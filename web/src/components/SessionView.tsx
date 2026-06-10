@@ -139,14 +139,14 @@ export default function SessionView({ sessionId }: SessionViewProps) {
   const sessionTitle = messages.find(m => m.role === 'user')?.content?.slice(0, 40) ?? 'Session';
 
   if (isLoading) {
-    return <div className="flex-1 flex items-center justify-center text-[#333333] text-[11px]">Loading…</div>;
+    return <div className="flex-1 flex items-center justify-center text-base-content/30 text-sm">Loading…</div>;
   }
 
   return (
     <div className="flex-1 flex flex-col overflow-hidden">
       {/* Header */}
-      <div className="h-10 px-4 border-b border-[#141414] flex items-center gap-2 shrink-0">
-        <span className="text-[#aaaaaa] text-[11px] font-medium flex-1">
+      <div className="h-14 px-6 border-b border-base-300 flex items-center gap-2 shrink-0">
+        <span className="text-base-content/80 text-sm font-medium flex-1">
           {sessionTitle}
         </span>
       </div>

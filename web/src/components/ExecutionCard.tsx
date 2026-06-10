@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { ChevronDown, ChevronUp, Check, X } from 'lucide-react';
 import { approveExecution, rejectExecution } from '../lib/api.js';
 
 type ExecutionStatus = 'pending' | 'running' | 'done' | 'error' | 'awaiting_approval';
@@ -16,11 +17,11 @@ interface ExecutionCardProps {
 }
 
 const STATUS_DOT: Record<ExecutionStatus, string> = {
-  pending: '#333333',
-  running: '#22c55e',
-  done: '#444444',
-  error: '#ef4444',
-  awaiting_approval: '#f59e0b',
+  pending: 'bg-base-content/20',
+  running: 'bg-success',
+  done: 'bg-base-content/30',
+  error: 'bg-error',
+  awaiting_approval: 'bg-warning',
 };
 
 export default function ExecutionCard({
@@ -38,7 +39,7 @@ export default function ExecutionCard({
   const [decided, setDecided] = useState<'approved' | 'rejected' | null>(null);
   const [acting, setActing] = useState(false);
 
-  const dotColor = STATUS_DOT[status] ?? '#333333';
+  const dotColor = STATUS_DOT[status] ?? 'bg-base-content/20';
   const label = workspaceName ? `${tool} · ${workspaceName}` : tool;
 
   async function handleApprove() {
@@ -54,46 +55,49 @@ export default function ExecutionCard({
   const isApproval = needsApproval && !decided;
 
   return (
-    <div className={`card bg-base-300 border ${status === 'awaiting_approval' && !decided ? 'border-[#201a0a]' : 'border-neutral'} rounded-md overflow-hidden text-[11px]`}>
+    <div className={`card bg-base-300 ${status === 'awaiting_approval' && !decided ? 'ring-1 ring-warning/30' : ''} rounded-2xl overflow-hidden text-sm`}>
       {/* Header row */}
       <div
         role={!isApproval ? 'button' : undefined}
         onClick={!isApproval ? () => setExpanded(e => !e) : undefined}
-        className={`px-2.5 py-1.5 flex items-center gap-1.5 ${isApproval ? 'cursor-default' : 'cursor-pointer'}`}
+        className={`px-4 py-3 flex items-center gap-2.5 ${isApproval ? 'cursor-default' : 'cursor-pointer'}`}
       >
         <div
-          className="w-1.5 h-1.5 rounded-full shrink-0"
-          style={{ background: decided === 'approved' ? '#4ade80' : decided === 'rejected' ? '#ef4444' : dotColor }}
+          className={`w-2 h-2 rounded-full shrink-0 ${
+            decided === 'approved' ? 'bg-success' : decided === 'rejected' ? 'bg-error' : dotColor
+          }`}
         />
-        <span className="text-[#555555] flex-1 select-none">{label}</span>
+        <span className="text-base-content/60 flex-1 select-none">{label}</span>
 
         {decided && (
-          <span className={`text-[9px] ${decided === 'approved' ? 'text-[#4ade80]' : 'text-error'}`}>
+          <span className={`text-xs ${decided === 'approved' ? 'text-success' : 'text-error'}`}>
             {decided}
           </span>
         )}
 
         {isApproval && (
-          <div className="flex gap-0.5">
+          <div className="flex gap-1.5">
             <button
               onClick={handleApprove}
               disabled={acting}
-              className="btn btn-xs min-h-0 h-auto py-0.5 px-2 bg-[#0f1f0f] border-[#1a3a1a] text-[#4ade80] text-[9px]"
+              className="btn btn-sm rounded-full bg-success/10 border-none text-success hover:bg-success/20"
             >
-              Approve
+              <Check size={14} strokeWidth={2} /> Approve
             </button>
             <button
               onClick={handleReject}
               disabled={acting}
-              className="btn btn-xs min-h-0 h-auto py-0.5 px-2 bg-base-300 border-neutral-content/20 text-[#555555] text-[9px]"
+              className="btn btn-sm rounded-full bg-base-200 border-none text-base-content/50 hover:bg-base-200/70"
             >
-              Reject
+              <X size={14} strokeWidth={2} /> Reject
             </button>
           </div>
         )}
 
         {!isApproval && !decided && (
-          <span className="text-[#333333] text-[9px]">{expanded ? '▴' : '▾'}</span>
+          <span className="text-base-content/30">
+            {expanded ? <ChevronUp size={16} /> : <ChevronDown size={16} />}
+          </span>
         )}
       </div>
 
@@ -101,7 +105,7 @@ export default function ExecutionCard({
       {expanded && !isApproval && (
         <div
           role="log"
-          className={`border-t ${status === 'error' ? 'border-[#2a1010]' : 'border-neutral'} px-2.5 py-1.5 font-mono text-[9px] text-[#555555] leading-relaxed bg-base-200 whitespace-pre-wrap max-h-50 overflow-y-auto`}
+          className="border-t border-base-200 px-4 py-3 font-mono text-xs text-base-content/50 leading-relaxed bg-base-200 whitespace-pre-wrap max-h-50 overflow-y-auto"
         >
           {outputLog || (result ?? '(no output)')}
         </div>

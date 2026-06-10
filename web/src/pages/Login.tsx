@@ -25,8 +25,8 @@ export default function Login() {
 
   return (
     <div className="h-full flex items-center justify-center bg-base-100">
-      <form onSubmit={handleSubmit} className="w-70 flex flex-col gap-2.5">
-        <div className="text-base-content text-sm font-medium mb-2">Sign in</div>
+      <form onSubmit={handleSubmit} className="w-80 flex flex-col gap-3">
+        <div className="text-base-content text-xl font-medium mb-2">Sign in</div>
 
         <input
           type="email"
@@ -34,7 +34,7 @@ export default function Login() {
           value={email}
           onChange={e => setEmail(e.target.value)}
           required
-          className="input input-sm bg-base-300 border-neutral text-base-content text-xs w-full"
+          className="input bg-base-300 border-none rounded-2xl text-base-content text-[15px] w-full"
         />
 
         <input
@@ -43,15 +43,15 @@ export default function Login() {
           value={password}
           onChange={e => setPassword(e.target.value)}
           required
-          className="input input-sm bg-base-300 border-neutral text-base-content text-xs w-full"
+          className="input bg-base-300 border-none rounded-2xl text-base-content text-[15px] w-full"
         />
 
-        {error && <div className="text-error text-[11px]">{error}</div>}
+        {error && <div className="text-error text-sm">{error}</div>}
 
         <button
           type="submit"
           disabled={loading}
-          className="btn btn-sm bg-neutral border-neutral-content/20 text-base-content text-xs mt-1"
+          className="btn rounded-full bg-base-content text-base-100 border-none hover:opacity-90 mt-1"
         >
           {loading ? 'Signing in…' : 'Sign in'}
         </button>

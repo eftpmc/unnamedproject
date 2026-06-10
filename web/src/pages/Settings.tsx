@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { Trash2 } from 'lucide-react';
 import {
   getConnections, createConnection, deleteConnection,
   getWorkspaces, createWorkspace, deleteWorkspace,
@@ -11,7 +12,7 @@ import type { Connection, Workspace } from '../types.js';
 
 function SectionHeader({ children }: { children: React.ReactNode }) {
   return (
-    <div className="text-[#555555] text-[9px] uppercase tracking-wider mb-2.5 mt-7">
+    <div className="text-base-content/40 text-xs uppercase tracking-wider mb-3 mt-9">
       {children}
     </div>
   );
@@ -19,8 +20,8 @@ function SectionHeader({ children }: { children: React.ReactNode }) {
 
 function DeleteBtn({ onClick }: { onClick: () => void }) {
   return (
-    <button onClick={onClick} className="btn btn-ghost btn-xs min-h-0 h-auto py-0 px-1 text-[#333333] text-[11px]" title="Delete">
-      ×
+    <button onClick={onClick} className="btn btn-ghost btn-sm btn-square text-base-content/30 hover:text-error" title="Delete">
+      <Trash2 size={15} strokeWidth={1.75} />
     </button>
   );
 }
@@ -79,31 +80,31 @@ export default function Settings() {
     navigate('/login', { replace: true });
   }
 
-  const inputCls = "input input-sm bg-base-300 border-neutral text-base-content text-[11px] w-full font-inherit";
-  const btnPrimaryCls = "btn btn-sm bg-neutral border-neutral-content/20 text-base-content text-[11px]";
-  const btnCancelCls = "btn btn-ghost btn-sm text-[#444444] text-[11px]";
-  const rowCls = "flex items-center py-1.5 border-b border-[#141414] gap-2";
+  const inputCls = "input bg-base-300 border-none rounded-xl text-base-content text-sm w-full font-inherit";
+  const btnPrimaryCls = "btn rounded-full bg-base-content text-base-100 border-none hover:opacity-90 text-sm";
+  const btnCancelCls = "btn btn-ghost rounded-full text-base-content/40 text-sm";
+  const rowCls = "flex items-center py-3 border-b border-base-300 gap-3";
 
   return (
-    <div className="flex-1 overflow-y-auto px-6 py-5 max-w-150">
-      <div className="text-[#aaaaaa] text-sm font-medium mb-1">Settings</div>
+    <div className="flex-1 overflow-y-auto px-8 py-8 max-w-2xl">
+      <div className="text-base-content text-xl font-medium mb-1">Settings</div>
 
       {/* Connections */}
       <SectionHeader>Connections</SectionHeader>
       {connections.map(c => (
         <div key={c.id} className={rowCls}>
-          <div className="flex-1 text-[#888888] text-[11px]">{c.name}</div>
-          <div className="badge badge-sm bg-[#141414] border-neutral-content/20 text-[#444444] text-[9px]">{c.type}</div>
+          <div className="flex-1 text-base-content/70 text-sm">{c.name}</div>
+          <div className="badge bg-base-300 border-none text-base-content/40 text-xs">{c.type}</div>
           <DeleteBtn onClick={() => deleteConnMutation.mutate(c.id)} />
         </div>
       ))}
       {!showConnForm && (
-        <button onClick={() => setShowConnForm(true)} className={`${btnPrimaryCls} mt-2`}>Add connection</button>
+        <button onClick={() => setShowConnForm(true)} className={`${btnPrimaryCls} mt-3`}>Add connection</button>
       )}
       {showConnForm && (
-        <div className="flex flex-col gap-2 mt-2.5">
+        <div className="flex flex-col gap-3 mt-3">
           <input placeholder="Name" value={connName} onChange={e => setConnName(e.target.value)} className={inputCls} />
-          <select value={connType} onChange={e => setConnType(e.target.value)} className={`select select-sm bg-base-300 border-neutral text-base-content text-[11px] w-full font-inherit`}>
+          <select value={connType} onChange={e => setConnType(e.target.value)} className="select bg-base-300 border-none rounded-xl text-base-content text-sm w-full font-inherit">
             <option value="anthropic">anthropic</option>
             <option value="openai">openai</option>
             <option value="github">github</option>
@@ -114,10 +115,10 @@ export default function Settings() {
             value={connConfig}
             onChange={e => setConnConfig(e.target.value)}
             rows={3}
-            className="textarea bg-base-300 border-neutral text-base-content text-[10px] w-full font-mono resize-y"
+            className="textarea bg-base-300 border-none rounded-xl text-base-content text-sm w-full font-mono resize-y"
           />
-          {connError && <div className="text-error text-[10px]">{connError}</div>}
-          <div className="flex gap-1.5">
+          {connError && <div className="text-error text-sm">{connError}</div>}
+          <div className="flex gap-2">
             <button onClick={() => createConnMutation.mutate()} className={btnPrimaryCls} disabled={!connName.trim()}>Save</button>
             <button onClick={() => { setShowConnForm(false); setConnError(''); }} className={btnCancelCls}>Cancel</button>
           </div>
@@ -129,38 +130,38 @@ export default function Settings() {
       {workspaces.map(w => (
         <div key={w.id} className={rowCls}>
           <div className="flex-1">
-            <div className="text-[#888888] text-[11px]">{w.name}</div>
-            {w.description && <div className="text-[#444444] text-[9px] mt-0.5">{w.description}</div>}
+            <div className="text-base-content/70 text-sm">{w.name}</div>
+            {w.description && <div className="text-base-content/30 text-xs mt-0.5">{w.description}</div>}
           </div>
           <DeleteBtn onClick={() => deleteWsMutation.mutate(w.id)} />
         </div>
       ))}
       {!showWsForm && (
-        <button onClick={() => setShowWsForm(true)} className={`${btnPrimaryCls} mt-2`}>Add workspace</button>
+        <button onClick={() => setShowWsForm(true)} className={`${btnPrimaryCls} mt-3`}>Add workspace</button>
       )}
       {showWsForm && (
-        <div className="flex flex-col gap-2 mt-2.5">
+        <div className="flex flex-col gap-3 mt-3">
           <input placeholder="Name" value={wsName} onChange={e => setWsName(e.target.value)} className={inputCls} />
           <input placeholder="Description (optional)" value={wsDesc} onChange={e => setWsDesc(e.target.value)} className={inputCls} />
           <input placeholder="Repo path (optional)" value={wsRepo} onChange={e => setWsRepo(e.target.value)} className={inputCls} />
           {connections.length > 0 && (
             <div>
-              <div className="text-[#444444] text-[9px] mb-1.5">Connections</div>
+              <div className="text-base-content/40 text-xs mb-2">Connections</div>
               {connections.map(c => (
-                <label key={c.id} className="flex items-center gap-1.5 mb-1 cursor-pointer">
+                <label key={c.id} className="flex items-center gap-2 mb-1.5 cursor-pointer">
                   <input
                     type="checkbox"
                     checked={wsConnIds.includes(c.id)}
                     onChange={e => setWsConnIds(prev => e.target.checked ? [...prev, c.id] : prev.filter(id => id !== c.id))}
-                    className="checkbox checkbox-xs"
+                    className="checkbox checkbox-sm"
                   />
-                  <span className="text-[#666666] text-[10px]">{c.name} ({c.type})</span>
+                  <span className="text-base-content/60 text-sm">{c.name} ({c.type})</span>
                 </label>
               ))}
             </div>
           )}
-          {wsError && <div className="text-error text-[10px]">{wsError}</div>}
-          <div className="flex gap-1.5">
+          {wsError && <div className="text-error text-sm">{wsError}</div>}
+          <div className="flex gap-2">
             <button onClick={() => createWsMutation.mutate()} className={btnPrimaryCls} disabled={!wsName.trim()}>Save</button>
             <button onClick={() => { setShowWsForm(false); setWsError(''); }} className={btnCancelCls}>Cancel</button>
           </div>
@@ -170,13 +171,13 @@ export default function Settings() {
       {/* Memory */}
       <SectionHeader>Memory</SectionHeader>
       {Object.keys(memory).length === 0 ? (
-        <div className="text-[#333333] text-[10px]">No memory stored yet.</div>
+        <div className="text-base-content/30 text-sm">No memory stored yet.</div>
       ) : (
-        <div className="border border-neutral rounded-md overflow-hidden">
+        <div className="bg-base-300 rounded-2xl overflow-hidden">
           {Object.entries(memory).map(([k, v], i) => (
-            <div key={k} className={`flex items-center gap-2 px-2.5 py-1.5 ${i < Object.keys(memory).length - 1 ? 'border-b border-[#141414]' : ''}`}>
-              <div className="w-35 text-[#555555] text-[10px] font-mono shrink-0">{k}</div>
-              <div className="flex-1 text-[#888888] text-[10px]">{v}</div>
+            <div key={k} className={`flex items-center gap-3 px-4 py-3 ${i < Object.keys(memory).length - 1 ? 'border-b border-base-200' : ''}`}>
+              <div className="w-35 text-base-content/50 text-sm font-mono shrink-0">{k}</div>
+              <div className="flex-1 text-base-content/70 text-sm">{v}</div>
             </div>
           ))}
         </div>
@@ -184,7 +185,7 @@ export default function Settings() {
 
       {/* Account */}
       <SectionHeader>Account</SectionHeader>
-      <button onClick={handleSignOut} className={`${btnPrimaryCls} text-error border-[#2a1010]`}>Sign out</button>
+      <button onClick={handleSignOut} className="btn rounded-full bg-error/10 border-none text-error hover:bg-error/20 text-sm">Sign out</button>
     </div>
   );
 }

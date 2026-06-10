@@ -14,13 +14,18 @@ interface ToolContext {
   repoPath: string;
 }
 
-const WRITE_OPS = new Set(['commit', 'push']);
+const AGENT_OPS = new Set(['commit']);
+const USER_OPS = new Set(['push']);
 
 export async function runGitOp(input: GitOpInput, ctx: ToolContext): Promise<string> {
   const git = simpleGit(ctx.repoPath);
 
-  if (WRITE_OPS.has(input.op)) {
-    const decision = await requestApproval(ctx.executionId, ctx.userId, `git ${input.op}`, input as unknown as Record<string, unknown>);
+  if (AGENT_OPS.has(input.op)) {
+    const decision = await requestApproval(ctx.executionId, ctx.userId, `git ${input.op}`, input as unknown as Record<string, unknown>, 'agent');
+    if (decision === 'rejected') return `git ${input.op} cancelled`;
+  }
+  if (USER_OPS.has(input.op)) {
+    const decision = await requestApproval(ctx.executionId, ctx.userId, `git ${input.op}`, input as unknown as Record<string, unknown>, 'user');
     if (decision === 'rejected') return `User rejected git ${input.op}`;
   }
 

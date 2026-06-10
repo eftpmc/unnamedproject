@@ -1,5 +1,5 @@
 import { spawn } from 'child_process';
-import { appendOutput } from '../services/executor.js';
+import { appendOutput, requestApproval } from '../services/executor.js';
 
 interface ClaudeCodeInput {
   prompt: string;
@@ -12,7 +12,8 @@ interface ToolContext {
   apiKey: string;
 }
 
-export function invokeClaudeCode(input: ClaudeCodeInput, ctx: ToolContext): Promise<string> {
+export async function invokeClaudeCode(input: ClaudeCodeInput, ctx: ToolContext): Promise<string> {
+  await requestApproval(ctx.executionId, ctx.userId, 'invoke_claude_code', { prompt: input.prompt }, 'agent');
   return new Promise((resolve, reject) => {
     const proc = spawn('claude', ['--print', input.prompt], {
       cwd: ctx.repoPath,

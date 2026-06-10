@@ -1,5 +1,5 @@
 import { describe, it, expect, vi } from 'vitest';
-import { invokeClaudeCode } from '../../src/tools/invoke_claude_code.js';
+import { invokeCodex } from '../../src/tools/invoke_codex.js';
 
 vi.mock('child_process', () => ({
   spawn: vi.fn(() => ({
@@ -11,9 +11,9 @@ vi.mock('child_process', () => ({
 
 vi.mock('../../src/services/executor.js', () => ({ appendOutput: vi.fn(), requestApproval: vi.fn().mockResolvedValue('approved') }));
 
-describe('invoke_claude_code', () => {
+describe('invoke_codex', () => {
   it('returns stdout output on success', async () => {
-    const result = await invokeClaudeCode(
+    const result = await invokeCodex(
       { prompt: 'fix the login bug' },
       { userId: 'u1', executionId: 'e1', repoPath: '/tmp/repo', apiKey: 'sk-test' }
     );

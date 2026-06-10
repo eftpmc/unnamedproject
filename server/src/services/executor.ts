@@ -40,22 +40,26 @@ export async function requestApproval(
   executionId: string,
   userId: string,
   action: string,
-  payload: Record<string, unknown>
+  payload: Record<string, unknown>,
+  tier: 'agent' | 'user' = 'user'
 ): Promise<'approved' | 'rejected'> {
   const approvalId = newId();
   getDb()
     .prepare('INSERT INTO approvals (id, execution_id, action, payload) VALUES (?,?,?,?)')
     .run(approvalId, executionId, action, JSON.stringify(payload));
+
+  if (tier === 'agent') {
+    getDb()
+      .prepare("UPDATE approvals SET status = 'approved', resolved_at = unixepoch() WHERE id = ?")
+      .run(approvalId);
+    broadcast(userId, { type: 'action_auto_approved', executionId, approvalId, action, payload });
+    return 'approved';
+  }
+
   getDb()
     .prepare("UPDATE executions SET status = 'awaiting_approval' WHERE id = ?")
     .run(executionId);
-  broadcast(userId, {
-    type: 'approval_requested',
-    executionId,
-    approvalId,
-    action,
-    payload,
-  });
+  broadcast(userId, { type: 'approval_requested', executionId, approvalId, action, payload });
   const decision = await waitForApproval(approvalId);
   getDb()
     .prepare('UPDATE approvals SET status = ?, resolved_at = unixepoch() WHERE id = ?')

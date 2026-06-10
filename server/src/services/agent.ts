@@ -47,7 +47,10 @@ When the user gives you a task, determine which workspace it relates to (ask if 
 
 You can run tools in parallel when the tasks are independent.
 
-Write ops (git commit, push, github comments) will pause for user approval — this is expected behavior, not an error.
+Approval tiers:
+- Agent-approved (automatic, logged): invoke_claude_code, invoke_codex, git commit
+- User-approved (pauses for user): git push, github write ops
+Never skip a write op because approval is needed — just proceed and the system handles it.
 ${memoryText}
 ${wsText}`;
 }

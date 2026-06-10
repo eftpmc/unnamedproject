@@ -1,5 +1,5 @@
 import { spawn } from 'child_process';
-import { appendOutput } from '../services/executor.js';
+import { appendOutput, requestApproval } from '../services/executor.js';
 
 interface CodexInput {
   prompt: string;
@@ -12,7 +12,8 @@ interface ToolContext {
   apiKey: string;
 }
 
-export function invokeCodex(input: CodexInput, ctx: ToolContext): Promise<string> {
+export async function invokeCodex(input: CodexInput, ctx: ToolContext): Promise<string> {
+  await requestApproval(ctx.executionId, ctx.userId, 'invoke_codex', { prompt: input.prompt }, 'agent');
   return new Promise((resolve, reject) => {
     const proc = spawn('codex', ['--quiet', input.prompt], {
       cwd: ctx.repoPath,

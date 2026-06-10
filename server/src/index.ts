@@ -2,6 +2,7 @@ import express from 'express';
 import { createServer } from 'http';
 import { initDb } from './db/index.js';
 import authRoutes from './routes/auth.js';
+import connectionsRoutes from './routes/connections.js';
 
 const PORT = process.env.PORT ?? '3000';
 const JWT_SECRET = process.env.JWT_SECRET;
@@ -16,6 +17,7 @@ app.use(express.json());
 
 initDb();
 app.use('/auth', authRoutes);
+app.use('/connections', connectionsRoutes);
 
 const server = createServer(app);
 

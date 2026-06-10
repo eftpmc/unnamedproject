@@ -4,6 +4,7 @@ import { initDb } from './db/index.js';
 import authRoutes from './routes/auth.js';
 import connectionsRoutes from './routes/connections.js';
 import workspacesRoutes from './routes/workspaces.js';
+import threadsRoutes from './routes/threads.js';
 
 const PORT = process.env.PORT ?? '3000';
 const JWT_SECRET = process.env.JWT_SECRET;
@@ -20,6 +21,7 @@ initDb();
 app.use('/auth', authRoutes);
 app.use('/connections', connectionsRoutes);
 app.use('/workspaces', workspacesRoutes);
+app.use('/threads', threadsRoutes);
 
 const server = createServer(app);
 

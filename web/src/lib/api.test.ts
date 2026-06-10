@@ -8,7 +8,7 @@ vi.mock('./auth', () => ({
 }));
 
 const mockFetch = vi.fn();
-global.fetch = mockFetch;
+globalThis.fetch = mockFetch;
 
 const { login, getSessions, createSession } = await import('./api');
 

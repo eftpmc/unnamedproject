@@ -50,6 +50,9 @@ export interface WSExecutionUpdate extends WSEvent {
   status?: string;
   chunk?: string;
   result?: string;
+  tool?: string;
+  workspaceName?: string;
+  messageId?: string;
 }
 
 export interface WSApprovalRequested extends WSEvent {

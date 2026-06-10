@@ -1,6 +1,7 @@
 import express from 'express';
 import { createServer } from 'http';
 import { initDb } from './db/index.js';
+import { initSocket } from './services/socket.js';
 import authRoutes from './routes/auth.js';
 import connectionsRoutes from './routes/connections.js';
 import workspacesRoutes from './routes/workspaces.js';
@@ -24,6 +25,7 @@ app.use('/workspaces', workspacesRoutes);
 app.use('/threads', threadsRoutes);
 
 const server = createServer(app);
+initSocket(server);
 
 if (NODE_ENV !== 'test') {
   server.listen(parseInt(PORT), () => {

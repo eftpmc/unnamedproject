@@ -11,28 +11,28 @@ beforeAll(async () => {
   initDb();
   const res = await request(app)
     .post('/auth/register')
-    .send({ email: `th-${Date.now()}@test.com`, password: 'pass' });
+    .send({ email: `sess-${Date.now()}@test.com`, password: 'pass' });
   token = res.body.token;
 });
 
-describe('threads', () => {
-  let threadId: string;
+describe('sessions', () => {
+  let sessionId: string;
 
-  it('creates a thread', async () => {
+  it('creates a session', async () => {
     const res = await request(app)
-      .post('/threads')
+      .post('/sessions')
       .set('Authorization', `Bearer ${token}`)
       .send({ title: 'Fix login bug' });
     expect(res.status).toBe(201);
-    threadId = res.body.id;
+    sessionId = res.body.id;
   });
 
-  it('lists threads ordered by updated_at desc', async () => {
+  it('lists sessions ordered by updated_at desc', async () => {
     const res = await request(app)
-      .get('/threads')
+      .get('/sessions')
       .set('Authorization', `Bearer ${token}`);
     expect(res.status).toBe(200);
     expect(res.body.length).toBeGreaterThanOrEqual(1);
-    expect(res.body[0].id).toBe(threadId);
+    expect(res.body[0].id).toBe(sessionId);
   });
 });

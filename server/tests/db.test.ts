@@ -17,7 +17,7 @@ describe('database schema', () => {
     expect(names).toContain('users');
     expect(names).toContain('connections');
     expect(names).toContain('workspaces');
-    expect(names).toContain('threads');
+    expect(names).toContain('sessions');
     expect(names).toContain('messages');
     expect(names).toContain('executions');
     expect(names).toContain('approvals');

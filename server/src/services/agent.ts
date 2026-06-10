@@ -146,13 +146,13 @@ async function dispatchTool(
   }
 }
 
-export async function runAgentTurn(userId: string, threadId: string, userMessageId: string): Promise<string> {
+export async function runAgentTurn(userId: string, sessionId: string, userMessageId: string): Promise<string> {
   const apiKey = getAnthropicKey(userId);
   const client = new Anthropic({ apiKey });
 
   const history = getDb()
-    .prepare('SELECT role, content FROM messages WHERE thread_id = ? ORDER BY created_at')
-    .all(threadId) as DbMessage[];
+    .prepare('SELECT role, content FROM messages WHERE session_id = ? ORDER BY created_at')
+    .all(sessionId) as DbMessage[];
 
   const messages: Anthropic.MessageParam[] = history.map(m => ({
     role: m.role as 'user' | 'assistant',

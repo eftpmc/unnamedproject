@@ -53,7 +53,7 @@ function applySchema(): void {
       UNIQUE(user_id, name)
     );
 
-    CREATE TABLE IF NOT EXISTS threads (
+    CREATE TABLE IF NOT EXISTS sessions (
       id TEXT PRIMARY KEY,
       user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
       title TEXT,
@@ -63,7 +63,7 @@ function applySchema(): void {
 
     CREATE TABLE IF NOT EXISTS messages (
       id TEXT PRIMARY KEY,
-      thread_id TEXT NOT NULL REFERENCES threads(id) ON DELETE CASCADE,
+      session_id TEXT NOT NULL REFERENCES sessions(id) ON DELETE CASCADE,
       role TEXT NOT NULL CHECK(role IN ('user','assistant')),
       content TEXT NOT NULL,
       created_at INTEGER NOT NULL DEFAULT (unixepoch())

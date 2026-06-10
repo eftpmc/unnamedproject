@@ -24,7 +24,7 @@ vi.mock('../../src/services/executor.js', () => ({
 }));
 
 const userId = newId();
-let threadId: string;
+let sessionId: string;
 let messageId: string;
 
 beforeAll(async () => {
@@ -38,15 +38,15 @@ beforeAll(async () => {
   db.prepare('INSERT INTO connections (id, user_id, name, type, encrypted_config) VALUES (?,?,?,?,?)')
     .run(newId(), userId, 'main', 'anthropic', encrypt(JSON.stringify({ apiKey: 'sk-test' }), deriveKey()));
 
-  threadId = newId();
-  db.prepare('INSERT INTO threads (id, user_id) VALUES (?,?)').run(threadId, userId);
+  sessionId = newId();
+  db.prepare('INSERT INTO sessions (id, user_id) VALUES (?,?)').run(sessionId, userId);
   messageId = newId();
-  db.prepare('INSERT INTO messages (id, thread_id, role, content) VALUES (?,?,?,?)').run(messageId, threadId, 'user', 'Hello');
+  db.prepare('INSERT INTO messages (id, session_id, role, content) VALUES (?,?,?,?)').run(messageId, sessionId, 'user', 'Hello');
 });
 
 describe('agent', () => {
   it('returns an assistant message string', async () => {
-    const reply = await runAgentTurn(userId, threadId, messageId);
+    const reply = await runAgentTurn(userId, sessionId, messageId);
     expect(typeof reply).toBe('string');
     expect(reply.length).toBeGreaterThan(0);
   });

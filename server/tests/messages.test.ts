@@ -10,7 +10,7 @@ vi.mock('../src/services/agent.js', () => ({
 vi.mock('../src/services/socket.js', () => ({ broadcast: vi.fn(), initSocket: vi.fn() }));
 
 let token: string;
-let threadId: string;
+let sessionId: string;
 
 beforeAll(async () => {
   fs.mkdirSync(process.env.DATA_DIR!, { recursive: true });
@@ -19,17 +19,17 @@ beforeAll(async () => {
     .post('/auth/register')
     .send({ email: `msg-${Date.now()}@test.com`, password: 'pass' });
   token = reg.body.token;
-  const th = await request(app)
-    .post('/threads')
+  const s = await request(app)
+    .post('/sessions')
     .set('Authorization', `Bearer ${token}`)
-    .send({ title: 'Test thread' });
-  threadId = th.body.id;
+    .send({ title: 'Test session' });
+  sessionId = s.body.id;
 });
 
 describe('messages', () => {
   it('saves user message and returns it', async () => {
     const res = await request(app)
-      .post(`/threads/${threadId}/messages`)
+      .post(`/sessions/${sessionId}/messages`)
       .set('Authorization', `Bearer ${token}`)
       .send({ content: 'Hello agent' });
     expect(res.status).toBe(201);
@@ -40,7 +40,7 @@ describe('messages', () => {
   it('lists messages including the assistant reply', async () => {
     await new Promise(r => setTimeout(r, 150));
     const res = await request(app)
-      .get(`/threads/${threadId}/messages`)
+      .get(`/sessions/${sessionId}/messages`)
       .set('Authorization', `Bearer ${token}`);
     expect(res.status).toBe(200);
     expect(res.body.length).toBeGreaterThanOrEqual(2);

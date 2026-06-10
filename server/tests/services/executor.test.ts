@@ -15,10 +15,10 @@ beforeAll(() => {
   initDb();
   const db = getDb();
   db.prepare('INSERT INTO users (id, email, hashed_password) VALUES (?,?,?)').run(userId, `exec-${userId}@test.com`, 'x');
-  const threadId = newId();
-  db.prepare('INSERT INTO threads (id, user_id) VALUES (?,?)').run(threadId, userId);
+  const sessionId = newId();
+  db.prepare('INSERT INTO sessions (id, user_id) VALUES (?,?)').run(sessionId, userId);
   messageId = newId();
-  db.prepare('INSERT INTO messages (id, thread_id, role, content) VALUES (?,?,?,?)').run(messageId, threadId, 'user', 'hello');
+  db.prepare('INSERT INTO messages (id, session_id, role, content) VALUES (?,?,?,?)').run(messageId, sessionId, 'user', 'hello');
   workspaceId = newId();
   db.prepare('INSERT INTO workspaces (id, user_id, name) VALUES (?,?,?)').run(workspaceId, userId, 'test-ws');
 });

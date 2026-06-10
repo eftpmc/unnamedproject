@@ -9,7 +9,7 @@ router.use(requireAuth);
 router.get('/', (req, res) => {
   const { userId } = req as AuthedRequest;
   const rows = getDb()
-    .prepare('SELECT id, title, created_at, updated_at FROM threads WHERE user_id = ? ORDER BY updated_at DESC')
+    .prepare('SELECT id, title, created_at, updated_at FROM sessions WHERE user_id = ? ORDER BY updated_at DESC')
     .all(userId);
   res.json(rows);
 });
@@ -19,7 +19,7 @@ router.post('/', (req, res) => {
   const { title } = req.body as { title?: string };
   const id = newId();
   getDb()
-    .prepare('INSERT INTO threads (id, user_id, title) VALUES (?,?,?)')
+    .prepare('INSERT INTO sessions (id, user_id, title) VALUES (?,?,?)')
     .run(id, userId, title ?? null);
   res.status(201).json({ id });
 });

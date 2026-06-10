@@ -15,7 +15,7 @@ router.get('/:id', (req, res) => {
       FROM executions e
       LEFT JOIN approvals a ON a.execution_id = e.id AND a.status = 'pending'
       LEFT JOIN messages m ON m.id = e.message_id
-      LEFT JOIN threads t ON t.id = m.thread_id
+      LEFT JOIN sessions t ON t.id = m.session_id
       WHERE e.id = ? AND t.user_id = ?
     `)
     .get(req.params.id, userId);
@@ -30,7 +30,7 @@ router.post('/:id/approve', (req, res) => {
       SELECT a.id FROM approvals a
       JOIN executions e ON e.id = a.execution_id
       JOIN messages m ON m.id = e.message_id
-      JOIN threads t ON t.id = m.thread_id
+      JOIN sessions t ON t.id = m.session_id
       WHERE e.id = ? AND t.user_id = ? AND a.status = 'pending'
     `)
     .get(req.params.id, userId) as { id: string } | undefined;
@@ -46,7 +46,7 @@ router.post('/:id/reject', (req, res) => {
       SELECT a.id FROM approvals a
       JOIN executions e ON e.id = a.execution_id
       JOIN messages m ON m.id = e.message_id
-      JOIN threads t ON t.id = m.thread_id
+      JOIN sessions t ON t.id = m.session_id
       WHERE e.id = ? AND t.user_id = ? AND a.status = 'pending'
     `)
     .get(req.params.id, userId) as { id: string } | undefined;

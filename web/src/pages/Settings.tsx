@@ -11,7 +11,7 @@ import type { Connection, Workspace } from '../types.js';
 
 function SectionHeader({ children }: { children: React.ReactNode }) {
   return (
-    <div style={{ color: '#555555', fontSize: 9, textTransform: 'uppercase', letterSpacing: '0.08em', marginBottom: 10, marginTop: 28 }}>
+    <div className="text-[#555555] text-[9px] uppercase tracking-wider mb-2.5 mt-7">
       {children}
     </div>
   );
@@ -19,7 +19,7 @@ function SectionHeader({ children }: { children: React.ReactNode }) {
 
 function DeleteBtn({ onClick }: { onClick: () => void }) {
   return (
-    <button onClick={onClick} style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#333', fontSize: 11, padding: '0 4px' }} title="Delete">
+    <button onClick={onClick} className="btn btn-ghost btn-xs min-h-0 h-auto py-0 px-1 text-[#333333] text-[11px]" title="Delete">
       ×
     </button>
   );
@@ -79,65 +79,31 @@ export default function Settings() {
     navigate('/login', { replace: true });
   }
 
-  const inputStyle = {
-    background: '#111',
-    border: '1px solid #1e1e1e',
-    borderRadius: 5,
-    padding: '7px 10px',
-    color: '#ccc',
-    fontSize: 11,
-    width: '100%',
-    outline: 'none',
-    fontFamily: 'inherit',
-  };
-
-  const btnPrimary = {
-    background: '#1e1e1e',
-    border: '1px solid #2a2a2a',
-    borderRadius: 5,
-    padding: '6px 14px',
-    color: '#ccc',
-    fontSize: 11,
-    cursor: 'pointer',
-  };
-
-  const btnCancel = {
-    background: 'none',
-    border: 'none',
-    color: '#444',
-    fontSize: 11,
-    cursor: 'pointer',
-    padding: '6px 8px',
-  };
-
-  const rowStyle = {
-    display: 'flex',
-    alignItems: 'center',
-    padding: '7px 0',
-    borderBottom: '1px solid #141414',
-    gap: 8,
-  };
+  const inputCls = "input input-sm bg-base-300 border-neutral text-base-content text-[11px] w-full font-inherit";
+  const btnPrimaryCls = "btn btn-sm bg-neutral border-neutral-content/20 text-base-content text-[11px]";
+  const btnCancelCls = "btn btn-ghost btn-sm text-[#444444] text-[11px]";
+  const rowCls = "flex items-center py-1.5 border-b border-[#141414] gap-2";
 
   return (
-    <div style={{ flex: 1, overflowY: 'auto', padding: '20px 24px', maxWidth: 600 }}>
-      <div style={{ color: '#aaa', fontSize: 13, fontWeight: 500, marginBottom: 4 }}>Settings</div>
+    <div className="flex-1 overflow-y-auto px-6 py-5 max-w-150">
+      <div className="text-[#aaaaaa] text-sm font-medium mb-1">Settings</div>
 
       {/* Connections */}
       <SectionHeader>Connections</SectionHeader>
       {connections.map(c => (
-        <div key={c.id} style={rowStyle}>
-          <div style={{ flex: 1, color: '#888', fontSize: 11 }}>{c.name}</div>
-          <div style={{ color: '#444', fontSize: 9, background: '#141414', border: '1px solid #222', borderRadius: 3, padding: '2px 6px' }}>{c.type}</div>
+        <div key={c.id} className={rowCls}>
+          <div className="flex-1 text-[#888888] text-[11px]">{c.name}</div>
+          <div className="badge badge-sm bg-[#141414] border-neutral-content/20 text-[#444444] text-[9px]">{c.type}</div>
           <DeleteBtn onClick={() => deleteConnMutation.mutate(c.id)} />
         </div>
       ))}
       {!showConnForm && (
-        <button onClick={() => setShowConnForm(true)} style={{ ...btnPrimary, marginTop: 8 }}>Add connection</button>
+        <button onClick={() => setShowConnForm(true)} className={`${btnPrimaryCls} mt-2`}>Add connection</button>
       )}
       {showConnForm && (
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 8, marginTop: 10 }}>
-          <input placeholder="Name" value={connName} onChange={e => setConnName(e.target.value)} style={inputStyle} />
-          <select value={connType} onChange={e => setConnType(e.target.value)} style={{ ...inputStyle }}>
+        <div className="flex flex-col gap-2 mt-2.5">
+          <input placeholder="Name" value={connName} onChange={e => setConnName(e.target.value)} className={inputCls} />
+          <select value={connType} onChange={e => setConnType(e.target.value)} className={`select select-sm bg-base-300 border-neutral text-base-content text-[11px] w-full font-inherit`}>
             <option value="anthropic">anthropic</option>
             <option value="openai">openai</option>
             <option value="github">github</option>
@@ -148,12 +114,12 @@ export default function Settings() {
             value={connConfig}
             onChange={e => setConnConfig(e.target.value)}
             rows={3}
-            style={{ ...inputStyle, resize: 'vertical', fontFamily: 'monospace', fontSize: 10 }}
+            className="textarea bg-base-300 border-neutral text-base-content text-[10px] w-full font-mono resize-y"
           />
-          {connError && <div style={{ color: '#ef4444', fontSize: 10 }}>{connError}</div>}
-          <div style={{ display: 'flex', gap: 6 }}>
-            <button onClick={() => createConnMutation.mutate()} style={btnPrimary} disabled={!connName.trim()}>Save</button>
-            <button onClick={() => { setShowConnForm(false); setConnError(''); }} style={btnCancel}>Cancel</button>
+          {connError && <div className="text-error text-[10px]">{connError}</div>}
+          <div className="flex gap-1.5">
+            <button onClick={() => createConnMutation.mutate()} className={btnPrimaryCls} disabled={!connName.trim()}>Save</button>
+            <button onClick={() => { setShowConnForm(false); setConnError(''); }} className={btnCancelCls}>Cancel</button>
           </div>
         </div>
       )}
@@ -161,41 +127,42 @@ export default function Settings() {
       {/* Workspaces */}
       <SectionHeader>Workspaces</SectionHeader>
       {workspaces.map(w => (
-        <div key={w.id} style={rowStyle}>
-          <div style={{ flex: 1 }}>
-            <div style={{ color: '#888', fontSize: 11 }}>{w.name}</div>
-            {w.description && <div style={{ color: '#444', fontSize: 9, marginTop: 2 }}>{w.description}</div>}
+        <div key={w.id} className={rowCls}>
+          <div className="flex-1">
+            <div className="text-[#888888] text-[11px]">{w.name}</div>
+            {w.description && <div className="text-[#444444] text-[9px] mt-0.5">{w.description}</div>}
           </div>
           <DeleteBtn onClick={() => deleteWsMutation.mutate(w.id)} />
         </div>
       ))}
       {!showWsForm && (
-        <button onClick={() => setShowWsForm(true)} style={{ ...btnPrimary, marginTop: 8 }}>Add workspace</button>
+        <button onClick={() => setShowWsForm(true)} className={`${btnPrimaryCls} mt-2`}>Add workspace</button>
       )}
       {showWsForm && (
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 8, marginTop: 10 }}>
-          <input placeholder="Name" value={wsName} onChange={e => setWsName(e.target.value)} style={inputStyle} />
-          <input placeholder="Description (optional)" value={wsDesc} onChange={e => setWsDesc(e.target.value)} style={inputStyle} />
-          <input placeholder="Repo path (optional)" value={wsRepo} onChange={e => setWsRepo(e.target.value)} style={inputStyle} />
+        <div className="flex flex-col gap-2 mt-2.5">
+          <input placeholder="Name" value={wsName} onChange={e => setWsName(e.target.value)} className={inputCls} />
+          <input placeholder="Description (optional)" value={wsDesc} onChange={e => setWsDesc(e.target.value)} className={inputCls} />
+          <input placeholder="Repo path (optional)" value={wsRepo} onChange={e => setWsRepo(e.target.value)} className={inputCls} />
           {connections.length > 0 && (
             <div>
-              <div style={{ color: '#444', fontSize: 9, marginBottom: 6 }}>Connections</div>
+              <div className="text-[#444444] text-[9px] mb-1.5">Connections</div>
               {connections.map(c => (
-                <label key={c.id} style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 4, cursor: 'pointer' }}>
+                <label key={c.id} className="flex items-center gap-1.5 mb-1 cursor-pointer">
                   <input
                     type="checkbox"
                     checked={wsConnIds.includes(c.id)}
                     onChange={e => setWsConnIds(prev => e.target.checked ? [...prev, c.id] : prev.filter(id => id !== c.id))}
+                    className="checkbox checkbox-xs"
                   />
-                  <span style={{ color: '#666', fontSize: 10 }}>{c.name} ({c.type})</span>
+                  <span className="text-[#666666] text-[10px]">{c.name} ({c.type})</span>
                 </label>
               ))}
             </div>
           )}
-          {wsError && <div style={{ color: '#ef4444', fontSize: 10 }}>{wsError}</div>}
-          <div style={{ display: 'flex', gap: 6 }}>
-            <button onClick={() => createWsMutation.mutate()} style={btnPrimary} disabled={!wsName.trim()}>Save</button>
-            <button onClick={() => { setShowWsForm(false); setWsError(''); }} style={btnCancel}>Cancel</button>
+          {wsError && <div className="text-error text-[10px]">{wsError}</div>}
+          <div className="flex gap-1.5">
+            <button onClick={() => createWsMutation.mutate()} className={btnPrimaryCls} disabled={!wsName.trim()}>Save</button>
+            <button onClick={() => { setShowWsForm(false); setWsError(''); }} className={btnCancelCls}>Cancel</button>
           </div>
         </div>
       )}
@@ -203,13 +170,13 @@ export default function Settings() {
       {/* Memory */}
       <SectionHeader>Memory</SectionHeader>
       {Object.keys(memory).length === 0 ? (
-        <div style={{ color: '#333', fontSize: 10 }}>No memory stored yet.</div>
+        <div className="text-[#333333] text-[10px]">No memory stored yet.</div>
       ) : (
-        <div style={{ border: '1px solid #1a1a1a', borderRadius: 5, overflow: 'hidden' }}>
+        <div className="border border-neutral rounded-md overflow-hidden">
           {Object.entries(memory).map(([k, v], i) => (
-            <div key={k} style={{ ...rowStyle, padding: '6px 10px', borderBottom: i < Object.keys(memory).length - 1 ? '1px solid #141414' : 'none' }}>
-              <div style={{ width: 140, color: '#555', fontSize: 10, fontFamily: 'monospace', flexShrink: 0 }}>{k}</div>
-              <div style={{ flex: 1, color: '#888', fontSize: 10 }}>{v}</div>
+            <div key={k} className={`flex items-center gap-2 px-2.5 py-1.5 ${i < Object.keys(memory).length - 1 ? 'border-b border-[#141414]' : ''}`}>
+              <div className="w-35 text-[#555555] text-[10px] font-mono shrink-0">{k}</div>
+              <div className="flex-1 text-[#888888] text-[10px]">{v}</div>
             </div>
           ))}
         </div>
@@ -217,7 +184,7 @@ export default function Settings() {
 
       {/* Account */}
       <SectionHeader>Account</SectionHeader>
-      <button onClick={handleSignOut} style={{ ...btnPrimary, color: '#ef4444', borderColor: '#2a1010' }}>Sign out</button>
+      <button onClick={handleSignOut} className={`${btnPrimaryCls} text-error border-[#2a1010]`}>Sign out</button>
     </div>
   );
 }

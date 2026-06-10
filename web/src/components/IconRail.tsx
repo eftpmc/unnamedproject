@@ -15,19 +15,7 @@ function IconBtn({ active, onClick, title, children }: {
     <button
       title={title}
       onClick={onClick}
-      style={{
-        width: 32,
-        height: 32,
-        display: 'flex',
-        alignItems: 'center',
-        justifyContent: 'center',
-        borderRadius: 5,
-        border: 'none',
-        background: active ? '#1e1e1e' : 'transparent',
-        cursor: 'pointer',
-        color: active ? '#cccccc' : '#555555',
-        flexShrink: 0,
-      }}
+      className={`btn btn-square btn-sm btn-ghost shrink-0 ${active ? 'bg-neutral text-base-content' : 'text-[#555555]'}`}
     >
       {children}
     </button>
@@ -44,26 +32,9 @@ export default function IconRail({ activePanel, onPanelToggle }: IconRailProps) 
   }
 
   return (
-    <div style={{
-      width: 44,
-      background: '#0d0d0d',
-      borderRight: '1px solid #1a1a1a',
-      display: 'flex',
-      flexDirection: 'column',
-      alignItems: 'center',
-      padding: '10px 0',
-      gap: 4,
-      flexShrink: 0,
-    }}>
+    <div className="w-11 bg-base-200 border-r border-neutral flex flex-col items-center py-2.5 gap-1 shrink-0">
       {/* Logo */}
-      <div style={{
-        width: 22,
-        height: 22,
-        background: '#1e1e1e',
-        borderRadius: 5,
-        marginBottom: 8,
-        flexShrink: 0,
-      }} />
+      <div className="w-5.5 h-5.5 bg-neutral rounded mb-2 shrink-0" />
 
       {/* New session */}
       <IconBtn title="New session" onClick={handleNewSession}>
@@ -98,7 +69,7 @@ export default function IconRail({ activePanel, onPanelToggle }: IconRailProps) 
         </svg>
       </IconBtn>
 
-      <div style={{ flex: 1 }} />
+      <div className="flex-1" />
 
       {/* Settings */}
       <IconBtn

@@ -43,7 +43,7 @@ export default function AppLayout() {
       : <EmptyState onNewSession={handleNewSession} />;
 
   return (
-    <div style={{ display: 'flex', height: '100%', background: '#0a0a0a' }}>
+    <div className="flex h-full bg-base-100">
       <IconRail
         activePanel={showPanel ? activePanel : null}
         onPanelToggle={handlePanelToggle}
@@ -56,7 +56,7 @@ export default function AppLayout() {
           onNewSession={handleNewSession}
         />
       )}
-      <div style={{ flex: 1, display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
+      <div className="flex-1 flex flex-col overflow-hidden">
         {mainContent}
       </div>
     </div>

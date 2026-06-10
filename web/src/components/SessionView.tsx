@@ -139,22 +139,14 @@ export default function SessionView({ sessionId }: SessionViewProps) {
   const sessionTitle = messages.find(m => m.role === 'user')?.content?.slice(0, 40) ?? 'Session';
 
   if (isLoading) {
-    return <div style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#333', fontSize: 11 }}>Loading…</div>;
+    return <div className="flex-1 flex items-center justify-center text-[#333333] text-[11px]">Loading…</div>;
   }
 
   return (
-    <div style={{ flex: 1, display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
+    <div className="flex-1 flex flex-col overflow-hidden">
       {/* Header */}
-      <div style={{
-        height: 40,
-        padding: '0 16px',
-        borderBottom: '1px solid #141414',
-        display: 'flex',
-        alignItems: 'center',
-        gap: 8,
-        flexShrink: 0,
-      }}>
-        <span style={{ color: '#aaaaaa', fontSize: 11, fontWeight: 500, flex: 1 }}>
+      <div className="h-10 px-4 border-b border-[#141414] flex items-center gap-2 shrink-0">
+        <span className="text-[#aaaaaa] text-[11px] font-medium flex-1">
           {sessionTitle}
         </span>
       </div>

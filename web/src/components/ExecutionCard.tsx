@@ -54,69 +54,38 @@ export default function ExecutionCard({
   const isApproval = needsApproval && !decided;
 
   return (
-    <div style={{
-      background: '#111111',
-      border: `1px solid ${status === 'awaiting_approval' && !decided ? '#201a0a' : '#1e1e1e'}`,
-      borderRadius: 5,
-      overflow: 'hidden',
-      fontSize: 11,
-    }}>
+    <div className={`card bg-base-300 border ${status === 'awaiting_approval' && !decided ? 'border-[#201a0a]' : 'border-neutral'} rounded-md overflow-hidden text-[11px]`}>
       {/* Header row */}
       <div
         role={!isApproval ? 'button' : undefined}
         onClick={!isApproval ? () => setExpanded(e => !e) : undefined}
-        style={{
-          padding: '6px 10px',
-          display: 'flex',
-          alignItems: 'center',
-          gap: 7,
-          cursor: isApproval ? 'default' : 'pointer',
-        }}
+        className={`px-2.5 py-1.5 flex items-center gap-1.5 ${isApproval ? 'cursor-default' : 'cursor-pointer'}`}
       >
-        <div style={{
-          width: 5,
-          height: 5,
-          borderRadius: '50%',
-          background: decided === 'approved' ? '#4ade80' : decided === 'rejected' ? '#ef4444' : dotColor,
-          flexShrink: 0,
-        }} />
-        <span style={{ color: '#555555', flex: 1, userSelect: 'none' }}>{label}</span>
+        <div
+          className="w-1.5 h-1.5 rounded-full shrink-0"
+          style={{ background: decided === 'approved' ? '#4ade80' : decided === 'rejected' ? '#ef4444' : dotColor }}
+        />
+        <span className="text-[#555555] flex-1 select-none">{label}</span>
 
         {decided && (
-          <span style={{ color: decided === 'approved' ? '#4ade80' : '#ef4444', fontSize: 9 }}>
+          <span className={`text-[9px] ${decided === 'approved' ? 'text-[#4ade80]' : 'text-error'}`}>
             {decided}
           </span>
         )}
 
         {isApproval && (
-          <div style={{ display: 'flex', gap: 3 }}>
+          <div className="flex gap-0.5">
             <button
               onClick={handleApprove}
               disabled={acting}
-              style={{
-                background: '#0f1f0f',
-                border: '1px solid #1a3a1a',
-                borderRadius: 3,
-                padding: '2px 8px',
-                fontSize: 9,
-                color: '#4ade80',
-                cursor: acting ? 'not-allowed' : 'pointer',
-              }}
+              className="btn btn-xs min-h-0 h-auto py-0.5 px-2 bg-[#0f1f0f] border-[#1a3a1a] text-[#4ade80] text-[9px]"
             >
               Approve
             </button>
             <button
               onClick={handleReject}
               disabled={acting}
-              style={{
-                background: '#111',
-                border: '1px solid #222',
-                borderRadius: 3,
-                padding: '2px 8px',
-                fontSize: 9,
-                color: '#555555',
-                cursor: acting ? 'not-allowed' : 'pointer',
-              }}
+              className="btn btn-xs min-h-0 h-auto py-0.5 px-2 bg-base-300 border-neutral-content/20 text-[#555555] text-[9px]"
             >
               Reject
             </button>
@@ -124,7 +93,7 @@ export default function ExecutionCard({
         )}
 
         {!isApproval && !decided && (
-          <span style={{ color: '#333', fontSize: 9 }}>{expanded ? '▴' : '▾'}</span>
+          <span className="text-[#333333] text-[9px]">{expanded ? '▴' : '▾'}</span>
         )}
       </div>
 
@@ -132,18 +101,7 @@ export default function ExecutionCard({
       {expanded && !isApproval && (
         <div
           role="log"
-          style={{
-            borderTop: `1px solid ${status === 'error' ? '#2a1010' : '#1a1a1a'}`,
-            padding: '7px 10px',
-            fontFamily: 'monospace',
-            fontSize: 9,
-            color: '#555555',
-            lineHeight: 1.6,
-            background: '#0d0d0d',
-            whiteSpace: 'pre-wrap',
-            maxHeight: 200,
-            overflowY: 'auto',
-          }}
+          className={`border-t ${status === 'error' ? 'border-[#2a1010]' : 'border-neutral'} px-2.5 py-1.5 font-mono text-[9px] text-[#555555] leading-relaxed bg-base-200 whitespace-pre-wrap max-h-50 overflow-y-auto`}
         >
           {outputLog || (result ?? '(no output)')}
         </div>

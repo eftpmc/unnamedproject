@@ -35,39 +35,22 @@ export default function NavPanel({ activePanel, sessions, activeSessionId, onNew
   });
 
   return (
-    <div style={{
-      width: 180,
-      background: '#0d0d0d',
-      borderRight: '1px solid #151515',
-      display: 'flex',
-      flexDirection: 'column',
-      overflow: 'hidden',
-      flexShrink: 0,
-    }}>
+    <div className="w-45 bg-base-200 border-r border-[#151515] flex flex-col overflow-hidden shrink-0">
       {activePanel === 'sessions' ? (
         <>
-          <div style={{
-            padding: '10px 12px 6px',
-            color: '#444',
-            fontSize: 9,
-            textTransform: 'uppercase',
-            letterSpacing: '0.07em',
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'space-between',
-          }}>
+          <div className="px-3 pt-2.5 pb-1.5 text-[#444444] text-[9px] uppercase tracking-wider flex items-center justify-between">
             Sessions
             <button
               onClick={onNewSession}
               title="New session"
-              style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#444', fontSize: 14, lineHeight: 1 }}
+              className="btn btn-ghost btn-xs btn-square text-[#444444] text-sm leading-none p-0 min-h-0 h-auto"
             >
               +
             </button>
           </div>
-          <div style={{ flex: 1, overflowY: 'auto' }}>
+          <div className="flex-1 overflow-y-auto">
             {sessions.length === 0 && (
-              <div style={{ padding: '12px', color: '#333', fontSize: 10 }}>No sessions yet</div>
+              <div className="p-3 text-[#333333] text-[10px]">No sessions yet</div>
             )}
             {sessions.map(s => {
               const active = s.id === activeSessionId;
@@ -75,27 +58,12 @@ export default function NavPanel({ activePanel, sessions, activeSessionId, onNew
                 <div
                   key={s.id}
                   onClick={() => navigate(`/s/${s.id}`)}
-                  style={{
-                    padding: '7px 12px',
-                    cursor: 'pointer',
-                    background: active ? '#161616' : 'transparent',
-                    borderLeft: active ? '2px solid #cccccc' : '2px solid transparent',
-                    paddingLeft: active ? 10 : 12,
-                  }}
-                  onMouseEnter={e => { if (!active) (e.currentTarget as HTMLElement).style.background = '#111'; }}
-                  onMouseLeave={e => { if (!active) (e.currentTarget as HTMLElement).style.background = 'transparent'; }}
+                  className={`py-1.5 px-3 cursor-pointer border-l-2 ${active ? 'bg-[#161616] border-l-base-content pl-2.5' : 'border-l-transparent hover:bg-base-300'}`}
                 >
-                  <div style={{
-                    color: active ? '#dddddd' : '#666666',
-                    fontSize: 10,
-                    fontWeight: active ? 500 : 400,
-                    whiteSpace: 'nowrap',
-                    overflow: 'hidden',
-                    textOverflow: 'ellipsis',
-                  }}>
+                  <div className={`text-[10px] truncate ${active ? 'text-[#dddddd] font-medium' : 'text-[#666666]'}`}>
                     {s.title ?? 'Untitled session'}
                   </div>
-                  <div style={{ color: '#333', fontSize: 9, marginTop: 2 }}>
+                  <div className="text-[#333333] text-[9px] mt-0.5">
                     {timeAgo(s.updated_at)}
                   </div>
                 </div>
@@ -105,33 +73,33 @@ export default function NavPanel({ activePanel, sessions, activeSessionId, onNew
         </>
       ) : (
         <>
-          <div style={{ padding: '10px 12px 6px', color: '#444', fontSize: 9, textTransform: 'uppercase', letterSpacing: '0.07em' }}>
+          <div className="px-3 pt-2.5 pb-1.5 text-[#444444] text-[9px] uppercase tracking-wider">
             Workspaces
           </div>
-          <div style={{ flex: 1, overflowY: 'auto' }}>
+          <div className="flex-1 overflow-y-auto">
             {workspaces.map(w => (
-              <div key={w.id} style={{ padding: '7px 12px' }}>
-                <div style={{ color: '#666', fontSize: 10, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+              <div key={w.id} className="py-1.5 px-3">
+                <div className="text-[#666666] text-[10px] truncate">
                   {w.name}
                 </div>
                 {w.description && (
-                  <div style={{ color: '#333', fontSize: 9, marginTop: 2, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                  <div className="text-[#333333] text-[9px] mt-0.5 truncate">
                     {w.description}
                   </div>
                 )}
               </div>
             ))}
             {workspaces.length > 0 && connections.length > 0 && (
-              <div style={{ borderTop: '1px solid #141414', marginTop: 4 }}>
-                <div style={{ padding: '8px 12px 4px', color: '#333', fontSize: 9, textTransform: 'uppercase', letterSpacing: '0.07em' }}>
+              <div className="border-t border-[#141414] mt-1">
+                <div className="px-3 pt-2 pb-1 text-[#333333] text-[9px] uppercase tracking-wider">
                   Connections
                 </div>
                 {connections.map(c => (
-                  <div key={c.id} style={{ padding: '5px 12px', display: 'flex', alignItems: 'center', gap: 6 }}>
-                    <div style={{ color: '#555', fontSize: 10, flex: 1, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                  <div key={c.id} className="py-1 px-3 flex items-center gap-1.5">
+                    <div className="text-[#555555] text-[10px] flex-1 truncate">
                       {c.name}
                     </div>
-                    <div style={{ color: '#333', fontSize: 9 }}>{c.type}</div>
+                    <div className="text-[#333333] text-[9px]">{c.type}</div>
                   </div>
                 ))}
               </div>

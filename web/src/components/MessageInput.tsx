@@ -23,16 +23,8 @@ export default function MessageInput({ onSend, disabled }: MessageInputProps) {
   }
 
   return (
-    <div style={{ padding: '10px 12px', borderTop: '1px solid #141414', flexShrink: 0 }}>
-      <div style={{
-        background: '#111111',
-        border: '1px solid #1e1e1e',
-        borderRadius: 7,
-        padding: '8px 12px',
-        display: 'flex',
-        alignItems: 'flex-end',
-        gap: 8,
-      }}>
+    <div className="px-3 py-2.5 border-t border-[#141414] shrink-0">
+      <div className="bg-base-300 border border-neutral rounded-lg px-3 py-2 flex items-end gap-2">
         <textarea
           value={value}
           onChange={e => setValue(e.target.value)}
@@ -40,30 +32,13 @@ export default function MessageInput({ onSend, disabled }: MessageInputProps) {
           placeholder="Message…"
           disabled={disabled}
           rows={1}
-          style={{
-            flex: 1,
-            background: 'transparent',
-            border: 'none',
-            outline: 'none',
-            color: disabled ? '#333' : '#cccccc',
-            fontSize: 11,
-            resize: 'none',
-            fontFamily: 'inherit',
-            lineHeight: 1.5,
-          }}
+          className={`flex-1 bg-transparent border-none outline-none text-[11px] resize-none font-inherit leading-relaxed ${disabled ? 'text-[#333333]' : 'text-base-content'}`}
         />
         <button
           onClick={submit}
           disabled={disabled || !value.trim()}
           title="Send"
-          style={{
-            background: 'none',
-            border: 'none',
-            cursor: disabled || !value.trim() ? 'not-allowed' : 'pointer',
-            color: disabled || !value.trim() ? '#333' : '#666',
-            padding: '0 2px',
-            flexShrink: 0,
-          }}
+          className={`btn btn-ghost btn-xs btn-square min-h-0 h-auto p-0.5 shrink-0 ${disabled || !value.trim() ? 'text-[#333333]' : 'text-[#666666]'}`}
         >
           <svg width="14" height="14" viewBox="0 0 14 14" fill="none">
             <path d="M12 7L2 2l2.5 5L2 12l10-5z" fill="currentColor"/>

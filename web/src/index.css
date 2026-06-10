@@ -1,4 +1,33 @@
 @import "tailwindcss";
+@plugin "daisyui" {
+  themes: unnamed --default;
+}
+@plugin "daisyui/theme" {
+  name: "unnamed";
+  default: true;
+  prefersdark: true;
+  color-scheme: dark;
+  --color-base-100: #0a0a0a;
+  --color-base-200: #0d0d0d;
+  --color-base-300: #111111;
+  --color-base-content: #cccccc;
+  --color-primary: #cccccc;
+  --color-primary-content: #0a0a0a;
+  --color-secondary: #161616;
+  --color-secondary-content: #cccccc;
+  --color-accent: #22c55e;
+  --color-accent-content: #0a0a0a;
+  --color-neutral: #1a1a1a;
+  --color-neutral-content: #cccccc;
+  --color-info: #666666;
+  --color-success: #22c55e;
+  --color-warning: #f59e0b;
+  --color-error: #ef4444;
+  --radius-selector: 0.3rem;
+  --radius-field: 0.35rem;
+  --radius-box: 0.5rem;
+  --border: 1px;
+}
 
 @theme {
   --color-base: #0a0a0a;
@@ -18,19 +47,21 @@
   --color-approve-text: #4ade80;
 }
 
-* {
-  box-sizing: border-box;
-  margin: 0;
-  padding: 0;
-}
+@layer base {
+  * {
+    box-sizing: border-box;
+    margin: 0;
+    padding: 0;
+  }
 
-html, body, #root {
-  height: 100%;
-  background: #0a0a0a;
-  color: #cccccc;
-  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
-  font-size: 13px;
-  -webkit-font-smoothing: antialiased;
+  html, body, #root {
+    height: 100%;
+    background: #0a0a0a;
+    color: #cccccc;
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+    font-size: 13px;
+    -webkit-font-smoothing: antialiased;
+  }
 }
 
 ::-webkit-scrollbar {

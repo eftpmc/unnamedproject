@@ -27,36 +27,19 @@ export default function MessageList({ messages, executions }: MessageListProps) 
   }, [messages.length]);
 
   return (
-    <div style={{
-      flex: 1,
-      overflowY: 'auto',
-      padding: '14px 16px',
-      display: 'flex',
-      flexDirection: 'column',
-      gap: 10,
-    }}>
+    <div className="flex-1 overflow-y-auto px-4 py-3.5 flex flex-col gap-2.5">
       {messages.map(msg => (
         <div key={msg.id}>
           {msg.role === 'user' ? (
-            <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
-              <div style={{
-                background: '#161616',
-                border: '1px solid #222222',
-                borderRadius: '8px 8px 2px 8px',
-                padding: '8px 12px',
-                maxWidth: '70%',
-                color: '#bbbbbb',
-                fontSize: 11,
-                lineHeight: 1.6,
-                whiteSpace: 'pre-wrap',
-              }}>
+            <div className="flex justify-end">
+              <div className="bg-[#161616] border border-[#222222] rounded-tl-lg rounded-tr-lg rounded-br-sm rounded-bl-lg px-3 py-2 max-w-[70%] text-[#bbbbbb] text-[11px] leading-relaxed whitespace-pre-wrap">
                 {msg.content}
               </div>
             </div>
           ) : (
-            <div style={{ maxWidth: '85%', display: 'flex', flexDirection: 'column', gap: 6 }}>
-              <div style={{ color: '#555555', fontSize: 9 }}>Assistant</div>
-              <div style={{ color: '#bbbbbb', fontSize: 11, lineHeight: 1.6, whiteSpace: 'pre-wrap' }}>
+            <div className="max-w-[85%] flex flex-col gap-1.5">
+              <div className="text-[#555555] text-[9px]">Assistant</div>
+              <div className="text-[#bbbbbb] text-[11px] leading-relaxed whitespace-pre-wrap">
                 {msg.content}
               </div>
               {(executions[msg.id] ?? []).map(exec => (

@@ -1,0 +1,88 @@
+import { getToken, setToken, clearToken } from './auth.js';
+import type { Session, Message, Workspace, Connection } from '../types.js';
+
+async function request<T>(path: string, init: RequestInit = {}): Promise<T> {
+  const token = getToken();
+  const res = await fetch(path, {
+    ...init,
+    headers: {
+      'Content-Type': 'application/json',
+      ...(token ? { Authorization: `Bearer ${token}` } : {}),
+      ...(init.headers ?? {}),
+    },
+  });
+  if (res.status === 401) {
+    clearToken();
+    window.location.href = '/login';
+    throw new Error('Unauthorized');
+  }
+  if (!res.ok) {
+    const body = await res.json().catch(() => ({}));
+    throw new Error((body as { error?: string }).error ?? `HTTP ${res.status}`);
+  }
+  return res.json();
+}
+
+export async function login(email: string, password: string): Promise<string> {
+  const data = await request<{ token: string }>('/auth/login', {
+    method: 'POST',
+    body: JSON.stringify({ email, password }),
+  });
+  setToken(data.token);
+  return data.token;
+}
+
+export function getSessions(): Promise<Session[]> {
+  return request('/sessions');
+}
+
+export function createSession(title?: string): Promise<{ id: string }> {
+  return request('/sessions', { method: 'POST', body: JSON.stringify({ title }) });
+}
+
+export function getMessages(sessionId: string): Promise<Message[]> {
+  return request(`/sessions/${sessionId}/messages`);
+}
+
+export function sendMessage(sessionId: string, content: string): Promise<Message> {
+  return request(`/sessions/${sessionId}/messages`, {
+    method: 'POST',
+    body: JSON.stringify({ content }),
+  });
+}
+
+export function approveExecution(executionId: string): Promise<void> {
+  return request(`/executions/${executionId}/approve`, { method: 'POST' });
+}
+
+export function rejectExecution(executionId: string): Promise<void> {
+  return request(`/executions/${executionId}/reject`, { method: 'POST' });
+}
+
+export function getWorkspaces(): Promise<Workspace[]> {
+  return request('/workspaces');
+}
+
+export function createWorkspace(body: { name: string; description?: string; repo_path?: string; enabled_connection_ids: string[] }): Promise<{ id: string }> {
+  return request('/workspaces', { method: 'POST', body: JSON.stringify(body) });
+}
+
+export function deleteWorkspace(id: string): Promise<void> {
+  return request(`/workspaces/${id}`, { method: 'DELETE' });
+}
+
+export function getConnections(): Promise<Connection[]> {
+  return request('/connections');
+}
+
+export function createConnection(body: { name: string; type: string; config: Record<string, unknown> }): Promise<{ id: string }> {
+  return request('/connections', { method: 'POST', body: JSON.stringify(body) });
+}
+
+export function deleteConnection(id: string): Promise<void> {
+  return request(`/connections/${id}`, { method: 'DELETE' });
+}
+
+export function getMemory(): Promise<Record<string, string>> {
+  return request('/memory');
+}

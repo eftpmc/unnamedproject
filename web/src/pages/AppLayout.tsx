@@ -52,7 +52,7 @@ export default function AppLayout() {
         <NavPanel
           activePanel={activePanel}
           sessions={sessions}
-          activeSesssionId={sessionId}
+          activeSessionId={sessionId}
           onNewSession={handleNewSession}
         />
       )}

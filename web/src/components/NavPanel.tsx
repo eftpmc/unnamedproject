@@ -15,11 +15,11 @@ function timeAgo(unixSeconds: number): string {
 interface NavPanelProps {
   activePanel: 'sessions' | 'workspaces';
   sessions: Session[];
-  activeSesssionId?: string;
+  activeSessionId?: string;
   onNewSession: () => void;
 }
 
-export default function NavPanel({ activePanel, sessions, activeSesssionId, onNewSession }: NavPanelProps) {
+export default function NavPanel({ activePanel, sessions, activeSessionId, onNewSession }: NavPanelProps) {
   const navigate = useNavigate();
 
   const { data: workspaces = [] } = useQuery<Workspace[]>({
@@ -70,7 +70,7 @@ export default function NavPanel({ activePanel, sessions, activeSesssionId, onNe
               <div style={{ padding: '12px', color: '#333', fontSize: 10 }}>No sessions yet</div>
             )}
             {sessions.map(s => {
-              const active = s.id === activeSesssionId;
+              const active = s.id === activeSessionId;
               return (
                 <div
                   key={s.id}

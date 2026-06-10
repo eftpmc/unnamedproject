@@ -1,5 +1,7 @@
 import express from 'express';
 import { createServer } from 'http';
+import { initDb } from './db/index.js';
+import authRoutes from './routes/auth.js';
 
 const PORT = process.env.PORT ?? '3000';
 const JWT_SECRET = process.env.JWT_SECRET;
@@ -11,6 +13,9 @@ if (!JWT_SECRET && NODE_ENV !== 'test') {
 
 const app = express();
 app.use(express.json());
+
+initDb();
+app.use('/auth', authRoutes);
 
 const server = createServer(app);
 

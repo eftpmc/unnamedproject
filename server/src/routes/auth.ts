@@ -1,0 +1,57 @@
+import { Router } from 'express';
+import bcrypt from 'bcrypt';
+import { getDb } from '../db/index.js';
+import { newId } from '../lib/ids.js';
+import { signToken } from '../lib/jwt.js';
+
+const router = Router();
+
+router.post('/register', async (req, res) => {
+  const { email, password } = req.body as { email?: string; password?: string };
+  if (!email || !password) {
+    res.status(400).json({ error: 'email and password required' });
+    return;
+  }
+
+  const db = getDb();
+  const userCount = (db.prepare('SELECT COUNT(*) as n FROM users').get() as { n: number }).n;
+
+  if (userCount > 0 && process.env.ALLOW_REGISTRATION !== 'true') {
+    res.status(403).json({ error: 'Registration closed' });
+    return;
+  }
+
+  const hashed = await bcrypt.hash(password, 12);
+  const id = newId();
+
+  try {
+    db.prepare('INSERT INTO users (id, email, hashed_password) VALUES (?, ?, ?)').run(id, email, hashed);
+  } catch {
+    res.status(409).json({ error: 'Email already registered' });
+    return;
+  }
+
+  res.status(201).json({ token: signToken(id) });
+});
+
+router.post('/login', async (req, res) => {
+  const { email, password } = req.body as { email?: string; password?: string };
+  if (!email || !password) {
+    res.status(400).json({ error: 'email and password required' });
+    return;
+  }
+
+  const db = getDb();
+  const user = db.prepare('SELECT id, hashed_password FROM users WHERE email = ?').get(email) as
+    | { id: string; hashed_password: string }
+    | undefined;
+
+  if (!user || !(await bcrypt.compare(password, user.hashed_password))) {
+    res.status(401).json({ error: 'Invalid credentials' });
+    return;
+  }
+
+  res.json({ token: signToken(user.id) });
+});
+
+export default router;

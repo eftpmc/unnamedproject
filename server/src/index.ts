@@ -8,6 +8,7 @@ import workspacesRoutes from './routes/workspaces.js';
 import sessionsRoutes from './routes/sessions.js';
 import messagesRoutes from './routes/messages.js';
 import executionsRoutes from './routes/executions.js';
+import memoryRoutes from './routes/memory.js';
 
 const PORT = process.env.PORT ?? '3000';
 const JWT_SECRET = process.env.JWT_SECRET;
@@ -27,6 +28,7 @@ app.use('/workspaces', workspacesRoutes);
 app.use('/sessions', sessionsRoutes);
 app.use('/sessions', messagesRoutes);
 app.use('/executions', executionsRoutes);
+app.use('/memory', memoryRoutes);
 
 const server = createServer(app);
 initSocket(server);

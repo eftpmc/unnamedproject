@@ -1,0 +1,66 @@
+<h2>Overall layout structure</h2>
+<p class="subtitle">How should the sidebar and thread view relate?</p>
+
+<div class="options">
+  <div class="option" data-choice="a" onclick="toggleSelect(this)">
+    <div class="letter">A</div>
+    <div class="content">
+      <h3>Fixed sidebar + thread</h3>
+      <p>Persistent left sidebar (240px) showing thread list, workspaces, connections. Thread view takes remaining width. Sidebar always visible.</p>
+      <div style="margin-top:12px;background:oklch(0.11 0.01 250);border-radius:8px;overflow:hidden;display:flex;height:120px;font-size:11px;">
+        <div style="width:80px;background:oklch(0.13 0.01 250);border-right:1px solid oklch(0.2 0.01 250);padding:10px 8px;display:flex;flex-direction:column;gap:6px;">
+          <div style="color:oklch(0.55 0.02 250);font-size:9px;text-transform:uppercase;letter-spacing:0.05em;">Threads</div>
+          <div style="background:oklch(0.22 0.04 250);border-radius:3px;padding:4px 6px;color:oklch(0.8 0.01 250);font-size:9px;">API fixes</div>
+          <div style="padding:4px 6px;color:oklch(0.5 0.02 250);font-size:9px;">Deploy</div>
+          <div style="padding:4px 6px;color:oklch(0.5 0.02 250);font-size:9px;">Refactor</div>
+        </div>
+        <div style="flex:1;padding:10px;display:flex;flex-direction:column;gap:6px;">
+          <div style="color:oklch(0.55 0.02 250);font-size:9px;">Assistant</div>
+          <div style="background:oklch(0.17 0.02 250);border-radius:4px;padding:6px;color:oklch(0.7 0.01 250);font-size:9px;">Running Claude Code on api workspace...</div>
+          <div style="background:oklch(0.19 0.03 290);border-radius:4px;padding:5px;font-size:9px;color:oklch(0.75 0.04 290);">● invoke_claude_code · api</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="option" data-choice="b" onclick="toggleSelect(this)">
+    <div class="letter">B</div>
+    <div class="content">
+      <h3>Icon rail + thread</h3>
+      <p>Narrow icon-only rail (48px) on left. Clicking an icon slides open a panel (workspaces, threads, settings). Thread takes most of the screen — feels more focused.</p>
+      <div style="margin-top:12px;background:oklch(0.11 0.01 250);border-radius:8px;overflow:hidden;display:flex;height:120px;font-size:11px;">
+        <div style="width:32px;background:oklch(0.13 0.01 250);border-right:1px solid oklch(0.2 0.01 250);padding:8px 6px;display:flex;flex-direction:column;gap:8px;align-items:center;">
+          <div style="width:16px;height:16px;background:oklch(0.35 0.05 250);border-radius:3px;"></div>
+          <div style="width:16px;height:16px;background:oklch(0.22 0.02 250);border-radius:3px;"></div>
+          <div style="width:16px;height:16px;background:oklch(0.22 0.02 250);border-radius:3px;"></div>
+        </div>
+        <div style="flex:1;padding:10px;display:flex;flex-direction:column;gap:6px;">
+          <div style="color:oklch(0.55 0.02 250);font-size:9px;">Assistant</div>
+          <div style="background:oklch(0.17 0.02 250);border-radius:4px;padding:6px;color:oklch(0.7 0.01 250);font-size:9px;">Running Claude Code on api workspace...</div>
+          <div style="background:oklch(0.19 0.03 290);border-radius:4px;padding:5px;font-size:9px;color:oklch(0.75 0.04 290);">● invoke_claude_code · api</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="option" data-choice="c" onclick="toggleSelect(this)">
+    <div class="letter">C</div>
+    <div class="content">
+      <h3>Full-width thread + overlay sidebar</h3>
+      <p>Thread is fullscreen. Sidebar slides in from left when triggered (hamburger/shortcut). Maximizes conversation space — feels like a chat-first product.</p>
+      <div style="margin-top:12px;background:oklch(0.11 0.01 250);border-radius:8px;overflow:hidden;height:120px;font-size:11px;padding:10px;display:flex;flex-direction:column;gap:6px;">
+        <div style="display:flex;align-items:center;gap:8px;margin-bottom:4px;">
+          <div style="width:14px;height:10px;display:flex;flex-direction:column;gap:2px;justify-content:center;">
+            <div style="height:1.5px;background:oklch(0.5 0.02 250);border-radius:1px;"></div>
+            <div style="height:1.5px;background:oklch(0.5 0.02 250);border-radius:1px;"></div>
+            <div style="height:1.5px;background:oklch(0.5 0.02 250);border-radius:1px;"></div>
+          </div>
+          <div style="color:oklch(0.6 0.02 250);font-size:9px;">API fixes</div>
+        </div>
+        <div style="color:oklch(0.55 0.02 250);font-size:9px;">Assistant</div>
+        <div style="background:oklch(0.17 0.02 250);border-radius:4px;padding:6px;color:oklch(0.7 0.01 250);font-size:9px;">Running Claude Code on api workspace...</div>
+        <div style="background:oklch(0.19 0.03 290);border-radius:4px;padding:5px;font-size:9px;color:oklch(0.75 0.04 290);">● invoke_claude_code · api</div>
+      </div>
+    </div>
+  </div>
+</div>

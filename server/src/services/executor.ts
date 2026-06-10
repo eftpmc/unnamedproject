@@ -13,7 +13,7 @@ export function createExecution(
   getDb()
     .prepare('INSERT INTO executions (id, message_id, workspace_id, tool, status) VALUES (?,?,?,?,?)')
     .run(id, messageId, workspaceId, tool, 'running');
-  broadcast(userId, { type: 'execution_update', executionId: id, status: 'running', tool });
+  broadcast(userId, { type: 'execution_update', executionId: id, status: 'running', tool, messageId });
   return id;
 }
 

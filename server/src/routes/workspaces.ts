@@ -33,7 +33,7 @@ router.post('/', (req, res) => {
 });
 
 router.delete('/:id', (req, res) => {
-  const { userId } = req as AuthedRequest;
+  const { userId } = req as unknown as AuthedRequest;
   const result = getDb()
     .prepare('DELETE FROM workspaces WHERE id = ? AND user_id = ?')
     .run(req.params.id, userId);

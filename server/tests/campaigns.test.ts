@@ -2,7 +2,7 @@ import { describe, it, expect, beforeAll } from 'vitest';
 import request from 'supertest';
 import fs from 'fs';
 import { app } from '../src/index.js';
-import { initDb, getDb } from '../src/db/index.js';
+import { initDb, getDb, createCampaign, getCampaignsForProject, getCampaignById, getCampaignTasks, updateCampaignTaskStatus, maybeCompleteCampaign } from '../src/db/index.js';
 
 let token: string;
 let projectId: string;
@@ -48,5 +48,40 @@ describe('campaigns DB', () => {
     expect(names).toContain('status');
     expect(names).toContain('execution_id');
     expect(names).toContain('position');
+  });
+});
+
+describe('campaign helpers', () => {
+  let campaignId: string;
+
+  it('createCampaign creates campaign and tasks', () => {
+    const { campaign, tasks } = createCampaign(projectId, null, 'Test campaign', [
+      { title: 'Task A', agent: 'claude_code' },
+      { title: 'Task B', agent: 'codex' },
+    ]);
+    expect(campaign.id).toBeTruthy();
+    expect(campaign.status).toBe('running');
+    expect(tasks).toHaveLength(2);
+    expect(tasks[0].status).toBe('waiting');
+    expect(tasks[0].agent).toBe('claude_code');
+    expect(tasks[1].position).toBe(1);
+    campaignId = campaign.id;
+  });
+
+  it('getCampaignsForProject returns campaigns', () => {
+    const campaigns = getCampaignsForProject(projectId);
+    expect(campaigns.length).toBeGreaterThan(0);
+    expect(campaigns[0].id).toBe(campaignId);
+  });
+
+  it('updateCampaignTaskStatus + maybeCompleteCampaign', () => {
+    const tasks = getCampaignTasks(campaignId);
+    updateCampaignTaskStatus(tasks[0].id, 'done');
+    updateCampaignTaskStatus(tasks[1].id, 'done');
+    const status = maybeCompleteCampaign(campaignId);
+    expect(status).toBe('done');
+    const campaign = getCampaignById(campaignId)!;
+    expect(campaign.status).toBe('done');
+    expect(campaign.completed_at).not.toBeNull();
   });
 });

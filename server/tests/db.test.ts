@@ -24,6 +24,8 @@ describe('database schema', () => {
     expect(names).toContain('approvals');
     expect(names).toContain('memories');
     expect(names).toContain('scheduled_tasks');
+    expect(names).toContain('campaigns');
+    expect(names).toContain('campaign_tasks');
   });
 
   it('executions table has project_id column', () => {

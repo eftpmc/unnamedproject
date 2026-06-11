@@ -380,29 +380,24 @@ export function createCampaign(
   projectId: string,
   sessionId: string | null,
   title: string,
-  tasks: Array<{ title: string; agent: string }>
+  tasks: Array<{ title: string; agent: DbCampaignTask['agent'] }>
 ): { campaign: DbCampaign; tasks: DbCampaignTask[] } {
-  const id = newId();
-  getDb()
-    .prepare('INSERT INTO campaigns (id, project_id, session_id, title) VALUES (?,?,?,?)')
-    .run(id, projectId, sessionId, title);
-  const insertTask = getDb().prepare(
-    'INSERT INTO campaign_tasks (id, campaign_id, title, agent, position) VALUES (?,?,?,?,?)'
-  );
-  const createdTasks: DbCampaignTask[] = tasks.map((t, i) => {
-    const taskId = newId();
-    insertTask.run(taskId, id, t.title, t.agent, i);
-    return {
-      id: taskId, campaign_id: id, title: t.title,
-      agent: t.agent as DbCampaignTask['agent'], status: 'waiting',
-      execution_id: null, position: i, created_at: Math.floor(Date.now() / 1000),
-      completed_at: null,
-    };
-  });
-  const campaign = getDb()
-    .prepare('SELECT * FROM campaigns WHERE id = ?')
-    .get(id) as DbCampaign;
-  return { campaign, tasks: createdTasks };
+  return getDb().transaction(() => {
+    const id = newId();
+    getDb()
+      .prepare('INSERT INTO campaigns (id, project_id, session_id, title) VALUES (?,?,?,?)')
+      .run(id, projectId, sessionId, title);
+    const insertTask = getDb().prepare(
+      'INSERT INTO campaign_tasks (id, campaign_id, title, agent, position) VALUES (?,?,?,?,?)'
+    );
+    tasks.forEach((t, i) => {
+      insertTask.run(newId(), id, t.title, t.agent, i);
+    });
+    const campaign = getDb()
+      .prepare('SELECT * FROM campaigns WHERE id = ?')
+      .get(id) as DbCampaign;
+    return { campaign, tasks: getCampaignTasks(id) };
+  })();
 }
 
 export function getCampaignsForProject(projectId: string): DbCampaign[] {

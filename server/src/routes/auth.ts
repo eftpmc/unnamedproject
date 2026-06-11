@@ -1,6 +1,6 @@
 import { Router } from 'express';
 import bcrypt from 'bcrypt';
-import { getDb } from '../db/index.js';
+import { getDb, createScheduledTask } from '../db/index.js';
 import { newId } from '../lib/ids.js';
 import { signToken } from '../lib/jwt.js';
 
@@ -30,6 +30,8 @@ router.post('/register', async (req, res) => {
     res.status(409).json({ error: 'Email already registered' });
     return;
   }
+
+  createScheduledTask(id, 'reorganize_memory', 24);
 
   res.status(201).json({ token: signToken(id) });
 });

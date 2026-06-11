@@ -2,7 +2,7 @@ import { describe, it, expect, beforeAll } from 'vitest';
 import request from 'supertest';
 import fs from 'fs';
 import { app } from '../src/index.js';
-import { initDb } from '../src/db/index.js';
+import { initDb, getDb } from '../src/db/index.js';
 
 beforeAll(() => {
   fs.mkdirSync(process.env.DATA_DIR!, { recursive: true });
@@ -18,6 +18,10 @@ describe('POST /auth/register', () => {
       .send({ email, password: 'password123' });
     expect(res.status).toBe(201);
     expect(res.body.token).toBeDefined();
+
+    const payload = JSON.parse(Buffer.from(res.body.token.split('.')[1], 'base64').toString());
+    const tasks = getDb().prepare('SELECT type, interval_hours, enabled FROM scheduled_tasks WHERE user_id = ?').all(payload.userId) as { type: string; interval_hours: number; enabled: number }[];
+    expect(tasks).toContainEqual({ type: 'reorganize_memory', interval_hours: 24, enabled: 1 });
   });
 
   it('rejects duplicate email', async () => {

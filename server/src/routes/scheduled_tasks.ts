@@ -1,0 +1,34 @@
+import { Router } from 'express';
+import { getScheduledTasksForUser, getScheduledTaskForUser, updateScheduledTask } from '../db/index.js';
+import { runScheduledTask } from '../services/scheduled_tasks.js';
+import { requireAuth, type AuthedRequest } from '../middleware/auth.js';
+
+const router = Router();
+router.use(requireAuth);
+
+router.get('/', (req, res) => {
+  const { userId } = req as AuthedRequest;
+  res.json(getScheduledTasksForUser(userId));
+});
+
+router.patch('/:id', (req, res) => {
+  const { userId } = req as unknown as AuthedRequest;
+  const { enabled, interval_hours } = req.body as { enabled?: boolean; interval_hours?: number };
+
+  const task = getScheduledTaskForUser(req.params.id, userId);
+  if (!task) { res.status(404).json({ error: 'Scheduled task not found' }); return; }
+
+  updateScheduledTask(req.params.id, userId, { enabled, interval_hours });
+  res.json({ ok: true });
+});
+
+router.post('/:id/run', async (req, res) => {
+  const { userId } = req as unknown as AuthedRequest;
+  const task = getScheduledTaskForUser(req.params.id, userId);
+  if (!task) { res.status(404).json({ error: 'Scheduled task not found' }); return; }
+
+  await runScheduledTask(userId, req.params.id);
+  res.json({ ok: true });
+});
+
+export default router;

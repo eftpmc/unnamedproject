@@ -6,12 +6,15 @@ interface CodexInput {
   prompt: string;
 }
 
+interface McpServerConfig { command: string; args?: string[]; env?: Record<string, string> }
+
 interface ToolContext {
   userId: string;
   executionId: string;
   repoPath: string;
   apiKey: string | null;
   resumeSessionId?: string | null;
+  mcpServers?: Record<string, McpServerConfig>;
 }
 
 export interface CodexResult {
@@ -29,6 +32,9 @@ export async function invokeCodex(input: CodexInput, ctx: ToolContext): Promise<
   }
   args.push('--dangerously-bypass-approvals-and-sandbox', '--json');
   if (!ctx.resumeSessionId) args.push('--skip-git-repo-check');
+  if (ctx.mcpServers && Object.keys(ctx.mcpServers).length > 0) {
+    args.push('--mcp-config', JSON.stringify({ mcpServers: ctx.mcpServers }));
+  }
   args.push(input.prompt);
 
   return new Promise((resolve, reject) => {

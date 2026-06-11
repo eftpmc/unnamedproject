@@ -9,7 +9,7 @@ import { runGitOp } from '../tools/git_op.js';
 import { runGithubApi } from '../tools/github_api.js';
 import { invokeClaudeCode } from '../tools/invoke_claude_code.js';
 import { invokeCodex } from '../tools/invoke_codex.js';
-import { callMcp } from '../tools/mcp_call.js';
+import { callMcpTool } from '../tools/mcp_call.js';
 import { runProjectQuery } from '../tools/project_query.js';
 import { buildGraph } from './graphify.js';
 import { remember, recall, forget, formatEntry } from '../tools/memory_tools.js';
@@ -136,6 +136,28 @@ ${pinnedProjectText}${memoryText}
 ${projectsText}${recentChatsText}`;
 }
 
+interface McpServerConfig { command: string; args?: string[]; env?: Record<string, string> }
+
+function getMcpServersForUser(userId: string): Record<string, McpServerConfig> {
+  const conns = getDb()
+    .prepare("SELECT id FROM connections WHERE user_id = ? AND type = 'mcp'")
+    .all(userId) as { id: string }[];
+  const servers: Record<string, McpServerConfig> = {};
+  for (const conn of conns) {
+    try {
+      const cfg = getDecryptedConfig(conn.id);
+      if (cfg.command) {
+        servers[conn.id] = {
+          command: cfg.command,
+          args: cfg.args ? JSON.parse(cfg.args) : [],
+          env: cfg.env ? JSON.parse(cfg.env) : {},
+        };
+      }
+    } catch { /* skip misconfigured connections */ }
+  }
+  return servers;
+}
+
 async function dispatchTool(
   toolName: string,
   toolInput: Record<string, unknown>,
@@ -172,7 +194,7 @@ async function dispatchTool(
         const ccWorktree = await ensureWorktree(project, sessionId);
         const ccResult = await invokeClaudeCode(
           { prompt: toolInput.prompt as string },
-          { userId, executionId, repoPath: ccWorktree.worktree_path, apiKey: ccApiKey, resumeSessionId: ccWorktree.claude_session_id }
+          { userId, executionId, repoPath: ccWorktree.worktree_path, apiKey: ccApiKey, resumeSessionId: ccWorktree.claude_session_id, mcpServers: getMcpServersForUser(userId) }
         );
         if (ccResult.sessionId) setAgentWorktreeSession(ccWorktree.id, 'claude', ccResult.sessionId);
         result = ccResult.result;
@@ -198,7 +220,7 @@ async function dispatchTool(
         const codexWorktree = await ensureWorktree(project, sessionId);
         const codexResult = await invokeCodex(
           { prompt: toolInput.prompt as string },
-          { userId, executionId, repoPath: codexWorktree.worktree_path, apiKey: codexApiKey, resumeSessionId: codexWorktree.codex_session_id }
+          { userId, executionId, repoPath: codexWorktree.worktree_path, apiKey: codexApiKey, resumeSessionId: codexWorktree.codex_session_id, mcpServers: getMcpServersForUser(userId) }
         );
         if (codexResult.sessionId) setAgentWorktreeSession(codexWorktree.id, 'codex', codexResult.sessionId);
         result = codexResult.result;
@@ -213,10 +235,14 @@ async function dispatchTool(
         break;
       }
       case 'mcp_call': {
-        const config = getDecryptedConfig(toolInput.connection_id as string);
-        result = await callMcp(
-          { tool_name: toolInput.tool_name as string, tool_input: toolInput.tool_input as Record<string, unknown> },
-          { command: config.command, args: config.args ? JSON.parse(config.args) : [], env: config.env ? JSON.parse(config.env) : {} }
+        const mcpConfig = getDecryptedConfig(toolInput.connection_id as string);
+        result = await callMcpTool(
+          toolInput.connection_id as string,
+          mcpConfig.command,
+          mcpConfig.args ? JSON.parse(mcpConfig.args) : [],
+          mcpConfig.env ? JSON.parse(mcpConfig.env) : {},
+          toolInput.tool_name as string,
+          toolInput.tool_input as Record<string, unknown>,
         );
         break;
       }

@@ -6,12 +6,15 @@ interface ClaudeCodeInput {
   prompt: string;
 }
 
+interface McpServerConfig { command: string; args?: string[]; env?: Record<string, string> }
+
 interface ToolContext {
   userId: string;
   executionId: string;
   repoPath: string;
   apiKey: string | null;
   resumeSessionId?: string | null;
+  mcpServers?: Record<string, McpServerConfig>;
 }
 
 export interface ClaudeCodeResult {
@@ -39,6 +42,9 @@ export async function invokeClaudeCode(input: ClaudeCodeInput, ctx: ToolContext)
 
   const args = ['--print', '--permission-mode', 'bypassPermissions', '--output-format', 'stream-json', '--verbose'];
   if (ctx.resumeSessionId) args.push('--resume', ctx.resumeSessionId);
+  if (ctx.mcpServers && Object.keys(ctx.mcpServers).length > 0) {
+    args.push('--mcp-config', JSON.stringify({ mcpServers: ctx.mcpServers }));
+  }
   args.push(input.prompt);
 
   return new Promise((resolve, reject) => {

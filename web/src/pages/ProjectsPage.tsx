@@ -1,30 +1,67 @@
 import { useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { Plus, Trash2, FolderGit2, FileText, ChevronRight } from 'lucide-react';
-import { getProjects, createProject, deleteProject } from '../lib/api.js';
+import { Plus, FolderGit2, FileText } from 'lucide-react';
+import { getProjects, createProject, getProjectCampaigns } from '../lib/api.js';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
-import { ScrollArea } from '@/components/ui/scroll-area';
-import { ConfirmDialog } from '@/components/ui/confirm-dialog';
-import FileBrowser from '../components/FileBrowser.js';
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
 import { cn } from '@/lib/utils';
 import type { Project } from '../types.js';
 
+function ProjectCard({ project }: { project: Project }) {
+  const navigate = useNavigate();
+  const { data: campaigns = [] } = useQuery({
+    queryKey: ['project-campaigns', project.id],
+    queryFn: () => getProjectCampaigns(project.id),
+    staleTime: 30_000,
+  });
+  const runningCount = campaigns.filter(c => c.status === 'running').length;
+
+  return (
+    <button
+      onClick={() => navigate(`/projects/${project.id}`)}
+      className="group flex flex-col gap-3 rounded-2xl border border-border/50 bg-background/60 p-5 text-left shadow-sm transition-all hover:border-border hover:bg-background/90 hover:shadow-md"
+    >
+      <div className="flex items-start justify-between gap-2">
+        <div className="flex items-center gap-2.5">
+          {project.repo_path
+            ? <FolderGit2 size={16} className="shrink-0 text-muted-foreground" />
+            : <FileText size={16} className="shrink-0 text-muted-foreground" />
+          }
+          <span className="font-semibold text-sm text-foreground">{project.name}</span>
+        </div>
+        {runningCount > 0 && (
+          <div className="flex items-center gap-1 shrink-0">
+            <span className="size-2 rounded-full bg-blue-500 animate-pulse" />
+            <span className="text-[10px] text-blue-600 font-medium">{runningCount} running</span>
+          </div>
+        )}
+      </div>
+      {project.description && (
+        <p className="text-xs text-muted-foreground line-clamp-2">{project.description}</p>
+      )}
+      <div className="flex items-center gap-3 text-[11px] text-muted-foreground/60">
+        <span>{project.repo_path ? 'code repo' : 'doc project'}</span>
+        {campaigns.length > 0 && (
+          <span>{campaigns.length} campaign{campaigns.length !== 1 ? 's' : ''}</span>
+        )}
+      </div>
+    </button>
+  );
+}
+
 export default function ProjectsPage() {
   const queryClient = useQueryClient();
-  const [creating, setCreating] = useState(false);
+  const [open, setOpen] = useState(false);
   const [name, setName] = useState('');
   const [description, setDescription] = useState('');
   const [repoPath, setRepoPath] = useState('');
-  const [selectedId, setSelectedId] = useState<string | null>(null);
-  const [pendingDelete, setPendingDelete] = useState<string | null>(null);
 
   const { data: projects = [], isLoading } = useQuery<Project[]>({
     queryKey: ['projects'],
     queryFn: getProjects,
   });
-
-  const selectedProject = projects.find(p => p.id === selectedId) ?? null;
 
   const createMutation = useMutation({
     mutationFn: () => createProject({
@@ -33,168 +70,72 @@ export default function ProjectsPage() {
       repo_path: repoPath.trim() || undefined,
       enabled_connection_ids: [],
     }),
-    onSuccess: (data) => {
+    onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['projects'] });
-      setCreating(false);
-      setName('');
-      setDescription('');
-      setRepoPath('');
-      setSelectedId(data.id);
+      setOpen(false);
+      setName(''); setDescription(''); setRepoPath('');
     },
   });
-
-  const deleteMutation = useMutation({
-    mutationFn: deleteProject,
-    onSuccess: (_, id) => {
-      queryClient.invalidateQueries({ queryKey: ['projects'] });
-      setPendingDelete(null);
-      if (selectedId === id) setSelectedId(null);
-    },
-    onError: () => setPendingDelete(null),
-  });
-
-  const inputCls = 'h-8 text-sm bg-background/60';
 
   if (isLoading) return null;
 
   return (
-    <div className="flex min-h-0 flex-1 overflow-hidden">
-      {/* Left: project list */}
-      <div className="flex w-64 shrink-0 flex-col border-r border-border/50">
-        <header className="flex h-16 shrink-0 items-center justify-between px-4">
-          <h1 className="text-sm font-medium">Projects</h1>
-          <Button size="sm" variant="ghost" className="h-7 px-2 text-xs" onClick={() => setCreating(v => !v)}>
-            <Plus size={13} className="mr-1" />
-            New
-          </Button>
-        </header>
+    <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
+      <header className="flex h-14 shrink-0 items-center justify-between px-6 border-b border-border/40">
+        <h1 className="text-sm font-semibold">Projects</h1>
+        <Button size="sm" variant="outline" className="h-7 gap-1.5 text-xs" onClick={() => setOpen(true)}>
+          <Plus size={13} />
+          New project
+        </Button>
+      </header>
 
-        {creating && (
-          <div className="shrink-0 border-b border-border/50 px-3 pb-3">
-            <div className="flex flex-col gap-2 rounded-xl border border-border/50 bg-background/40 p-3">
-              <Input
-                className={inputCls}
-                placeholder="Project name"
-                value={name}
-                onChange={e => setName(e.target.value)}
-                autoFocus
-              />
-              <Input
-                className={inputCls}
-                placeholder="Description (optional)"
-                value={description}
-                onChange={e => setDescription(e.target.value)}
-              />
-              <Input
-                className={inputCls}
-                placeholder="Repo path (optional)"
-                value={repoPath}
-                onChange={e => setRepoPath(e.target.value)}
-              />
-              <div className="flex gap-2 pt-0.5">
-                <Button
-                  size="sm"
-                  className="h-7 text-xs"
-                  disabled={!name.trim() || createMutation.isPending}
-                  onClick={() => createMutation.mutate()}
-                >
-                  Create
-                </Button>
-                <Button size="sm" variant="ghost" className="h-7 text-xs" onClick={() => setCreating(false)}>
-                  Cancel
-                </Button>
-              </div>
-            </div>
+      {projects.length === 0 ? (
+        <div className="flex flex-1 flex-col items-center justify-center gap-3">
+          <p className="text-sm text-muted-foreground/60">No projects yet.</p>
+          <Button size="sm" onClick={() => setOpen(true)}>Create your first project</Button>
+        </div>
+      ) : (
+        <div className="flex-1 overflow-y-auto px-6 py-6">
+          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3 max-w-5xl">
+            {projects.map(p => <ProjectCard key={p.id} project={p} />)}
           </div>
-        )}
-
-        <ScrollArea className="flex-1">
-          <div className="px-2 py-1">
-            {projects.length === 0 && !creating && (
-              <p className="px-2 py-6 text-center text-xs text-muted-foreground/50">No projects yet</p>
-            )}
-            {projects.map((project) => (
-              <button
-                key={project.id}
-                onClick={() => setSelectedId(project.id === selectedId ? null : project.id)}
-                className={cn(
-                  'group flex w-full items-center gap-2.5 rounded-lg px-2.5 py-2 text-left transition-colors',
-                  selectedId === project.id
-                    ? 'bg-muted text-foreground'
-                    : 'text-muted-foreground hover:bg-muted/50',
-                )}
-              >
-                {project.repo_path
-                  ? <FolderGit2 size={14} className="shrink-0 opacity-70" />
-                  : <FileText size={14} className="shrink-0 opacity-70" />
-                }
-                <div className="min-w-0 flex-1">
-                  <div className="truncate text-xs font-medium">{project.name}</div>
-                  {project.description && (
-                    <div className="truncate text-xs text-muted-foreground/60">{project.description}</div>
-                  )}
-                </div>
-                <ChevronRight size={12} className="shrink-0 opacity-40" />
-              </button>
-            ))}
-          </div>
-        </ScrollArea>
-      </div>
-
-      {/* Right: project detail */}
-      <div className="flex min-w-0 flex-1 flex-col overflow-hidden">
-        {!selectedProject ? (
-          <div className="flex flex-1 items-center justify-center">
-            <p className="text-sm text-muted-foreground/40">
-              {projects.length === 0 ? 'Create a project to get started' : 'Select a project'}
-            </p>
-          </div>
-        ) : (
-          <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
-            {/* Detail header */}
-            <header className="flex h-16 shrink-0 items-center justify-between px-6">
-              <div className="min-w-0 flex-1">
-                <div className="flex items-center gap-2">
-                  {selectedProject.repo_path
-                    ? <FolderGit2 size={15} className="shrink-0 text-muted-foreground" />
-                    : <FileText size={15} className="shrink-0 text-muted-foreground" />
-                  }
-                  <h2 className="truncate text-sm font-medium">{selectedProject.name}</h2>
-                </div>
-                {selectedProject.repo_path && (
-                  <p className="mt-0.5 truncate font-mono text-xs text-muted-foreground/50">{selectedProject.repo_path}</p>
-                )}
-                {selectedProject.description && !selectedProject.repo_path && (
-                  <p className="mt-0.5 truncate text-xs text-muted-foreground/60">{selectedProject.description}</p>
-                )}
-              </div>
-              <Button
-                variant="ghost"
-                size="icon-sm"
-                className="shrink-0 text-muted-foreground hover:text-destructive"
-                onClick={() => setPendingDelete(selectedProject.id)}
-              >
-                <Trash2 size={14} />
-              </Button>
-            </header>
-
-            {/* File browser */}
-            <div className="flex min-h-0 flex-1 flex-col overflow-hidden px-6 pb-6">
-              <FileBrowser projectId={selectedProject.id} />
-            </div>
-          </div>
-        )}
-      </div>
-
-      {pendingDelete && (
-        <ConfirmDialog
-          title="Delete project?"
-          description="This will permanently delete the project. Files on disk will not be removed."
-          confirmLabel="Delete"
-          onConfirm={() => deleteMutation.mutate(pendingDelete)}
-          onCancel={() => setPendingDelete(null)}
-        />
+        </div>
       )}
+
+      <Dialog open={open} onOpenChange={setOpen}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>New project</DialogTitle>
+          </DialogHeader>
+          <div className="flex flex-col gap-3 py-2">
+            <Input
+              placeholder="Project name"
+              value={name}
+              onChange={e => setName(e.target.value)}
+              autoFocus
+            />
+            <Input
+              placeholder="Description (optional)"
+              value={description}
+              onChange={e => setDescription(e.target.value)}
+            />
+            <Input
+              placeholder="Repo path (optional, e.g. /Users/me/code/my-app)"
+              value={repoPath}
+              onChange={e => setRepoPath(e.target.value)}
+            />
+          </div>
+          <DialogFooter>
+            <Button variant="ghost" onClick={() => setOpen(false)}>Cancel</Button>
+            <Button
+              disabled={!name.trim() || createMutation.isPending}
+              onClick={() => createMutation.mutate()}
+            >
+              Create
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

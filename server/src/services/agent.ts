@@ -1,5 +1,6 @@
 import Anthropic from '@anthropic-ai/sdk';
-import { getDb, getProjectForUser, type DbProject } from '../db/index.js';
+import { getDb, getProjectForUser, setAgentWorktreeSession, type DbProject } from '../db/index.js';
+import { ensureWorktree } from '../lib/worktree.js';
 import { getDecryptedConfig } from '../routes/connections.js';
 import { recallAll } from './memory.js';
 import { toolDefinitions } from '../tools/definitions.js';
@@ -16,6 +17,46 @@ import { createProject, updateProject, deleteProject } from '../tools/project_op
 import { broadcast } from './socket.js';
 import { newId } from '../lib/ids.js';
 import { DEFAULT_EFFORT, getAnthropicKey, resolveModelForEffort, type EffortLevel } from './anthropic.js';
+
+async function maybeGenerateSessionTitle(userId: string, sessionId: string): Promise<void> {
+  // Only generate if session has no title yet
+  const session = getDb()
+    .prepare('SELECT title FROM sessions WHERE id = ?')
+    .get(sessionId) as { title: string | null } | undefined;
+  if (!session || session.title) return;
+
+  // Get the first user message
+  const firstUser = getDb()
+    .prepare("SELECT content FROM messages WHERE session_id = ? AND role = 'user' ORDER BY created_at LIMIT 1")
+    .get(sessionId) as { content: string } | undefined;
+  if (!firstUser) return;
+
+  let apiKey: string;
+  try {
+    apiKey = getAnthropicKey(userId);
+  } catch {
+    return; // no key configured, skip silently
+  }
+
+  try {
+    const client = new Anthropic({ apiKey });
+    const response = await client.messages.create({
+      model: 'claude-haiku-4-5-20251001',
+      max_tokens: 20,
+      messages: [{
+        role: 'user',
+        content: `Write a short title (4-6 words) for a conversation that starts with this message. Reply with only the title, no quotes or punctuation:\n\n${firstUser.content.slice(0, 500)}`,
+      }],
+    });
+    const title = response.content[0].type === 'text' ? response.content[0].text.trim() : null;
+    if (!title) return;
+
+    getDb().prepare('UPDATE sessions SET title = ? WHERE id = ?').run(title, sessionId);
+    broadcast(userId, { type: 'session_title_updated', sessionId, title });
+  } catch {
+    // title generation is best-effort, never throw
+  }
+}
 
 interface DbMessage { role: string; content: string; }
 
@@ -39,6 +80,8 @@ function buildSystemPrompt(userId: string): string {
 
 When the user gives you a task, determine which project it relates to. If no existing project fits and the task implies new code or files, call create_project yourself (pick a sensible name and description) rather than asking the user where to put things — only ask if it's genuinely ambiguous which existing project a task belongs to. For coding work, prefer invoke_claude_code or invoke_codex over manual file edits. Query project_query before dispatching coding tools to understand the codebase structure.
 
+Coding tools (invoke_claude_code, invoke_codex, file edits, git_op) all operate in a worktree on its own branch, isolated per session and separate from the project's main checkout — so dispatched work never disrupts the user's main branch or collides with other sessions working on the same project. When work is ready, use git_op commit and push so the user can review a diff/PR before merging.
+
 You can run tools in parallel when the tasks are independent.
 
 Approval tiers:
@@ -53,7 +96,8 @@ async function dispatchTool(
   toolName: string,
   toolInput: Record<string, unknown>,
   userId: string,
-  messageId: string
+  messageId: string,
+  sessionId: string
 ): Promise<string> {
   const projectId = (toolInput.project_id as string | undefined) ?? 'unknown';
   const project = getProjectForUser(projectId, userId);
@@ -80,10 +124,13 @@ async function dispatchTool(
             .get(...connectionIds) as { id: string } | undefined;
           if (anthropicConn) apiKey = getDecryptedConfig(anthropicConn.id).apiKey;
         }
-        result = await invokeClaudeCode(
+        const ccWorktree = await ensureWorktree(project, sessionId);
+        const ccResult = await invokeClaudeCode(
           { prompt: toolInput.prompt as string },
-          { userId, executionId, repoPath: project.repo_path, apiKey }
+          { userId, executionId, repoPath: ccWorktree.worktree_path, apiKey, resumeSessionId: ccWorktree.claude_session_id }
         );
+        if (ccResult.sessionId) setAgentWorktreeSession(ccWorktree.id, 'claude', ccResult.sessionId);
+        result = ccResult.result;
         break;
       }
       case 'invoke_codex': {
@@ -103,10 +150,13 @@ async function dispatchTool(
             .get(...connectionIds) as { id: string } | undefined;
           if (openaiConn) apiKey = getDecryptedConfig(openaiConn.id).apiKey;
         }
-        result = await invokeCodex(
+        const codexWorktree = await ensureWorktree(project, sessionId);
+        const codexResult = await invokeCodex(
           { prompt: toolInput.prompt as string },
-          { userId, executionId, repoPath: project.repo_path, apiKey }
+          { userId, executionId, repoPath: codexWorktree.worktree_path, apiKey, resumeSessionId: codexWorktree.codex_session_id }
         );
+        if (codexResult.sessionId) setAgentWorktreeSession(codexWorktree.id, 'codex', codexResult.sessionId);
+        result = codexResult.result;
         break;
       }
       case 'github_api': {
@@ -134,14 +184,15 @@ async function dispatchTool(
           result = `Project '${project.name}' has no repo. Create a new repo-backed project with create_project (with_repo=true) for this work.`;
           break;
         }
+        const gitWorktree = await ensureWorktree(project, sessionId);
         result = await runGitOp(
-          { op: toolInput.op as 'log' | 'diff' | 'status' | 'commit' | 'push', message: toolInput.message as string | undefined },
-          { userId, executionId, projectId, repoPath: project.repo_path }
+          { op: toolInput.op as 'log' | 'diff' | 'status' | 'commit' | 'push', message: toolInput.message as string | undefined, branch: toolInput.branch as string | undefined ?? gitWorktree.branch },
+          { userId, executionId, projectId, repoPath: gitWorktree.worktree_path }
         );
         break;
       }
       case 'project_query':
-        result = await runProjectQuery({ project_id: projectId, question: toolInput.question as string }, userId);
+        result = await runProjectQuery({ project_id: projectId, question: toolInput.question as string, session_id: sessionId }, userId);
         break;
       case 'remember':
         result = remember(
@@ -159,15 +210,15 @@ async function dispatchTool(
         result = forget(userId, toolInput.type as string, toolInput.key as string);
         break;
       case 'read_file':
-        result = await readFile({ project_id: projectId, path: toolInput.path as string }, { userId, executionId, projectId });
+        result = await readFile({ project_id: projectId, path: toolInput.path as string }, { userId, executionId, projectId, sessionId });
         break;
       case 'list_dir':
-        result = await listDir({ project_id: projectId, path: toolInput.path as string | undefined }, { userId, executionId, projectId });
+        result = await listDir({ project_id: projectId, path: toolInput.path as string | undefined }, { userId, executionId, projectId, sessionId });
         break;
       case 'write_file':
         result = await writeFile(
           { project_id: projectId, path: toolInput.path as string, content: toolInput.content as string },
-          { userId, executionId, projectId }
+          { userId, executionId, projectId, sessionId }
         );
         break;
       case 'create_project':
@@ -254,7 +305,7 @@ export async function runAgentTurn(userId: string, sessionId: string, userMessag
         // Dispatch all tool calls (potentially parallel for independent tools)
         const toolResults = await Promise.all(
           toolUseBlocks.map(async block => {
-            const result = await dispatchTool(block.name, block.input as Record<string, unknown>, userId, userMessageId);
+            const result = await dispatchTool(block.name, block.input as Record<string, unknown>, userId, userMessageId, sessionId);
             return {
               type: 'tool_result' as const,
               tool_use_id: block.id,
@@ -294,4 +345,7 @@ export async function runAgentTurn(userId: string, sessionId: string, userMessag
     .prepare('UPDATE sessions SET updated_at = unixepoch() WHERE id = ?')
     .run(sessionId);
   broadcast(userId, { type: 'turn_complete', sessionId });
+
+  // Fire-and-forget: generate title after first turn
+  maybeGenerateSessionTitle(userId, sessionId).catch(() => {});
 }

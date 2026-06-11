@@ -1,5 +1,5 @@
 import Anthropic from '@anthropic-ai/sdk';
-import { getDb, getProjectForUser, setAgentWorktreeSession, type DbProject } from '../db/index.js';
+import { getDb, getProjectForUser, setAgentWorktreeSession, updateCampaignTaskStatus, maybeCompleteCampaign, type DbProject } from '../db/index.js';
 import { ensureWorktree } from '../lib/worktree.js';
 import { getDecryptedConfig } from '../routes/connections.js';
 import { recallAll } from './memory.js';
@@ -16,6 +16,7 @@ import { remember, recall, forget, formatEntry } from '../tools/memory_tools.js'
 import { readFile, listDir, writeFile } from '../tools/file_ops.js';
 import { readChat } from '../tools/read_chat.js';
 import { createProject, updateProject, deleteProject } from '../tools/project_ops.js';
+import { runCreateCampaign } from '../tools/create_campaign.js';
 import { broadcast } from './socket.js';
 import { newId } from '../lib/ids.js';
 import { DEFAULT_EFFORT, getAnthropicKey, resolveModelForEffort, type EffortLevel } from './anthropic.js';
@@ -199,12 +200,26 @@ async function dispatchTool(
           if (anthropicConn) ccApiKey = getDecryptedConfig(anthropicConn.id).apiKey;
         }
         const ccWorktree = await ensureWorktree(project, sessionId);
+        const ccTaskId = toolInput.campaign_task_id as string | undefined;
+        if (ccTaskId) {
+          updateCampaignTaskStatus(ccTaskId, 'running', executionId);
+          broadcast(userId, { type: 'campaign_task_updated', taskId: ccTaskId, status: 'running' });
+        }
         const ccResult = await invokeClaudeCode(
           { prompt: toolInput.prompt as string },
           { userId, executionId, repoPath: ccWorktree.worktree_path, apiKey: ccApiKey, resumeSessionId: ccWorktree.claude_session_id, mcpServers: getMcpServersForUser(userId) }
         );
         if (ccResult.sessionId) setAgentWorktreeSession(ccWorktree.id, 'claude', ccResult.sessionId);
         result = ccResult.result;
+        if (ccTaskId) {
+          const taskFinalStatus = result.startsWith('Error') ? 'error' : 'done';
+          updateCampaignTaskStatus(ccTaskId, taskFinalStatus, executionId);
+          const taskRow = getDb()
+            .prepare('SELECT campaign_id FROM campaign_tasks WHERE id = ?')
+            .get(ccTaskId) as { campaign_id: string } | undefined;
+          if (taskRow) maybeCompleteCampaign(taskRow.campaign_id);
+          broadcast(userId, { type: 'campaign_task_updated', taskId: ccTaskId, status: taskFinalStatus });
+        }
         break;
       }
       case 'invoke_codex': {
@@ -225,12 +240,26 @@ async function dispatchTool(
           if (openaiConn) codexApiKey = getDecryptedConfig(openaiConn.id).apiKey;
         }
         const codexWorktree = await ensureWorktree(project, sessionId);
+        const codexTaskId = toolInput.campaign_task_id as string | undefined;
+        if (codexTaskId) {
+          updateCampaignTaskStatus(codexTaskId, 'running', executionId);
+          broadcast(userId, { type: 'campaign_task_updated', taskId: codexTaskId, status: 'running' });
+        }
         const codexResult = await invokeCodex(
           { prompt: toolInput.prompt as string },
           { userId, executionId, repoPath: codexWorktree.worktree_path, apiKey: codexApiKey, resumeSessionId: codexWorktree.codex_session_id, mcpServers: getMcpServersForUser(userId) }
         );
         if (codexResult.sessionId) setAgentWorktreeSession(codexWorktree.id, 'codex', codexResult.sessionId);
         result = codexResult.result;
+        if (codexTaskId) {
+          const taskFinalStatus = result.startsWith('Error') ? 'error' : 'done';
+          updateCampaignTaskStatus(codexTaskId, taskFinalStatus, executionId);
+          const taskRow = getDb()
+            .prepare('SELECT campaign_id FROM campaign_tasks WHERE id = ?')
+            .get(codexTaskId) as { campaign_id: string } | undefined;
+          if (taskRow) maybeCompleteCampaign(taskRow.campaign_id);
+          broadcast(userId, { type: 'campaign_task_updated', taskId: codexTaskId, status: taskFinalStatus });
+        }
         break;
       }
       case 'github_api': {
@@ -329,6 +358,18 @@ async function dispatchTool(
       case 'delete_project':
         result = await deleteProject({ project_id: toolInput.project_id as string, delete_files: toolInput.delete_files as boolean }, userId, executionId);
         break;
+      case 'create_campaign': {
+        result = runCreateCampaign(
+          {
+            project_id: toolInput.project_id as string,
+            title: toolInput.title as string,
+            tasks: toolInput.tasks as Array<{ title: string; agent: 'claude_code' | 'codex' | 'mcp' }>,
+            session_id: sessionId,
+          },
+          userId
+        );
+        break;
+      }
       default:
         result = `Unknown tool: ${toolName}`;
     }

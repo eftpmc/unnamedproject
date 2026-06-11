@@ -9,6 +9,7 @@ export const toolDefinitions: Anthropic.Tool[] = [
       properties: {
         project_id: { type: 'string', description: 'ID of the project to work in' },
         prompt: { type: 'string', description: 'The task to give Claude Code. Be specific and thorough — it can handle complex, multi-file work. Include context, constraints, and what done looks like.' },
+        campaign_task_id: { type: 'string', description: 'Campaign task ID to link this execution to (from create_campaign response)' },
       },
       required: ['project_id', 'prompt'],
     },
@@ -21,6 +22,7 @@ export const toolDefinitions: Anthropic.Tool[] = [
       properties: {
         project_id: { type: 'string', description: 'ID of the project to work in' },
         prompt: { type: 'string', description: 'The task to give Codex. Be specific — include codebase context, what to build, and what done looks like.' },
+        campaign_task_id: { type: 'string', description: 'Campaign task ID to link this execution to (from create_campaign response)' },
       },
       required: ['project_id', 'prompt'],
     },
@@ -55,6 +57,7 @@ export const toolDefinitions: Anthropic.Tool[] = [
         connection_id: { type: 'string', description: 'ID of the MCP connection to use' },
         tool_name: { type: 'string', description: 'Name of the MCP tool to call' },
         tool_input: { type: 'object', description: 'Input for the MCP tool', additionalProperties: true },
+        campaign_task_id: { type: 'string', description: 'Campaign task ID to link this execution to (from create_campaign response)' },
       },
       required: ['connection_id', 'tool_name', 'tool_input'],
     },
@@ -216,6 +219,30 @@ export const toolDefinitions: Anthropic.Tool[] = [
         chat_id: { type: 'string', description: 'ID of the chat to read — get IDs from the recent chats list in your context' },
       },
       required: ['chat_id'],
+    },
+  },
+  {
+    name: 'create_campaign',
+    description: 'Create a campaign to track a coordinated multi-task delegation across Claude Code, Codex, or MCP tools. Call this BEFORE dispatching the individual tasks. The response includes task IDs — pass each task\'s id as campaign_task_id when calling invoke_claude_code, invoke_codex, or mcp_call so the tasks are linked and their status tracked.',
+    input_schema: {
+      type: 'object',
+      properties: {
+        project_id: { type: 'string', description: 'Project this campaign belongs to' },
+        title: { type: 'string', description: 'Short name for the campaign, e.g. "Auth refactor"' },
+        tasks: {
+          type: 'array',
+          description: 'Ordered list of planned tasks',
+          items: {
+            type: 'object',
+            properties: {
+              title: { type: 'string' },
+              agent: { type: 'string', enum: ['claude_code', 'codex', 'mcp'] },
+            },
+            required: ['title', 'agent'],
+          },
+        },
+      },
+      required: ['project_id', 'title', 'tasks'],
     },
   },
   {

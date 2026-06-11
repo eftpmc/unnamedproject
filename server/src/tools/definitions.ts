@@ -55,21 +55,21 @@ export const toolDefinitions: Anthropic.Tool[] = [
   },
   {
     name: 'git_op',
-    description: 'Run git operations in a workspace repo. Write ops (commit, push) require user approval.',
+    description: "Run git operations in this session's isolated agent worktree (its own branch off the project's default branch). Write ops (commit, push) require user approval. Push defaults to this session's branch so changes can be reviewed via a PR before merging.",
     input_schema: {
       type: 'object',
       properties: {
         project_id: { type: 'string' },
         op: { type: 'string', enum: ['log', 'diff', 'status', 'commit', 'push'] },
         message: { type: 'string', description: 'Commit message (for commit op)' },
-        branch: { type: 'string', description: 'Branch name (for push op)' },
+        branch: { type: 'string', description: "Branch name to push (for push op, defaults to this session's agent branch)" },
       },
       required: ['project_id', 'op'],
     },
   },
   {
     name: 'project_query',
-    description: 'Query the Graphify knowledge graph for a project to understand its code structure without reading raw files.',
+    description: 'Ask a read-only question about a workspace codebase (structure, where something is implemented, how something works). Runs Claude Code in plan mode — it can explore files but cannot make edits.',
     input_schema: {
       type: 'object',
       properties: {
@@ -188,6 +188,17 @@ export const toolDefinitions: Anthropic.Tool[] = [
         content: { type: 'string', description: 'New file contents' },
       },
       required: ['project_id', 'path', 'content'],
+    },
+  },
+  {
+    name: 'read_chat',
+    description: 'Retrieve messages from a previous chat. Use when the user references past work, asks to continue something, or you need context before responding.',
+    input_schema: {
+      type: 'object',
+      properties: {
+        chat_id: { type: 'string', description: 'ID of the chat to read — get IDs from the recent chats list in your context' },
+      },
+      required: ['chat_id'],
     },
   },
   {

@@ -13,6 +13,7 @@ import { callMcp } from '../tools/mcp_call.js';
 import { runProjectQuery } from '../tools/project_query.js';
 import { remember, recall, forget, formatEntry } from '../tools/memory_tools.js';
 import { readFile, listDir, writeFile } from '../tools/file_ops.js';
+import { readChat } from '../tools/read_chat.js';
 import { createProject, updateProject, deleteProject } from '../tools/project_ops.js';
 import { broadcast } from './socket.js';
 import { newId } from '../lib/ids.js';
@@ -208,6 +209,9 @@ async function dispatchTool(
         break;
       case 'forget':
         result = forget(userId, toolInput.type as string, toolInput.key as string);
+        break;
+      case 'read_chat':
+        result = readChat(userId, toolInput.chat_id as string);
         break;
       case 'read_file':
         result = await readFile({ project_id: projectId, path: toolInput.path as string }, { userId, executionId, projectId, sessionId });

@@ -1,9 +1,20 @@
 export interface Session {
   id: string;
   title: string | null;
+  effort: EffortLevel;
+  model: string | null;
   created_at: number;
   updated_at: number;
 }
+
+export interface ClaudeModelInfo {
+  id: string;
+  display_name: string;
+  created_at: string;
+  supports_effort: boolean;
+}
+
+export type EffortLevel = 'low' | 'medium' | 'high';
 
 export interface Message {
   id: string;
@@ -36,6 +47,7 @@ export interface Connection {
   id: string;
   name: string;
   type: 'anthropic' | 'openai' | 'github' | 'mcp';
+  purpose: 'lead_agent' | 'claude_code' | 'codex' | 'github' | 'mcp' | 'tool';
   created_at: number;
 }
 
@@ -73,4 +85,15 @@ export interface WSAutoApproved extends WSEvent {
 export interface WSMessageCreated extends WSEvent {
   type: 'message_created';
   message: Message;
+}
+
+export interface WSMessageStarted extends WSEvent {
+  type: 'message_started';
+  message: Message;
+}
+
+export interface WSMessageDelta extends WSEvent {
+  type: 'message_delta';
+  messageId: string;
+  delta: string;
 }

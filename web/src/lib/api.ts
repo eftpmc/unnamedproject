@@ -1,5 +1,5 @@
 import { getToken, setToken, clearToken } from './auth.js';
-import type { Session, Message, Workspace, Connection } from '../types.js';
+import type { Session, Message, Workspace, Connection, EffortLevel, ClaudeModelInfo } from '../types.js';
 
 async function request<T>(path: string, init: RequestInit = {}): Promise<T> {
   const token = getToken();
@@ -40,6 +40,14 @@ export function createSession(title?: string): Promise<{ id: string }> {
   return request('/sessions', { method: 'POST', body: JSON.stringify({ title }) });
 }
 
+export function updateSessionConfig(sessionId: string, config: { effort?: EffortLevel; model?: string | null }): Promise<void> {
+  return request(`/sessions/${sessionId}`, { method: 'PATCH', body: JSON.stringify(config) });
+}
+
+export function getModelsForEffort(effort: EffortLevel): Promise<ClaudeModelInfo[]> {
+  return request(`/sessions/models?effort=${effort}`);
+}
+
 export function getMessages(sessionId: string): Promise<Message[]> {
   return request(`/sessions/${sessionId}/messages`);
 }
@@ -75,7 +83,7 @@ export function getConnections(): Promise<Connection[]> {
   return request('/connections');
 }
 
-export function createConnection(body: { name: string; type: string; config: Record<string, unknown> }): Promise<{ id: string }> {
+export function createConnection(body: { name: string; type: string; purpose?: string; config: Record<string, unknown> }): Promise<{ id: string }> {
   return request('/connections', { method: 'POST', body: JSON.stringify(body) });
 }
 

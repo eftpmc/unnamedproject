@@ -1,6 +1,9 @@
 import { useNavigate, useLocation } from 'react-router-dom';
 import { Plus, MessagesSquare, LayoutGrid, Settings, Sun, Moon } from 'lucide-react';
 import { useTheme } from '../lib/useTheme.js';
+import { Button } from '@/components/ui/button';
+import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
+import { cn } from '@/lib/utils';
 
 interface IconRailProps {
   activePanel: 'sessions' | 'workspaces' | null;
@@ -14,13 +17,23 @@ function IconBtn({ active, onClick, title, children }: {
   children: React.ReactNode;
 }) {
   return (
-    <button
-      title={title}
-      onClick={onClick}
-      className={`btn btn-square btn-ghost shrink-0 ${active ? 'bg-base-300 text-base-content' : 'text-base-content/40 hover:text-base-content/70'}`}
-    >
-      {children}
-    </button>
+    <Tooltip>
+      <TooltipTrigger asChild>
+        <Button
+          variant={active ? 'secondary' : 'ghost'}
+          size="icon"
+          aria-label={title}
+          onClick={onClick}
+          className={cn(
+            'rounded-2xl',
+            active ? 'bg-background shadow-xs ring-1 ring-border/50' : 'text-muted-foreground hover:bg-background/70 hover:text-foreground',
+          )}
+        >
+          {children}
+        </Button>
+      </TooltipTrigger>
+      <TooltipContent side="right" sideOffset={8}>{title}</TooltipContent>
+    </Tooltip>
   );
 }
 
@@ -35,9 +48,10 @@ export default function IconRail({ activePanel, onPanelToggle }: IconRailProps) 
   }
 
   return (
-    <div className="w-16 bg-base-200 border-r border-base-300 flex flex-col items-center py-4 gap-2 shrink-0">
-      {/* Logo */}
-      <div className="w-8 h-8 bg-base-content rounded-xl mb-2 shrink-0" />
+    <aside className="flex w-14 shrink-0 flex-col items-center gap-2 rounded-3xl bg-background/50 py-3 backdrop-blur">
+      <div className="mb-2 grid size-9 shrink-0 place-items-center rounded-2xl bg-foreground text-background shadow-sm">
+        <span className="text-sm font-semibold">u</span>
+      </div>
 
       {/* New session */}
       <IconBtn title="New session" onClick={handleNewSession}>
@@ -77,6 +91,6 @@ export default function IconRail({ activePanel, onPanelToggle }: IconRailProps) 
       >
         <Settings size={20} strokeWidth={1.75} />
       </IconBtn>
-    </div>
+    </aside>
   );
 }

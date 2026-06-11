@@ -1,5 +1,5 @@
 import Anthropic from '@anthropic-ai/sdk';
-import { getDb } from '../db/index.js';
+import { getDb, getWorkspaceForUser, type DbWorkspace } from '../db/index.js';
 import { getDecryptedConfig } from '../routes/connections.js';
 import { recallAll } from './memory.js';
 import { toolDefinitions } from '../tools/definitions.js';
@@ -11,19 +11,12 @@ import { invokeCodex } from '../tools/invoke_codex.js';
 import { callMcp } from '../tools/mcp_call.js';
 import { runWorkspaceQuery } from '../tools/workspace_query.js';
 import { remember, recall } from '../tools/memory_tools.js';
+import { readFile, listDir, writeFile } from '../tools/file_ops.js';
 import { broadcast } from './socket.js';
+import { newId } from '../lib/ids.js';
+import { DEFAULT_EFFORT, getAnthropicKey, resolveModelForEffort, type EffortLevel } from './anthropic.js';
 
 interface DbMessage { role: string; content: string; }
-interface DbWorkspace { id: string; name: string; description: string | null; repo_path: string | null; enabled_connection_ids: string; }
-
-function getAnthropicKey(userId: string): string {
-  const conn = getDb()
-    .prepare("SELECT id FROM connections WHERE user_id = ? AND type = 'anthropic' ORDER BY created_at LIMIT 1")
-    .get(userId) as { id: string } | undefined;
-  if (!conn) throw new Error('No Anthropic connection configured');
-  const config = getDecryptedConfig(conn.id);
-  return config.apiKey;
-}
 
 function getWorkspaces(userId: string): DbWorkspace[] {
   return getDb()
@@ -49,7 +42,7 @@ You can run tools in parallel when the tasks are independent.
 
 Approval tiers:
 - Agent-approved (automatic, logged): invoke_claude_code, invoke_codex, git commit
-- User-approved (pauses for user): git push, github write ops
+- User-approved (pauses for user): git push, github write ops, write_file
 Never skip a write op because approval is needed — just proceed and the system handles it.
 ${memoryText}
 ${wsText}`;
@@ -69,7 +62,7 @@ async function dispatchTool(
 
     switch (toolName) {
       case 'invoke_claude_code': {
-        const ws = getDb().prepare('SELECT repo_path, enabled_connection_ids FROM workspaces WHERE id = ?').get(workspaceId) as DbWorkspace | undefined;
+        const ws = getWorkspaceForUser(workspaceId, userId);
         const connectionIds: string[] = JSON.parse(ws?.enabled_connection_ids ?? '[]');
         let apiKey = getAnthropicKey(userId);
         if (connectionIds.length > 0) {
@@ -85,7 +78,7 @@ async function dispatchTool(
         break;
       }
       case 'invoke_codex': {
-        const ws = getDb().prepare('SELECT repo_path, enabled_connection_ids FROM workspaces WHERE id = ?').get(workspaceId) as DbWorkspace | undefined;
+        const ws = getWorkspaceForUser(workspaceId, userId);
         const connectionIds: string[] = JSON.parse(ws?.enabled_connection_ids ?? '[]');
         let apiKey = '';
         if (connectionIds.length > 0) {
@@ -117,7 +110,7 @@ async function dispatchTool(
         break;
       }
       case 'git_op': {
-        const ws = getDb().prepare('SELECT repo_path FROM workspaces WHERE id = ?').get(workspaceId) as { repo_path: string | null } | undefined;
+        const ws = getWorkspaceForUser(workspaceId, userId);
         result = await runGitOp(
           { op: toolInput.op as 'log' | 'diff' | 'status' | 'commit' | 'push', message: toolInput.message as string | undefined },
           { userId, executionId, workspaceId, repoPath: ws?.repo_path ?? '/tmp' }
@@ -125,13 +118,25 @@ async function dispatchTool(
         break;
       }
       case 'workspace_query':
-        result = await runWorkspaceQuery({ workspace_id: workspaceId, question: toolInput.question as string });
+        result = await runWorkspaceQuery({ workspace_id: workspaceId, question: toolInput.question as string }, userId);
         break;
       case 'remember':
         result = remember(userId, toolInput.key as string, toolInput.value as string);
         break;
       case 'recall':
         result = recall(userId, (toolInput.key as string | undefined) ?? null);
+        break;
+      case 'read_file':
+        result = await readFile({ workspace_id: workspaceId, path: toolInput.path as string }, { userId, executionId, workspaceId });
+        break;
+      case 'list_dir':
+        result = await listDir({ workspace_id: workspaceId, path: toolInput.path as string | undefined }, { userId, executionId, workspaceId });
+        break;
+      case 'write_file':
+        result = await writeFile(
+          { workspace_id: workspaceId, path: toolInput.path as string, content: toolInput.content as string },
+          { userId, executionId, workspaceId }
+        );
         break;
       default:
         result = `Unknown tool: ${toolName}`;
@@ -146,9 +151,15 @@ async function dispatchTool(
   }
 }
 
-export async function runAgentTurn(userId: string, sessionId: string, userMessageId: string): Promise<string> {
+export async function runAgentTurn(userId: string, sessionId: string, userMessageId: string): Promise<void> {
   const apiKey = getAnthropicKey(userId);
   const client = new Anthropic({ apiKey });
+
+  const session = getDb()
+    .prepare('SELECT effort, model FROM sessions WHERE id = ?')
+    .get(sessionId) as { effort: EffortLevel; model: string | null } | undefined;
+  const effort = session?.effort ?? DEFAULT_EFFORT;
+  const model = session?.model || await resolveModelForEffort(client, effort, apiKey);
 
   const history = getDb()
     .prepare('SELECT role, content FROM messages WHERE session_id = ? ORDER BY created_at')
@@ -162,43 +173,80 @@ export async function runAgentTurn(userId: string, sessionId: string, userMessag
   const systemPrompt = buildSystemPrompt(userId);
   let currentMessages = [...messages];
 
-  while (true) {
-    const response = await client.messages.create({
-      model: 'claude-sonnet-4-6',
-      max_tokens: 4096,
-      system: systemPrompt,
-      tools: toolDefinitions,
-      messages: currentMessages,
-    });
+  const replyId = newId();
+  let fullText = '';
+  let started = false;
 
-    if (response.stop_reason === 'end_turn') {
-      const textBlock = response.content.find(b => b.type === 'text');
-      return textBlock ? (textBlock as Anthropic.TextBlock).text : '';
+  try {
+    while (true) {
+      const stream = client.messages.stream({
+        model,
+        max_tokens: 4096,
+        system: systemPrompt,
+        tools: toolDefinitions,
+        messages: currentMessages,
+      });
+
+      stream.on('text', (delta) => {
+        if (!started) {
+          started = true;
+          getDb()
+            .prepare('INSERT INTO messages (id, session_id, role, content) VALUES (?,?,?,?)')
+            .run(replyId, sessionId, 'assistant', '');
+          broadcast(userId, { type: 'message_started', message: { id: replyId, role: 'assistant', content: '' } });
+        }
+        fullText += delta;
+        broadcast(userId, { type: 'message_delta', messageId: replyId, delta });
+      });
+
+      const response = await stream.finalMessage();
+
+      if (response.stop_reason === 'tool_use') {
+        const toolUseBlocks = response.content.filter(b => b.type === 'tool_use') as Anthropic.ToolUseBlock[];
+
+        currentMessages.push({ role: 'assistant', content: response.content });
+
+        // Dispatch all tool calls (potentially parallel for independent tools)
+        const toolResults = await Promise.all(
+          toolUseBlocks.map(async block => {
+            const result = await dispatchTool(block.name, block.input as Record<string, unknown>, userId, userMessageId);
+            return {
+              type: 'tool_result' as const,
+              tool_use_id: block.id,
+              content: result,
+            };
+          })
+        );
+
+        currentMessages.push({ role: 'user', content: toolResults });
+        continue;
+      }
+
+      break;
     }
-
-    if (response.stop_reason === 'tool_use') {
-      const toolUseBlocks = response.content.filter(b => b.type === 'tool_use') as Anthropic.ToolUseBlock[];
-
-      currentMessages.push({ role: 'assistant', content: response.content });
-
-      // Dispatch all tool calls (potentially parallel for independent tools)
-      const toolResults = await Promise.all(
-        toolUseBlocks.map(async block => {
-          const result = await dispatchTool(block.name, block.input as Record<string, unknown>, userId, userMessageId);
-          return {
-            type: 'tool_result' as const,
-            tool_use_id: block.id,
-            content: result,
-          };
-        })
-      );
-
-      currentMessages.push({ role: 'user', content: toolResults });
-      continue;
+  } catch (err) {
+    if (started) {
+      // Persist whatever was streamed so far rather than leaving an empty
+      // assistant message in history (the API rejects empty assistant content).
+      if (fullText) {
+        getDb().prepare('UPDATE messages SET content = ? WHERE id = ?').run(fullText, replyId);
+        broadcast(userId, { type: 'message_created', message: { id: replyId, role: 'assistant', content: fullText } });
+      } else {
+        getDb().prepare('DELETE FROM messages WHERE id = ?').run(replyId);
+      }
     }
-
-    break;
+    throw err;
   }
 
-  return '';
+  if (fullText) {
+    getDb()
+      .prepare('UPDATE messages SET content = ? WHERE id = ?')
+      .run(fullText, replyId);
+    broadcast(userId, { type: 'message_created', message: { id: replyId, role: 'assistant', content: fullText } });
+  }
+
+  getDb()
+    .prepare('UPDATE sessions SET updated_at = unixepoch() WHERE id = ?')
+    .run(sessionId);
+  broadcast(userId, { type: 'turn_complete', sessionId });
 }

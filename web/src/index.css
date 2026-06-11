@@ -1,86 +1,127 @@
 @import "tailwindcss";
-@plugin "daisyui" {
-  themes: unnamed-dark --default, unnamed-light;
+@import "tw-animate-css";
+@import "shadcn/tailwind.css";
+@import "@fontsource-variable/geist";
+
+@custom-variant dark (&:where([data-theme="unnamed-dark"], [data-theme="unnamed-dark"] *));
+
+@theme inline {
+  --font-heading: var(--font-sans);
+  --font-sans: "Geist Variable", sans-serif;
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --color-card: var(--card);
+  --color-card-foreground: var(--card-foreground);
+  --color-popover: var(--popover);
+  --color-popover-foreground: var(--popover-foreground);
+  --color-primary: var(--primary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-secondary: var(--secondary);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-muted: var(--muted);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-accent: var(--accent);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-destructive: var(--destructive);
+  --color-border: var(--border);
+  --color-input: var(--input);
+  --color-ring: var(--ring);
+  --color-success: var(--success);
+  --color-warning: var(--warning);
+  --radius-sm: calc(var(--radius) * 0.6);
+  --radius-md: calc(var(--radius) * 0.8);
+  --radius-lg: var(--radius);
+  --radius-xl: calc(var(--radius) * 1.4);
+  --radius-2xl: calc(var(--radius) * 1.8);
+  --radius-3xl: calc(var(--radius) * 2.2);
+  --radius-4xl: calc(var(--radius) * 2.6);
 }
 
-@plugin "daisyui/theme" {
-  name: "unnamed-dark";
-  default: true;
-  prefersdark: true;
-  color-scheme: dark;
-  --color-base-100: #15171a;
-  --color-base-200: #1a1c20;
-  --color-base-300: #20232a;
-  --color-base-content: #e8e8ea;
-  --color-primary: #e8e8ea;
-  --color-primary-content: #15171a;
-  --color-secondary: #23262c;
-  --color-secondary-content: #e8e8ea;
-  --color-accent: #4ade80;
-  --color-accent-content: #0a1f0f;
-  --color-neutral: #272a30;
-  --color-neutral-content: #e8e8ea;
-  --color-info: #9a9ca1;
-  --color-success: #22c55e;
-  --color-warning: #f59e0b;
-  --color-error: #ef4444;
-  --radius-selector: 0.75rem;
-  --radius-field: 0.75rem;
-  --radius-box: 1.25rem;
-  --border: 1px;
-}
-
-@plugin "daisyui/theme" {
-  name: "unnamed-light";
-  default: false;
-  prefersdark: false;
+:root,
+[data-theme="unnamed-light"] {
   color-scheme: light;
-  --color-base-100: #faf9f7;
-  --color-base-200: #f3f1ee;
-  --color-base-300: #ffffff;
-  --color-base-content: #2a2a2a;
-  --color-primary: #2a2a2a;
-  --color-primary-content: #faf9f7;
-  --color-secondary: #efece8;
-  --color-secondary-content: #2a2a2a;
-  --color-accent: #16a34a;
-  --color-accent-content: #ffffff;
-  --color-neutral: #ece9e5;
-  --color-neutral-content: #2a2a2a;
-  --color-info: #75716c;
-  --color-success: #16a34a;
-  --color-warning: #d97706;
-  --color-error: #dc2626;
-  --radius-selector: 0.75rem;
-  --radius-field: 0.75rem;
-  --radius-box: 1.25rem;
-  --border: 1px;
+  --background: oklch(0.982 0.006 80);
+  --foreground: oklch(0.22 0.012 250);
+  --card: oklch(1 0 0);
+  --card-foreground: var(--foreground);
+  --popover: oklch(1 0 0);
+  --popover-foreground: var(--foreground);
+  --primary: oklch(0.25 0.014 250);
+  --primary-foreground: oklch(0.985 0.005 80);
+  --secondary: oklch(0.94 0.01 80);
+  --secondary-foreground: var(--foreground);
+  --muted: oklch(0.955 0.009 80);
+  --muted-foreground: oklch(0.52 0.014 250);
+  --accent: oklch(0.925 0.012 80);
+  --accent-foreground: var(--foreground);
+  --destructive: oklch(0.58 0.2 25);
+  --border: oklch(0.9 0.012 80);
+  --input: oklch(0.9 0.012 80);
+  --ring: oklch(0.66 0.018 250);
+  --success: oklch(0.58 0.13 145);
+  --warning: oklch(0.68 0.13 70);
+  --radius: 0.8rem;
+}
+
+[data-theme="unnamed-dark"] {
+  color-scheme: dark;
+  --background: oklch(0.18 0.01 250);
+  --foreground: oklch(0.92 0.006 250);
+  --card: oklch(0.225 0.012 250);
+  --card-foreground: var(--foreground);
+  --popover: oklch(0.235 0.012 250);
+  --popover-foreground: var(--foreground);
+  --primary: oklch(0.9 0.006 250);
+  --primary-foreground: oklch(0.19 0.012 250);
+  --secondary: oklch(0.28 0.012 250);
+  --secondary-foreground: var(--foreground);
+  --muted: oklch(0.265 0.012 250);
+  --muted-foreground: oklch(0.68 0.012 250);
+  --accent: oklch(0.31 0.014 250);
+  --accent-foreground: var(--foreground);
+  --destructive: oklch(0.68 0.19 24);
+  --border: oklch(1 0 0 / 10%);
+  --input: oklch(1 0 0 / 14%);
+  --ring: oklch(0.6 0.012 250);
+  --success: oklch(0.68 0.13 145);
+  --warning: oklch(0.76 0.13 70);
 }
 
 @layer base {
   * {
+    @apply border-border outline-ring/50;
     box-sizing: border-box;
-    margin: 0;
-    padding: 0;
   }
 
-  html, body, #root {
+  html,
+  body,
+  #root {
     height: 100%;
-    background: var(--color-base-100);
-    color: var(--color-base-content);
-    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+  }
+
+  body {
+    @apply bg-background text-foreground font-sans;
     font-size: 15px;
     -webkit-font-smoothing: antialiased;
+  }
+
+  button,
+  input,
+  textarea,
+  select {
+    font: inherit;
   }
 }
 
 ::-webkit-scrollbar {
-  width: 6px;
+  width: 8px;
 }
+
 ::-webkit-scrollbar-track {
   background: transparent;
 }
+
 ::-webkit-scrollbar-thumb {
-  background: var(--color-neutral);
-  border-radius: 3px;
+  background: color-mix(in oklch, var(--muted-foreground) 28%, transparent);
+  border-radius: 999px;
 }

@@ -101,4 +101,45 @@ export const toolDefinitions: Anthropic.Tool[] = [
       },
     },
   },
+  {
+    name: 'read_file',
+    description: 'Read the contents of a file in a workspace repo.',
+    input_schema: {
+      type: 'object',
+      properties: {
+        workspace_id: { type: 'string' },
+        path: { type: 'string', description: 'Path relative to the workspace root' },
+      },
+      required: ['workspace_id', 'path'],
+    },
+  },
+  {
+    name: 'list_dir',
+    description: 'List the contents of a directory in a workspace repo.',
+    input_schema: {
+      type: 'object',
+      properties: {
+        workspace_id: { type: 'string' },
+        path: { type: 'string', description: 'Path relative to the workspace root (default: repo root)' },
+      },
+      required: ['workspace_id'],
+    },
+  },
+  {
+    name: 'write_file',
+    description: 'Write content to a file in a workspace repo, creating it if needed. Requires approval.',
+    input_schema: {
+      type: 'object',
+      properties: {
+        workspace_id: { type: 'string' },
+        path: { type: 'string', description: 'Path relative to the workspace root' },
+        content: { type: 'string', description: 'New file contents' },
+      },
+      required: ['workspace_id', 'path', 'content'],
+    },
+  },
+  {
+    type: 'web_search_20250305',
+    name: 'web_search',
+  } as unknown as Anthropic.Tool,
 ];

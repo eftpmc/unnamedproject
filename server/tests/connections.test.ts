@@ -22,7 +22,7 @@ describe('connections', () => {
     const res = await request(app)
       .post('/connections')
       .set('Authorization', `Bearer ${token}`)
-      .send({ name: 'My Anthropic Key', type: 'anthropic', config: { apiKey: 'sk-test' } });
+      .send({ name: 'My Anthropic Key', type: 'anthropic', purpose: 'lead_agent', config: { apiKey: 'sk-test' } });
     expect(res.status).toBe(201);
     expect(res.body.id).toBeDefined();
     connectionId = res.body.id;
@@ -35,6 +35,15 @@ describe('connections', () => {
     expect(res.status).toBe(200);
     expect(res.body.length).toBeGreaterThanOrEqual(1);
     expect(res.body[0].config).toBeUndefined();
+    expect(res.body[0].purpose).toBe('lead_agent');
+  });
+
+  it('rejects incompatible purpose/type pairs', async () => {
+    const res = await request(app)
+      .post('/connections')
+      .set('Authorization', `Bearer ${token}`)
+      .send({ name: 'Bad Codex', type: 'anthropic', purpose: 'codex', config: { apiKey: 'sk-test' } });
+    expect(res.status).toBe(400);
   });
 
   it('deletes a connection', async () => {

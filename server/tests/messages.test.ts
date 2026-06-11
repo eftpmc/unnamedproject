@@ -2,10 +2,14 @@ import { describe, it, expect, beforeAll, vi } from 'vitest';
 import request from 'supertest';
 import fs from 'fs';
 import { app } from '../src/index.js';
-import { initDb } from '../src/db/index.js';
+import { initDb, getDb } from '../src/db/index.js';
+import { newId } from '../src/lib/ids.js';
 
 vi.mock('../src/services/agent.js', () => ({
-  runAgentTurn: vi.fn().mockResolvedValue('Agent reply here'),
+  runAgentTurn: vi.fn().mockImplementation(async (_userId: string, sessionId: string) => {
+    getDb().prepare('INSERT INTO messages (id, session_id, role, content) VALUES (?,?,?,?)')
+      .run(newId(), sessionId, 'assistant', 'Agent reply here');
+  }),
 }));
 vi.mock('../src/services/socket.js', () => ({ broadcast: vi.fn(), initSocket: vi.fn() }));
 

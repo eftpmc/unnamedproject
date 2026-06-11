@@ -45,19 +45,10 @@ router.post('/:sessionId/messages', async (req, res) => {
   // Trigger agent turn async — client gets reply via WebSocket
   setImmediate(async () => {
     try {
-      const reply = await runAgentTurn(userId, req.params.sessionId, messageId);
-      if (reply) {
-        const replyId = newId();
-        getDb()
-          .prepare('INSERT INTO messages (id, session_id, role, content) VALUES (?,?,?,?)')
-          .run(replyId, req.params.sessionId, 'assistant', reply);
-        getDb()
-          .prepare('UPDATE sessions SET updated_at = unixepoch() WHERE id = ?')
-          .run(req.params.sessionId);
-        broadcast(userId, { type: 'message_created', message: { id: replyId, role: 'assistant', content: reply } });
-      }
+      await runAgentTurn(userId, req.params.sessionId, messageId);
     } catch (err) {
       console.error('[agent turn error]', err);
+      broadcast(userId, { type: 'agent_error', error: err instanceof Error ? err.message : String(err) });
     }
   });
 });

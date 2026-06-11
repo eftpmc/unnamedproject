@@ -8,18 +8,26 @@ const router = Router();
 router.use(requireAuth);
 
 const VALID_TYPES = ['anthropic', 'openai', 'github', 'mcp'] as const;
+const VALID_PURPOSES = ['lead_agent', 'claude_code', 'codex', 'github', 'mcp', 'tool'] as const;
+const PURPOSE_TYPE: Record<string, string> = {
+  lead_agent: 'anthropic',
+  claude_code: 'anthropic',
+  codex: 'openai',
+  github: 'github',
+  mcp: 'mcp',
+};
 
 router.get('/', (req, res) => {
   const { userId } = req as AuthedRequest;
   const rows = getDb()
-    .prepare('SELECT id, name, type, created_at FROM connections WHERE user_id = ? ORDER BY created_at')
+    .prepare('SELECT id, name, type, purpose, created_at FROM connections WHERE user_id = ? ORDER BY created_at')
     .all(userId);
   res.json(rows);
 });
 
 router.post('/', (req, res) => {
   const { userId } = req as AuthedRequest;
-  const { name, type, config } = req.body as { name?: string; type?: string; config?: unknown };
+  const { name, type, purpose, config } = req.body as { name?: string; type?: string; purpose?: string; config?: unknown };
   if (!name || !type || !config) {
     res.status(400).json({ error: 'name, type, config required' });
     return;
@@ -28,12 +36,21 @@ router.post('/', (req, res) => {
     res.status(400).json({ error: `type must be one of ${VALID_TYPES.join(', ')}` });
     return;
   }
+  const connectionPurpose = purpose ?? 'tool';
+  if (!VALID_PURPOSES.includes(connectionPurpose as (typeof VALID_PURPOSES)[number])) {
+    res.status(400).json({ error: `purpose must be one of ${VALID_PURPOSES.join(', ')}` });
+    return;
+  }
+  if (connectionPurpose !== 'tool' && PURPOSE_TYPE[connectionPurpose] !== type) {
+    res.status(400).json({ error: `${connectionPurpose} connections must use type ${PURPOSE_TYPE[connectionPurpose]}` });
+    return;
+  }
   const id = newId();
   const encrypted = encrypt(JSON.stringify(config), deriveKey());
   try {
     getDb()
-      .prepare('INSERT INTO connections (id, user_id, name, type, encrypted_config) VALUES (?,?,?,?,?)')
-      .run(id, userId, name, type, encrypted);
+      .prepare('INSERT INTO connections (id, user_id, name, type, purpose, encrypted_config) VALUES (?,?,?,?,?,?)')
+      .run(id, userId, name, type, connectionPurpose, encrypted);
   } catch {
     res.status(409).json({ error: 'Connection name already exists' });
     return;

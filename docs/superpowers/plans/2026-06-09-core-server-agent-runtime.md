@@ -79,7 +79,7 @@ server/
 - Create: `server/.env.example`
 - Create: `server/src/index.ts`
 
-- [ ] **Step 1: Create server/package.json**
+- [x] **Step 1: Create server/package.json**
 
 ```json
 {
@@ -121,7 +121,7 @@ server/
 }
 ```
 
-- [ ] **Step 2: Create server/tsconfig.json**
+- [x] **Step 2: Create server/tsconfig.json**
 
 ```json
 {
@@ -141,7 +141,7 @@ server/
 }
 ```
 
-- [ ] **Step 3: Create server/vitest.config.ts**
+- [x] **Step 3: Create server/vitest.config.ts**
 
 ```typescript
 import { defineConfig } from 'vitest/config';
@@ -155,7 +155,7 @@ export default defineConfig({
 });
 ```
 
-- [ ] **Step 4: Create server/tests/setup.ts**
+- [x] **Step 4: Create server/tests/setup.ts**
 
 ```typescript
 import { beforeAll, afterAll } from 'vitest';
@@ -170,7 +170,7 @@ afterAll(() => {
 });
 ```
 
-- [ ] **Step 5: Create server/.env.example**
+- [x] **Step 5: Create server/.env.example**
 
 ```
 PORT=3000
@@ -180,7 +180,7 @@ ALLOW_REGISTRATION=
 NODE_ENV=
 ```
 
-- [ ] **Step 6: Create server/src/index.ts**
+- [x] **Step 6: Create server/src/index.ts**
 
 ```typescript
 import express from 'express';
@@ -226,7 +226,7 @@ if (NODE_ENV !== 'test') {
 export { app, server };
 ```
 
-- [ ] **Step 7: Install dependencies**
+- [x] **Step 7: Install dependencies**
 
 ```bash
 cd server && npm install
@@ -234,7 +234,7 @@ cd server && npm install
 
 Expected: node_modules created, no errors.
 
-- [ ] **Step 8: Verify TypeScript compiles**
+- [x] **Step 8: Verify TypeScript compiles**
 
 ```bash
 cd server && npx tsc --noEmit
@@ -242,7 +242,7 @@ cd server && npx tsc --noEmit
 
 Expected: no errors (some "cannot find module" errors are fine until files exist).
 
-- [ ] **Step 9: Commit**
+- [x] **Step 9: Commit**
 
 ```bash
 git add server/
@@ -257,7 +257,7 @@ git commit -m "feat: bootstrap server package"
 - Create: `server/src/db/index.ts`
 - Create: `server/src/lib/ids.ts`
 
-- [ ] **Step 1: Create server/src/lib/ids.ts**
+- [x] **Step 1: Create server/src/lib/ids.ts**
 
 ```typescript
 import { nanoid } from 'nanoid';
@@ -265,7 +265,7 @@ import { nanoid } from 'nanoid';
 export const newId = () => nanoid(21);
 ```
 
-- [ ] **Step 2: Write the failing test**
+- [x] **Step 2: Write the failing test**
 
 ```typescript
 // tests/db.test.ts
@@ -297,7 +297,7 @@ describe('database schema', () => {
 });
 ```
 
-- [ ] **Step 3: Run test to verify it fails**
+- [x] **Step 3: Run test to verify it fails**
 
 ```bash
 cd server && npm test -- tests/db.test.ts
@@ -305,7 +305,7 @@ cd server && npm test -- tests/db.test.ts
 
 Expected: FAIL — "Cannot find module '../src/db/index.js'"
 
-- [ ] **Step 4: Create server/src/db/index.ts**
+- [x] **Step 4: Create server/src/db/index.ts**
 
 ```typescript
 import Database from 'better-sqlite3';
@@ -415,7 +415,7 @@ function applySchema(): void {
 }
 ```
 
-- [ ] **Step 5: Run test to verify it passes**
+- [x] **Step 5: Run test to verify it passes**
 
 ```bash
 cd server && npm test -- tests/db.test.ts
@@ -423,7 +423,7 @@ cd server && npm test -- tests/db.test.ts
 
 Expected: PASS
 
-- [ ] **Step 6: Commit**
+- [x] **Step 6: Commit**
 
 ```bash
 git add server/src/db/ server/src/lib/ids.ts server/tests/
@@ -438,7 +438,7 @@ git commit -m "feat: database schema + ids"
 - Create: `server/src/lib/crypto.ts`
 - Create: `server/src/lib/jwt.ts`
 
-- [ ] **Step 1: Write failing tests**
+- [x] **Step 1: Write failing tests**
 
 ```typescript
 // tests/lib/crypto.test.ts
@@ -481,7 +481,7 @@ describe('jwt', () => {
 });
 ```
 
-- [ ] **Step 2: Run tests to verify they fail**
+- [x] **Step 2: Run tests to verify they fail**
 
 ```bash
 cd server && npm test -- tests/lib/
@@ -489,7 +489,7 @@ cd server && npm test -- tests/lib/
 
 Expected: FAIL
 
-- [ ] **Step 3: Create server/src/lib/crypto.ts**
+- [x] **Step 3: Create server/src/lib/crypto.ts**
 
 ```typescript
 import { createCipheriv, createDecipheriv, randomBytes } from 'crypto';
@@ -513,7 +513,7 @@ export function decrypt(ciphertext: string, hexKey: string): string {
 }
 ```
 
-- [ ] **Step 4: Create server/src/lib/jwt.ts**
+- [x] **Step 4: Create server/src/lib/jwt.ts**
 
 ```typescript
 import jwt from 'jsonwebtoken';
@@ -529,7 +529,7 @@ export function verifyToken(token: string): { userId: string } {
 }
 ```
 
-- [ ] **Step 5: Run tests to verify they pass**
+- [x] **Step 5: Run tests to verify they pass**
 
 ```bash
 cd server && npm test -- tests/lib/
@@ -537,7 +537,7 @@ cd server && npm test -- tests/lib/
 
 Expected: PASS
 
-- [ ] **Step 6: Commit**
+- [x] **Step 6: Commit**
 
 ```bash
 git add server/src/lib/crypto.ts server/src/lib/jwt.ts server/tests/lib/
@@ -553,7 +553,7 @@ git commit -m "feat: crypto + jwt helpers"
 - Create: `server/src/routes/auth.ts`
 - Create: `server/tests/auth.test.ts`
 
-- [ ] **Step 1: Write failing test**
+- [x] **Step 1: Write failing test**
 
 ```typescript
 // tests/auth.test.ts
@@ -603,7 +603,7 @@ describe('POST /auth/login', () => {
 });
 ```
 
-- [ ] **Step 2: Run test to verify it fails**
+- [x] **Step 2: Run test to verify it fails**
 
 ```bash
 cd server && npm test -- tests/auth.test.ts
@@ -611,7 +611,7 @@ cd server && npm test -- tests/auth.test.ts
 
 Expected: FAIL
 
-- [ ] **Step 3: Create server/src/middleware/auth.ts**
+- [x] **Step 3: Create server/src/middleware/auth.ts**
 
 ```typescript
 import type { Request, Response, NextFunction } from 'express';
@@ -637,7 +637,7 @@ export function requireAuth(req: Request, res: Response, next: NextFunction): vo
 }
 ```
 
-- [ ] **Step 4: Create server/src/routes/auth.ts**
+- [x] **Step 4: Create server/src/routes/auth.ts**
 
 ```typescript
 import { Router } from 'express';
@@ -699,7 +699,7 @@ router.post('/login', async (req, res) => {
 export default router;
 ```
 
-- [ ] **Step 5: Run test to verify it passes**
+- [x] **Step 5: Run test to verify it passes**
 
 ```bash
 cd server && npm test -- tests/auth.test.ts
@@ -707,7 +707,7 @@ cd server && npm test -- tests/auth.test.ts
 
 Expected: PASS
 
-- [ ] **Step 6: Commit**
+- [x] **Step 6: Commit**
 
 ```bash
 git add server/src/routes/auth.ts server/src/middleware/auth.ts server/tests/auth.test.ts
@@ -724,7 +724,7 @@ git commit -m "feat: auth register + login + JWT middleware"
 
 Connection configs are encrypted with a per-server key derived from `JWT_SECRET`. The key is the first 32 bytes (64 hex chars) of `SHA-256(JWT_SECRET)`.
 
-- [ ] **Step 1: Add deriveKey to crypto.ts**
+- [x] **Step 1: Add deriveKey to crypto.ts**
 
 Open `server/src/lib/crypto.ts` and add at the bottom:
 
@@ -737,7 +737,7 @@ export function deriveKey(): string {
 }
 ```
 
-- [ ] **Step 2: Write failing test**
+- [x] **Step 2: Write failing test**
 
 ```typescript
 // tests/connections.test.ts
@@ -789,7 +789,7 @@ describe('connections', () => {
 });
 ```
 
-- [ ] **Step 3: Run test to verify it fails**
+- [x] **Step 3: Run test to verify it fails**
 
 ```bash
 cd server && npm test -- tests/connections.test.ts
@@ -797,7 +797,7 @@ cd server && npm test -- tests/connections.test.ts
 
 Expected: FAIL
 
-- [ ] **Step 4: Create server/src/routes/connections.ts**
+- [x] **Step 4: Create server/src/routes/connections.ts**
 
 ```typescript
 import { Router } from 'express';
@@ -867,7 +867,7 @@ export function getDecryptedConfig(connectionId: string): Record<string, string>
 export default router;
 ```
 
-- [ ] **Step 5: Run test to verify it passes**
+- [x] **Step 5: Run test to verify it passes**
 
 ```bash
 cd server && npm test -- tests/connections.test.ts
@@ -875,7 +875,7 @@ cd server && npm test -- tests/connections.test.ts
 
 Expected: PASS
 
-- [ ] **Step 6: Commit**
+- [x] **Step 6: Commit**
 
 ```bash
 git add server/src/routes/connections.ts server/tests/connections.test.ts server/src/lib/crypto.ts
@@ -890,7 +890,7 @@ git commit -m "feat: connections CRUD with encrypted config"
 - Create: `server/src/routes/workspaces.ts`
 - Create: `server/tests/workspaces.test.ts`
 
-- [ ] **Step 1: Write failing test**
+- [x] **Step 1: Write failing test**
 
 ```typescript
 // tests/workspaces.test.ts
@@ -941,7 +941,7 @@ describe('workspaces', () => {
 });
 ```
 
-- [ ] **Step 2: Run test to verify it fails**
+- [x] **Step 2: Run test to verify it fails**
 
 ```bash
 cd server && npm test -- tests/workspaces.test.ts
@@ -949,7 +949,7 @@ cd server && npm test -- tests/workspaces.test.ts
 
 Expected: FAIL
 
-- [ ] **Step 3: Create server/src/routes/workspaces.ts**
+- [x] **Step 3: Create server/src/routes/workspaces.ts**
 
 ```typescript
 import { Router } from 'express';
@@ -998,7 +998,7 @@ router.delete('/:id', (req, res) => {
 export default router;
 ```
 
-- [ ] **Step 4: Run test to verify it passes**
+- [x] **Step 4: Run test to verify it passes**
 
 ```bash
 cd server && npm test -- tests/workspaces.test.ts
@@ -1006,7 +1006,7 @@ cd server && npm test -- tests/workspaces.test.ts
 
 Expected: PASS
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add server/src/routes/workspaces.ts server/tests/workspaces.test.ts
@@ -1021,7 +1021,7 @@ git commit -m "feat: workspaces CRUD"
 - Create: `server/src/routes/threads.ts`
 - Create: `server/tests/threads.test.ts`
 
-- [ ] **Step 1: Write failing test**
+- [x] **Step 1: Write failing test**
 
 ```typescript
 // tests/threads.test.ts
@@ -1064,7 +1064,7 @@ describe('threads', () => {
 });
 ```
 
-- [ ] **Step 2: Run test to verify it fails**
+- [x] **Step 2: Run test to verify it fails**
 
 ```bash
 cd server && npm test -- tests/threads.test.ts
@@ -1072,7 +1072,7 @@ cd server && npm test -- tests/threads.test.ts
 
 Expected: FAIL
 
-- [ ] **Step 3: Create server/src/routes/threads.ts**
+- [x] **Step 3: Create server/src/routes/threads.ts**
 
 ```typescript
 import { Router } from 'express';
@@ -1104,7 +1104,7 @@ router.post('/', (req, res) => {
 export default router;
 ```
 
-- [ ] **Step 4: Run test to verify it passes**
+- [x] **Step 4: Run test to verify it passes**
 
 ```bash
 cd server && npm test -- tests/threads.test.ts
@@ -1112,7 +1112,7 @@ cd server && npm test -- tests/threads.test.ts
 
 Expected: PASS
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add server/src/routes/threads.ts server/tests/threads.test.ts
@@ -1128,7 +1128,7 @@ git commit -m "feat: threads CRUD"
 
 The WebSocket server authenticates clients via a `?token=` query param on upgrade. It maintains a registry of `userId → Set<WebSocket>` to broadcast user-specific events.
 
-- [ ] **Step 1: Create server/src/services/socket.ts**
+- [x] **Step 1: Create server/src/services/socket.ts**
 
 ```typescript
 import { WebSocketServer, WebSocket } from 'ws';
@@ -1174,7 +1174,7 @@ export function broadcast(userId: string, event: Record<string, unknown>): void 
 }
 ```
 
-- [ ] **Step 2: Verify server starts without errors**
+- [x] **Step 2: Verify server starts without errors**
 
 ```bash
 cd server && npm run dev &
@@ -1184,7 +1184,7 @@ kill %1
 
 Expected: OK
 
-- [ ] **Step 3: Commit**
+- [x] **Step 3: Commit**
 
 ```bash
 git add server/src/services/socket.ts
@@ -1199,7 +1199,7 @@ git commit -m "feat: WebSocket service with JWT auth + broadcast"
 - Create: `server/src/services/memory.ts`
 - Create: `server/tests/services/memory.test.ts`
 
-- [ ] **Step 1: Write failing test**
+- [x] **Step 1: Write failing test**
 
 ```typescript
 // tests/services/memory.test.ts
@@ -1241,7 +1241,7 @@ describe('memory', () => {
 });
 ```
 
-- [ ] **Step 2: Run test to verify it fails**
+- [x] **Step 2: Run test to verify it fails**
 
 ```bash
 cd server && npm test -- tests/services/memory.test.ts
@@ -1249,7 +1249,7 @@ cd server && npm test -- tests/services/memory.test.ts
 
 Expected: FAIL
 
-- [ ] **Step 3: Create server/src/services/memory.ts**
+- [x] **Step 3: Create server/src/services/memory.ts**
 
 ```typescript
 import { getDb } from '../db/index.js';
@@ -1285,7 +1285,7 @@ export function recallAll(userId: string): Record<string, string> {
 }
 ```
 
-- [ ] **Step 4: Run test to verify it passes**
+- [x] **Step 4: Run test to verify it passes**
 
 ```bash
 cd server && npm test -- tests/services/memory.test.ts
@@ -1293,7 +1293,7 @@ cd server && npm test -- tests/services/memory.test.ts
 
 Expected: PASS
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add server/src/services/memory.ts server/tests/services/memory.test.ts
@@ -1310,7 +1310,7 @@ git commit -m "feat: user memory service (remember/recall)"
 
 Graphify is a Python CLI tool. The server spawns it as a subprocess. Two operations: `index` (build the graph for a workspace repo) and `query` (ask a question against the graph).
 
-- [ ] **Step 1: Install Graphify system dependency (document in .env.example)**
+- [x] **Step 1: Install Graphify system dependency (document in .env.example)**
 
 Add to `server/.env.example`:
 
@@ -1318,7 +1318,7 @@ Add to `server/.env.example`:
 # System dependencies: Python 3.10+, graphify (pip install graphify)
 ```
 
-- [ ] **Step 2: Write failing test**
+- [x] **Step 2: Write failing test**
 
 ```typescript
 // tests/services/graphify.test.ts
@@ -1342,7 +1342,7 @@ describe('graphify', () => {
 });
 ```
 
-- [ ] **Step 3: Run test to verify it fails**
+- [x] **Step 3: Run test to verify it fails**
 
 ```bash
 cd server && npm test -- tests/services/graphify.test.ts
@@ -1350,7 +1350,7 @@ cd server && npm test -- tests/services/graphify.test.ts
 
 Expected: FAIL
 
-- [ ] **Step 4: Create server/src/services/graphify.ts**
+- [x] **Step 4: Create server/src/services/graphify.ts**
 
 ```typescript
 import { spawn } from 'child_process';
@@ -1386,7 +1386,7 @@ export function queryGraph(repoPath: string, question: string): Promise<string> 
 }
 ```
 
-- [ ] **Step 5: Run test to verify it passes**
+- [x] **Step 5: Run test to verify it passes**
 
 ```bash
 cd server && npm test -- tests/services/graphify.test.ts
@@ -1394,7 +1394,7 @@ cd server && npm test -- tests/services/graphify.test.ts
 
 Expected: PASS
 
-- [ ] **Step 6: Commit**
+- [x] **Step 6: Commit**
 
 ```bash
 git add server/src/services/graphify.ts server/tests/services/graphify.test.ts server/.env.example
@@ -1410,7 +1410,7 @@ git commit -m "feat: graphify subprocess wrapper (index + query)"
 
 The approval gate is an EventEmitter that lets a running tool executor pause and wait for a user decision. The executor calls `waitForApproval(approvalId)` which returns a Promise. The approve/reject route resolves it by emitting an event.
 
-- [ ] **Step 1: Create server/src/lib/approval.ts**
+- [x] **Step 1: Create server/src/lib/approval.ts**
 
 ```typescript
 import { EventEmitter } from 'events';
@@ -1428,7 +1428,7 @@ export function resolveApproval(approvalId: string, decision: 'approved' | 'reje
 }
 ```
 
-- [ ] **Step 2: Write and run test**
+- [x] **Step 2: Write and run test**
 
 ```typescript
 // tests/lib/approval.test.ts
@@ -1458,7 +1458,7 @@ cd server && npm test -- tests/lib/approval.test.ts
 
 Expected: PASS
 
-- [ ] **Step 3: Commit**
+- [x] **Step 3: Commit**
 
 ```bash
 git add server/src/lib/approval.ts server/tests/lib/approval.test.ts
@@ -1475,7 +1475,7 @@ git commit -m "feat: approval gate event emitter"
 
 The executor manages execution lifecycle: creates the DB record, updates status, appends output chunks, broadcasts via WebSocket, and handles the approval pause/resume flow.
 
-- [ ] **Step 1: Write failing test**
+- [x] **Step 1: Write failing test**
 
 ```typescript
 // tests/services/executor.test.ts
@@ -1519,7 +1519,7 @@ describe('executor', () => {
 });
 ```
 
-- [ ] **Step 2: Run test to verify it fails**
+- [x] **Step 2: Run test to verify it fails**
 
 ```bash
 cd server && npm test -- tests/services/executor.test.ts
@@ -1527,7 +1527,7 @@ cd server && npm test -- tests/services/executor.test.ts
 
 Expected: FAIL
 
-- [ ] **Step 3: Create server/src/services/executor.ts**
+- [x] **Step 3: Create server/src/services/executor.ts**
 
 ```typescript
 import { getDb } from '../db/index.js';
@@ -1602,7 +1602,7 @@ export async function requestApproval(
 }
 ```
 
-- [ ] **Step 4: Run test to verify it passes**
+- [x] **Step 4: Run test to verify it passes**
 
 ```bash
 cd server && npm test -- tests/services/executor.test.ts
@@ -1610,7 +1610,7 @@ cd server && npm test -- tests/services/executor.test.ts
 
 Expected: PASS
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add server/src/services/executor.ts server/tests/services/executor.test.ts
@@ -1632,7 +1632,7 @@ git commit -m "feat: executor service — lifecycle, output streaming, approval 
 
 Each tool receives `(input, context)` where `context = { userId, executionId, workspaceId, getConfig }`.
 
-- [ ] **Step 1: Write failing test for git_op**
+- [x] **Step 1: Write failing test for git_op**
 
 ```typescript
 // tests/tools/git_op.test.ts
@@ -1668,7 +1668,7 @@ describe('git_op', () => {
 });
 ```
 
-- [ ] **Step 2: Run test to verify it fails**
+- [x] **Step 2: Run test to verify it fails**
 
 ```bash
 cd server && npm test -- tests/tools/git_op.test.ts
@@ -1676,7 +1676,7 @@ cd server && npm test -- tests/tools/git_op.test.ts
 
 Expected: FAIL
 
-- [ ] **Step 3: Create server/src/tools/git_op.ts**
+- [x] **Step 3: Create server/src/tools/git_op.ts**
 
 ```typescript
 import simpleGit from 'simple-git';
@@ -1732,7 +1732,7 @@ export async function runGitOp(input: GitOpInput, ctx: ToolContext): Promise<str
 }
 ```
 
-- [ ] **Step 4: Run test to verify it passes**
+- [x] **Step 4: Run test to verify it passes**
 
 ```bash
 cd server && npm test -- tests/tools/git_op.test.ts
@@ -1740,7 +1740,7 @@ cd server && npm test -- tests/tools/git_op.test.ts
 
 Expected: PASS
 
-- [ ] **Step 5: Create server/src/tools/github_api.ts**
+- [x] **Step 5: Create server/src/tools/github_api.ts**
 
 ```typescript
 import { Octokit } from '@octokit/rest';
@@ -1797,7 +1797,7 @@ export async function runGithubApi(input: GithubInput, ctx: ToolContext): Promis
 }
 ```
 
-- [ ] **Step 6: Create server/src/tools/invoke_claude_code.ts**
+- [x] **Step 6: Create server/src/tools/invoke_claude_code.ts**
 
 ```typescript
 import { spawn } from 'child_process';
@@ -1838,7 +1838,7 @@ export function invokeClaudeCode(input: ClaudeCodeInput, ctx: ToolContext): Prom
 }
 ```
 
-- [ ] **Step 7: Create server/src/tools/invoke_codex.ts**
+- [x] **Step 7: Create server/src/tools/invoke_codex.ts**
 
 ```typescript
 import { spawn } from 'child_process';
@@ -1879,7 +1879,7 @@ export function invokeCodex(input: CodexInput, ctx: ToolContext): Promise<string
 }
 ```
 
-- [ ] **Step 8: Create server/src/tools/mcp_call.ts**
+- [x] **Step 8: Create server/src/tools/mcp_call.ts**
 
 ```typescript
 import { spawn } from 'child_process';
@@ -1935,7 +1935,7 @@ export function callMcp(input: McpInput, ctx: ToolContext): Promise<string> {
 }
 ```
 
-- [ ] **Step 9: Create server/src/tools/workspace_query.ts**
+- [x] **Step 9: Create server/src/tools/workspace_query.ts**
 
 ```typescript
 import { queryGraph } from '../services/graphify.js';
@@ -1959,7 +1959,7 @@ export async function runWorkspaceQuery(input: WorkspaceQueryInput): Promise<str
 }
 ```
 
-- [ ] **Step 10: Create server/src/tools/memory_tools.ts**
+- [x] **Step 10: Create server/src/tools/memory_tools.ts**
 
 ```typescript
 import { rememberFact, recallFact, recallAll } from '../services/memory.js';
@@ -1981,7 +1981,7 @@ export function recall(userId: string, key: string | null): string {
 }
 ```
 
-- [ ] **Step 11: Commit**
+- [x] **Step 11: Commit**
 
 ```bash
 git add server/src/tools/ server/tests/tools/
@@ -1995,7 +1995,7 @@ git commit -m "feat: tool implementations (git, github, claude code, codex, mcp,
 **Files:**
 - Create: `server/src/tools/definitions.ts`
 
-- [ ] **Step 1: Create server/src/tools/definitions.ts**
+- [x] **Step 1: Create server/src/tools/definitions.ts**
 
 ```typescript
 import type Anthropic from '@anthropic-ai/sdk';
@@ -2104,7 +2104,7 @@ export const toolDefinitions: Anthropic.Tool[] = [
 ];
 ```
 
-- [ ] **Step 2: Commit**
+- [x] **Step 2: Commit**
 
 ```bash
 git add server/src/tools/definitions.ts
@@ -2121,7 +2121,7 @@ git commit -m "feat: Anthropic tool definitions"
 
 The lead agent runs an Anthropic tool-use loop. It builds context from thread history + user memory, then iterates: send to API → handle tool calls → collect results → send back until the model stops calling tools.
 
-- [ ] **Step 1: Write failing test**
+- [x] **Step 1: Write failing test**
 
 ```typescript
 // tests/services/agent.test.ts
@@ -2173,7 +2173,7 @@ describe('agent', () => {
 });
 ```
 
-- [ ] **Step 2: Run test to verify it fails**
+- [x] **Step 2: Run test to verify it fails**
 
 ```bash
 cd server && npm test -- tests/services/agent.test.ts
@@ -2181,7 +2181,7 @@ cd server && npm test -- tests/services/agent.test.ts
 
 Expected: FAIL
 
-- [ ] **Step 3: Create server/src/services/agent.ts**
+- [x] **Step 3: Create server/src/services/agent.ts**
 
 ```typescript
 import Anthropic from '@anthropic-ai/sdk';
@@ -2390,7 +2390,7 @@ export async function runAgentTurn(userId: string, threadId: string, userMessage
 }
 ```
 
-- [ ] **Step 4: Run test to verify it passes**
+- [x] **Step 4: Run test to verify it passes**
 
 ```bash
 cd server && npm test -- tests/services/agent.test.ts
@@ -2398,7 +2398,7 @@ cd server && npm test -- tests/services/agent.test.ts
 
 Expected: PASS
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add server/src/services/agent.ts server/tests/services/agent.test.ts
@@ -2415,7 +2415,7 @@ git commit -m "feat: lead agent with Anthropic tool-use loop"
 
 POST /threads/:id/messages saves the user message, triggers the agent turn async, saves the assistant reply, and returns the user message immediately. The client gets the assistant reply via WebSocket.
 
-- [ ] **Step 1: Write failing test**
+- [x] **Step 1: Write failing test**
 
 ```typescript
 // tests/messages.test.ts
@@ -2471,7 +2471,7 @@ describe('messages', () => {
 });
 ```
 
-- [ ] **Step 2: Run test to verify it fails**
+- [x] **Step 2: Run test to verify it fails**
 
 ```bash
 cd server && npm test -- tests/messages.test.ts
@@ -2479,7 +2479,7 @@ cd server && npm test -- tests/messages.test.ts
 
 Expected: FAIL
 
-- [ ] **Step 3: Create server/src/routes/messages.ts**
+- [x] **Step 3: Create server/src/routes/messages.ts**
 
 ```typescript
 import { Router } from 'express';
@@ -2549,7 +2549,7 @@ router.post('/:threadId/messages', async (req, res) => {
 export default router;
 ```
 
-- [ ] **Step 4: Run test to verify it passes**
+- [x] **Step 4: Run test to verify it passes**
 
 ```bash
 cd server && npm test -- tests/messages.test.ts
@@ -2557,7 +2557,7 @@ cd server && npm test -- tests/messages.test.ts
 
 Expected: PASS
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add server/src/routes/messages.ts server/tests/messages.test.ts
@@ -2572,7 +2572,7 @@ git commit -m "feat: messages route — POST triggers async agent turn, reply vi
 - Create: `server/src/routes/executions.ts`
 - Create: `server/tests/executions.test.ts`
 
-- [ ] **Step 1: Write failing test**
+- [x] **Step 1: Write failing test**
 
 ```typescript
 // tests/executions.test.ts
@@ -2636,7 +2636,7 @@ describe('executions', () => {
 });
 ```
 
-- [ ] **Step 2: Run test to verify it fails**
+- [x] **Step 2: Run test to verify it fails**
 
 ```bash
 cd server && npm test -- tests/executions.test.ts
@@ -2644,7 +2644,7 @@ cd server && npm test -- tests/executions.test.ts
 
 Expected: FAIL
 
-- [ ] **Step 3: Create server/src/routes/executions.ts**
+- [x] **Step 3: Create server/src/routes/executions.ts**
 
 ```typescript
 import { Router } from 'express';
@@ -2707,7 +2707,7 @@ router.post('/:id/reject', (req, res) => {
 export default router;
 ```
 
-- [ ] **Step 4: Run test to verify it passes**
+- [x] **Step 4: Run test to verify it passes**
 
 ```bash
 cd server && npm test -- tests/executions.test.ts
@@ -2715,7 +2715,7 @@ cd server && npm test -- tests/executions.test.ts
 
 Expected: PASS
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add server/src/routes/executions.ts server/tests/executions.test.ts
@@ -2726,7 +2726,7 @@ git commit -m "feat: executions route — GET, approve, reject"
 
 ## Task 18: Full Test Run + Smoke Test
 
-- [ ] **Step 1: Run the full test suite**
+- [x] **Step 1: Run the full test suite**
 
 ```bash
 cd server && npm test
@@ -2734,7 +2734,7 @@ cd server && npm test
 
 Expected: all tests pass, no failures.
 
-- [ ] **Step 2: Start the server and verify all routes respond**
+- [x] **Step 2: Start the server and verify all routes respond**
 
 ```bash
 cd server && npm run dev &
@@ -2770,7 +2770,7 @@ kill %1
 
 Expected: each request returns valid JSON with an `id` field.
 
-- [ ] **Step 3: Final commit**
+- [x] **Step 3: Final commit**
 
 ```bash
 git add -A

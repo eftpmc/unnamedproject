@@ -43,7 +43,7 @@ export default function AppLayout() {
       : <EmptyState onNewSession={handleNewSession} />;
 
   return (
-    <div className="flex h-full bg-base-100">
+    <div className="flex h-full gap-2 bg-muted/45 p-3 text-foreground">
       <IconRail
         activePanel={showPanel ? activePanel : null}
         onPanelToggle={handlePanelToggle}
@@ -56,9 +56,10 @@ export default function AppLayout() {
           onNewSession={handleNewSession}
         />
       )}
-      <div className="flex-1 flex flex-col overflow-hidden">
+      <main className="relative flex min-w-0 flex-1 flex-col overflow-hidden rounded-3xl bg-background/58 shadow-sm backdrop-blur">
+        <div className="pointer-events-none absolute inset-x-8 top-0 h-px bg-gradient-to-r from-transparent via-foreground/10 to-transparent" />
         {mainContent}
-      </div>
+      </main>
     </div>
   );
 }

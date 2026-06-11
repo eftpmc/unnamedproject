@@ -3,6 +3,11 @@ import { useQuery } from '@tanstack/react-query';
 import { Plus } from 'lucide-react';
 import { getWorkspaces, getConnections } from '../lib/api.js';
 import type { Session, Workspace, Connection } from '../types.js';
+import { Badge } from '@/components/ui/badge';
+import { Button } from '@/components/ui/button';
+import { ScrollArea } from '@/components/ui/scroll-area';
+import { Separator } from '@/components/ui/separator';
+import { cn } from '@/lib/utils';
 
 function timeAgo(unixSeconds: number): string {
   const diff = Date.now() / 1000 - unixSeconds;
@@ -11,6 +16,17 @@ function timeAgo(unixSeconds: number): string {
   if (diff < 86400) return `${Math.floor(diff / 3600)}h ago`;
   if (diff < 604800) return `${Math.floor(diff / 86400)}d ago`;
   return new Date(unixSeconds * 1000).toLocaleDateString();
+}
+
+function connectionLabel(connection: Connection): string {
+  switch (connection.purpose) {
+    case 'lead_agent': return 'Lead agent';
+    case 'claude_code': return 'Claude Code';
+    case 'codex': return 'Codex';
+    case 'github': return 'GitHub';
+    case 'mcp': return 'MCP';
+    case 'tool': return connection.type;
+  }
 }
 
 interface NavPanelProps {
@@ -36,76 +52,89 @@ export default function NavPanel({ activePanel, sessions, activeSessionId, onNew
   });
 
   return (
-    <div className="w-64 bg-base-200 border-r border-base-300 flex flex-col overflow-hidden shrink-0">
+    <aside className="flex w-72 shrink-0 flex-col overflow-hidden rounded-3xl bg-background/50 backdrop-blur">
       {activePanel === 'sessions' ? (
         <>
-          <div className="px-4 pt-4 pb-2 text-base-content/40 text-xs uppercase tracking-wider flex items-center justify-between">
-            Sessions
-            <button
+          <div className="flex items-center justify-between px-4 py-4">
+            <div>
+              <div className="text-sm font-medium">Sessions</div>
+              <div className="text-xs text-muted-foreground">{sessions.length} total</div>
+            </div>
+            <Button
+              variant="ghost"
+              size="icon-sm"
               onClick={onNewSession}
               title="New session"
-              className="btn btn-ghost btn-sm btn-square text-base-content/40 hover:text-base-content/70"
+              className="rounded-xl text-muted-foreground hover:text-foreground"
             >
               <Plus size={16} strokeWidth={1.75} />
-            </button>
+            </Button>
           </div>
-          <div className="flex-1 overflow-y-auto px-2">
+          <Separator className="mx-4 w-auto bg-border/60" />
+          <ScrollArea className="flex-1">
+            <div className="p-2.5">
             {sessions.length === 0 && (
-              <div className="p-3 text-base-content/30 text-sm">No sessions yet</div>
+              <div className="rounded-2xl border border-dashed border-border/70 bg-background/45 p-4 text-sm text-muted-foreground">No sessions yet</div>
             )}
             {sessions.map(s => {
               const active = s.id === activeSessionId;
               return (
-                <div
+                <button
                   key={s.id}
                   onClick={() => navigate(`/s/${s.id}`)}
-                  className={`py-2.5 px-3 mb-1 rounded-xl cursor-pointer ${active ? 'bg-base-300' : 'hover:bg-base-300/60'}`}
+                  className={cn(
+                    'mb-1 w-full rounded-2xl px-3 py-2.5 text-left transition-colors',
+                    active ? 'bg-background text-foreground shadow-xs ring-1 ring-border/60' : 'text-muted-foreground hover:bg-background/65 hover:text-foreground',
+                  )}
                 >
-                  <div className={`text-sm truncate ${active ? 'text-base-content font-medium' : 'text-base-content/60'}`}>
+                  <div className="truncate text-sm font-medium">
                     {s.title ?? 'Untitled session'}
                   </div>
-                  <div className="text-base-content/30 text-xs mt-1">
+                  <div className="mt-1 text-xs text-muted-foreground">
                     {timeAgo(s.updated_at)}
                   </div>
-                </div>
+                </button>
               );
             })}
-          </div>
+            </div>
+          </ScrollArea>
         </>
       ) : (
         <>
-          <div className="px-4 pt-4 pb-2 text-base-content/40 text-xs uppercase tracking-wider">
-            Workspaces
+          <div className="px-4 py-4">
+            <div className="text-sm font-medium">Workspaces</div>
+            <div className="text-xs text-muted-foreground">{workspaces.length} configured</div>
           </div>
-          <div className="flex-1 overflow-y-auto px-2">
+          <Separator className="mx-4 w-auto bg-border/60" />
+          <ScrollArea className="flex-1">
+            <div className="p-2.5">
             {workspaces.map(w => (
-              <div key={w.id} className="py-2.5 px-3 rounded-xl">
-                <div className="text-base-content/70 text-sm truncate">
+              <div key={w.id} className="rounded-2xl px-3 py-2.5 hover:bg-background/65">
+                <div className="truncate text-sm font-medium">
                   {w.name}
                 </div>
                 {w.description && (
-                  <div className="text-base-content/30 text-xs mt-1 truncate">
+                  <div className="mt-1 truncate text-xs text-muted-foreground">
                     {w.description}
                   </div>
                 )}
               </div>
             ))}
             {workspaces.length > 0 && connections.length > 0 && (
-              <div className="border-t border-base-300 mt-2 pt-2">
-                <div className="px-3 pb-1 text-base-content/30 text-xs uppercase tracking-wider">
-                  Connections
-                </div>
+              <div className="mt-3 space-y-1 border-t border-border/60 pt-3">
+                <div className="px-3 pb-1 text-xs font-medium text-muted-foreground">Setup</div>
                 {connections.map(c => (
-                  <div key={c.id} className="py-1.5 px-3 flex items-center gap-2">
-                    <div className="text-base-content/60 text-sm flex-1 truncate">{c.name}</div>
-                    <div className="text-base-content/30 text-xs">{c.type}</div>
+                  <div key={c.id} className="flex items-center gap-2 rounded-lg px-3 py-1.5">
+                    <div className="flex-1 truncate text-sm text-muted-foreground">{c.name}</div>
+                    <Badge variant="secondary">{connectionLabel(c)}</Badge>
                   </div>
                 ))}
               </div>
             )}
-          </div>
+            </div>
+          </ScrollArea>
         </>
       )}
-    </div>
+    </aside>
   );
 }

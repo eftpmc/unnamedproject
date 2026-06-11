@@ -1,6 +1,10 @@
 import { useState } from 'react';
 import { ChevronDown, ChevronUp, Check, X } from 'lucide-react';
 import { approveExecution, rejectExecution } from '../lib/api.js';
+import { Badge } from '@/components/ui/badge';
+import { Button } from '@/components/ui/button';
+import { Card } from '@/components/ui/card';
+import { cn } from '@/lib/utils';
 
 type ExecutionStatus = 'pending' | 'running' | 'done' | 'error' | 'awaiting_approval';
 
@@ -17,11 +21,19 @@ interface ExecutionCardProps {
 }
 
 const STATUS_DOT: Record<ExecutionStatus, string> = {
-  pending: 'bg-base-content/20',
+  pending: 'bg-foreground/20',
   running: 'bg-success',
-  done: 'bg-base-content/30',
-  error: 'bg-error',
+  done: 'bg-foreground/30',
+  error: 'bg-destructive',
   awaiting_approval: 'bg-warning',
+};
+
+const STATUS_LABEL: Record<ExecutionStatus, string> = {
+  pending: 'Pending',
+  running: 'Running',
+  done: 'Done',
+  error: 'Error',
+  awaiting_approval: 'Approval',
 };
 
 export default function ExecutionCard({
@@ -39,7 +51,7 @@ export default function ExecutionCard({
   const [decided, setDecided] = useState<'approved' | 'rejected' | null>(null);
   const [acting, setActing] = useState(false);
 
-  const dotColor = STATUS_DOT[status] ?? 'bg-base-content/20';
+  const dotColor = STATUS_DOT[status] ?? 'bg-foreground/20';
   const label = workspaceName ? `${tool} · ${workspaceName}` : tool;
 
   async function handleApprove() {
@@ -55,47 +67,50 @@ export default function ExecutionCard({
   const isApproval = needsApproval && !decided;
 
   return (
-    <div className={`card bg-base-300 ${status === 'awaiting_approval' && !decided ? 'ring-1 ring-warning/30' : ''} rounded-2xl overflow-hidden text-sm`}>
-      {/* Header row */}
+    <Card className={cn(
+      'overflow-hidden rounded-2xl py-0 shadow-xs',
+      status === 'awaiting_approval' && !decided ? 'ring-2 ring-warning/25' : '',
+    )}>
       <div
         role={!isApproval ? 'button' : undefined}
         onClick={!isApproval ? () => setExpanded(e => !e) : undefined}
-        className={`px-4 py-3 flex items-center gap-2.5 ${isApproval ? 'cursor-default' : 'cursor-pointer'}`}
+        className={`flex items-center gap-2.5 px-4 py-3 ${isApproval ? 'cursor-default' : 'cursor-pointer'}`}
       >
         <div
           className={`w-2 h-2 rounded-full shrink-0 ${
-            decided === 'approved' ? 'bg-success' : decided === 'rejected' ? 'bg-error' : dotColor
+            decided === 'approved' ? 'bg-success' : decided === 'rejected' ? 'bg-destructive' : dotColor
           }`}
         />
-        <span className="text-base-content/60 flex-1 select-none">{label}</span>
-
-        {decided && (
-          <span className={`text-xs ${decided === 'approved' ? 'text-success' : 'text-error'}`}>
-            {decided}
-          </span>
-        )}
+        <span className="flex-1 select-none truncate text-sm text-muted-foreground">{label}</span>
+        <Badge variant={status === 'error' ? 'destructive' : status === 'awaiting_approval' ? 'outline' : 'secondary'}>
+          {decided ?? STATUS_LABEL[status]}
+        </Badge>
 
         {isApproval && (
           <div className="flex gap-1.5">
-            <button
+            <Button
+              variant="secondary"
+              size="sm"
               onClick={handleApprove}
               disabled={acting}
-              className="btn btn-sm rounded-full bg-success/10 border-none text-success hover:bg-success/20"
+              className="text-success"
             >
               <Check size={14} strokeWidth={2} /> Approve
-            </button>
-            <button
+            </Button>
+            <Button
+              variant="secondary"
+              size="sm"
               onClick={handleReject}
               disabled={acting}
-              className="btn btn-sm rounded-full bg-base-200 border-none text-base-content/50 hover:bg-base-200/70"
+              className="text-muted-foreground"
             >
               <X size={14} strokeWidth={2} /> Reject
-            </button>
+            </Button>
           </div>
         )}
 
         {!isApproval && !decided && (
-          <span className="text-base-content/30">
+          <span className="text-muted-foreground/70">
             {expanded ? <ChevronUp size={16} /> : <ChevronDown size={16} />}
           </span>
         )}
@@ -105,11 +120,11 @@ export default function ExecutionCard({
       {expanded && !isApproval && (
         <div
           role="log"
-          className="border-t border-base-200 px-4 py-3 font-mono text-xs text-base-content/50 leading-relaxed bg-base-200 whitespace-pre-wrap max-h-50 overflow-y-auto"
+          className="max-h-48 overflow-y-auto border-t bg-muted/50 px-4 py-3 font-mono text-xs leading-relaxed whitespace-pre-wrap text-muted-foreground"
         >
           {outputLog || (result ?? '(no output)')}
         </div>
       )}
-    </div>
+    </Card>
   );
 }

@@ -34,5 +34,27 @@ describe('sessions', () => {
     expect(res.status).toBe(200);
     expect(res.body.length).toBeGreaterThanOrEqual(1);
     expect(res.body[0].id).toBe(sessionId);
+    expect(res.body[0].effort).toBe('medium');
+  });
+
+  it('updates session effort', async () => {
+    const res = await request(app)
+      .patch(`/sessions/${sessionId}`)
+      .set('Authorization', `Bearer ${token}`)
+      .send({ effort: 'high' });
+    expect(res.status).toBe(200);
+
+    const list = await request(app)
+      .get('/sessions')
+      .set('Authorization', `Bearer ${token}`);
+    expect(list.body[0].effort).toBe('high');
+  });
+
+  it('rejects invalid effort', async () => {
+    const res = await request(app)
+      .patch(`/sessions/${sessionId}`)
+      .set('Authorization', `Bearer ${token}`)
+      .send({ effort: 'xhigh' });
+    expect(res.status).toBe(400);
   });
 });

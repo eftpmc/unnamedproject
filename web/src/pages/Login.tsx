@@ -1,6 +1,10 @@
 import { useState, type FormEvent } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { login } from '../lib/api.js';
+import { Button } from '@/components/ui/button';
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
+import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
 
 export default function Login() {
   const navigate = useNavigate();
@@ -24,38 +28,46 @@ export default function Login() {
   }
 
   return (
-    <div className="h-full flex items-center justify-center bg-base-100">
-      <form onSubmit={handleSubmit} className="w-80 flex flex-col gap-3">
-        <div className="text-base-content text-xl font-medium mb-2">Sign in</div>
+    <div className="flex h-full items-center justify-center bg-muted/40 p-6">
+      <Card className="w-full max-w-sm rounded-3xl shadow-sm">
+        <CardHeader>
+          <CardTitle>Sign in</CardTitle>
+          <CardDescription>Open your local agent workspace.</CardDescription>
+        </CardHeader>
+        <CardContent>
+          <form onSubmit={handleSubmit} className="flex flex-col gap-4">
+            <div className="grid gap-2">
+              <Label htmlFor="email">Email</Label>
+              <Input
+                id="email"
+                type="email"
+                placeholder="Email"
+                value={email}
+                onChange={e => setEmail(e.target.value)}
+                required
+              />
+            </div>
 
-        <input
-          type="email"
-          placeholder="Email"
-          value={email}
-          onChange={e => setEmail(e.target.value)}
-          required
-          className="input bg-base-300 border-none rounded-2xl text-base-content text-[15px] w-full"
-        />
+            <div className="grid gap-2">
+              <Label htmlFor="password">Password</Label>
+              <Input
+                id="password"
+                type="password"
+                placeholder="Password"
+                value={password}
+                onChange={e => setPassword(e.target.value)}
+                required
+              />
+            </div>
 
-        <input
-          type="password"
-          placeholder="Password"
-          value={password}
-          onChange={e => setPassword(e.target.value)}
-          required
-          className="input bg-base-300 border-none rounded-2xl text-base-content text-[15px] w-full"
-        />
+            {error && <div className="text-sm text-destructive">{error}</div>}
 
-        {error && <div className="text-error text-sm">{error}</div>}
-
-        <button
-          type="submit"
-          disabled={loading}
-          className="btn rounded-full bg-base-content text-base-100 border-none hover:opacity-90 mt-1"
-        >
-          {loading ? 'Signing in…' : 'Sign in'}
-        </button>
-      </form>
+            <Button type="submit" disabled={loading} className="w-full">
+              {loading ? 'Signing in…' : 'Sign in'}
+            </Button>
+          </form>
+        </CardContent>
+      </Card>
     </div>
   );
 }

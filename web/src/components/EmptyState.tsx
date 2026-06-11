@@ -1,18 +1,22 @@
+import { Button } from '@/components/ui/button';
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
+
 interface EmptyStateProps {
   onNewSession: () => void;
 }
 
 export default function EmptyState({ onNewSession }: EmptyStateProps) {
   return (
-    <div className="flex-1 flex flex-col items-center justify-center gap-3 text-center px-6">
-      <div className="text-base-content/70 text-lg font-medium">Start a session</div>
-      <div className="text-base-content/40 text-sm max-w-xs">Talk to the agent to plan, execute, and manage work across your projects.</div>
-      <button
-        onClick={onNewSession}
-        className="btn rounded-full bg-base-content text-base-100 border-none hover:opacity-90 mt-2"
-      >
-        New session
-      </button>
+    <div className="flex flex-1 items-center justify-center px-6">
+      <Card className="w-full max-w-md rounded-3xl border-border/60 bg-background/72 text-center shadow-sm">
+        <CardHeader>
+          <CardTitle>Start a session</CardTitle>
+          <CardDescription>Talk to the agent to plan, execute, and manage work across your projects.</CardDescription>
+        </CardHeader>
+        <CardContent>
+          <Button onClick={onNewSession}>New session</Button>
+        </CardContent>
+      </Card>
     </div>
   );
 }

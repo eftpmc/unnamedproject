@@ -5,6 +5,7 @@ import IconRail from '../components/IconRail.js';
 import NavPanel from '../components/NavPanel.js';
 import SessionView from '../components/SessionView.js';
 import EmptyState from '../components/EmptyState.js';
+import ProjectsEmptyState from '../components/ProjectsEmptyState.js';
 import { getSessions, createSession } from '../lib/api.js';
 import { connect } from '../lib/ws.js';
 
@@ -38,9 +39,11 @@ export default function AppLayout() {
 
   const mainContent = isSettings
     ? <Outlet />
-    : sessionId
-      ? <SessionView sessionId={sessionId} />
-      : <EmptyState onNewSession={handleNewSession} />;
+    : activePanel === 'projects'
+      ? <ProjectsEmptyState />
+      : sessionId
+        ? <SessionView sessionId={sessionId} />
+        : <EmptyState onNewSession={handleNewSession} />;
 
   return (
     <div className="flex h-full gap-2 bg-muted/45 p-3 text-foreground">

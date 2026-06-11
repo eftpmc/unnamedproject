@@ -72,9 +72,17 @@ export default function CampaignCard({ campaignId, projectId }: CampaignCardProp
 
   const { campaign, tasks } = data;
   const effectiveStatuses = tasks.map(t => taskStatuses[t.id] ?? t.status);
-  const isRunning = effectiveStatuses.some(s => s === 'running') || campaign.status === 'running';
-  const isDone = campaign.status === 'done';
-  const isError = campaign.status === 'error';
+  // Derive the displayed status from live task updates rather than the
+  // (possibly stale) campaign.status fetched on initial load — the campaign
+  // row is only updated server-side once all tasks settle, but WS task
+  // updates arrive immediately.
+  const allDone = effectiveStatuses.every(s => s === 'done');
+  const anyError = effectiveStatuses.some(s => s === 'error');
+  const anyRunning = effectiveStatuses.some(s => s === 'running');
+  const isRunning = anyRunning || (campaign.status === 'running' && !allDone && !anyError);
+  const isDone = allDone || (campaign.status === 'done' && !anyRunning);
+  const isError = (anyError && !anyRunning) || (campaign.status === 'error' && !anyRunning);
+  const displayStatus = isDone ? 'done' : isError ? 'error' : isRunning ? 'running' : campaign.status;
 
   return (
     <div className="mt-2 w-64 overflow-hidden rounded-xl border border-border/50 bg-background/80 shadow-sm">
@@ -88,7 +96,7 @@ export default function CampaignCard({ campaignId, projectId }: CampaignCardProp
           isError && 'bg-red-100 text-red-700',
           !isRunning && !isDone && !isError && 'bg-muted text-muted-foreground',
         )}>
-          {campaign.status}
+          {displayStatus}
         </span>
       </div>
       {/* tasks */}

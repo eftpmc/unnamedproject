@@ -386,7 +386,7 @@ async function dispatchTool(
           {
             project_id: toolInput.project_id as string,
             title: toolInput.title as string,
-            tasks: toolInput.tasks as Array<{ title: string; agent: 'claude_code' | 'codex' | 'mcp' }>,
+            tasks: toolInput.tasks as Array<{ title: string; agent: 'claude_code' | 'codex' | 'mcp' | 'file_write' | 'git' }>,
             session_id: sessionId,
           },
           userId

@@ -44,7 +44,7 @@ function applySchema(): void {
       UNIQUE(user_id, name)
     );
 
-    CREATE TABLE IF NOT EXISTS workspaces (
+    CREATE TABLE IF NOT EXISTS projects (
       id TEXT PRIMARY KEY,
       user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
       name TEXT NOT NULL,
@@ -53,6 +53,11 @@ function applySchema(): void {
       enabled_connection_ids TEXT NOT NULL DEFAULT '[]',
       created_at INTEGER NOT NULL DEFAULT (unixepoch()),
       UNIQUE(user_id, name)
+    );
+
+    CREATE TABLE IF NOT EXISTS user_settings (
+      user_id TEXT PRIMARY KEY REFERENCES users(id) ON DELETE CASCADE,
+      projects_root TEXT
     );
 
     CREATE TABLE IF NOT EXISTS sessions (
@@ -75,7 +80,7 @@ function applySchema(): void {
     CREATE TABLE IF NOT EXISTS executions (
       id TEXT PRIMARY KEY,
       message_id TEXT REFERENCES messages(id) ON DELETE SET NULL,
-      workspace_id TEXT REFERENCES workspaces(id) ON DELETE SET NULL,
+      project_id TEXT REFERENCES projects(id) ON DELETE SET NULL,
       tool TEXT NOT NULL,
       status TEXT NOT NULL DEFAULT 'pending'
         CHECK(status IN ('pending','running','done','error','awaiting_approval')),
@@ -141,9 +146,28 @@ function applySchema(): void {
   if (!sessionCols.some(c => c.name === 'model')) {
     db.exec('ALTER TABLE sessions ADD COLUMN model TEXT');
   }
+
+  const tableNames = db.prepare("SELECT name FROM sqlite_master WHERE type='table'").all() as { name: string }[];
+  if (tableNames.some(t => t.name === 'workspaces')) {
+    db.exec(`
+      INSERT INTO projects (id, user_id, name, description, repo_path, enabled_connection_ids, created_at)
+      SELECT id, user_id, name, description, repo_path, enabled_connection_ids, created_at FROM workspaces
+      WHERE NOT EXISTS (SELECT 1 FROM projects WHERE projects.id = workspaces.id);
+    `);
+
+    const executionCols = db.prepare("SELECT name FROM pragma_table_info('executions')").all() as { name: string }[];
+    if (executionCols.some(c => c.name === 'workspace_id') && !executionCols.some(c => c.name === 'project_id')) {
+      db.exec(`
+        ALTER TABLE executions ADD COLUMN project_id TEXT REFERENCES projects(id) ON DELETE SET NULL;
+        UPDATE executions SET project_id = workspace_id;
+      `);
+    }
+
+    db.exec('DROP TABLE workspaces');
+  }
 }
 
-export interface DbWorkspace {
+export interface DbProject {
   id: string;
   name: string;
   description: string | null;
@@ -151,8 +175,30 @@ export interface DbWorkspace {
   enabled_connection_ids: string;
 }
 
-export function getWorkspaceForUser(workspaceId: string, userId: string): DbWorkspace | undefined {
+export function getProjectForUser(projectId: string, userId: string): DbProject | undefined {
   return getDb()
-    .prepare('SELECT id, name, description, repo_path, enabled_connection_ids FROM workspaces WHERE id = ? AND user_id = ?')
-    .get(workspaceId, userId) as DbWorkspace | undefined;
+    .prepare('SELECT id, name, description, repo_path, enabled_connection_ids FROM projects WHERE id = ? AND user_id = ?')
+    .get(projectId, userId) as DbProject | undefined;
+}
+
+export function getProjectsForUser(userId: string): DbProject[] {
+  return getDb()
+    .prepare('SELECT id, name, description, repo_path, enabled_connection_ids FROM projects WHERE user_id = ?')
+    .all(userId) as DbProject[];
+}
+
+export function getProjectsRoot(userId: string): string | null {
+  const row = getDb()
+    .prepare('SELECT projects_root FROM user_settings WHERE user_id = ?')
+    .get(userId) as { projects_root: string | null } | undefined;
+  return row?.projects_root ?? null;
+}
+
+export function setProjectsRoot(userId: string, projectsRoot: string): void {
+  getDb()
+    .prepare(`
+      INSERT INTO user_settings (user_id, projects_root) VALUES (?, ?)
+      ON CONFLICT(user_id) DO UPDATE SET projects_root = excluded.projects_root
+    `)
+    .run(userId, projectsRoot);
 }

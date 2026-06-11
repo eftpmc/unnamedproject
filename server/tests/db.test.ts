@@ -16,11 +16,18 @@ describe('database schema', () => {
     const names = tables.map(t => t.name);
     expect(names).toContain('users');
     expect(names).toContain('connections');
-    expect(names).toContain('workspaces');
+    expect(names).toContain('projects');
+    expect(names).toContain('user_settings');
     expect(names).toContain('sessions');
     expect(names).toContain('messages');
     expect(names).toContain('executions');
     expect(names).toContain('approvals');
     expect(names).toContain('user_memory');
+  });
+
+  it('executions table has project_id column', () => {
+    const db = getDb();
+    const cols = db.prepare("SELECT name FROM pragma_table_info('executions')").all() as { name: string }[];
+    expect(cols.some(c => c.name === 'project_id')).toBe(true);
   });
 });

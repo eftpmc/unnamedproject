@@ -6,13 +6,13 @@ import { waitForApproval } from '../lib/approval.js';
 export function createExecution(
   userId: string,
   messageId: string,
-  workspaceId: string | null,
+  projectId: string | null,
   tool: string
 ): string {
   const id = newId();
   getDb()
-    .prepare('INSERT INTO executions (id, message_id, workspace_id, tool, status) VALUES (?,?,?,?,?)')
-    .run(id, messageId, workspaceId, tool, 'running');
+    .prepare('INSERT INTO executions (id, message_id, project_id, tool, status) VALUES (?,?,?,?,?)')
+    .run(id, messageId, projectId, tool, 'running');
   broadcast(userId, { type: 'execution_update', executionId: id, status: 'running', tool, messageId });
   return id;
 }

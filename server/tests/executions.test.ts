@@ -32,8 +32,8 @@ beforeAll(async () => {
 
   db.prepare('INSERT INTO sessions (id, user_id) VALUES (?,?)').run(sessionId, userId);
   db.prepare('INSERT INTO messages (id, session_id, role, content) VALUES (?,?,?,?)').run(msgId, sessionId, 'user', 'test');
-  db.prepare('INSERT INTO workspaces (id, user_id, name) VALUES (?,?,?)').run(wsId, userId, `ws-${newId()}`);
-  db.prepare("INSERT INTO executions (id, message_id, workspace_id, tool, status) VALUES (?,?,?,?,?)").run(executionId, msgId, wsId, 'git_op', 'awaiting_approval');
+  db.prepare('INSERT INTO projects (id, user_id, name) VALUES (?,?,?)').run(wsId, userId, `ws-${newId()}`);
+  db.prepare("INSERT INTO executions (id, message_id, project_id, tool, status) VALUES (?,?,?,?,?)").run(executionId, msgId, wsId, 'git_op', 'awaiting_approval');
   db.prepare("INSERT INTO approvals (id, execution_id, action, payload) VALUES (?,?,?,?)").run(approvalId, executionId, 'git commit', '{"message":"fix bug"}');
 });
 

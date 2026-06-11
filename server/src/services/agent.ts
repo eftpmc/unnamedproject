@@ -1,5 +1,5 @@
 import Anthropic from '@anthropic-ai/sdk';
-import { getDb, getWorkspaceForUser, type DbWorkspace } from '../db/index.js';
+import { getDb, getProjectForUser, type DbProject } from '../db/index.js';
 import { getDecryptedConfig } from '../routes/connections.js';
 import { recallAll } from './memory.js';
 import { toolDefinitions } from '../tools/definitions.js';
@@ -9,43 +9,44 @@ import { runGithubApi } from '../tools/github_api.js';
 import { invokeClaudeCode } from '../tools/invoke_claude_code.js';
 import { invokeCodex } from '../tools/invoke_codex.js';
 import { callMcp } from '../tools/mcp_call.js';
-import { runWorkspaceQuery } from '../tools/workspace_query.js';
+import { runProjectQuery } from '../tools/project_query.js';
 import { remember, recall } from '../tools/memory_tools.js';
 import { readFile, listDir, writeFile } from '../tools/file_ops.js';
+import { createProject, updateProject, deleteProject } from '../tools/project_ops.js';
 import { broadcast } from './socket.js';
 import { newId } from '../lib/ids.js';
 import { DEFAULT_EFFORT, getAnthropicKey, resolveModelForEffort, type EffortLevel } from './anthropic.js';
 
 interface DbMessage { role: string; content: string; }
 
-function getWorkspaces(userId: string): DbWorkspace[] {
+function getProjects(userId: string): DbProject[] {
   return getDb()
-    .prepare('SELECT id, name, description, repo_path, enabled_connection_ids FROM workspaces WHERE user_id = ?')
-    .all(userId) as DbWorkspace[];
+    .prepare('SELECT id, name, description, repo_path, enabled_connection_ids FROM projects WHERE user_id = ?')
+    .all(userId) as DbProject[];
 }
 
 function buildSystemPrompt(userId: string): string {
   const memory = recallAll(userId);
-  const workspaces = getWorkspaces(userId);
+  const projects = getProjects(userId);
   const memoryText = Object.keys(memory).length > 0
     ? `\n\nUser memory:\n${Object.entries(memory).map(([k, v]) => `- ${k}: ${v}`).join('\n')}`
     : '';
-  const wsText = workspaces.length > 0
-    ? `\n\nAvailable workspaces:\n${workspaces.map(w => `- ${w.name} (id: ${w.id})${w.description ? ': ' + w.description : ''}`).join('\n')}`
-    : '\n\nNo workspaces configured yet.';
+  const projectsText = projects.length > 0
+    ? `\n\nAvailable projects:\n${projects.map(p => `- ${p.name} (id: ${p.id}${p.repo_path ? '' : ', no repo'})${p.description ? ': ' + p.description : ''}`).join('\n')}`
+    : '\n\nNo projects yet.';
 
   return `You are a personal AI operator. You help the user plan, execute, and manage work across their projects and tools.
 
-When the user gives you a task, determine which workspace it relates to (ask if unclear), then use the available tools to complete it. For coding work, prefer invoke_claude_code or invoke_codex over manual file edits. Query workspace_query before dispatching coding tools to understand the codebase structure.
+When the user gives you a task, determine which project it relates to. If no existing project fits and the task implies new code or files, call create_project yourself (pick a sensible name and description) rather than asking the user where to put things — only ask if it's genuinely ambiguous which existing project a task belongs to. For coding work, prefer invoke_claude_code or invoke_codex over manual file edits. Query project_query before dispatching coding tools to understand the codebase structure.
 
 You can run tools in parallel when the tasks are independent.
 
 Approval tiers:
-- Agent-approved (automatic, logged): invoke_claude_code, invoke_codex, git commit
-- User-approved (pauses for user): git push, github write ops, write_file
+- Agent-approved (automatic, logged): invoke_claude_code, invoke_codex, git commit, create_project, update_project
+- User-approved (pauses for user): git push, github write ops, write_file, delete_project
 Never skip a write op because approval is needed — just proceed and the system handles it.
 ${memoryText}
-${wsText}`;
+${projectsText}`;
 }
 
 async function dispatchTool(
@@ -54,16 +55,16 @@ async function dispatchTool(
   userId: string,
   messageId: string
 ): Promise<string> {
-  const workspaceId = (toolInput.workspace_id as string | undefined) ?? 'unknown';
-  const ws = getWorkspaceForUser(workspaceId, userId);
-  const executionId = createExecution(userId, messageId, ws?.id ?? null, toolName);
+  const projectId = (toolInput.project_id as string | undefined) ?? 'unknown';
+  const project = getProjectForUser(projectId, userId);
+  const executionId = createExecution(userId, messageId, project?.id ?? null, toolName);
 
   try {
     let result: string;
 
     switch (toolName) {
       case 'invoke_claude_code': {
-        const connectionIds: string[] = JSON.parse(ws?.enabled_connection_ids ?? '[]');
+        const connectionIds: string[] = JSON.parse(project?.enabled_connection_ids ?? '[]');
         let apiKey = getAnthropicKey(userId);
         if (connectionIds.length > 0) {
           const anthropicConn = getDb()
@@ -73,12 +74,12 @@ async function dispatchTool(
         }
         result = await invokeClaudeCode(
           { prompt: toolInput.prompt as string },
-          { userId, executionId, repoPath: ws?.repo_path ?? '/tmp', apiKey }
+          { userId, executionId, repoPath: project?.repo_path ?? '/tmp', apiKey }
         );
         break;
       }
       case 'invoke_codex': {
-        const connectionIds: string[] = JSON.parse(ws?.enabled_connection_ids ?? '[]');
+        const connectionIds: string[] = JSON.parse(project?.enabled_connection_ids ?? '[]');
         let apiKey = '';
         if (connectionIds.length > 0) {
           const openaiConn = getDb()
@@ -88,7 +89,7 @@ async function dispatchTool(
         }
         result = await invokeCodex(
           { prompt: toolInput.prompt as string },
-          { userId, executionId, repoPath: ws?.repo_path ?? '/tmp', apiKey }
+          { userId, executionId, repoPath: project?.repo_path ?? '/tmp', apiKey }
         );
         break;
       }
@@ -111,12 +112,12 @@ async function dispatchTool(
       case 'git_op': {
         result = await runGitOp(
           { op: toolInput.op as 'log' | 'diff' | 'status' | 'commit' | 'push', message: toolInput.message as string | undefined },
-          { userId, executionId, workspaceId, repoPath: ws?.repo_path ?? '/tmp' }
+          { userId, executionId, projectId, repoPath: project?.repo_path ?? '/tmp' }
         );
         break;
       }
-      case 'workspace_query':
-        result = await runWorkspaceQuery({ workspace_id: workspaceId, question: toolInput.question as string }, userId);
+      case 'project_query':
+        result = await runProjectQuery({ project_id: projectId, question: toolInput.question as string }, userId);
         break;
       case 'remember':
         result = remember(userId, toolInput.key as string, toolInput.value as string);
@@ -125,16 +126,29 @@ async function dispatchTool(
         result = recall(userId, (toolInput.key as string | undefined) ?? null);
         break;
       case 'read_file':
-        result = await readFile({ workspace_id: workspaceId, path: toolInput.path as string }, { userId, executionId, workspaceId });
+        result = await readFile({ project_id: projectId, path: toolInput.path as string }, { userId, executionId, projectId });
         break;
       case 'list_dir':
-        result = await listDir({ workspace_id: workspaceId, path: toolInput.path as string | undefined }, { userId, executionId, workspaceId });
+        result = await listDir({ project_id: projectId, path: toolInput.path as string | undefined }, { userId, executionId, projectId });
         break;
       case 'write_file':
         result = await writeFile(
-          { workspace_id: workspaceId, path: toolInput.path as string, content: toolInput.content as string },
-          { userId, executionId, workspaceId }
+          { project_id: projectId, path: toolInput.path as string, content: toolInput.content as string },
+          { userId, executionId, projectId }
         );
+        break;
+      case 'create_project':
+        result = await createProject(
+          { name: toolInput.name as string, description: toolInput.description as string | undefined, with_repo: toolInput.with_repo as boolean },
+          userId,
+          executionId
+        );
+        break;
+      case 'update_project':
+        result = await updateProject({ project_id: toolInput.project_id as string, description: toolInput.description as string }, userId);
+        break;
+      case 'delete_project':
+        result = await deleteProject({ project_id: toolInput.project_id as string, delete_files: toolInput.delete_files as boolean }, userId, executionId);
         break;
       default:
         result = `Unknown tool: ${toolName}`;

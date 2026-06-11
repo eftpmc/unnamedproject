@@ -8,7 +8,7 @@ vi.mock('../../src/services/socket.js', () => ({ broadcast: vi.fn() }));
 
 const userId = newId();
 let messageId: string;
-let workspaceId: string;
+let projectId: string;
 
 beforeAll(() => {
   fs.mkdirSync(process.env.DATA_DIR!, { recursive: true });
@@ -19,13 +19,13 @@ beforeAll(() => {
   db.prepare('INSERT INTO sessions (id, user_id) VALUES (?,?)').run(sessionId, userId);
   messageId = newId();
   db.prepare('INSERT INTO messages (id, session_id, role, content) VALUES (?,?,?,?)').run(messageId, sessionId, 'user', 'hello');
-  workspaceId = newId();
-  db.prepare('INSERT INTO workspaces (id, user_id, name) VALUES (?,?,?)').run(workspaceId, userId, 'test-ws');
+  projectId = newId();
+  db.prepare('INSERT INTO projects (id, user_id, name) VALUES (?,?,?)').run(projectId, userId, 'test-ws');
 });
 
 describe('executor', () => {
   it('creates an execution and transitions through lifecycle', () => {
-    const id = createExecution(userId, messageId, workspaceId, 'git_op');
+    const id = createExecution(userId, messageId, projectId, 'git_op');
     expect(getDb().prepare('SELECT status FROM executions WHERE id = ?').get(id)).toMatchObject({ status: 'running' });
 
     appendOutput(id, userId, 'line 1\n');

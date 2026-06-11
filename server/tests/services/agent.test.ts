@@ -80,4 +80,21 @@ describe('agent', () => {
     expect(payload).not.toHaveProperty('effort');
     expect(payload).not.toHaveProperty('thinking');
   });
+
+  it('includes available projects and project tools in the system prompt', async () => {
+    const db = getDb();
+    db.prepare('INSERT INTO projects (id, user_id, name, description, repo_path, enabled_connection_ids) VALUES (?,?,?,?,?,?)')
+      .run(newId(), userId, 'demo', 'Demo project', null, '[]');
+
+    const msgId = newId();
+    db.prepare('INSERT INTO messages (id, session_id, role, content) VALUES (?,?,?,?)').run(msgId, sessionId, 'user', 'hi');
+
+    await runAgentTurn(userId, sessionId, msgId);
+
+    const call = streamMock.mock.calls[streamMock.mock.calls.length - 1][0];
+    expect(call.system).toContain('Available projects');
+    expect(call.system).toContain('demo');
+    expect(call.tools.some((t: { name: string }) => t.name === 'create_project')).toBe(true);
+    expect(call.tools.some((t: { name: string }) => t.name === 'delete_project')).toBe(true);
+  });
 });

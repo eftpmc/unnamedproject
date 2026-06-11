@@ -11,7 +11,7 @@ router.get('/:id', (req, res) => {
   const execution = getDb()
     .prepare(`
       SELECT e.id, e.tool, e.status, e.output_log, e.result, e.created_at, e.completed_at,
-             e.workspace_id, a.id as approval_id, a.action, a.payload
+             e.project_id, a.id as approval_id, a.action, a.payload
       FROM executions e
       LEFT JOIN approvals a ON a.execution_id = e.id AND a.status = 'pending'
       LEFT JOIN messages m ON m.id = e.message_id

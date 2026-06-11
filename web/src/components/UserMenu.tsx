@@ -22,7 +22,7 @@ export default function UserMenu() {
   return (
     <DropdownMenu>
       <DropdownMenuTrigger asChild>
-        <button className="flex w-full items-center gap-2 rounded-xl px-2 py-2 text-left transition-colors hover:bg-background/60 focus-visible:outline-none">
+        <button aria-label="User menu" className="flex w-full items-center gap-2 rounded-xl px-2 py-2 text-left transition-colors hover:bg-background/60 focus-visible:outline-none">
           <div className="grid h-7 w-7 shrink-0 place-items-center rounded-lg bg-foreground text-xs font-semibold text-background">
             {initial}
           </div>

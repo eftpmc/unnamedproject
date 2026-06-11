@@ -6,6 +6,7 @@ import { Badge } from '@/components/ui/badge';
 import { Button, buttonVariants } from '@/components/ui/button';
 import { Card, CardAction, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '@/components/ui/card';
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
+import { ConfirmDialog } from '@/components/ui/confirm-dialog';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Separator } from '@/components/ui/separator';
@@ -142,6 +143,7 @@ export default function Settings() {
   const [projConnIds, setProjConnIds] = useState<string[]>([]);
   const [projError, setProjError] = useState('');
   const [projectsRoot, setProjectsRoot] = useState('');
+  const [pendingDelete, setPendingDelete] = useState<{ kind: 'connection' | 'project'; id: string } | null>(null);
   const [projectsRootError, setProjectsRootError] = useState('');
 
   const inputCls = 'text-sm';
@@ -218,7 +220,7 @@ export default function Settings() {
   });
 
   const updateSettingsMutation = useMutation({
-    mutationFn: () => updateSettings({ projects_root: projectsRoot }),
+    mutationFn: (root: string) => updateSettings({ projects_root: root }),
     onSuccess: () => qc.invalidateQueries({ queryKey: ['settings'] }),
     onError: (e: Error) => setProjectsRootError(e.message),
   });
@@ -294,7 +296,7 @@ export default function Settings() {
           <button onClick={() => openSetupModal(kind)} className={connection ? ghostBtn : primaryBtn}>
             {connection ? 'Details' : 'Connect'}
           </button>
-          {connection && <DeleteBtn onClick={() => deleteConnMutation.mutate(connection.id)} />}
+          {connection && <DeleteBtn onClick={() => setPendingDelete({ kind: 'connection', id: connection.id })} />}
         </CardFooter>
       </Card>
     );
@@ -314,7 +316,7 @@ export default function Settings() {
               <div className="text-foreground/75 text-sm">{existing.name}</div>
               <Badge variant="secondary" className="mt-1 text-success">Connected</Badge>
             </div>
-            <DeleteBtn onClick={() => deleteConnMutation.mutate(existing.id)} />
+            <DeleteBtn onClick={() => setPendingDelete({ kind: 'connection', id: existing.id })} />
           </div>
         )}
         {existing && activeSetup !== 'mcp' ? (
@@ -437,14 +439,14 @@ export default function Settings() {
               </CardHeader>
               <CardFooter className="gap-2">
                 <button onClick={() => openSetupModal('mcp')} className={ghostBtn}>Details</button>
-                <DeleteBtn onClick={() => deleteConnMutation.mutate(c.id)} />
+                <DeleteBtn onClick={() => setPendingDelete({ kind: 'connection', id: c.id })} />
               </CardFooter>
             </Card>
           ))}
           <Card className="min-h-28 rounded-2xl border-dashed" size="sm">
             <CardHeader>
               <CardTitle>Add MCP Server</CardTitle>
-              <CardDescription>Expose extra tools to workspaces.</CardDescription>
+              <CardDescription>Run an MCP server process (command + args) to expose extra tools.</CardDescription>
               <CardAction>
                 <button onClick={() => openSetupModal('mcp')} className={primaryBtn}>Add</button>
               </CardAction>
@@ -464,13 +466,25 @@ export default function Settings() {
               className={inputCls}
             />
           </div>
-          <button onClick={() => updateSettingsMutation.mutate()} className={ghostBtn} disabled={!projectsRoot.trim()}>
+          <button onClick={() => updateSettingsMutation.mutate(projectsRoot)} className={ghostBtn}>
             Save
+          </button>
+          <button
+            onClick={() => {
+              setProjectsRoot('');
+              updateSettingsMutation.mutate('');
+            }}
+            className={ghostBtn}
+          >
+            Reset to default
           </button>
         </div>
         {projectsRootError && <div className="text-destructive text-sm mb-3">{projectsRootError}</div>}
         <p className="text-muted-foreground/70 text-xs mb-3">
-          The agent creates new repo-backed projects under this directory.
+          New repo-backed projects are created as folders under this directory — this is where the agent's local
+          checkouts of your project repos live. The path shown above is the current value, which defaults to a{' '}
+          <code>projects</code> folder inside the server's data directory. Change it if you'd rather keep project
+          repos somewhere else (e.g. <code>~/code</code>), or click "Reset to default" to go back to the default location.
         </p>
         {projects.length > 0 && (
           <div className="mb-3 grid gap-2">
@@ -483,7 +497,7 @@ export default function Settings() {
                   </div>
                   {p.description && <div className="text-muted-foreground/70 text-xs mt-0.5">{p.description}</div>}
                 </div>
-                <DeleteBtn onClick={() => deleteProjMutation.mutate(p.id)} />
+                <DeleteBtn onClick={() => setPendingDelete({ kind: 'project', id: p.id })} />
               </div>
             ))}
           </div>
@@ -563,6 +577,23 @@ export default function Settings() {
         <Button variant="destructive" onClick={handleSignOut}>Sign out</Button>
       </Section>
 
+      {pendingDelete && (
+        <ConfirmDialog
+          title={pendingDelete.kind === 'connection' ? 'Remove connection?' : 'Delete project?'}
+          description={
+            pendingDelete.kind === 'connection'
+              ? 'This will disconnect the integration. You can reconnect it at any time.'
+              : 'This will permanently delete the project and its configuration.'
+          }
+          confirmLabel="Delete"
+          onConfirm={() => {
+            if (pendingDelete.kind === 'connection') deleteConnMutation.mutate(pendingDelete.id);
+            else deleteProjMutation.mutate(pendingDelete.id);
+            setPendingDelete(null);
+          }}
+          onCancel={() => setPendingDelete(null)}
+        />
+      )}
       <SetupModal />
       <ProjectModal />
       </div>

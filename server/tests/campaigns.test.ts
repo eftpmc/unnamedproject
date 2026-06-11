@@ -171,4 +171,67 @@ describe('campaigns routes', () => {
     const status = maybeCompleteCampaign(res.body.campaign_id);
     expect(status).toBe('done');
   });
+
+  it('POST /campaigns/:id/cancel cancels a running campaign and errors its pending tasks', async () => {
+    const create = await request(app)
+      .post('/campaigns')
+      .set('Authorization', `Bearer ${token}`)
+      .send({
+        project_id: projectId,
+        title: 'Cancel me',
+        tasks: [
+          { title: 'Task A', agent: 'claude_code' },
+          { title: 'Task B', agent: 'codex' },
+        ],
+      });
+    const cancelCampaignId = create.body.campaign_id;
+    const tasks = create.body.tasks as { id: string }[];
+    updateCampaignTaskStatus(tasks[0].id, 'running');
+
+    const res = await request(app)
+      .post(`/campaigns/${cancelCampaignId}/cancel`)
+      .set('Authorization', `Bearer ${token}`);
+    expect(res.status).toBe(200);
+    expect(res.body.campaign.status).toBe('cancelled');
+    expect(res.body.campaign.completed_at).not.toBeNull();
+
+    const after = await request(app)
+      .get(`/campaigns/${cancelCampaignId}`)
+      .set('Authorization', `Bearer ${token}`);
+    expect(after.body.campaign.status).toBe('cancelled');
+    expect(after.body.tasks.every((t: { status: string }) => t.status === 'error')).toBe(true);
+
+    // maybeCompleteCampaign must not override a cancelled campaign's status.
+    expect(maybeCompleteCampaign(cancelCampaignId)).toBe('cancelled');
+  });
+
+  it('POST /campaigns/:id/cancel returns 400 for a campaign that is not running', async () => {
+    const create = await request(app)
+      .post('/campaigns')
+      .set('Authorization', `Bearer ${token}`)
+      .send({
+        project_id: projectId,
+        title: 'Already done',
+        tasks: [{ title: 'Task A', agent: 'claude_code' }],
+      });
+    updateCampaignTaskStatus(create.body.tasks[0].id, 'done');
+    maybeCompleteCampaign(create.body.campaign_id);
+
+    const res = await request(app)
+      .post(`/campaigns/${create.body.campaign_id}/cancel`)
+      .set('Authorization', `Bearer ${token}`);
+    expect(res.status).toBe(400);
+  });
+
+  it('POST /campaigns/:id/cancel returns 404 for unknown campaign', async () => {
+    const res = await request(app)
+      .post('/campaigns/nonexistent/cancel')
+      .set('Authorization', `Bearer ${token}`);
+    expect(res.status).toBe(404);
+  });
+
+  it('POST /campaigns/:id/cancel requires auth', async () => {
+    const res = await request(app).post(`/campaigns/${campaignId}/cancel`);
+    expect(res.status).toBe(401);
+  });
 });

@@ -44,7 +44,7 @@ export interface Project {
 }
 
 export interface UserSettings {
-  projects_root: string | null;
+  projects_root: string;
 }
 
 export interface Connection {
@@ -100,6 +100,12 @@ export interface WSMessageDelta extends WSEvent {
   type: 'message_delta';
   messageId: string;
   delta: string;
+}
+
+export interface WSSessionTitleUpdated extends WSEvent {
+  type: 'session_title_updated';
+  sessionId: string;
+  title: string;
 }
 
 export interface Memory {

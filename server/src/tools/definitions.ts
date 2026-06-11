@@ -7,10 +7,10 @@ export const toolDefinitions: Anthropic.Tool[] = [
     input_schema: {
       type: 'object',
       properties: {
-        workspace_id: { type: 'string', description: 'ID of the workspace to work in' },
+        project_id: { type: 'string', description: 'ID of the workspace to work in' },
         prompt: { type: 'string', description: 'The task to give Claude Code' },
       },
-      required: ['workspace_id', 'prompt'],
+      required: ['project_id', 'prompt'],
     },
   },
   {
@@ -19,10 +19,10 @@ export const toolDefinitions: Anthropic.Tool[] = [
     input_schema: {
       type: 'object',
       properties: {
-        workspace_id: { type: 'string', description: 'ID of the workspace to work in' },
+        project_id: { type: 'string', description: 'ID of the workspace to work in' },
         prompt: { type: 'string', description: 'The task to give Codex' },
       },
-      required: ['workspace_id', 'prompt'],
+      required: ['project_id', 'prompt'],
     },
   },
   {
@@ -59,24 +59,24 @@ export const toolDefinitions: Anthropic.Tool[] = [
     input_schema: {
       type: 'object',
       properties: {
-        workspace_id: { type: 'string' },
+        project_id: { type: 'string' },
         op: { type: 'string', enum: ['log', 'diff', 'status', 'commit', 'push'] },
         message: { type: 'string', description: 'Commit message (for commit op)' },
         branch: { type: 'string', description: 'Branch name (for push op)' },
       },
-      required: ['workspace_id', 'op'],
+      required: ['project_id', 'op'],
     },
   },
   {
-    name: 'workspace_query',
-    description: 'Query the Graphify knowledge graph for a workspace to understand its code structure without reading raw files.',
+    name: 'project_query',
+    description: 'Query the Graphify knowledge graph for a project to understand its code structure without reading raw files.',
     input_schema: {
       type: 'object',
       properties: {
-        workspace_id: { type: 'string' },
+        project_id: { type: 'string' },
         question: { type: 'string', description: 'What to look up in the codebase' },
       },
-      required: ['workspace_id', 'question'],
+      required: ['project_id', 'question'],
     },
   },
   {
@@ -102,15 +102,52 @@ export const toolDefinitions: Anthropic.Tool[] = [
     },
   },
   {
+    name: 'create_project',
+    description: 'Create a new project. If with_repo is true, creates a git repo under the configured projects root.',
+    input_schema: {
+      type: 'object',
+      properties: {
+        name: { type: 'string', description: 'Project name' },
+        description: { type: 'string', description: 'Optional description' },
+        with_repo: { type: 'boolean', description: 'Whether to create a backing git repo for this project' },
+      },
+      required: ['name', 'with_repo'],
+    },
+  },
+  {
+    name: 'update_project',
+    description: "Update a project's description.",
+    input_schema: {
+      type: 'object',
+      properties: {
+        project_id: { type: 'string' },
+        description: { type: 'string' },
+      },
+      required: ['project_id', 'description'],
+    },
+  },
+  {
+    name: 'delete_project',
+    description: 'Delete a project. Requires user approval. Optionally deletes the project files on disk.',
+    input_schema: {
+      type: 'object',
+      properties: {
+        project_id: { type: 'string' },
+        delete_files: { type: 'boolean', description: 'Whether to also delete the project repo directory from disk' },
+      },
+      required: ['project_id', 'delete_files'],
+    },
+  },
+  {
     name: 'read_file',
     description: 'Read the contents of a file in a workspace repo.',
     input_schema: {
       type: 'object',
       properties: {
-        workspace_id: { type: 'string' },
+        project_id: { type: 'string' },
         path: { type: 'string', description: 'Path relative to the workspace root' },
       },
-      required: ['workspace_id', 'path'],
+      required: ['project_id', 'path'],
     },
   },
   {
@@ -119,10 +156,10 @@ export const toolDefinitions: Anthropic.Tool[] = [
     input_schema: {
       type: 'object',
       properties: {
-        workspace_id: { type: 'string' },
+        project_id: { type: 'string' },
         path: { type: 'string', description: 'Path relative to the workspace root (default: repo root)' },
       },
-      required: ['workspace_id'],
+      required: ['project_id'],
     },
   },
   {
@@ -131,11 +168,11 @@ export const toolDefinitions: Anthropic.Tool[] = [
     input_schema: {
       type: 'object',
       properties: {
-        workspace_id: { type: 'string' },
+        project_id: { type: 'string' },
         path: { type: 'string', description: 'Path relative to the workspace root' },
         content: { type: 'string', description: 'New file contents' },
       },
-      required: ['workspace_id', 'path', 'content'],
+      required: ['project_id', 'path', 'content'],
     },
   },
   {

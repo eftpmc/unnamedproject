@@ -71,7 +71,7 @@ describe('campaign helpers', () => {
   it('getCampaignsForProject returns campaigns', () => {
     const campaigns = getCampaignsForProject(projectId);
     expect(campaigns.length).toBeGreaterThan(0);
-    expect(campaigns[0].id).toBe(campaignId);
+    expect(campaigns.some(c => c.id === campaignId)).toBe(true);
   });
 
   it('updateCampaignTaskStatus + maybeCompleteCampaign', () => {

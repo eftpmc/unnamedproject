@@ -1,6 +1,6 @@
 import fs from 'fs/promises';
 import path from 'path';
-import { getProjectForUser } from '../db/index.js';
+import { getProjectForUser, getDataDir } from '../db/index.js';
 import { requestApproval } from '../services/executor.js';
 import { ensureWorktree } from '../lib/worktree.js';
 
@@ -24,7 +24,10 @@ async function getWorkspacePath(projectId: string, userId: string, sessionId: st
   const project = getProjectForUser(projectId, userId);
   if (!project) throw new Error('Project not found');
   if (!project.repo_path) {
-    throw new Error(`Project '${project.name}' has no repo. Create a new repo-backed project with create_project (with_repo=true) for this work.`);
+    // Doc project: use a managed flat directory, no git/worktree needed
+    const dir = path.join(getDataDir(), 'doc-projects', projectId, 'files');
+    await fs.mkdir(dir, { recursive: true });
+    return dir;
   }
   return (await ensureWorktree(project, sessionId)).worktree_path;
 }

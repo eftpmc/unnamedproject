@@ -96,7 +96,14 @@ function buildSystemPrompt(userId: string, sessionId: string): string {
     ? `\n\nUser memory:\n${memory.map(e => `- ${formatEntry(userId, e)}`).join('\n')}`
     : '\n\nUser memory:\nNo memories stored yet.';
   const pinnedProjectText = pinnedProject
-    ? `\n\nActive project: **${pinnedProject.name}** (id: ${pinnedProject.id}${pinnedProject.repo_path ? ', repo: ' + pinnedProject.repo_path : ', no repo'})${pinnedProject.description ? ' — ' + pinnedProject.description : ''}\nUse this project for all coding work unless the user explicitly asks about a different one.`
+    ? (() => {
+        const isCode = !!pinnedProject.repo_path;
+        const header = `\n\nActive project: **${pinnedProject.name}** (id: ${pinnedProject.id})${pinnedProject.description ? ' — ' + pinnedProject.description : ''}`;
+        const guidance = isCode
+          ? `\nThis is a code project (repo: ${pinnedProject.repo_path}). For coding tasks, delegate to invoke_claude_code or invoke_codex — give them rich context. Use git_op add→commit after work completes. For non-code tasks within this project (docs, notes), use write_file/read_file.`
+          : `\nThis is a doc/writing project (no git repo). Use write_file/read_file/list_dir directly — no Claude Code or Codex needed. Create files in this project for any output the user wants saved.`;
+        return header + guidance;
+      })()
     : '';
   const projectsText = projects.length > 0
     ? `\n\nAvailable projects:\n${projects.map(p => `- ${p.name} (id: ${p.id}${p.repo_path ? '' : ', no repo'})${p.description ? ': ' + p.description : ''}`).join('\n')}`

@@ -99,6 +99,15 @@ export function deleteProject(id: string): Promise<void> {
   return request(`/projects/${id}`, { method: 'DELETE' });
 }
 
+export function getProjectTree(projectId: string, dirPath?: string): Promise<{ entries: { name: string; type: 'file' | 'dir'; path: string }[]; base_is_repo: boolean }> {
+  const q = dirPath ? `?path=${encodeURIComponent(dirPath)}` : '';
+  return request(`/projects/${projectId}/tree${q}`);
+}
+
+export function getProjectFile(projectId: string, filePath: string): Promise<{ content: string; path: string }> {
+  return request(`/projects/${projectId}/file?path=${encodeURIComponent(filePath)}`);
+}
+
 export function getSettings(): Promise<UserSettings> {
   return request('/settings');
 }

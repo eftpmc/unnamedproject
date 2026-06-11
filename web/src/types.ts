@@ -44,6 +44,12 @@ export interface Project {
   enabled_connection_ids: string[];
 }
 
+export interface FileEntry {
+  name: string;
+  type: 'file' | 'dir';
+  path: string;
+}
+
 export interface UserSettings {
   projects_root: string;
 }

@@ -1,4 +1,33 @@
-import { useState } from 'react';
+import { useState, useMemo } from 'react';
+
+const COLLAPSED_LINES = 6;
+
+function OutputLog({ outputLog, result }: { outputLog: string; result: string | null }) {
+  const [showAll, setShowAll] = useState(false);
+  const text = outputLog || result || '(no output)';
+  const lines = useMemo(() => text.split('\n'), [text]);
+  const truncated = !showAll && lines.length > COLLAPSED_LINES;
+  const displayed = truncated ? lines.slice(-COLLAPSED_LINES).join('\n') : text;
+
+  return (
+    <div className="border-t bg-muted/50">
+      {truncated && (
+        <button
+          onClick={() => setShowAll(true)}
+          className="w-full px-4 py-1.5 text-left text-xs text-muted-foreground/60 hover:text-muted-foreground"
+        >
+          Show all {lines.length} lines
+        </button>
+      )}
+      <div
+        role="log"
+        className="max-h-48 overflow-y-auto px-4 py-3 font-mono text-xs leading-relaxed whitespace-pre-wrap text-muted-foreground"
+      >
+        {displayed}
+      </div>
+    </div>
+  );
+}
 import { ChevronDown, ChevronUp, Check, X, Square } from 'lucide-react';
 import { approveExecution, rejectExecution, cancelExecution } from '../lib/api.js';
 import { Badge } from '@/components/ui/badge';
@@ -134,12 +163,7 @@ export default function ExecutionCard({
 
       {/* Output area */}
       {expanded && !isApproval && (
-        <div
-          role="log"
-          className="max-h-48 overflow-y-auto border-t bg-muted/50 px-4 py-3 font-mono text-xs leading-relaxed whitespace-pre-wrap text-muted-foreground"
-        >
-          {outputLog || (result ?? '(no output)')}
-        </div>
+        <OutputLog outputLog={outputLog} result={result} />
       )}
     </Card>
   );

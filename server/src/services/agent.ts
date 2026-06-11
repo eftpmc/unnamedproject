@@ -42,7 +42,7 @@ async function maybeGenerateSessionTitle(userId: string, sessionId: string): Pro
     const client = new Anthropic({ apiKey });
     const response = await client.messages.create({
       model: 'claude-haiku-4-5-20251001',
-      max_tokens: 20,
+      max_tokens: 40,
       messages: [{
         role: 'user',
         content: `Write a short title (4-6 words) for a conversation that starts with this message. Reply with only the title, no quotes or punctuation:\n\n${firstUser.content.slice(0, 500)}`,

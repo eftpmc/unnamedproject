@@ -38,4 +38,13 @@ describe('readChat', () => {
     const result = readChat(userId, 'fake-id');
     expect(result).toContain('not found');
   });
+
+  it('returns no-messages message for session with no messages', () => {
+    const db = getDb();
+    const emptySessionId = newId();
+    db.prepare('INSERT INTO sessions (id, user_id, title) VALUES (?,?,?)').run(emptySessionId, userId, 'Empty chat');
+    const result = readChat(userId, emptySessionId);
+    expect(result).toContain('Empty chat');
+    expect(result).toContain('no messages');
+  });
 });

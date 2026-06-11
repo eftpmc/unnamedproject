@@ -1,5 +1,6 @@
 import { spawn } from 'child_process';
 import { appendOutput, requestApproval } from '../services/executor.js';
+import { registerProcess, unregisterProcess } from '../lib/process-registry.js';
 
 interface ClaudeCodeInput {
   prompt: string;
@@ -18,10 +19,25 @@ export interface ClaudeCodeResult {
   sessionId: string | null;
 }
 
+function summarizeToolUse(name: string, input: Record<string, unknown>): string {
+  switch (name) {
+    case 'Read': return `Read ${input.file_path}`;
+    case 'Edit': return `Edit ${input.file_path}`;
+    case 'Write': return `Write ${input.file_path}`;
+    case 'MultiEdit': return `Edit ${input.file_path}`;
+    case 'Bash': return `Run: ${String(input.command ?? '').slice(0, 80)}`;
+    case 'WebFetch': return `Fetch ${input.url}`;
+    case 'WebSearch': return `Search: ${input.query}`;
+    case 'TodoWrite': return 'Update todos';
+    case 'Agent': return 'Spawn subagent';
+    default: return name;
+  }
+}
+
 export async function invokeClaudeCode(input: ClaudeCodeInput, ctx: ToolContext): Promise<ClaudeCodeResult> {
   await requestApproval(ctx.executionId, ctx.userId, 'invoke_claude_code', { prompt: input.prompt }, 'agent');
 
-  const args = ['--print', '--permission-mode', 'bypassPermissions', '--output-format', 'json'];
+  const args = ['--print', '--permission-mode', 'bypassPermissions', '--output-format', 'stream-json', '--verbose'];
   if (ctx.resumeSessionId) args.push('--resume', ctx.resumeSessionId);
   args.push(input.prompt);
 
@@ -31,27 +47,54 @@ export async function invokeClaudeCode(input: ClaudeCodeInput, ctx: ToolContext)
       env: ctx.apiKey ? { ...process.env, ANTHROPIC_API_KEY: ctx.apiKey } : process.env,
     });
 
-    let output = '';
+    registerProcess(ctx.executionId, proc);
+
+    let buffer = '';
+    let sessionId: string | null = null;
+    let resultText = '';
+
     proc.stdout.on('data', (chunk: Buffer) => {
-      output += chunk.toString();
+      buffer += chunk.toString();
+      let idx;
+      while ((idx = buffer.indexOf('\n')) !== -1) {
+        const line = buffer.slice(0, idx).trim();
+        buffer = buffer.slice(idx + 1);
+        if (!line) continue;
+        let event: Record<string, unknown>;
+        try { event = JSON.parse(line); } catch { continue; }
+
+        if (typeof event.session_id === 'string') sessionId = event.session_id;
+
+        if (event.type === 'assistant') {
+          const msg = event.message as { content?: Array<{ type: string; name?: string; input?: Record<string, unknown>; text?: string }> } | undefined;
+          for (const block of msg?.content ?? []) {
+            if (block.type === 'tool_use' && block.name) {
+              appendOutput(ctx.executionId, ctx.userId, `→ ${summarizeToolUse(block.name, block.input ?? {})}\n`);
+            }
+            if (block.type === 'text' && block.text) {
+              appendOutput(ctx.executionId, ctx.userId, block.text);
+            }
+          }
+        }
+
+        if (event.type === 'result') {
+          resultText = typeof event.result === 'string' ? event.result : '';
+          if (typeof event.session_id === 'string') sessionId = event.session_id;
+        }
+      }
     });
+
     proc.stderr.on('data', (chunk: Buffer) => {
       appendOutput(ctx.executionId, ctx.userId, chunk.toString());
     });
+
     proc.on('close', code => {
-      if (code !== 0) {
-        reject(new Error(`claude exited with code ${code}: ${output.trim()}`));
+      unregisterProcess(ctx.executionId);
+      if (code !== 0 && !resultText) {
+        reject(new Error(`claude exited with code ${code}`));
         return;
       }
-      try {
-        const parsed = JSON.parse(output);
-        const text = typeof parsed.result === 'string' ? parsed.result : output.trim();
-        appendOutput(ctx.executionId, ctx.userId, text);
-        resolve({ result: text, sessionId: parsed.session_id ?? null });
-      } catch {
-        appendOutput(ctx.executionId, ctx.userId, output);
-        resolve({ result: output.trim(), sessionId: null });
-      }
+      resolve({ result: resultText || 'Done.', sessionId });
     });
   });
 }

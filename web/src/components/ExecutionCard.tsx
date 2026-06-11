@@ -1,6 +1,6 @@
 import { useState } from 'react';
-import { ChevronDown, ChevronUp, Check, X } from 'lucide-react';
-import { approveExecution, rejectExecution } from '../lib/api.js';
+import { ChevronDown, ChevronUp, Check, X, Square } from 'lucide-react';
+import { approveExecution, rejectExecution, cancelExecution } from '../lib/api.js';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
@@ -50,6 +50,7 @@ export default function ExecutionCard({
   const [expanded, setExpanded] = useState(false);
   const [decided, setDecided] = useState<'approved' | 'rejected' | null>(null);
   const [acting, setActing] = useState(false);
+  const [cancelling, setCancelling] = useState(false);
 
   const dotColor = STATUS_DOT[status] ?? 'bg-foreground/20';
   const label = projectName ? `${tool} · ${projectName}` : tool;
@@ -62,6 +63,11 @@ export default function ExecutionCard({
   async function handleReject() {
     setActing(true);
     try { await rejectExecution(executionId); setDecided('rejected'); } finally { setActing(false); }
+  }
+
+  async function handleCancel() {
+    setCancelling(true);
+    try { await cancelExecution(executionId); } finally { setCancelling(false); }
   }
 
   const isApproval = needsApproval && !decided;
@@ -109,6 +115,16 @@ export default function ExecutionCard({
           </div>
         )}
 
+        {status === 'running' && !isApproval && (
+          <button
+            onClick={e => { e.stopPropagation(); handleCancel(); }}
+            disabled={cancelling}
+            title="Cancel"
+            className="ml-1 rounded p-0.5 text-muted-foreground/50 hover:text-destructive disabled:opacity-40"
+          >
+            <Square size={13} strokeWidth={2} />
+          </button>
+        )}
         {!isApproval && !decided && (
           <span className="text-muted-foreground/70">
             {expanded ? <ChevronUp size={16} /> : <ChevronDown size={16} />}

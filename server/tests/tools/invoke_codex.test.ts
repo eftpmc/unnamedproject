@@ -15,6 +15,7 @@ vi.mock('child_process', () => ({
 }));
 
 vi.mock('../../src/services/executor.js', () => ({ appendOutput: vi.fn(), requestApproval: vi.fn().mockResolvedValue('approved') }));
+vi.mock('../../src/lib/process-registry.js', () => ({ registerProcess: vi.fn(), unregisterProcess: vi.fn() }));
 
 describe('invoke_codex', () => {
   it('returns parsed result and session id on success', async () => {

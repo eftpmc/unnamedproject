@@ -83,6 +83,10 @@ export function rejectExecution(executionId: string): Promise<void> {
   return request(`/executions/${executionId}/reject`, { method: 'POST' });
 }
 
+export function cancelExecution(executionId: string): Promise<void> {
+  return request(`/executions/${executionId}/cancel`, { method: 'POST' });
+}
+
 export function getProjects(): Promise<Project[]> {
   return request('/projects');
 }

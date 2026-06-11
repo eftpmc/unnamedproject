@@ -1,5 +1,6 @@
 import { spawn } from 'child_process';
 import { appendOutput, requestApproval } from '../services/executor.js';
+import { registerProcess, unregisterProcess } from '../lib/process-registry.js';
 
 interface CodexInput {
   prompt: string;
@@ -21,12 +22,14 @@ export interface CodexResult {
 export async function invokeCodex(input: CodexInput, ctx: ToolContext): Promise<CodexResult> {
   await requestApproval(ctx.executionId, ctx.userId, 'invoke_codex', { prompt: input.prompt }, 'agent');
 
+  // codex exec [resume <sessionId>] --dangerously-bypass-approvals-and-sandbox --json [--skip-git-repo-check] "<prompt>"
   const args = ['exec'];
   if (ctx.resumeSessionId) {
-    args.push('resume', ctx.resumeSessionId, '-c', 'sandbox_mode="workspace-write"', '--json', input.prompt);
-  } else {
-    args.push('-c', 'sandbox_mode="workspace-write"', '--json', '--skip-git-repo-check', input.prompt);
+    args.push('resume', ctx.resumeSessionId);
   }
+  args.push('--dangerously-bypass-approvals-and-sandbox', '--json');
+  if (!ctx.resumeSessionId) args.push('--skip-git-repo-check');
+  args.push(input.prompt);
 
   return new Promise((resolve, reject) => {
     const proc = spawn('codex', args, {
@@ -34,6 +37,8 @@ export async function invokeCodex(input: CodexInput, ctx: ToolContext): Promise<
       stdio: ['ignore', 'pipe', 'pipe'],
       env: ctx.apiKey ? { ...process.env, OPENAI_API_KEY: ctx.apiKey } : process.env,
     });
+
+    registerProcess(ctx.executionId, proc);
 
     let buffer = '';
     let sessionId: string | null = null;
@@ -43,23 +48,30 @@ export async function invokeCodex(input: CodexInput, ctx: ToolContext): Promise<
       buffer += chunk.toString();
       let idx;
       while ((idx = buffer.indexOf('\n')) !== -1) {
-        const line = buffer.slice(0, idx);
+        const line = buffer.slice(0, idx).trim();
         buffer = buffer.slice(idx + 1);
-        if (!line.trim()) continue;
-        let event: any;
+        if (!line) continue;
+        let event: Record<string, unknown>;
         try { event = JSON.parse(line); } catch { continue; }
-        if (event.type === 'thread.started') sessionId = event.thread_id ?? sessionId;
-        if (event.type === 'item.completed' && event.item?.type === 'agent_message') {
-          resultText = event.item.text ?? resultText;
-          appendOutput(ctx.executionId, ctx.userId, event.item.text + '\n');
+
+        if (event.type === 'thread.started') sessionId = (event.thread_id as string) ?? sessionId;
+        if (event.type === 'item.completed') {
+          const item = event.item as { type?: string; text?: string } | undefined;
+          if (item?.type === 'agent_message' && item.text) {
+            resultText = item.text;
+            appendOutput(ctx.executionId, ctx.userId, item.text + '\n');
+          }
         }
       }
     });
+
     proc.stderr.on('data', (chunk: Buffer) => {
       appendOutput(ctx.executionId, ctx.userId, chunk.toString());
     });
+
     proc.on('close', code => {
-      if (code === 0) resolve({ result: resultText.trim(), sessionId });
+      unregisterProcess(ctx.executionId);
+      if (code === 0) resolve({ result: resultText.trim() || 'Done.', sessionId });
       else reject(new Error(`codex exited with code ${code}`));
     });
   });

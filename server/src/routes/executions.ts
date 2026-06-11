@@ -2,6 +2,8 @@ import { Router } from 'express';
 import { getDb } from '../db/index.js';
 import { requireAuth, type AuthedRequest } from '../middleware/auth.js';
 import { resolveApproval } from '../lib/approval.js';
+import { killProcess } from '../lib/process-registry.js';
+import { completeExecution } from '../services/executor.js';
 
 const router = Router();
 router.use(requireAuth);
@@ -53,6 +55,22 @@ router.post('/:id/reject', (req, res) => {
   if (!approval) { res.status(404).json({ error: 'No pending approval found' }); return; }
   resolveApproval(approval.id, 'rejected');
   res.json({ status: 'rejected' });
+});
+
+router.post('/:id/cancel', (req, res) => {
+  const { userId } = req as unknown as AuthedRequest;
+  const execution = getDb()
+    .prepare(`
+      SELECT e.id FROM executions e
+      JOIN messages m ON m.id = e.message_id
+      JOIN sessions t ON t.id = m.session_id
+      WHERE e.id = ? AND t.user_id = ? AND e.status IN ('pending','running')
+    `)
+    .get(req.params.id, userId) as { id: string } | undefined;
+  if (!execution) { res.status(404).json({ error: 'No active execution found' }); return; }
+  killProcess(req.params.id);
+  completeExecution(req.params.id, userId, 'error', 'Cancelled');
+  res.json({ ok: true });
 });
 
 export default router;

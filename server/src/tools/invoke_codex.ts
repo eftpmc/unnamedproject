@@ -9,7 +9,7 @@ interface ToolContext {
   userId: string;
   executionId: string;
   repoPath: string;
-  apiKey: string;
+  apiKey: string | null;
   resumeSessionId?: string | null;
 }
 
@@ -32,7 +32,7 @@ export async function invokeCodex(input: CodexInput, ctx: ToolContext): Promise<
     const proc = spawn('codex', args, {
       cwd: ctx.repoPath,
       stdio: ['ignore', 'pipe', 'pipe'],
-      env: { ...process.env, OPENAI_API_KEY: ctx.apiKey },
+      env: ctx.apiKey ? { ...process.env, OPENAI_API_KEY: ctx.apiKey } : process.env,
     });
 
     let buffer = '';

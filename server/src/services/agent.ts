@@ -151,17 +151,18 @@ async function dispatchTool(
           break;
         }
         const connectionIds: string[] = JSON.parse(project.enabled_connection_ids ?? '[]');
-        let apiKey = getAnthropicKey(userId);
+        let ccApiKey: string | null = null;
+        try { ccApiKey = getAnthropicKey(userId); } catch { /* use CLI's local auth */ }
         if (connectionIds.length > 0) {
           const anthropicConn = getDb()
             .prepare(`SELECT id FROM connections WHERE id IN (${connectionIds.map(() => '?').join(',')}) AND type = 'anthropic' LIMIT 1`)
             .get(...connectionIds) as { id: string } | undefined;
-          if (anthropicConn) apiKey = getDecryptedConfig(anthropicConn.id).apiKey;
+          if (anthropicConn) ccApiKey = getDecryptedConfig(anthropicConn.id).apiKey;
         }
         const ccWorktree = await ensureWorktree(project, sessionId);
         const ccResult = await invokeClaudeCode(
           { prompt: toolInput.prompt as string },
-          { userId, executionId, repoPath: ccWorktree.worktree_path, apiKey, resumeSessionId: ccWorktree.claude_session_id }
+          { userId, executionId, repoPath: ccWorktree.worktree_path, apiKey: ccApiKey, resumeSessionId: ccWorktree.claude_session_id }
         );
         if (ccResult.sessionId) setAgentWorktreeSession(ccWorktree.id, 'claude', ccResult.sessionId);
         result = ccResult.result;
@@ -177,17 +178,17 @@ async function dispatchTool(
           break;
         }
         const connectionIds: string[] = JSON.parse(project.enabled_connection_ids ?? '[]');
-        let apiKey = '';
+        let codexApiKey: string | null = null;
         if (connectionIds.length > 0) {
           const openaiConn = getDb()
             .prepare(`SELECT id FROM connections WHERE id IN (${connectionIds.map(() => '?').join(',')}) AND type = 'openai' LIMIT 1`)
             .get(...connectionIds) as { id: string } | undefined;
-          if (openaiConn) apiKey = getDecryptedConfig(openaiConn.id).apiKey;
+          if (openaiConn) codexApiKey = getDecryptedConfig(openaiConn.id).apiKey;
         }
         const codexWorktree = await ensureWorktree(project, sessionId);
         const codexResult = await invokeCodex(
           { prompt: toolInput.prompt as string },
-          { userId, executionId, repoPath: codexWorktree.worktree_path, apiKey, resumeSessionId: codexWorktree.codex_session_id }
+          { userId, executionId, repoPath: codexWorktree.worktree_path, apiKey: codexApiKey, resumeSessionId: codexWorktree.codex_session_id }
         );
         if (codexResult.sessionId) setAgentWorktreeSession(codexWorktree.id, 'codex', codexResult.sessionId);
         result = codexResult.result;

@@ -9,7 +9,7 @@ interface ToolContext {
   userId: string;
   executionId: string;
   repoPath: string;
-  apiKey: string;
+  apiKey: string | null;
   resumeSessionId?: string | null;
 }
 
@@ -28,7 +28,7 @@ export async function invokeClaudeCode(input: ClaudeCodeInput, ctx: ToolContext)
   return new Promise((resolve, reject) => {
     const proc = spawn('claude', args, {
       cwd: ctx.repoPath,
-      env: { ...process.env, ANTHROPIC_API_KEY: ctx.apiKey },
+      env: ctx.apiKey ? { ...process.env, ANTHROPIC_API_KEY: ctx.apiKey } : process.env,
     });
 
     let output = '';

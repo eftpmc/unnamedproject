@@ -139,6 +139,30 @@ function applySchema(): void {
       last_run_at INTEGER,
       created_at INTEGER NOT NULL DEFAULT (unixepoch())
     );
+
+    CREATE TABLE IF NOT EXISTS campaigns (
+      id TEXT PRIMARY KEY,
+      project_id TEXT NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
+      session_id TEXT REFERENCES sessions(id) ON DELETE SET NULL,
+      title TEXT NOT NULL,
+      status TEXT NOT NULL DEFAULT 'running'
+        CHECK(status IN ('running','done','error','cancelled')),
+      created_at INTEGER NOT NULL DEFAULT (unixepoch()),
+      completed_at INTEGER
+    );
+
+    CREATE TABLE IF NOT EXISTS campaign_tasks (
+      id TEXT PRIMARY KEY,
+      campaign_id TEXT NOT NULL REFERENCES campaigns(id) ON DELETE CASCADE,
+      title TEXT NOT NULL,
+      agent TEXT NOT NULL CHECK(agent IN ('claude_code','codex','mcp')),
+      status TEXT NOT NULL DEFAULT 'waiting'
+        CHECK(status IN ('waiting','running','done','error')),
+      execution_id TEXT REFERENCES executions(id) ON DELETE SET NULL,
+      position INTEGER NOT NULL,
+      created_at INTEGER NOT NULL DEFAULT (unixepoch()),
+      completed_at INTEGER
+    );
   `);
 
   const connectionCols = db.prepare("SELECT name FROM pragma_table_info('connections')").all() as { name: string }[];
@@ -328,4 +352,109 @@ export function markScheduledTaskRun(id: string, now: number, intervalHours: num
   getDb()
     .prepare('UPDATE scheduled_tasks SET last_run_at = ?, next_run_at = ? WHERE id = ?')
     .run(now, now + intervalHours * 3600, id);
+}
+
+export interface DbCampaign {
+  id: string;
+  project_id: string;
+  session_id: string | null;
+  title: string;
+  status: 'running' | 'done' | 'error' | 'cancelled';
+  created_at: number;
+  completed_at: number | null;
+}
+
+export interface DbCampaignTask {
+  id: string;
+  campaign_id: string;
+  title: string;
+  agent: 'claude_code' | 'codex' | 'mcp';
+  status: 'waiting' | 'running' | 'done' | 'error';
+  execution_id: string | null;
+  position: number;
+  created_at: number;
+  completed_at: number | null;
+}
+
+export function createCampaign(
+  projectId: string,
+  sessionId: string | null,
+  title: string,
+  tasks: Array<{ title: string; agent: string }>
+): { campaign: DbCampaign; tasks: DbCampaignTask[] } {
+  const id = newId();
+  getDb()
+    .prepare('INSERT INTO campaigns (id, project_id, session_id, title) VALUES (?,?,?,?)')
+    .run(id, projectId, sessionId, title);
+  const insertTask = getDb().prepare(
+    'INSERT INTO campaign_tasks (id, campaign_id, title, agent, position) VALUES (?,?,?,?,?)'
+  );
+  const createdTasks: DbCampaignTask[] = tasks.map((t, i) => {
+    const taskId = newId();
+    insertTask.run(taskId, id, t.title, t.agent, i);
+    return {
+      id: taskId, campaign_id: id, title: t.title,
+      agent: t.agent as DbCampaignTask['agent'], status: 'waiting',
+      execution_id: null, position: i, created_at: Math.floor(Date.now() / 1000),
+      completed_at: null,
+    };
+  });
+  const campaign = getDb()
+    .prepare('SELECT * FROM campaigns WHERE id = ?')
+    .get(id) as DbCampaign;
+  return { campaign, tasks: createdTasks };
+}
+
+export function getCampaignsForProject(projectId: string): DbCampaign[] {
+  return getDb()
+    .prepare('SELECT * FROM campaigns WHERE project_id = ? ORDER BY created_at DESC')
+    .all(projectId) as DbCampaign[];
+}
+
+export function getCampaignById(id: string): DbCampaign | undefined {
+  return getDb()
+    .prepare('SELECT * FROM campaigns WHERE id = ?')
+    .get(id) as DbCampaign | undefined;
+}
+
+export function getCampaignTasks(campaignId: string): DbCampaignTask[] {
+  return getDb()
+    .prepare('SELECT * FROM campaign_tasks WHERE campaign_id = ? ORDER BY position')
+    .all(campaignId) as DbCampaignTask[];
+}
+
+export function updateCampaignTaskStatus(
+  taskId: string,
+  status: DbCampaignTask['status'],
+  executionId?: string
+): void {
+  const now = Math.floor(Date.now() / 1000);
+  const completed = status === 'done' || status === 'error' ? now : null;
+  if (executionId) {
+    getDb()
+      .prepare('UPDATE campaign_tasks SET status = ?, execution_id = ?, completed_at = ? WHERE id = ?')
+      .run(status, executionId, completed, taskId);
+  } else {
+    getDb()
+      .prepare('UPDATE campaign_tasks SET status = ?, completed_at = ? WHERE id = ?')
+      .run(status, completed, taskId);
+  }
+}
+
+export function maybeCompleteCampaign(campaignId: string): DbCampaign['status'] {
+  const tasks = getCampaignTasks(campaignId);
+  const allDone = tasks.every(t => t.status === 'done');
+  const anyError = tasks.some(t => t.status === 'error');
+  const anyRunning = tasks.some(t => t.status === 'running');
+  let newStatus: DbCampaign['status'] | null = null;
+  if (allDone) newStatus = 'done';
+  else if (anyError && !anyRunning) newStatus = 'error';
+  if (newStatus) {
+    const now = Math.floor(Date.now() / 1000);
+    getDb()
+      .prepare('UPDATE campaigns SET status = ?, completed_at = ? WHERE id = ?')
+      .run(newStatus, now, campaignId);
+  }
+  const campaign = getCampaignById(campaignId)!;
+  return campaign.status;
 }

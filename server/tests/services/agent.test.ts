@@ -258,6 +258,23 @@ describe('agent', () => {
     expect(call.system).toContain('- [project: memdemo] status: auth refactor blocked on legal review');
   });
 
+  it('includes recent chat titles in the system prompt', async () => {
+    const db = getDb();
+    const recentSessionId = newId();
+    db.prepare('INSERT INTO sessions (id, user_id, title) VALUES (?,?,?)').run(recentSessionId, userId, 'My recent chat');
+
+    streamMock.mockClear();
+
+    const msgId = newId();
+    db.prepare('INSERT INTO messages (id, session_id, role, content) VALUES (?,?,?,?)').run(msgId, sessionId, 'user', 'what have I been working on?');
+
+    await runAgentTurn(userId, sessionId, msgId);
+
+    const call = streamMock.mock.calls[0][0];
+    expect(call.system).toContain('My recent chat');
+    expect(call.system).toContain(recentSessionId);
+  });
+
   it('dispatches the forget tool', async () => {
     const db = getDb();
     const { rememberFact, recallFact } = await import('../../src/services/memory.js');

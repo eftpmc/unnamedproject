@@ -67,6 +67,19 @@ function getProjects(userId: string): DbProject[] {
     .all(userId) as DbProject[];
 }
 
+function timeAgo(unixSeconds: number): string {
+  const diff = Date.now() / 1000 - unixSeconds;
+  if (diff < 3600) return `${Math.floor(diff / 60)}m ago`;
+  if (diff < 86400) return `${Math.floor(diff / 3600)}h ago`;
+  return `${Math.floor(diff / 86400)}d ago`;
+}
+
+function getRecentChats(userId: string): Array<{ id: string; title: string | null; updated_at: number }> {
+  return getDb()
+    .prepare('SELECT id, title, updated_at FROM sessions WHERE user_id = ? ORDER BY updated_at DESC LIMIT 10')
+    .all(userId) as Array<{ id: string; title: string | null; updated_at: number }>;
+}
+
 function buildSystemPrompt(userId: string): string {
   const memory = recallAll(userId);
   const projects = getProjects(userId);
@@ -76,6 +89,10 @@ function buildSystemPrompt(userId: string): string {
   const projectsText = projects.length > 0
     ? `\n\nAvailable projects:\n${projects.map(p => `- ${p.name} (id: ${p.id}${p.repo_path ? '' : ', no repo'})${p.description ? ': ' + p.description : ''}`).join('\n')}`
     : '\n\nNo projects yet.';
+  const recentChats = getRecentChats(userId);
+  const recentChatsText = recentChats.length > 0
+    ? `\n\nRecent chats (use read_chat to retrieve full context when relevant):\n${recentChats.map(c => `- "${c.title ?? 'Untitled'}" (id: ${c.id}, ${timeAgo(c.updated_at)})`).join('\n')}`
+    : '';
 
   return `You are a personal AI operator. You help the user plan, execute, and manage work across their projects and tools.
 
@@ -90,7 +107,7 @@ Approval tiers:
 - User-approved (pauses for user): git push, github write ops, write_file, delete_project
 Never skip a write op because approval is needed — just proceed and the system handles it.
 ${memoryText}
-${projectsText}`;
+${projectsText}${recentChatsText}`;
 }
 
 async function dispatchTool(

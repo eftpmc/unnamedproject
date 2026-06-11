@@ -47,8 +47,9 @@ export async function runGitOp(input: GitOpInput, ctx: ToolContext): Promise<str
       return `committed: ${input.message}`;
     }
     case 'push': {
-      await git.push();
-      return 'pushed';
+      if (!input.branch) return 'Error: branch required for push';
+      await git.push(['-u', 'origin', input.branch]);
+      return `pushed ${input.branch}`;
     }
     default:
       return 'Unknown git op';

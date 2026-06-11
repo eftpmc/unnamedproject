@@ -5,8 +5,12 @@ import { newId } from '../lib/ids.js';
 
 let db: Database.Database;
 
+export function getDataDir(): string {
+  return process.env.DATA_DIR ?? './data';
+}
+
 export function initDb(): void {
-  const dataDir = process.env.DATA_DIR ?? './data';
+  const dataDir = getDataDir();
   fs.mkdirSync(dataDir, { recursive: true });
   const dbPath = path.join(dataDir, 'app.db');
   db = new Database(dbPath);
@@ -113,6 +117,18 @@ function applySchema(): void {
       UNIQUE(user_id, type, key)
     );
 
+    CREATE TABLE IF NOT EXISTS agent_worktrees (
+      id TEXT PRIMARY KEY,
+      project_id TEXT NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
+      session_id TEXT NOT NULL REFERENCES sessions(id) ON DELETE CASCADE,
+      branch TEXT NOT NULL,
+      worktree_path TEXT NOT NULL,
+      claude_session_id TEXT,
+      codex_session_id TEXT,
+      created_at INTEGER NOT NULL DEFAULT (unixepoch()),
+      UNIQUE(project_id, session_id)
+    );
+
     CREATE TABLE IF NOT EXISTS scheduled_tasks (
       id TEXT PRIMARY KEY,
       user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
@@ -205,17 +221,50 @@ export function getProjectForUser(projectId: string, userId: string): DbProject 
     .get(projectId, userId) as DbProject | undefined;
 }
 
+export interface DbAgentWorktree {
+  id: string;
+  project_id: string;
+  session_id: string;
+  branch: string;
+  worktree_path: string;
+  claude_session_id: string | null;
+  codex_session_id: string | null;
+}
+
+export function getAgentWorktree(projectId: string, sessionId: string): DbAgentWorktree | undefined {
+  return getDb()
+    .prepare('SELECT * FROM agent_worktrees WHERE project_id = ? AND session_id = ?')
+    .get(projectId, sessionId) as DbAgentWorktree | undefined;
+}
+
+export function createAgentWorktree(projectId: string, sessionId: string, branch: string, worktreePath: string): DbAgentWorktree {
+  const id = newId();
+  getDb()
+    .prepare('INSERT INTO agent_worktrees (id, project_id, session_id, branch, worktree_path) VALUES (?,?,?,?,?)')
+    .run(id, projectId, sessionId, branch, worktreePath);
+  return getAgentWorktree(projectId, sessionId)!;
+}
+
+export function setAgentWorktreeSession(id: string, tool: 'claude' | 'codex', sessionId: string): void {
+  const column = tool === 'claude' ? 'claude_session_id' : 'codex_session_id';
+  getDb().prepare(`UPDATE agent_worktrees SET ${column} = ? WHERE id = ?`).run(sessionId, id);
+}
+
+export function updateAgentWorktreePath(id: string, worktreePath: string): void {
+  getDb().prepare('UPDATE agent_worktrees SET worktree_path = ? WHERE id = ?').run(worktreePath, id);
+}
+
 export function getProjectsForUser(userId: string): DbProject[] {
   return getDb()
     .prepare('SELECT id, name, description, repo_path, enabled_connection_ids FROM projects WHERE user_id = ?')
     .all(userId) as DbProject[];
 }
 
-export function getProjectsRoot(userId: string): string | null {
+export function getProjectsRoot(userId: string): string {
   const row = getDb()
     .prepare('SELECT projects_root FROM user_settings WHERE user_id = ?')
     .get(userId) as { projects_root: string | null } | undefined;
-  return row?.projects_root ?? null;
+  return row?.projects_root || path.join(getDataDir(), 'projects');
 }
 
 export function setProjectsRoot(userId: string, projectsRoot: string): void {

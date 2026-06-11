@@ -85,3 +85,59 @@ describe('campaign helpers', () => {
     expect(campaign.completed_at).not.toBeNull();
   });
 });
+
+describe('campaigns routes', () => {
+  let campaignId: string;
+
+  it('POST /campaigns creates a campaign with tasks', async () => {
+    const res = await request(app)
+      .post('/campaigns')
+      .set('Authorization', `Bearer ${token}`)
+      .send({
+        project_id: projectId,
+        title: 'Auth refactor',
+        tasks: [
+          { title: 'Analyze codebase', agent: 'claude_code' },
+          { title: 'Write middleware', agent: 'claude_code' },
+          { title: 'Update tests', agent: 'codex' },
+        ],
+      });
+    expect(res.status).toBe(201);
+    expect(res.body.campaign_id).toBeTruthy();
+    expect(res.body.project_id).toBe(projectId);
+    expect(res.body.tasks).toHaveLength(3);
+    expect(res.body.tasks[0].status).toBe('waiting');
+    campaignId = res.body.campaign_id;
+  });
+
+  it('GET /projects/:id/campaigns lists campaigns for project', async () => {
+    const res = await request(app)
+      .get(`/projects/${projectId}/campaigns`)
+      .set('Authorization', `Bearer ${token}`);
+    expect(res.status).toBe(200);
+    expect(res.body.length).toBeGreaterThan(0);
+    expect(res.body.some((c: { title: string }) => c.title === 'Auth refactor')).toBe(true);
+  });
+
+  it('GET /campaigns/:id returns campaign with tasks', async () => {
+    const res = await request(app)
+      .get(`/campaigns/${campaignId}`)
+      .set('Authorization', `Bearer ${token}`);
+    expect(res.status).toBe(200);
+    expect(res.body.campaign.id).toBe(campaignId);
+    expect(res.body.tasks).toHaveLength(3);
+    expect(res.body.tasks[0].agent).toBe('claude_code');
+  });
+
+  it('GET /campaigns/:id returns 404 for unknown campaign', async () => {
+    const res = await request(app)
+      .get('/campaigns/nonexistent')
+      .set('Authorization', `Bearer ${token}`);
+    expect(res.status).toBe(404);
+  });
+
+  it('GET /projects/:id/campaigns requires auth', async () => {
+    const res = await request(app).get(`/projects/${projectId}/campaigns`);
+    expect(res.status).toBe(401);
+  });
+});

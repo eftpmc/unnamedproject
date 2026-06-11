@@ -1,7 +1,7 @@
 import { Router } from 'express';
 import fs from 'fs/promises';
 import path from 'path';
-import { getDb, getDataDir } from '../db/index.js';
+import { getDb, getDataDir, getCampaignsForProject } from '../db/index.js';
 import { newId } from '../lib/ids.js';
 import { requireAuth, type AuthedRequest } from '../middleware/auth.js';
 
@@ -102,6 +102,15 @@ router.get('/:id/file', async (req, res) => {
   } catch {
     res.status(404).json({ error: 'File not found' });
   }
+});
+
+router.get('/:id/campaigns', (req, res) => {
+  const { userId } = req as unknown as AuthedRequest;
+  const project = getDb()
+    .prepare('SELECT id FROM projects WHERE id = ? AND user_id = ?')
+    .get(req.params.id, userId);
+  if (!project) { res.status(404).json({ error: 'Not found' }); return; }
+  res.json(getCampaignsForProject(req.params.id));
 });
 
 export default router;

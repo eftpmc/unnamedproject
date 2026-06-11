@@ -211,7 +211,7 @@ async function dispatchTool(
         break;
       }
       case 'project_query':
-        result = await runProjectQuery({ project_id: projectId, question: toolInput.question as string, session_id: sessionId }, userId);
+        result = await runProjectQuery({ project_id: projectId, question: toolInput.question as string }, userId);
         break;
       case 'remember':
         result = remember(

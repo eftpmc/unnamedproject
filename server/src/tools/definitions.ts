@@ -69,7 +69,7 @@ export const toolDefinitions: Anthropic.Tool[] = [
   },
   {
     name: 'project_query',
-    description: 'Ask a read-only question about a workspace codebase (structure, where something is implemented, how something works). Runs Claude Code in plan mode — it can explore files but cannot make edits.',
+    description: 'Ask a question about a project codebase (structure, where something is implemented, how things connect). Queries a pre-built knowledge graph — fast and token-efficient.',
     input_schema: {
       type: 'object',
       properties: {

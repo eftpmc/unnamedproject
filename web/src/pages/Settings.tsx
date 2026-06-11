@@ -13,9 +13,7 @@ import { Separator } from '@/components/ui/separator';
 import { Textarea } from '@/components/ui/textarea';
 import {
   createConnection,
-  createProject,
   deleteConnection,
-  deleteProject,
   getConnections,
   getMemory,
   getProjects,
@@ -136,14 +134,8 @@ export default function Settings() {
   const [mcpEnv, setMcpEnv] = useState('{}');
   const [setupError, setSetupError] = useState('');
 
-  const [showProjectModal, setShowProjectModal] = useState(false);
-  const [projName, setProjName] = useState('');
-  const [projDesc, setProjDesc] = useState('');
-  const [projRepo, setProjRepo] = useState('');
-  const [projConnIds, setProjConnIds] = useState<string[]>([]);
-  const [projError, setProjError] = useState('');
   const [projectsRoot, setProjectsRoot] = useState('');
-  const [pendingDelete, setPendingDelete] = useState<{ kind: 'connection' | 'project'; id: string } | null>(null);
+  const [pendingDelete, setPendingDelete] = useState<{ id: string } | null>(null);
   const [projectsRootError, setProjectsRootError] = useState('');
 
   const inputCls = 'text-sm';
@@ -200,25 +192,6 @@ export default function Settings() {
     onSuccess: () => qc.invalidateQueries({ queryKey: ['connections'] }),
   });
 
-  const createProjMutation = useMutation({
-    mutationFn: () => createProject({
-      name: projName,
-      description: projDesc || undefined,
-      repo_path: projRepo || undefined,
-      enabled_connection_ids: projConnIds,
-    }),
-    onSuccess: () => {
-      qc.invalidateQueries({ queryKey: ['projects'] });
-      closeProjectModal();
-    },
-    onError: (e: Error) => setProjError(e.message),
-  });
-
-  const deleteProjMutation = useMutation({
-    mutationFn: deleteProject,
-    onSuccess: () => qc.invalidateQueries({ queryKey: ['projects'] }),
-  });
-
   const updateSettingsMutation = useMutation({
     mutationFn: (root: string) => updateSettings({ projects_root: root }),
     onSuccess: () => qc.invalidateQueries({ queryKey: ['settings'] }),
@@ -255,24 +228,6 @@ export default function Settings() {
     setSetupError('');
   }
 
-  function openProjectModal() {
-    setShowProjectModal(true);
-    setProjName('');
-    setProjDesc('');
-    setProjRepo('');
-    setProjConnIds([]);
-    setProjError('');
-  }
-
-  function closeProjectModal() {
-    setShowProjectModal(false);
-    setProjName('');
-    setProjDesc('');
-    setProjRepo('');
-    setProjConnIds([]);
-    setProjError('');
-  }
-
   function handleSignOut() {
     clearToken();
     navigate('/login', { replace: true });
@@ -296,7 +251,7 @@ export default function Settings() {
           <button onClick={() => openSetupModal(kind)} className={connection ? ghostBtn : primaryBtn}>
             {connection ? 'Details' : 'Connect'}
           </button>
-          {connection && <DeleteBtn onClick={() => setPendingDelete({ kind: 'connection', id: connection.id })} />}
+          {connection && <DeleteBtn onClick={() => setPendingDelete({ id: connection.id })} />}
         </CardFooter>
       </Card>
     );
@@ -316,7 +271,7 @@ export default function Settings() {
               <div className="text-foreground/75 text-sm">{existing.name}</div>
               <Badge variant="secondary" className="mt-1 text-success">Connected</Badge>
             </div>
-            <DeleteBtn onClick={() => setPendingDelete({ kind: 'connection', id: existing.id })} />
+            <DeleteBtn onClick={() => setPendingDelete({ id: existing.id })} />
           </div>
         )}
         {existing && activeSetup !== 'mcp' ? (
@@ -363,52 +318,6 @@ export default function Settings() {
     );
   }
 
-  function ProjectModal() {
-    if (!showProjectModal) return null;
-    return (
-      <Modal title="Project" onClose={closeProjectModal}>
-        <div className="flex flex-col gap-3">
-          <div>
-            <Label>Name</Label>
-            <Input placeholder="Main app" value={projName} onChange={e => setProjName(e.target.value)} className={inputCls} />
-          </div>
-          <div>
-            <Label>Description</Label>
-            <Input placeholder="Optional" value={projDesc} onChange={e => setProjDesc(e.target.value)} className={inputCls} />
-          </div>
-          <div>
-            <Label>Repo path (optional)</Label>
-            <Input placeholder="/Users/you/project" value={projRepo} onChange={e => setProjRepo(e.target.value)} className={inputCls} />
-          </div>
-          {projectConnections.length > 0 && (
-            <div>
-              <Label>Allowed tools</Label>
-              <div className="mt-2 rounded-xl border bg-card px-3 py-2">
-                {projectConnections.map(c => (
-                  <label key={c.id} className="flex items-center gap-2 py-1.5 cursor-pointer">
-                    <input
-                      type="checkbox"
-                      checked={projConnIds.includes(c.id)}
-                      onChange={e => setProjConnIds(prev => e.target.checked ? [...prev, c.id] : prev.filter(id => id !== c.id))}
-                      className="h-4 w-4 rounded border-border bg-background accent-primary"
-                    />
-                    <span className="text-sm text-foreground/70">{c.name}</span>
-                    <Badge variant="outline">{purposeLabel(c.purpose)}</Badge>
-                  </label>
-                ))}
-              </div>
-            </div>
-          )}
-          {projError && <div className="text-destructive text-sm">{projError}</div>}
-          <DialogFooter>
-            <button onClick={closeProjectModal} className={ghostBtn}>Cancel</button>
-            <button onClick={() => createProjMutation.mutate()} className={primaryBtn} disabled={!projName.trim()}>Save project</button>
-          </DialogFooter>
-        </div>
-      </Modal>
-    );
-  }
-
   return (
     <div className="flex-1 overflow-y-auto px-8 py-8">
       <div className="mx-auto max-w-5xl">
@@ -439,7 +348,7 @@ export default function Settings() {
               </CardHeader>
               <CardFooter className="gap-2">
                 <button onClick={() => openSetupModal('mcp')} className={ghostBtn}>Details</button>
-                <DeleteBtn onClick={() => setPendingDelete({ kind: 'connection', id: c.id })} />
+                <DeleteBtn onClick={() => setPendingDelete({ id: c.id })} />
               </CardFooter>
             </Card>
           ))}
@@ -486,23 +395,6 @@ export default function Settings() {
           <code>projects</code> folder inside the server's data directory. Change it if you'd rather keep project
           repos somewhere else (e.g. <code>~/code</code>), or click "Reset to default" to go back to the default location.
         </p>
-        {projects.length > 0 && (
-          <div className="mb-3 grid gap-2">
-            {projects.map(p => (
-              <div key={p.id} className={rowCls}>
-                <div className="flex-1">
-                  <div className="text-sm font-medium">
-                    {p.name}
-                    {!p.repo_path && <span className="ml-2 text-muted-foreground/70 text-xs">(no repo)</span>}
-                  </div>
-                  {p.description && <div className="text-muted-foreground/70 text-xs mt-0.5">{p.description}</div>}
-                </div>
-                <DeleteBtn onClick={() => setPendingDelete({ kind: 'project', id: p.id })} />
-              </div>
-            ))}
-          </div>
-        )}
-        <button onClick={openProjectModal} className={primaryBtn}>Add project</button>
       </Section>
 
       <Section title="Memory">
@@ -579,23 +471,17 @@ export default function Settings() {
 
       {pendingDelete && (
         <ConfirmDialog
-          title={pendingDelete.kind === 'connection' ? 'Remove connection?' : 'Delete project?'}
-          description={
-            pendingDelete.kind === 'connection'
-              ? 'This will disconnect the integration. You can reconnect it at any time.'
-              : 'This will permanently delete the project and its configuration.'
-          }
+          title="Remove connection?"
+          description="This will disconnect the integration. You can reconnect it at any time."
           confirmLabel="Delete"
           onConfirm={() => {
-            if (pendingDelete.kind === 'connection') deleteConnMutation.mutate(pendingDelete.id);
-            else deleteProjMutation.mutate(pendingDelete.id);
+            deleteConnMutation.mutate(pendingDelete.id);
             setPendingDelete(null);
           }}
           onCancel={() => setPendingDelete(null)}
         />
       )}
       <SetupModal />
-      <ProjectModal />
       </div>
     </div>
   );

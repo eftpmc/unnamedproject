@@ -1,4 +1,5 @@
 import { Router } from 'express';
+import simpleGit from 'simple-git';
 import { getDb } from '../db/index.js';
 import { newId } from '../lib/ids.js';
 import { requireAuth, type AuthedRequest } from '../middleware/auth.js';
@@ -80,6 +81,54 @@ router.delete('/:id', (req, res) => {
   if (!session) { res.status(404).json({ error: 'Session not found' }); return; }
   getDb().prepare('DELETE FROM sessions WHERE id = ?').run(req.params.id);
   res.json({ ok: true });
+});
+
+router.get('/:id/worktree', async (req, res) => {
+  const { userId } = req as unknown as AuthedRequest;
+  const wt = getDb().prepare(`
+    SELECT w.id, w.branch, w.worktree_path, p.repo_path, p.name AS project_name
+    FROM agent_worktrees w
+    JOIN projects p ON p.id = w.project_id
+    WHERE w.session_id = ? AND p.user_id = ?
+  `).get(req.params.id, userId) as { id: string; branch: string; worktree_path: string; repo_path: string; project_name: string } | undefined;
+
+  if (!wt) { res.json(null); return; }
+
+  try {
+    const git = simpleGit(wt.worktree_path);
+    const status = await git.status();
+    let ahead = 0;
+    for (const base of ['main', 'master']) {
+      try {
+        const out = await git.raw(['rev-list', '--count', `${base}..HEAD`]);
+        ahead = parseInt(out.trim(), 10) || 0;
+        break;
+      } catch { /* try next */ }
+    }
+    res.json({ branch: wt.branch, project_name: wt.project_name, files_changed: status.files.length, ahead, has_uncommitted: status.files.length > 0 });
+  } catch {
+    res.json({ branch: wt.branch, project_name: wt.project_name, files_changed: 0, ahead: 0, has_uncommitted: false });
+  }
+});
+
+router.post('/:id/merge', async (req, res) => {
+  const { userId } = req as unknown as AuthedRequest;
+  const wt = getDb().prepare(`
+    SELECT w.branch, p.repo_path
+    FROM agent_worktrees w
+    JOIN projects p ON p.id = w.project_id
+    WHERE w.session_id = ? AND p.user_id = ?
+  `).get(req.params.id, userId) as { branch: string; repo_path: string } | undefined;
+
+  if (!wt) { res.status(404).json({ error: 'No worktree for this session' }); return; }
+
+  try {
+    await simpleGit(wt.repo_path).merge([wt.branch]);
+    res.json({ ok: true });
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err);
+    res.status(422).json({ error: msg });
+  }
 });
 
 export default router;

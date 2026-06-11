@@ -1,8 +1,9 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { GitMerge } from 'lucide-react';
 import MessageList from './MessageList.js';
 import MessageInput from './MessageInput.js';
-import { getMessages, sendMessage, getChats, updateChatConfig, getModelsForEffort } from '../lib/api.js';
+import { getMessages, sendMessage, getChats, updateChatConfig, getModelsForEffort, getSessionWorktree, mergeSessionBranch } from '../lib/api.js';
 import { subscribe } from '../lib/ws.js';
 import type { EffortLevel, Message, Session, WSEvent, WSMessageCreated, WSMessageStarted, WSMessageDelta, WSExecutionUpdate, WSApprovalRequested, WSAutoApproved, WSSessionTitleUpdated } from '../types.js';
 import { Skeleton } from '@/components/ui/skeleton';
@@ -46,6 +47,26 @@ export default function ChatView({ chatId }: ChatViewProps) {
   const configMutation = useMutation({
     mutationFn: (config: { effort?: EffortLevel; model?: string | null }) => updateChatConfig(chatId, config),
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ['chats'] }),
+  });
+
+  const { data: worktree, refetch: refetchWorktree } = useQuery({
+    queryKey: ['worktree', chatId],
+    queryFn: () => getSessionWorktree(chatId),
+    refetchInterval: 20000,
+  });
+
+  const [mergeState, setMergeState] = useState<'idle' | 'merging' | 'done' | 'error'>('idle');
+  const [mergeError, setMergeError] = useState('');
+
+  const mergeMutation = useMutation({
+    mutationFn: () => mergeSessionBranch(chatId),
+    onMutate: () => { setMergeState('merging'); setMergeError(''); },
+    onSuccess: () => {
+      setMergeState('done');
+      refetchWorktree();
+      setTimeout(() => setMergeState('idle'), 4000);
+    },
+    onError: (e: Error) => { setMergeState('error'); setMergeError(e.message); },
   });
 
   // executions: messageId → list of execution cards
@@ -142,6 +163,7 @@ export default function ChatView({ chatId }: ChatViewProps) {
             ...(ev.chunk ? { outputLog: existing.outputLog + ev.chunk } : {}),
             ...(ev.result ? { result: ev.result } : {}),
           };
+          if (ev.status === 'done' || ev.status === 'error') refetchWorktree();
           return { ...prev, [msgId]: list.map(e => e.executionId === ev.executionId ? updated : e) };
         });
       }
@@ -184,7 +206,7 @@ export default function ChatView({ chatId }: ChatViewProps) {
       }
     }
 
-  }, [chatId, queryClient]);
+  }, [chatId, queryClient, refetchWorktree]);
 
   useEffect(() => {
     const unsub = subscribe(handleWsEvent);
@@ -210,6 +232,30 @@ export default function ChatView({ chatId }: ChatViewProps) {
           <div className="truncate text-sm font-medium">{chatTitle}</div>
         </div>
       </header>
+
+      {worktree && (worktree.ahead > 0 || worktree.has_uncommitted) && (
+        <div className="shrink-0 flex items-center gap-3 border-b px-6 py-2 text-xs text-muted-foreground bg-muted/30">
+          <GitMerge size={13} className="shrink-0 text-muted-foreground/60" />
+          <code className="font-mono text-foreground/70">{worktree.branch}</code>
+          <span className="text-muted-foreground/50">·</span>
+          {worktree.ahead > 0 && <span>{worktree.ahead} commit{worktree.ahead !== 1 ? 's' : ''}</span>}
+          {worktree.ahead > 0 && worktree.has_uncommitted && <span className="text-muted-foreground/50">·</span>}
+          {worktree.has_uncommitted && worktree.ahead === 0 && <span>{worktree.files_changed} file{worktree.files_changed !== 1 ? 's' : ''} changed (uncommitted)</span>}
+          <div className="ml-auto flex items-center gap-2">
+            {mergeState === 'done' && <span className="text-success text-xs">Merged</span>}
+            {mergeState === 'error' && <span className="text-destructive text-xs truncate max-w-48" title={mergeError}>Merge failed</span>}
+            {worktree.ahead > 0 && (
+              <button
+                onClick={() => mergeMutation.mutate()}
+                disabled={mergeState === 'merging'}
+                className="rounded-md px-2.5 py-1 text-xs font-medium bg-primary text-primary-foreground hover:bg-primary/90 disabled:opacity-50"
+              >
+                {mergeState === 'merging' ? 'Merging…' : 'Merge to main'}
+              </button>
+            )}
+          </div>
+        </div>
+      )}
 
       {messages.length === 0 ? (
         <div className="flex flex-1 items-center justify-center">

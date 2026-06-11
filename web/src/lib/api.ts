@@ -1,5 +1,5 @@
 import { getToken, setToken, clearToken } from './auth.js';
-import type { Session, Message, Project, Connection, EffortLevel, ClaudeModelInfo, UserSettings, Memory, ScheduledTask } from '../types.js';
+import type { Session, Message, Project, Connection, EffortLevel, ClaudeModelInfo, UserSettings, Memory, ScheduledTask, SessionWorktree } from '../types.js';
 
 async function request<T>(path: string, init: RequestInit = {}): Promise<T> {
   const token = getToken();
@@ -46,6 +46,14 @@ export function updateChatConfig(chatId: string, config: { effort?: EffortLevel;
 
 export function deleteChat(id: string): Promise<void> {
   return request(`/sessions/${id}`, { method: 'DELETE' });
+}
+
+export function getSessionWorktree(chatId: string): Promise<SessionWorktree | null> {
+  return request(`/sessions/${chatId}/worktree`);
+}
+
+export function mergeSessionBranch(chatId: string): Promise<{ ok: boolean }> {
+  return request(`/sessions/${chatId}/merge`, { method: 'POST' });
 }
 
 export function getMe(): Promise<{ email: string }> {

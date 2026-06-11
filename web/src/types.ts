@@ -115,6 +115,14 @@ export interface Memory {
   project_id: string | null;
 }
 
+export interface SessionWorktree {
+  branch: string;
+  project_name: string;
+  files_changed: number;
+  ahead: number;
+  has_uncommitted: boolean;
+}
+
 export interface ScheduledTask {
   id: string;
   type: string;

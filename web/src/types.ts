@@ -101,3 +101,19 @@ export interface WSMessageDelta extends WSEvent {
   messageId: string;
   delta: string;
 }
+
+export interface Memory {
+  type: 'user' | 'feedback' | 'project' | 'reference';
+  key: string;
+  value: string;
+  project_id: string | null;
+}
+
+export interface ScheduledTask {
+  id: string;
+  type: string;
+  interval_hours: number;
+  enabled: number;
+  next_run_at: number;
+  last_run_at: number | null;
+}

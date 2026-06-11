@@ -1,5 +1,5 @@
 import { getToken, setToken, clearToken } from './auth.js';
-import type { Session, Message, Project, Connection, EffortLevel, ClaudeModelInfo, UserSettings } from '../types.js';
+import type { Session, Message, Project, Connection, EffortLevel, ClaudeModelInfo, UserSettings, Memory, ScheduledTask } from '../types.js';
 
 async function request<T>(path: string, init: RequestInit = {}): Promise<T> {
   const token = getToken();
@@ -99,6 +99,18 @@ export function deleteConnection(id: string): Promise<void> {
   return request(`/connections/${id}`, { method: 'DELETE' });
 }
 
-export function getMemory(): Promise<Record<string, string>> {
+export function getMemory(): Promise<Memory[]> {
   return request('/memory');
+}
+
+export function getScheduledTasks(): Promise<ScheduledTask[]> {
+  return request('/scheduled-tasks');
+}
+
+export function updateScheduledTask(id: string, body: { enabled?: boolean; interval_hours?: number }): Promise<void> {
+  return request(`/scheduled-tasks/${id}`, { method: 'PATCH', body: JSON.stringify(body) });
+}
+
+export function runScheduledTask(id: string): Promise<void> {
+  return request(`/scheduled-tasks/${id}/run`, { method: 'POST' });
 }

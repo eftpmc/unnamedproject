@@ -4,7 +4,7 @@ import MessageList from './MessageList.js';
 import MessageInput from './MessageInput.js';
 import { getMessages, sendMessage, getSessions, updateSessionConfig, getModelsForEffort } from '../lib/api.js';
 import { subscribe } from '../lib/ws.js';
-import type { EffortLevel, Message, Session, WSEvent, WSMessageCreated, WSMessageStarted, WSMessageDelta, WSExecutionUpdate, WSApprovalRequested, WSAutoApproved } from '../types.js';
+import type { EffortLevel, Message, Session, WSEvent, WSMessageCreated, WSMessageStarted, WSMessageDelta, WSExecutionUpdate, WSApprovalRequested, WSAutoApproved, WSSessionTitleUpdated } from '../types.js';
 import { Skeleton } from '@/components/ui/skeleton';
 
 interface InlineExecution {
@@ -155,6 +155,13 @@ export default function SessionView({ sessionId }: SessionViewProps) {
       });
     }
 
+    if (event.type === 'session_title_updated') {
+      const ev = event as WSSessionTitleUpdated;
+      if (ev.sessionId === sessionId) {
+        queryClient.invalidateQueries({ queryKey: ['sessions'] });
+      }
+    }
+
     // New execution started (from execution_update with status='running' + no existing entry)
     if (event.type === 'execution_update') {
       const ev = event as WSExecutionUpdate;
@@ -201,11 +208,16 @@ export default function SessionView({ sessionId }: SessionViewProps) {
       <header className="flex h-16 shrink-0 items-center gap-3 px-6">
         <div className="min-w-0 flex-1">
           <div className="truncate text-sm font-medium">{sessionTitle}</div>
-          <div className="text-xs text-muted-foreground">Agent session</div>
         </div>
       </header>
 
-      <MessageList messages={messages} executions={executions} streamingIds={streamingIds} />
+      {messages.length === 0 ? (
+        <div className="flex flex-1 items-center justify-center">
+          <p className="text-sm text-muted-foreground/60">Send a message to get started</p>
+        </div>
+      ) : (
+        <MessageList messages={messages} executions={executions} streamingIds={streamingIds} />
+      )}
 
       <MessageInput
         onSend={content => mutation.mutate(content)}

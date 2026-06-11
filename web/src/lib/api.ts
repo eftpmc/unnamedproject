@@ -1,5 +1,5 @@
 import { getToken, setToken, clearToken } from './auth.js';
-import type { Session, Message, Workspace, Connection, EffortLevel, ClaudeModelInfo } from '../types.js';
+import type { Session, Message, Project, Connection, EffortLevel, ClaudeModelInfo, UserSettings } from '../types.js';
 
 async function request<T>(path: string, init: RequestInit = {}): Promise<T> {
   const token = getToken();
@@ -67,16 +67,24 @@ export function rejectExecution(executionId: string): Promise<void> {
   return request(`/executions/${executionId}/reject`, { method: 'POST' });
 }
 
-export function getWorkspaces(): Promise<Workspace[]> {
-  return request('/workspaces');
+export function getProjects(): Promise<Project[]> {
+  return request('/projects');
 }
 
-export function createWorkspace(body: { name: string; description?: string; repo_path?: string; enabled_connection_ids: string[] }): Promise<{ id: string }> {
-  return request('/workspaces', { method: 'POST', body: JSON.stringify(body) });
+export function createProject(body: { name: string; description?: string; repo_path?: string; enabled_connection_ids: string[] }): Promise<{ id: string }> {
+  return request('/projects', { method: 'POST', body: JSON.stringify(body) });
 }
 
-export function deleteWorkspace(id: string): Promise<void> {
-  return request(`/workspaces/${id}`, { method: 'DELETE' });
+export function deleteProject(id: string): Promise<void> {
+  return request(`/projects/${id}`, { method: 'DELETE' });
+}
+
+export function getSettings(): Promise<UserSettings> {
+  return request('/settings');
+}
+
+export function updateSettings(body: { projects_root: string }): Promise<UserSettings> {
+  return request('/settings', { method: 'PUT', body: JSON.stringify(body) });
 }
 
 export function getConnections(): Promise<Connection[]> {

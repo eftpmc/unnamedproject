@@ -26,7 +26,7 @@ export interface Message {
 export interface Execution {
   id: string;
   message_id: string;
-  workspace_id: string;
+  project_id: string;
   tool: string;
   status: 'pending' | 'running' | 'done' | 'error' | 'awaiting_approval';
   output_log: string;
@@ -35,12 +35,16 @@ export interface Execution {
   completed_at: number | null;
 }
 
-export interface Workspace {
+export interface Project {
   id: string;
   name: string;
   description: string | null;
   repo_path: string | null;
   enabled_connection_ids: string[];
+}
+
+export interface UserSettings {
+  projects_root: string | null;
 }
 
 export interface Connection {
@@ -63,7 +67,7 @@ export interface WSExecutionUpdate extends WSEvent {
   chunk?: string;
   result?: string;
   tool?: string;
-  workspaceName?: string;
+  projectName?: string;
   messageId?: string;
 }
 

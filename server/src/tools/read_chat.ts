@@ -1,6 +1,6 @@
 import { getDb } from '../db/index.js';
 
-const TRUNCATION_NOTE = '\n\n(Note: output truncated — use read_chat with a narrower time range if you need more)';
+const TRUNCATION_NOTE = '\n\n(Note: output truncated — conversation is long, only the first 100 messages are shown)';
 
 export function readChat(userId: string, chatId: string): string {
   const db = getDb();

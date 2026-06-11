@@ -1,6 +1,7 @@
 import { spawn } from 'child_process';
 import { appendOutput, requestApproval } from '../services/executor.js';
 import { registerProcess, unregisterProcess } from '../lib/process-registry.js';
+import { DELEGATE_FRAMING } from './agent_framing.js';
 
 interface CodexInput {
   prompt: string;
@@ -22,6 +23,31 @@ export interface CodexResult {
   sessionId: string | null;
 }
 
+// codex exec has no --mcp-config flag (that's a Claude Code option) — MCP
+// servers are passed as `-c mcp_servers.<name>.<field>=<toml value>` overrides.
+function tomlString(value: string): string {
+  return JSON.stringify(value);
+}
+
+function tomlInlineTable(obj: Record<string, string>): string {
+  const entries = Object.entries(obj).map(([k, v]) => `${tomlString(k)} = ${tomlString(v)}`);
+  return `{ ${entries.join(', ')} }`;
+}
+
+function mcpServerConfigOverrides(servers: Record<string, McpServerConfig>): string[] {
+  const overrides: string[] = [];
+  for (const [name, cfg] of Object.entries(servers)) {
+    overrides.push(`-c`, `mcp_servers.${name}.command=${tomlString(cfg.command)}`);
+    if (cfg.args && cfg.args.length > 0) {
+      overrides.push(`-c`, `mcp_servers.${name}.args=${JSON.stringify(cfg.args)}`);
+    }
+    if (cfg.env && Object.keys(cfg.env).length > 0) {
+      overrides.push(`-c`, `mcp_servers.${name}.env=${tomlInlineTable(cfg.env)}`);
+    }
+  }
+  return overrides;
+}
+
 export async function invokeCodex(input: CodexInput, ctx: ToolContext): Promise<CodexResult> {
   await requestApproval(ctx.executionId, ctx.userId, 'invoke_codex', { prompt: input.prompt }, 'agent');
 
@@ -33,9 +59,11 @@ export async function invokeCodex(input: CodexInput, ctx: ToolContext): Promise<
   args.push('--dangerously-bypass-approvals-and-sandbox', '--json');
   if (!ctx.resumeSessionId) args.push('--skip-git-repo-check');
   if (ctx.mcpServers && Object.keys(ctx.mcpServers).length > 0) {
-    args.push('--mcp-config', JSON.stringify({ mcpServers: ctx.mcpServers }));
+    args.push(...mcpServerConfigOverrides(ctx.mcpServers));
   }
-  args.push(input.prompt);
+  // codex has no append-system-prompt equivalent — fold the framing into the prompt itself.
+  const prompt = ctx.resumeSessionId ? input.prompt : `${DELEGATE_FRAMING}\n\n${input.prompt}`;
+  args.push(prompt);
 
   return new Promise((resolve, reject) => {
     const proc = spawn('codex', args, {
@@ -49,6 +77,7 @@ export async function invokeCodex(input: CodexInput, ctx: ToolContext): Promise<
     let buffer = '';
     let sessionId: string | null = null;
     let resultText = '';
+    let stderrText = '';
 
     proc.stdout.on('data', (chunk: Buffer) => {
       buffer += chunk.toString();
@@ -72,13 +101,19 @@ export async function invokeCodex(input: CodexInput, ctx: ToolContext): Promise<
     });
 
     proc.stderr.on('data', (chunk: Buffer) => {
+      stderrText += chunk.toString();
       appendOutput(ctx.executionId, ctx.userId, chunk.toString());
+    });
+
+    proc.on('error', err => {
+      unregisterProcess(ctx.executionId);
+      reject(new Error(`Failed to launch codex: ${err.message}. Is the Codex CLI installed and on PATH?`));
     });
 
     proc.on('close', code => {
       unregisterProcess(ctx.executionId);
       if (code === 0) resolve({ result: resultText.trim() || 'Done.', sessionId });
-      else reject(new Error(`codex exited with code ${code}`));
+      else reject(new Error(`codex exited with code ${code}${stderrText.trim() ? `: ${stderrText.trim()}` : ''}`));
     });
   });
 }

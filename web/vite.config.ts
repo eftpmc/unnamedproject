@@ -13,10 +13,13 @@ export default defineConfig({
     proxy: {
       '/auth': 'http://localhost:3000',
       '/sessions': 'http://localhost:3000',
+      '/messages': 'http://localhost:3000',
       '/connections': 'http://localhost:3000',
-      '/workspaces': 'http://localhost:3000',
+      '/projects': 'http://localhost:3000',
+      '/settings': 'http://localhost:3000',
       '/executions': 'http://localhost:3000',
       '/memory': 'http://localhost:3000',
+      '/scheduled_tasks': 'http://localhost:3000',
     },
   },
   test: {

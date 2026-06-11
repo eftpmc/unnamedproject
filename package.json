@@ -1,0 +1,10 @@
+{
+  "scripts": {
+    "dev": "concurrently --names server,web --prefix-colors blue,green \"npm run dev --prefix server\" \"npm run dev --prefix web\"",
+    "test": "npm run test --prefix server && npm run test --prefix web",
+    "build": "npm run build --prefix server && npm run build --prefix web"
+  },
+  "devDependencies": {
+    "concurrently": "^9.2.1"
+  }
+}

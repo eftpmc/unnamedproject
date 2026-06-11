@@ -11,7 +11,7 @@ type ExecutionStatus = 'pending' | 'running' | 'done' | 'error' | 'awaiting_appr
 interface ExecutionCardProps {
   executionId: string;
   tool: string;
-  workspaceName?: string;
+  projectName?: string;
   status: ExecutionStatus;
   outputLog: string;
   result: string | null;
@@ -39,7 +39,7 @@ const STATUS_LABEL: Record<ExecutionStatus, string> = {
 export default function ExecutionCard({
   executionId,
   tool,
-  workspaceName,
+  projectName,
   status,
   outputLog,
   result,
@@ -52,7 +52,7 @@ export default function ExecutionCard({
   const [acting, setActing] = useState(false);
 
   const dotColor = STATUS_DOT[status] ?? 'bg-foreground/20';
-  const label = workspaceName ? `${tool} · ${workspaceName}` : tool;
+  const label = projectName ? `${tool} · ${projectName}` : tool;
 
   async function handleApprove() {
     setActing(true);

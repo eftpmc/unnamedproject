@@ -7,7 +7,7 @@ import { ScrollArea } from '@/components/ui/scroll-area';
 interface InlineExecution {
   executionId: string;
   tool: string;
-  workspaceName?: string;
+  projectName?: string;
   status: 'pending' | 'running' | 'done' | 'error' | 'awaiting_approval';
   outputLog: string;
   result: string | null;

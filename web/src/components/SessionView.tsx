@@ -10,7 +10,7 @@ import { Skeleton } from '@/components/ui/skeleton';
 interface InlineExecution {
   executionId: string;
   tool: string;
-  workspaceName?: string;
+  projectName?: string;
   status: 'pending' | 'running' | 'done' | 'error' | 'awaiting_approval';
   outputLog: string;
   result: string | null;
@@ -157,12 +157,12 @@ export default function SessionView({ sessionId }: SessionViewProps) {
 
     // New execution started (from execution_update with status='running' + no existing entry)
     if (event.type === 'execution_update') {
-      const ev = event as WSExecutionUpdate & { tool?: string; workspaceName?: string; messageId?: string };
+      const ev = event as WSExecutionUpdate;
       if (ev.status === 'running' && ev.messageId) {
         const newExec: InlineExecution = {
           executionId: ev.executionId,
           tool: ev.tool ?? 'unknown',
-          workspaceName: ev.workspaceName,
+          projectName: ev.projectName,
           status: 'running',
           outputLog: '',
           result: null,

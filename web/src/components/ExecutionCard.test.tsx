@@ -11,7 +11,7 @@ vi.mock('../lib/api.js', () => ({
 const baseCard = {
   executionId: 'exec-1',
   tool: 'invoke_claude_code',
-  workspaceName: 'api',
+  projectName: 'api',
   status: 'running' as const,
   outputLog: '',
   result: null,

@@ -1,6 +1,7 @@
 import { useEffect, useRef } from 'react';
 import ReactMarkdown from 'react-markdown';
 import ExecutionCard from './ExecutionCard.js';
+import CampaignCard from './CampaignCard.js';
 import type { Message } from '../types.js';
 import { Card, CardContent } from '@/components/ui/card';
 
@@ -80,9 +81,23 @@ export default function MessageList({ messages, executions, streamingIds, sessio
                     <span className="ml-1 inline-block h-4 w-1.5 animate-pulse align-middle rounded-full bg-foreground/40" />
                   )}
                 </div>
-                {(executions[msg.id] ?? []).map(exec => (
-                  <ExecutionCard key={exec.executionId} {...exec} />
-                ))}
+                {(executions[msg.id] ?? []).map(exec => {
+                  if (exec.tool === 'create_campaign' && exec.status === 'done' && exec.result) {
+                    try {
+                      const parsed = JSON.parse(exec.result) as { campaign_id: string; project_id: string };
+                      if (parsed.campaign_id && parsed.project_id) {
+                        return (
+                          <CampaignCard
+                            key={exec.executionId}
+                            campaignId={parsed.campaign_id}
+                            projectId={parsed.project_id}
+                          />
+                        );
+                      }
+                    } catch { /* fall through to ExecutionCard */ }
+                  }
+                  return <ExecutionCard key={exec.executionId} {...exec} />;
+                })}
               </div>
             )}
           </div>

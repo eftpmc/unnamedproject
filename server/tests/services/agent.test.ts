@@ -215,4 +215,96 @@ describe('agent', () => {
     const toolResult = (toolResultMsg.content as { content: string }[])[0].content;
     expect(toolResult).toBe("Project 'norepo2' has no repo. Create a new repo-backed project with create_project (with_repo=true) for this work.");
   });
+
+  it('renders "No memories stored yet." in the system prompt when memory is empty', async () => {
+    const db = getDb();
+    const freshUserId = newId();
+    db.prepare('INSERT INTO users (id, email, hashed_password) VALUES (?,?,?)').run(freshUserId, `agent-fresh-${freshUserId}@test.com`, 'x');
+    const { encrypt, deriveKey } = await import('../../src/lib/crypto.js');
+    db.prepare('INSERT INTO connections (id, user_id, name, type, encrypted_config) VALUES (?,?,?,?,?)')
+      .run(newId(), freshUserId, 'main', 'anthropic', encrypt(JSON.stringify({ apiKey: 'sk-test' }), deriveKey()));
+
+    const freshSessionId = newId();
+    db.prepare('INSERT INTO sessions (id, user_id) VALUES (?,?)').run(freshSessionId, freshUserId);
+    const msgId = newId();
+    db.prepare('INSERT INTO messages (id, session_id, role, content) VALUES (?,?,?,?)').run(msgId, freshSessionId, 'user', 'hi');
+
+    streamMock.mockClear();
+    await runAgentTurn(freshUserId, freshSessionId, msgId);
+
+    const call = streamMock.mock.calls[streamMock.mock.calls.length - 1][0];
+    expect(call.system).toContain('User memory:\nNo memories stored yet.');
+  });
+
+  it('renders typed and project-linked memory entries in the system prompt', async () => {
+    const db = getDb();
+    const { rememberFact } = await import('../../src/services/memory.js');
+
+    const projectId = newId();
+    db.prepare('INSERT INTO projects (id, user_id, name, description, repo_path, enabled_connection_ids) VALUES (?,?,?,?,?,?)')
+      .run(projectId, userId, 'memdemo', 'Demo project', null, '[]');
+
+    rememberFact(userId, 'feedback', 'package_manager', 'use pnpm, not npm');
+    rememberFact(userId, 'project', 'status', 'auth refactor blocked on legal review', projectId);
+
+    const msgId = newId();
+    db.prepare('INSERT INTO messages (id, session_id, role, content) VALUES (?,?,?,?)').run(msgId, sessionId, 'user', 'hi');
+
+    streamMock.mockClear();
+    await runAgentTurn(userId, sessionId, msgId);
+
+    const call = streamMock.mock.calls[streamMock.mock.calls.length - 1][0];
+    expect(call.system).toContain('- [feedback] package_manager: use pnpm, not npm');
+    expect(call.system).toContain('- [project: memdemo] status: auth refactor blocked on legal review');
+  });
+
+  it('dispatches the forget tool', async () => {
+    const db = getDb();
+    const { rememberFact, recallFact } = await import('../../src/services/memory.js');
+    rememberFact(userId, 'user', 'scratch_note', 'temporary');
+
+    streamMock.mockImplementationOnce(() => {
+      const listeners: Record<string, ((...args: unknown[]) => void)[]> = {};
+      return {
+        on: (event: string, cb: (...args: unknown[]) => void) => {
+          (listeners[event] ??= []).push(cb);
+          return { on: () => ({ finalMessage: async () => ({}) }) };
+        },
+        finalMessage: async () => ({
+          stop_reason: 'tool_use',
+          content: [{ type: 'tool_use', id: 'tool-3', name: 'forget', input: { type: 'user', key: 'scratch_note' } }],
+        }),
+      };
+    });
+    streamMock.mockImplementationOnce(() => {
+      const listeners: Record<string, ((...args: unknown[]) => void)[]> = {};
+      return {
+        on: (event: string, cb: (...args: unknown[]) => void) => {
+          (listeners[event] ??= []).push(cb);
+          return { on: () => ({ finalMessage: async () => ({}) }) };
+        },
+        finalMessage: async () => {
+          for (const cb of listeners.text ?? []) cb('done');
+          return {
+            stop_reason: 'end_turn',
+            content: [{ type: 'text', text: 'done' }],
+          };
+        },
+      };
+    });
+
+    const msgId = newId();
+    db.prepare('INSERT INTO messages (id, session_id, role, content) VALUES (?,?,?,?)').run(msgId, sessionId, 'user', 'forget the scratch note');
+
+    await runAgentTurn(userId, sessionId, msgId);
+
+    expect(recallFact(userId, 'user', 'scratch_note')).toBeNull();
+
+    const secondCall = streamMock.mock.calls[streamMock.mock.calls.length - 1][0];
+    const toolResultMsg = secondCall.messages.find((m: { role: string; content: unknown }) =>
+      m.role === 'user' && Array.isArray(m.content) && (m.content as { type: string }[]).some(c => c.type === 'tool_result')
+    );
+    const toolResult = (toolResultMsg.content as { content: string }[])[0].content;
+    expect(toolResult).toBe('Forgot [user] scratch_note');
+  });
 });

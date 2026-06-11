@@ -1,7 +1,7 @@
 import Anthropic from '@anthropic-ai/sdk';
 import { getDb, getProjectForUser, type DbProject } from '../db/index.js';
 import { getDecryptedConfig } from '../routes/connections.js';
-import { recallAll } from './memory.js';
+import { recallAll, projectNameFor, type MemoryEntry } from './memory.js';
 import { toolDefinitions } from '../tools/definitions.js';
 import { createExecution, completeExecution } from './executor.js';
 import { runGitOp } from '../tools/git_op.js';
@@ -10,7 +10,7 @@ import { invokeClaudeCode } from '../tools/invoke_claude_code.js';
 import { invokeCodex } from '../tools/invoke_codex.js';
 import { callMcp } from '../tools/mcp_call.js';
 import { runProjectQuery } from '../tools/project_query.js';
-import { remember, recall } from '../tools/memory_tools.js';
+import { remember, recall, forget } from '../tools/memory_tools.js';
 import { readFile, listDir, writeFile } from '../tools/file_ops.js';
 import { createProject, updateProject, deleteProject } from '../tools/project_ops.js';
 import { broadcast } from './socket.js';
@@ -25,12 +25,19 @@ function getProjects(userId: string): DbProject[] {
     .all(userId) as DbProject[];
 }
 
+function formatMemoryEntry(userId: string, e: MemoryEntry): string {
+  const label = e.type === 'project'
+    ? `[project: ${projectNameFor(userId, e.project_id) ?? e.project_id}]`
+    : `[${e.type}]`;
+  return `- ${label} ${e.key}: ${e.value}`;
+}
+
 function buildSystemPrompt(userId: string): string {
   const memory = recallAll(userId);
   const projects = getProjects(userId);
-  const memoryText = Object.keys(memory).length > 0
-    ? `\n\nUser memory:\n${Object.entries(memory).map(([k, v]) => `- ${k}: ${v}`).join('\n')}`
-    : '';
+  const memoryText = memory.length > 0
+    ? `\n\nUser memory:\n${memory.map(e => formatMemoryEntry(userId, e)).join('\n')}`
+    : '\n\nUser memory:\nNo memories stored yet.';
   const projectsText = projects.length > 0
     ? `\n\nAvailable projects:\n${projects.map(p => `- ${p.name} (id: ${p.id}${p.repo_path ? '' : ', no repo'})${p.description ? ': ' + p.description : ''}`).join('\n')}`
     : '\n\nNo projects yet.';
@@ -144,10 +151,19 @@ async function dispatchTool(
         result = await runProjectQuery({ project_id: projectId, question: toolInput.question as string }, userId);
         break;
       case 'remember':
-        result = remember(userId, toolInput.key as string, toolInput.value as string);
+        result = remember(
+          userId,
+          toolInput.type as string,
+          toolInput.key as string,
+          toolInput.value as string,
+          toolInput.project_id as string | undefined
+        );
         break;
       case 'recall':
-        result = recall(userId, (toolInput.key as string | undefined) ?? null);
+        result = recall(userId, toolInput.type as string | undefined, toolInput.key as string | undefined);
+        break;
+      case 'forget':
+        result = forget(userId, toolInput.type as string, toolInput.key as string);
         break;
       case 'read_file':
         result = await readFile({ project_id: projectId, path: toolInput.path as string }, { userId, executionId, projectId });

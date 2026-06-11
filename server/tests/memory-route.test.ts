@@ -18,17 +18,18 @@ beforeAll(async () => {
   // Decode userId from JWT payload (middle segment)
   const payload = JSON.parse(Buffer.from(res.body.token.split('.')[1], 'base64').toString());
   userId = payload.userId;
-  rememberFact(userId, 'preferred_language', 'TypeScript');
-  rememberFact(userId, 'timezone', 'UTC');
+  rememberFact(userId, 'user', 'preferred_language', 'TypeScript');
+  rememberFact(userId, 'feedback', 'package_manager', 'use pnpm, not npm');
 });
 
 describe('GET /memory', () => {
-  it('returns all key-value pairs for the user', async () => {
+  it('returns all memory entries for the user', async () => {
     const res = await request(app)
       .get('/memory')
       .set('Authorization', `Bearer ${token}`);
     expect(res.status).toBe(200);
-    expect(res.body).toMatchObject({ preferred_language: 'TypeScript', timezone: 'UTC' });
+    expect(res.body).toContainEqual({ type: 'user', key: 'preferred_language', value: 'TypeScript', project_id: null });
+    expect(res.body).toContainEqual({ type: 'feedback', key: 'package_manager', value: 'use pnpm, not npm', project_id: null });
   });
 
   it('returns 401 without token', async () => {

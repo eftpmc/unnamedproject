@@ -518,6 +518,9 @@ export function updateCampaignTaskStatus(
 }
 
 export function maybeCompleteCampaign(campaignId: string): DbCampaign['status'] {
+  const campaign = getCampaignById(campaignId)!;
+  if (campaign.status === 'cancelled') return campaign.status;
+
   const tasks = getCampaignTasks(campaignId);
   const allDone = tasks.every(t => t.status === 'done');
   const anyError = tasks.some(t => t.status === 'error');
@@ -530,7 +533,26 @@ export function maybeCompleteCampaign(campaignId: string): DbCampaign['status'] 
     getDb()
       .prepare('UPDATE campaigns SET status = ?, completed_at = ? WHERE id = ?')
       .run(newStatus, now, campaignId);
+    return newStatus;
   }
-  const campaign = getCampaignById(campaignId)!;
   return campaign.status;
+}
+
+// Cancels a running campaign and marks any tasks still waiting/running as
+// errored so dispatchTool/maybeCompleteCampaign treat them as terminal.
+export function cancelCampaign(campaignId: string): DbCampaign | undefined {
+  const now = Math.floor(Date.now() / 1000);
+  getDb()
+    .prepare("UPDATE campaigns SET status = 'cancelled', completed_at = ? WHERE id = ? AND status = 'running'")
+    .run(now, campaignId);
+  getDb()
+    .prepare("UPDATE campaign_tasks SET status = 'error', completed_at = ? WHERE campaign_id = ? AND status IN ('waiting','running')")
+    .run(now, campaignId);
+  return getCampaignById(campaignId);
+}
+
+export function getCampaignForTask(taskId: string): DbCampaign | undefined {
+  return getDb()
+    .prepare('SELECT c.* FROM campaigns c JOIN campaign_tasks t ON t.campaign_id = c.id WHERE t.id = ?')
+    .get(taskId) as DbCampaign | undefined;
 }

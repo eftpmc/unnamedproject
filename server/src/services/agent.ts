@@ -1,5 +1,5 @@
 import Anthropic from '@anthropic-ai/sdk';
-import { getDb, getProjectForUser, setAgentWorktreeSession, updateCampaignTaskStatus, maybeCompleteCampaign, type DbProject } from '../db/index.js';
+import { getDb, getProjectForUser, setAgentWorktreeSession, updateCampaignTaskStatus, maybeCompleteCampaign, getCampaignForTask, type DbProject } from '../db/index.js';
 import { ensureWorktree } from '../lib/worktree.js';
 import { getDecryptedConfig } from '../routes/connections.js';
 import { recallAll } from './memory.js';
@@ -198,6 +198,15 @@ async function dispatchTool(
   const project = getProjectForUser(projectId, userId);
   const executionId = createExecution(userId, messageId, project?.id ?? null, toolName);
 
+  const campaignTaskId = toolInput.campaign_task_id as string | undefined;
+  if (campaignTaskId) {
+    const campaign = getCampaignForTask(campaignTaskId);
+    if (campaign?.status === 'cancelled') {
+      completeExecution(executionId, userId, 'error', 'Campaign cancelled');
+      return 'Error: Campaign was cancelled';
+    }
+  }
+
   try {
     let result: string;
 
@@ -224,7 +233,7 @@ async function dispatchTool(
         const ccTaskId = toolInput.campaign_task_id as string | undefined;
         if (ccTaskId) startCampaignTask(userId, ccTaskId, executionId);
         const ccResult = await invokeClaudeCode(
-          { prompt: toolInput.prompt as string },
+          { prompt: toolInput.prompt as string, model: toolInput.model as string | undefined },
           { userId, executionId, repoPath: ccWorktree.worktree_path, apiKey: ccApiKey, resumeSessionId: ccWorktree.claude_session_id, mcpServers: getMcpServersForUser(userId) }
         );
         if (ccResult.sessionId) setAgentWorktreeSession(ccWorktree.id, 'claude', ccResult.sessionId);
@@ -260,7 +269,7 @@ async function dispatchTool(
         const codexTaskId = toolInput.campaign_task_id as string | undefined;
         if (codexTaskId) startCampaignTask(userId, codexTaskId, executionId);
         const codexResult = await invokeCodex(
-          { prompt: toolInput.prompt as string },
+          { prompt: toolInput.prompt as string, model: toolInput.model as string | undefined },
           { userId, executionId, repoPath: codexWorktree.worktree_path, apiKey: codexApiKey, resumeSessionId: codexWorktree.codex_session_id, mcpServers: getMcpServersForUser(userId) }
         );
         if (codexResult.sessionId) setAgentWorktreeSession(codexWorktree.id, 'codex', codexResult.sessionId);

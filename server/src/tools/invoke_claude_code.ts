@@ -1,10 +1,11 @@
 import { spawn } from 'child_process';
 import { appendOutput, requestApproval } from '../services/executor.js';
 import { registerProcess, unregisterProcess } from '../lib/process-registry.js';
-import { DELEGATE_FRAMING } from './agent_framing.js';
+import { DELEGATE_FRAMING, DELEGATE_TIMEOUT_MS } from './agent_framing.js';
 
 interface ClaudeCodeInput {
   prompt: string;
+  model?: string;
 }
 
 interface McpServerConfig { command: string; args?: string[]; env?: Record<string, string> }
@@ -42,6 +43,7 @@ export async function invokeClaudeCode(input: ClaudeCodeInput, ctx: ToolContext)
   await requestApproval(ctx.executionId, ctx.userId, 'invoke_claude_code', { prompt: input.prompt }, 'agent');
 
   const args = ['--print', '--permission-mode', 'bypassPermissions', '--output-format', 'stream-json', '--verbose'];
+  if (input.model) args.push('--model', input.model);
   if (!ctx.resumeSessionId) args.push('--append-system-prompt', DELEGATE_FRAMING);
   if (ctx.resumeSessionId) args.push('--resume', ctx.resumeSessionId);
   if (ctx.mcpServers && Object.keys(ctx.mcpServers).length > 0) {
@@ -61,6 +63,12 @@ export async function invokeClaudeCode(input: ClaudeCodeInput, ctx: ToolContext)
     let sessionId: string | null = null;
     let resultText = '';
     let stderrText = '';
+    let timedOut = false;
+
+    const timeoutTimer = setTimeout(() => {
+      timedOut = true;
+      proc.kill('SIGTERM');
+    }, DELEGATE_TIMEOUT_MS);
 
     proc.stdout.on('data', (chunk: Buffer) => {
       buffer += chunk.toString();
@@ -99,12 +107,18 @@ export async function invokeClaudeCode(input: ClaudeCodeInput, ctx: ToolContext)
     });
 
     proc.on('error', err => {
+      clearTimeout(timeoutTimer);
       unregisterProcess(ctx.executionId);
       reject(new Error(`Failed to launch claude: ${err.message}. Is the Claude Code CLI installed and on PATH?`));
     });
 
     proc.on('close', code => {
+      clearTimeout(timeoutTimer);
       unregisterProcess(ctx.executionId);
+      if (timedOut) {
+        reject(new Error(`claude timed out after ${DELEGATE_TIMEOUT_MS / 1000}s and was killed`));
+        return;
+      }
       if (code !== 0 && !resultText) {
         reject(new Error(`claude exited with code ${code}${stderrText.trim() ? `: ${stderrText.trim()}` : ''}`));
         return;

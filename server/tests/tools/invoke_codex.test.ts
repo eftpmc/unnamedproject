@@ -37,6 +37,24 @@ describe('invoke_codex', () => {
     expect(result).toEqual({ result: 'fixed the bug', sessionId: 'thread-123' });
   });
 
+  it('passes model override to the CLI', async () => {
+    const proc = makeProc();
+    vi.mocked(spawn).mockReturnValue(proc as any);
+
+    const promise = invokeCodex(
+      { prompt: 'do the thing', model: 'gpt-5' },
+      { userId: 'u1', executionId: 'e1', repoPath: '/tmp/repo', apiKey: 'sk-test' }
+    );
+    await new Promise(setImmediate);
+    proc.emit('close', 0);
+    await promise;
+
+    const args = vi.mocked(spawn).mock.calls[0][1] as string[];
+    const idx = args.indexOf('-m');
+    expect(idx).toBeGreaterThanOrEqual(0);
+    expect(args[idx + 1]).toBe('gpt-5');
+  });
+
   it('passes mcp servers as -c overrides, not the unsupported --mcp-config flag', async () => {
     const proc = makeProc();
     vi.mocked(spawn).mockReturnValue(proc as any);

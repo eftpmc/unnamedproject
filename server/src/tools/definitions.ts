@@ -9,6 +9,7 @@ export const toolDefinitions: Anthropic.Tool[] = [
       properties: {
         project_id: { type: 'string', description: 'ID of the project to work in' },
         prompt: { type: 'string', description: 'The task to give Claude Code. Be specific and thorough — it can handle complex, multi-file work. Include context, constraints, and what done looks like.' },
+        model: { type: 'string', description: "Optional model override for this run, e.g. 'sonnet', 'opus', 'haiku', 'fable', or a full model ID. Defaults to the CLI's configured default." },
         campaign_task_id: { type: 'string', description: 'Campaign task ID to link this execution to (from create_campaign response)' },
       },
       required: ['project_id', 'prompt'],
@@ -22,6 +23,7 @@ export const toolDefinitions: Anthropic.Tool[] = [
       properties: {
         project_id: { type: 'string', description: 'ID of the project to work in' },
         prompt: { type: 'string', description: 'The task to give Codex. Be specific — include codebase context, what to build, and what done looks like.' },
+        model: { type: 'string', description: "Optional OpenAI model override for this run, e.g. 'gpt-5'. Defaults to the CLI's configured default." },
         campaign_task_id: { type: 'string', description: 'Campaign task ID to link this execution to (from create_campaign response)' },
       },
       required: ['project_id', 'prompt'],

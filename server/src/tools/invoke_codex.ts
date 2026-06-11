@@ -1,10 +1,11 @@
 import { spawn } from 'child_process';
 import { appendOutput, requestApproval } from '../services/executor.js';
 import { registerProcess, unregisterProcess } from '../lib/process-registry.js';
-import { DELEGATE_FRAMING } from './agent_framing.js';
+import { DELEGATE_FRAMING, DELEGATE_TIMEOUT_MS } from './agent_framing.js';
 
 interface CodexInput {
   prompt: string;
+  model?: string;
 }
 
 interface McpServerConfig { command: string; args?: string[]; env?: Record<string, string> }
@@ -58,6 +59,7 @@ export async function invokeCodex(input: CodexInput, ctx: ToolContext): Promise<
   }
   args.push('--dangerously-bypass-approvals-and-sandbox', '--json');
   if (!ctx.resumeSessionId) args.push('--skip-git-repo-check');
+  if (input.model) args.push('-m', input.model);
   if (ctx.mcpServers && Object.keys(ctx.mcpServers).length > 0) {
     args.push(...mcpServerConfigOverrides(ctx.mcpServers));
   }
@@ -78,6 +80,12 @@ export async function invokeCodex(input: CodexInput, ctx: ToolContext): Promise<
     let sessionId: string | null = null;
     let resultText = '';
     let stderrText = '';
+    let timedOut = false;
+
+    const timeoutTimer = setTimeout(() => {
+      timedOut = true;
+      proc.kill('SIGTERM');
+    }, DELEGATE_TIMEOUT_MS);
 
     proc.stdout.on('data', (chunk: Buffer) => {
       buffer += chunk.toString();
@@ -106,12 +114,18 @@ export async function invokeCodex(input: CodexInput, ctx: ToolContext): Promise<
     });
 
     proc.on('error', err => {
+      clearTimeout(timeoutTimer);
       unregisterProcess(ctx.executionId);
       reject(new Error(`Failed to launch codex: ${err.message}. Is the Codex CLI installed and on PATH?`));
     });
 
     proc.on('close', code => {
+      clearTimeout(timeoutTimer);
       unregisterProcess(ctx.executionId);
+      if (timedOut) {
+        reject(new Error(`codex timed out after ${DELEGATE_TIMEOUT_MS / 1000}s and was killed`));
+        return;
+      }
       if (code === 0) resolve({ result: resultText.trim() || 'Done.', sessionId });
       else reject(new Error(`codex exited with code ${code}${stderrText.trim() ? `: ${stderrText.trim()}` : ''}`));
     });

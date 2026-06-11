@@ -153,6 +153,10 @@ export function getCampaign(campaignId: string): Promise<{ campaign: Campaign; t
   return request(`/campaigns/${campaignId}`);
 }
 
+export function cancelCampaign(campaignId: string): Promise<{ campaign: Campaign }> {
+  return request(`/campaigns/${campaignId}/cancel`, { method: 'POST' });
+}
+
 export function updateProject(projectId: string, body: { description?: string }): Promise<void> {
   return request(`/projects/${projectId}`, {
     method: 'PATCH',

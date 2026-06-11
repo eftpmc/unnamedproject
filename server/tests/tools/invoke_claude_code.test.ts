@@ -55,6 +55,24 @@ describe('invoke_claude_code', () => {
     expect(args[idx + 1]).toContain('full authority');
   });
 
+  it('passes model override to the CLI', async () => {
+    const proc = makeProc();
+    vi.mocked(spawn).mockReturnValue(proc as any);
+
+    const promise = invokeClaudeCode(
+      { prompt: 'fix the login bug', model: 'opus' },
+      { userId: 'u1', executionId: 'e1', repoPath: '/tmp/repo', apiKey: 'sk-test' }
+    );
+    await new Promise(setImmediate);
+    proc.emit('close', 0);
+    await promise;
+
+    const args = vi.mocked(spawn).mock.calls[0][1] as string[];
+    const idx = args.indexOf('--model');
+    expect(idx).toBeGreaterThanOrEqual(0);
+    expect(args[idx + 1]).toBe('opus');
+  });
+
   it('does not append framing when resuming a session', async () => {
     const proc = makeProc();
     vi.mocked(spawn).mockReturnValue(proc as any);

@@ -1,13 +1,13 @@
 import { useEffect, useState } from 'react';
 import { useParams, Link } from 'react-router-dom';
-import { useQuery } from '@tanstack/react-query';
-import { ArrowLeft, Bot, FileEdit, GitBranch, GitPullRequest } from 'lucide-react';
-import { getCampaign } from '../lib/api.js';
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { ArrowLeft, Bot, FileEdit, GitBranch, GitPullRequest, X } from 'lucide-react';
+import { getCampaign, cancelCampaign } from '../lib/api.js';
 import { subscribe } from '../lib/ws.js';
 import { cn } from '@/lib/utils';
 import { timeAgo } from '../lib/utils.js';
 import { getToken } from '../lib/auth.js';
-import type { CampaignTask, WSCampaignTaskUpdated } from '../types.js';
+import type { Campaign, CampaignTask, WSCampaignTaskUpdated, WSCampaignUpdated } from '../types.js';
 
 const STATUS_DOT: Record<CampaignTask['status'], string> = {
   waiting: 'bg-muted-foreground/30',
@@ -68,13 +68,16 @@ export default function CampaignPage() {
     },
   });
 
+  const queryClient = useQueryClient();
   const [taskStatuses, setTaskStatuses] = useState<Record<string, CampaignTask['status']>>({});
+  const [campaignStatus, setCampaignStatus] = useState<Campaign['status'] | null>(null);
 
   useEffect(() => {
     if (data) {
       const initial: Record<string, CampaignTask['status']> = {};
       data.tasks.forEach(t => { initial[t.id] = t.status; });
       setTaskStatuses(initial);
+      setCampaignStatus(data.campaign.status);
     }
   }, [data]);
 
@@ -84,12 +87,22 @@ export default function CampaignPage() {
         const e = event as WSCampaignTaskUpdated;
         setTaskStatuses(prev => ({ ...prev, [e.taskId]: e.status }));
       }
+      if (event.type === 'campaign_updated') {
+        const e = event as WSCampaignUpdated;
+        if (e.campaignId === campaignId) setCampaignStatus(e.status);
+      }
     });
-  }, []);
+  }, [campaignId]);
+
+  const cancelMutation = useMutation({
+    mutationFn: () => cancelCampaign(campaignId!),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['campaign', campaignId] }),
+  });
 
   if (isLoading || !data) return null;
 
   const { campaign, tasks } = data;
+  const effectiveCampaignStatus = campaignStatus ?? campaign.status;
   const effectiveStatuses = tasks.map(t => taskStatuses[t.id] ?? t.status);
   const doneCount = effectiveStatuses.filter(s => s === 'done').length;
   const progressPct = tasks.length > 0 ? (doneCount / tasks.length) * 100 : 0;
@@ -118,12 +131,24 @@ export default function CampaignPage() {
               {campaign.completed_at && ` · completed ${timeAgo(campaign.completed_at)}`}
             </p>
           </div>
-          <span className={cn(
-            'rounded-full px-2.5 py-1 text-xs font-medium',
-            CAMPAIGN_STATUS_COLORS[campaign.status],
-          )}>
-            {campaign.status}
-          </span>
+          <div className="flex items-center gap-2">
+            <span className={cn(
+              'rounded-full px-2.5 py-1 text-xs font-medium',
+              CAMPAIGN_STATUS_COLORS[effectiveCampaignStatus],
+            )}>
+              {effectiveCampaignStatus}
+            </span>
+            {effectiveCampaignStatus === 'running' && (
+              <button
+                onClick={() => cancelMutation.mutate()}
+                disabled={cancelMutation.isPending}
+                className="flex items-center gap-1 rounded-full border border-border/50 px-2.5 py-1 text-xs font-medium text-muted-foreground hover:text-foreground hover:bg-muted/60 transition-colors disabled:opacity-50"
+              >
+                <X size={12} />
+                Cancel
+              </button>
+            )}
+          </div>
         </div>
         {/* Progress bar */}
         <div className="mt-4 flex items-center gap-3">

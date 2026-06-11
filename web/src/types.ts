@@ -171,3 +171,9 @@ export interface WSCampaignTaskUpdated extends WSEvent {
   taskId: string;
   status: CampaignTask['status'];
 }
+
+export interface WSCampaignUpdated extends WSEvent {
+  type: 'campaign_updated';
+  campaignId: string;
+  status: Campaign['status'];
+}

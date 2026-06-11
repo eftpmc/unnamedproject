@@ -10,7 +10,7 @@ interface GitOpInput {
 interface ToolContext {
   userId: string;
   executionId: string;
-  workspaceId: string;
+  projectId: string;
   repoPath: string;
 }
 

@@ -16,7 +16,7 @@ vi.mock('../../src/services/executor.js', () => ({
   appendOutput: vi.fn(),
 }));
 
-const ctx = { userId: 'u1', executionId: 'e1', workspaceId: 'w1', repoPath: '/tmp/repo' };
+const ctx = { userId: 'u1', executionId: 'e1', projectId: 'p1', repoPath: '/tmp/repo' };
 
 describe('git_op', () => {
   it('runs read op (log) without approval', async () => {

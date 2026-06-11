@@ -1,31 +1,52 @@
-import { getDb } from '../db/index.js';
+import { getDb, getProjectForUser } from '../db/index.js';
 import { newId } from '../lib/ids.js';
 
-export function rememberFact(userId: string, key: string, value: string): void {
+export type MemoryType = 'user' | 'feedback' | 'project' | 'reference';
+
+export interface MemoryEntry {
+  type: MemoryType;
+  key: string;
+  value: string;
+  project_id: string | null;
+}
+
+export function rememberFact(userId: string, type: MemoryType, key: string, value: string, projectId: string | null = null): void {
   const existing = getDb()
-    .prepare('SELECT id FROM user_memory WHERE user_id = ? AND key = ?')
-    .get(userId, key);
+    .prepare('SELECT id FROM memories WHERE user_id = ? AND type = ? AND key = ?')
+    .get(userId, type, key);
   if (existing) {
     getDb()
-      .prepare('UPDATE user_memory SET value = ?, updated_at = unixepoch() WHERE user_id = ? AND key = ?')
-      .run(value, userId, key);
+      .prepare('UPDATE memories SET value = ?, project_id = ?, updated_at = unixepoch() WHERE user_id = ? AND type = ? AND key = ?')
+      .run(value, projectId, userId, type, key);
   } else {
     getDb()
-      .prepare('INSERT INTO user_memory (id, user_id, key, value) VALUES (?,?,?,?)')
-      .run(newId(), userId, key, value);
+      .prepare('INSERT INTO memories (id, user_id, type, key, value, project_id) VALUES (?,?,?,?,?,?)')
+      .run(newId(), userId, type, key, value, projectId);
   }
 }
 
-export function recallFact(userId: string, key: string): string | null {
+export function recallFact(userId: string, type: MemoryType, key: string): string | null {
   const row = getDb()
-    .prepare('SELECT value FROM user_memory WHERE user_id = ? AND key = ?')
-    .get(userId, key) as { value: string } | undefined;
+    .prepare('SELECT value FROM memories WHERE user_id = ? AND type = ? AND key = ?')
+    .get(userId, type, key) as { value: string } | undefined;
   return row?.value ?? null;
 }
 
-export function recallAll(userId: string): Record<string, string> {
-  const rows = getDb()
-    .prepare('SELECT key, value FROM user_memory WHERE user_id = ?')
-    .all(userId) as { key: string; value: string }[];
-  return Object.fromEntries(rows.map(r => [r.key, r.value]));
+export function forgetFact(userId: string, type: MemoryType, key: string): boolean {
+  const result = getDb()
+    .prepare('DELETE FROM memories WHERE user_id = ? AND type = ? AND key = ?')
+    .run(userId, type, key);
+  return result.changes > 0;
+}
+
+export function recallAll(userId: string, type?: MemoryType): MemoryEntry[] {
+  const rows = type
+    ? getDb().prepare('SELECT type, key, value, project_id FROM memories WHERE user_id = ? AND type = ?').all(userId, type)
+    : getDb().prepare('SELECT type, key, value, project_id FROM memories WHERE user_id = ?').all(userId);
+  return rows as MemoryEntry[];
+}
+
+export function projectNameFor(userId: string, projectId: string | null): string | null {
+  if (!projectId) return null;
+  return getProjectForUser(projectId, userId)?.name ?? null;
 }

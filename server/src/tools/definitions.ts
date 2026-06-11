@@ -81,24 +81,39 @@ export const toolDefinitions: Anthropic.Tool[] = [
   },
   {
     name: 'remember',
-    description: 'Store a fact about the user for future sessions.',
+    description: "Store or update a memory entry. Use 'user' for durable facts/preferences about the user or their environment, 'feedback' for corrections or process preferences about how you should work, 'project' for notes tied to a specific project (pass project_id), and 'reference' for pointers to external systems.",
     input_schema: {
       type: 'object',
       properties: {
-        key: { type: 'string', description: 'Short identifier for the fact' },
-        value: { type: 'string', description: 'The fact to remember' },
+        type: { type: 'string', enum: ['user', 'feedback', 'project', 'reference'], description: 'Category of memory' },
+        key: { type: 'string', description: 'Short identifier for the entry' },
+        value: { type: 'string', description: 'The fact or note to remember' },
+        project_id: { type: 'string', description: "Required when type is 'project' — the project this note relates to" },
       },
-      required: ['key', 'value'],
+      required: ['type', 'key', 'value'],
     },
   },
   {
     name: 'recall',
-    description: 'Read stored facts about the user. Pass a key to get one fact, or omit key to get all.',
+    description: 'Read stored memory entries. Omit type and key to get everything (grouped by type). Pass type to filter by category, and type+key to get a single entry.',
     input_schema: {
       type: 'object',
       properties: {
-        key: { type: 'string', description: 'Key to look up (optional — omit to get all)' },
+        type: { type: 'string', enum: ['user', 'feedback', 'project', 'reference'], description: 'Category to filter by (optional)' },
+        key: { type: 'string', description: 'Key to look up (optional — requires type)' },
       },
+    },
+  },
+  {
+    name: 'forget',
+    description: 'Delete a memory entry by type and key.',
+    input_schema: {
+      type: 'object',
+      properties: {
+        type: { type: 'string', enum: ['user', 'feedback', 'project', 'reference'] },
+        key: { type: 'string' },
+      },
+      required: ['type', 'key'],
     },
   },
   {

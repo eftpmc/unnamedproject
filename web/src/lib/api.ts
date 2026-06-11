@@ -151,3 +151,10 @@ export function getProjectCampaigns(projectId: string): Promise<Campaign[]> {
 export function getCampaign(campaignId: string): Promise<{ campaign: Campaign; tasks: CampaignTask[] }> {
   return request(`/campaigns/${campaignId}`);
 }
+
+export function updateProject(projectId: string, body: { description?: string }): Promise<void> {
+  return request(`/projects/${projectId}`, {
+    method: 'PATCH',
+    body: JSON.stringify(body),
+  });
+}

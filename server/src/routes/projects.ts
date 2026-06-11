@@ -113,4 +113,14 @@ router.get('/:id/campaigns', (req, res) => {
   res.json(getCampaignsForProject(req.params.id));
 });
 
+router.patch('/:id', (req, res) => {
+  const { userId } = req as unknown as AuthedRequest;
+  const { description } = req.body as { description?: string };
+  const result = getDb()
+    .prepare('UPDATE projects SET description = ? WHERE id = ? AND user_id = ?')
+    .run(description ?? null, req.params.id, userId);
+  if (result.changes === 0) { res.status(404).json({ error: 'Not found' }); return; }
+  res.json({ ok: true });
+});
+
 export default router;

@@ -191,7 +191,7 @@ export default function SessionView({ sessionId }: SessionViewProps) {
     return unsub;
   }, [handleWsEvent]);
 
-  const sessionTitle = messages.find(m => m.role === 'user')?.content?.slice(0, 40) ?? 'Session';
+  const sessionTitle = session?.title ?? messages.find(m => m.role === 'user')?.content?.slice(0, 40) ?? 'Session';
 
   if (isLoading) {
     return (
@@ -216,7 +216,7 @@ export default function SessionView({ sessionId }: SessionViewProps) {
           <p className="text-sm text-muted-foreground/60">Send a message to get started</p>
         </div>
       ) : (
-        <MessageList messages={messages} executions={executions} streamingIds={streamingIds} />
+        <MessageList messages={messages} executions={executions} streamingIds={streamingIds} sessionId={sessionId} />
       )}
 
       <MessageInput

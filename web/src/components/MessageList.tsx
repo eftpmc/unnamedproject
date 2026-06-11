@@ -20,16 +20,15 @@ interface MessageListProps {
   messages: Message[];
   executions: Record<string, InlineExecution[]>;
   streamingIds?: Set<string>;
+  sessionId?: string;
 }
 
 const markdownComponents: React.ComponentProps<typeof ReactMarkdown>['components'] = {
   p: ({ children }) => <p className="mb-2 last:mb-0">{children}</p>,
   strong: ({ children }) => <strong className="font-semibold">{children}</strong>,
-  code: ({ children, className }) => {
-    const isBlock = !!className;
-    if (isBlock) return <code className="block">{children}</code>;
-    return <code className="rounded bg-muted px-1 font-mono text-[13px]">{children}</code>;
-  },
+  code: ({ children }) => (
+    <code className="rounded bg-muted px-1 font-mono text-[13px]">{children}</code>
+  ),
   pre: ({ children }) => (
     <pre className="my-2 overflow-x-auto rounded-lg bg-muted p-3 text-[13px] leading-relaxed font-mono">{children}</pre>
   ),
@@ -38,9 +37,13 @@ const markdownComponents: React.ComponentProps<typeof ReactMarkdown>['components
   li: ({ children }) => <li className="mb-0.5">{children}</li>,
 };
 
-export default function MessageList({ messages, executions, streamingIds }: MessageListProps) {
+export default function MessageList({ messages, executions, streamingIds, sessionId }: MessageListProps) {
   const bottomRef = useRef<HTMLDivElement>(null);
   const initialScrollDone = useRef(false);
+
+  useEffect(() => {
+    initialScrollDone.current = false;
+  }, [sessionId]);
 
   useEffect(() => {
     if (!bottomRef.current) return;

@@ -57,4 +57,17 @@ describe('sessions', () => {
       .send({ effort: 'xhigh' });
     expect(res.status).toBe(400);
   });
+
+  it('updates session title', async () => {
+    const res = await request(app)
+      .patch(`/sessions/${sessionId}`)
+      .set('Authorization', `Bearer ${token}`)
+      .send({ title: 'Fix the login bug' });
+    expect(res.status).toBe(200);
+
+    const list = await request(app)
+      .get('/sessions')
+      .set('Authorization', `Bearer ${token}`);
+    expect(list.body[0].title).toBe('Fix the login bug');
+  });
 });

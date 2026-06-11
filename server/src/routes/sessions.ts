@@ -32,10 +32,10 @@ router.get('/models', async (req, res) => {
 
 router.patch('/:id', (req, res) => {
   const { userId } = req as unknown as AuthedRequest;
-  const { effort, model } = req.body as { effort?: string; model?: string | null };
+  const { effort, model, title } = req.body as { effort?: string; model?: string | null; title?: string };
 
-  if (effort === undefined && model === undefined) {
-    res.status(400).json({ error: 'effort or model required' });
+  if (effort === undefined && model === undefined && title === undefined) {
+    res.status(400).json({ error: 'effort, model, or title required' });
     return;
   }
   if (effort !== undefined && !isEffortLevel(effort)) {
@@ -55,6 +55,9 @@ router.patch('/:id', (req, res) => {
   }
   if (model !== undefined) {
     getDb().prepare('UPDATE sessions SET model = ? WHERE id = ?').run(model, req.params.id);
+  }
+  if (title !== undefined) {
+    getDb().prepare('UPDATE sessions SET title = ? WHERE id = ?').run(title, req.params.id);
   }
   res.json({ ok: true });
 });

@@ -1,7 +1,7 @@
 import Anthropic from '@anthropic-ai/sdk';
 import { getDb, getProjectForUser, type DbProject } from '../db/index.js';
 import { getDecryptedConfig } from '../routes/connections.js';
-import { recallAll, projectNameFor, type MemoryEntry } from './memory.js';
+import { recallAll } from './memory.js';
 import { toolDefinitions } from '../tools/definitions.js';
 import { createExecution, completeExecution } from './executor.js';
 import { runGitOp } from '../tools/git_op.js';
@@ -10,7 +10,7 @@ import { invokeClaudeCode } from '../tools/invoke_claude_code.js';
 import { invokeCodex } from '../tools/invoke_codex.js';
 import { callMcp } from '../tools/mcp_call.js';
 import { runProjectQuery } from '../tools/project_query.js';
-import { remember, recall, forget } from '../tools/memory_tools.js';
+import { remember, recall, forget, formatEntry } from '../tools/memory_tools.js';
 import { readFile, listDir, writeFile } from '../tools/file_ops.js';
 import { createProject, updateProject, deleteProject } from '../tools/project_ops.js';
 import { broadcast } from './socket.js';
@@ -25,18 +25,11 @@ function getProjects(userId: string): DbProject[] {
     .all(userId) as DbProject[];
 }
 
-function formatMemoryEntry(userId: string, e: MemoryEntry): string {
-  const label = e.type === 'project'
-    ? `[project: ${projectNameFor(userId, e.project_id) ?? e.project_id}]`
-    : `[${e.type}]`;
-  return `- ${label} ${e.key}: ${e.value}`;
-}
-
 function buildSystemPrompt(userId: string): string {
   const memory = recallAll(userId);
   const projects = getProjects(userId);
   const memoryText = memory.length > 0
-    ? `\n\nUser memory:\n${memory.map(e => formatMemoryEntry(userId, e)).join('\n')}`
+    ? `\n\nUser memory:\n${memory.map(e => `- ${formatEntry(userId, e)}`).join('\n')}`
     : '\n\nUser memory:\nNo memories stored yet.';
   const projectsText = projects.length > 0
     ? `\n\nAvailable projects:\n${projects.map(p => `- ${p.name} (id: ${p.id}${p.repo_path ? '' : ', no repo'})${p.description ? ': ' + p.description : ''}`).join('\n')}`

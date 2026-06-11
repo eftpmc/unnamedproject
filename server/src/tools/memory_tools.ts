@@ -6,7 +6,7 @@ function isMemoryType(value: unknown): value is MemoryType {
   return typeof value === 'string' && (TYPES as string[]).includes(value);
 }
 
-function formatEntry(userId: string, e: MemoryEntry): string {
+export function formatEntry(userId: string, e: MemoryEntry): string {
   const label = e.type === 'project'
     ? `[project: ${projectNameFor(userId, e.project_id) ?? e.project_id}]`
     : `[${e.type}]`;

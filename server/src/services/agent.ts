@@ -11,6 +11,7 @@ import { invokeClaudeCode } from '../tools/invoke_claude_code.js';
 import { invokeCodex } from '../tools/invoke_codex.js';
 import { callMcp } from '../tools/mcp_call.js';
 import { runProjectQuery } from '../tools/project_query.js';
+import { buildGraph } from './graphify.js';
 import { remember, recall, forget, formatEntry } from '../tools/memory_tools.js';
 import { readFile, listDir, writeFile } from '../tools/file_ops.js';
 import { readChat } from '../tools/read_chat.js';
@@ -227,6 +228,15 @@ async function dispatchTool(
       case 'project_query':
         result = await runProjectQuery({ project_id: projectId, question: toolInput.question as string }, userId);
         break;
+      case 'rebuild_graph': {
+        if (!project?.repo_path) {
+          result = project ? `Project '${project.name}' has no repo.` : `Project ${projectId} not found.`;
+          break;
+        }
+        await buildGraph(project.repo_path, projectId);
+        result = 'Knowledge graph rebuilt successfully.';
+        break;
+      }
       case 'remember':
         result = remember(
           userId,

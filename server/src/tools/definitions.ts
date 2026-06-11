@@ -69,7 +69,7 @@ export const toolDefinitions: Anthropic.Tool[] = [
   },
   {
     name: 'project_query',
-    description: 'Ask a question about a project codebase (structure, where something is implemented, how things connect). Queries a pre-built knowledge graph — fast and token-efficient.',
+    description: 'Ask a question about a project codebase (structure, where something is implemented, how things connect). Queries a pre-built knowledge graph — fast and token-efficient. Call rebuild_graph first if significant code changes were made since the last query.',
     input_schema: {
       type: 'object',
       properties: {
@@ -77,6 +77,17 @@ export const toolDefinitions: Anthropic.Tool[] = [
         question: { type: 'string', description: 'What to look up in the codebase' },
       },
       required: ['project_id', 'question'],
+    },
+  },
+  {
+    name: 'rebuild_graph',
+    description: 'Rebuild the knowledge graph for a project. Call this after significant code changes (e.g. after a Claude Code or Codex session) so that subsequent project_query calls reflect the current state of the codebase.',
+    input_schema: {
+      type: 'object',
+      properties: {
+        project_id: { type: 'string' },
+      },
+      required: ['project_id'],
     },
   },
   {

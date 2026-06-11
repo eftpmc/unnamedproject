@@ -21,7 +21,11 @@ export default function ChatsPage() {
 
   const deleteMutation = useMutation({
     mutationFn: deleteChat,
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['chats'] }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['chats'] });
+      setPendingDelete(null);
+    },
+    onError: () => setPendingDelete(null),
   });
 
   if (isLoading) return null;
@@ -52,6 +56,7 @@ export default function ChatsPage() {
                   <Button
                     variant="ghost"
                     size="icon-sm"
+                    aria-label={`Delete ${chat.title ?? 'Untitled chat'}`}
                     className="shrink-0 text-muted-foreground hover:text-destructive"
                     onClick={() => setPendingDelete(chat.id)}
                   >
@@ -71,7 +76,6 @@ export default function ChatsPage() {
           confirmLabel="Delete"
           onConfirm={() => {
             deleteMutation.mutate(pendingDelete);
-            setPendingDelete(null);
           }}
           onCancel={() => setPendingDelete(null)}
         />

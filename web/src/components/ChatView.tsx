@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import MessageList from './MessageList.js';
 import MessageInput from './MessageInput.js';
@@ -50,8 +50,8 @@ export default function ChatView({ chatId }: ChatViewProps) {
 
   // executions: messageId → list of execution cards
   const [executions, setExecutions] = useState<Record<string, InlineExecution[]>>({});
-  // map executionId → messageId (for updates)
-  const [execToMsg, setExecToMsg] = useState<Record<string, string>>({});
+  // map executionId → messageId (ref: never rendered, needs latest value in callbacks)
+  const execToMsgRef = useRef<Record<string, string>>({});
   // streaming text for in-progress assistant messages
   const [streamingIds, setStreamingIds] = useState<Set<string>>(new Set());
 
@@ -109,20 +109,42 @@ export default function ChatView({ chatId }: ChatViewProps) {
 
     if (event.type === 'execution_update') {
       const ev = event as WSExecutionUpdate;
-      setExecutions(prev => {
-        const msgId = execToMsg[ev.executionId];
-        if (!msgId) return prev;
-        const list = prev[msgId] ?? [];
-        const existing = list.find(e => e.executionId === ev.executionId);
-        if (!existing) return prev;
-        const updated = {
-          ...existing,
-          ...(ev.status ? { status: ev.status as InlineExecution['status'] } : {}),
-          ...(ev.chunk ? { outputLog: existing.outputLog + ev.chunk } : {}),
-          ...(ev.result ? { result: ev.result } : {}),
+
+      if (ev.status === 'running' && ev.messageId && !execToMsgRef.current[ev.executionId]) {
+        // New execution started — register it
+        execToMsgRef.current = { ...execToMsgRef.current, [ev.executionId]: ev.messageId };
+        const newExec: InlineExecution = {
+          executionId: ev.executionId,
+          tool: ev.tool ?? 'unknown',
+          projectName: ev.projectName,
+          status: 'running',
+          outputLog: '',
+          result: null,
+          needsApproval: false,
+          approvalId: null,
+          action: null,
         };
-        return { ...prev, [msgId]: list.map(e => e.executionId === ev.executionId ? updated : e) };
-      });
+        setExecutions(prev => ({
+          ...prev,
+          [ev.messageId!]: [...(prev[ev.messageId!] ?? []), newExec],
+        }));
+      } else {
+        // Update to existing execution
+        setExecutions(prev => {
+          const msgId = execToMsgRef.current[ev.executionId];
+          if (!msgId) return prev;
+          const list = prev[msgId] ?? [];
+          const existing = list.find(e => e.executionId === ev.executionId);
+          if (!existing) return prev;
+          const updated = {
+            ...existing,
+            ...(ev.status ? { status: ev.status as InlineExecution['status'] } : {}),
+            ...(ev.chunk ? { outputLog: existing.outputLog + ev.chunk } : {}),
+            ...(ev.result ? { result: ev.result } : {}),
+          };
+          return { ...prev, [msgId]: list.map(e => e.executionId === ev.executionId ? updated : e) };
+        });
+      }
     }
 
     if (event.type === 'approval_requested') {
@@ -162,29 +184,7 @@ export default function ChatView({ chatId }: ChatViewProps) {
       }
     }
 
-    // New execution started (from execution_update with status='running' + no existing entry)
-    if (event.type === 'execution_update') {
-      const ev = event as WSExecutionUpdate;
-      if (ev.status === 'running' && ev.messageId) {
-        const newExec: InlineExecution = {
-          executionId: ev.executionId,
-          tool: ev.tool ?? 'unknown',
-          projectName: ev.projectName,
-          status: 'running',
-          outputLog: '',
-          result: null,
-          needsApproval: false,
-          approvalId: null,
-          action: null,
-        };
-        setExecToMsg(prev => ({ ...prev, [ev.executionId]: ev.messageId! }));
-        setExecutions(prev => ({
-          ...prev,
-          [ev.messageId!]: [...(prev[ev.messageId!] ?? []), newExec],
-        }));
-      }
-    }
-  }, [chatId, queryClient, execToMsg]);
+  }, [chatId, queryClient]);
 
   useEffect(() => {
     const unsub = subscribe(handleWsEvent);

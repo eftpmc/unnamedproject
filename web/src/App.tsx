@@ -4,6 +4,8 @@ import RequireAuth from './components/RequireAuth.js';
 import Login from './pages/Login.js';
 import AppLayout from './pages/AppLayout.js';
 import Settings from './pages/Settings.js';
+import ChatsPage from './pages/ChatsPage.js';
+import ProjectsPage from './pages/ProjectsPage.js';
 
 const queryClient = new QueryClient({
   defaultOptions: { queries: { retry: 1, staleTime: 30_000 } },
@@ -11,13 +13,16 @@ const queryClient = new QueryClient({
 
 const router = createBrowserRouter([
   { path: '/login', element: <Login /> },
-  { path: '/', element: <Navigate to="/s" replace /> },
+  { path: '/', element: <Navigate to="/c" replace /> },
+  { path: '/s/:sessionId', element: <Navigate to="/c" replace /> },
   {
     path: '/',
     element: <RequireAuth><AppLayout /></RequireAuth>,
     children: [
-      { path: 's', element: null },
-      { path: 's/:sessionId', element: null },
+      { path: 'c', element: null },
+      { path: 'c/:chatId', element: null },
+      { path: 'chats', element: <ChatsPage /> },
+      { path: 'projects', element: <ProjectsPage /> },
       { path: 'settings', element: <Settings /> },
     ],
   },

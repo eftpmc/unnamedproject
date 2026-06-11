@@ -16,12 +16,12 @@ beforeAll(async () => {
 });
 
 describe('settings', () => {
-  it('returns null projects_root by default', async () => {
+  it('returns a default projects_root when unset', async () => {
     const res = await request(app)
       .get('/settings')
       .set('Authorization', `Bearer ${token}`);
     expect(res.status).toBe(200);
-    expect(res.body.projects_root).toBeNull();
+    expect(res.body.projects_root).toMatch(/projects$/);
   });
 
   it('updates projects_root', async () => {

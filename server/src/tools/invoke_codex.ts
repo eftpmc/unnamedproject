@@ -10,27 +10,56 @@ interface ToolContext {
   executionId: string;
   repoPath: string;
   apiKey: string;
+  resumeSessionId?: string | null;
 }
 
-export async function invokeCodex(input: CodexInput, ctx: ToolContext): Promise<string> {
+export interface CodexResult {
+  result: string;
+  sessionId: string | null;
+}
+
+export async function invokeCodex(input: CodexInput, ctx: ToolContext): Promise<CodexResult> {
   await requestApproval(ctx.executionId, ctx.userId, 'invoke_codex', { prompt: input.prompt }, 'agent');
+
+  const args = ['exec'];
+  if (ctx.resumeSessionId) {
+    args.push('resume', ctx.resumeSessionId, '-c', 'sandbox_mode="workspace-write"', '--json', input.prompt);
+  } else {
+    args.push('-c', 'sandbox_mode="workspace-write"', '--json', '--skip-git-repo-check', input.prompt);
+  }
+
   return new Promise((resolve, reject) => {
-    const proc = spawn('codex', ['--quiet', input.prompt], {
+    const proc = spawn('codex', args, {
       cwd: ctx.repoPath,
+      stdio: ['ignore', 'pipe', 'pipe'],
       env: { ...process.env, OPENAI_API_KEY: ctx.apiKey },
     });
 
-    let output = '';
+    let buffer = '';
+    let sessionId: string | null = null;
+    let resultText = '';
+
     proc.stdout.on('data', (chunk: Buffer) => {
-      const text = chunk.toString();
-      output += text;
-      appendOutput(ctx.executionId, ctx.userId, text);
+      buffer += chunk.toString();
+      let idx;
+      while ((idx = buffer.indexOf('\n')) !== -1) {
+        const line = buffer.slice(0, idx);
+        buffer = buffer.slice(idx + 1);
+        if (!line.trim()) continue;
+        let event: any;
+        try { event = JSON.parse(line); } catch { continue; }
+        if (event.type === 'thread.started') sessionId = event.thread_id ?? sessionId;
+        if (event.type === 'item.completed' && event.item?.type === 'agent_message') {
+          resultText = event.item.text ?? resultText;
+          appendOutput(ctx.executionId, ctx.userId, event.item.text + '\n');
+        }
+      }
     });
     proc.stderr.on('data', (chunk: Buffer) => {
       appendOutput(ctx.executionId, ctx.userId, chunk.toString());
     });
     proc.on('close', code => {
-      if (code === 0) resolve(output.trim());
+      if (code === 0) resolve({ result: resultText.trim(), sessionId });
       else reject(new Error(`codex exited with code ${code}`));
     });
   });

@@ -13,9 +13,8 @@ router.get('/', (req, res) => {
 router.put('/', (req, res) => {
   const { userId } = req as AuthedRequest;
   const { projects_root } = req.body as { projects_root?: string };
-  if (!projects_root || !projects_root.trim()) { res.status(400).json({ error: 'projects_root required' }); return; }
-  setProjectsRoot(userId, projects_root.trim());
-  res.json({ projects_root: projects_root.trim() });
+  setProjectsRoot(userId, projects_root?.trim() ?? '');
+  res.json({ projects_root: getProjectsRoot(userId) });
 });
 
 export default router;

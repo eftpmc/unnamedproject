@@ -21,9 +21,6 @@ export async function createProject(
 
   if (input.with_repo) {
     const root = getProjectsRoot(userId);
-    if (!root) {
-      return 'Error: projects_root is not set. Ask the user to set a Projects root in Settings before creating repo-backed projects.';
-    }
     repoPath = path.join(root, slugify(input.name));
     try {
       await fs.access(repoPath);

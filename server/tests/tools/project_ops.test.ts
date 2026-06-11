@@ -71,12 +71,6 @@ describe('create_project', () => {
     expect(repoPath).toBe(path.join(tmpRoot, 'my-app'));
     expect(fs.existsSync(path.join(repoPath!, '.git'))).toBe(true);
   });
-
-  it('errors when projects_root is unset and with_repo is true', async () => {
-    dbState.projectsRoot = null;
-    const result = await createProject({ name: 'My App', with_repo: true }, userId, 'exec-1');
-    expect(result).toContain('projects_root');
-  });
 });
 
 describe('update_project', () => {

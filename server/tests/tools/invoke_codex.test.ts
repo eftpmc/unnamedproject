@@ -3,7 +3,12 @@ import { invokeCodex } from '../../src/tools/invoke_codex.js';
 
 vi.mock('child_process', () => ({
   spawn: vi.fn(() => ({
-    stdout: { on: vi.fn((ev: string, cb: (d: Buffer) => void) => { if (ev === 'data') cb(Buffer.from('fixed the bug')); }) },
+    stdout: { on: vi.fn((ev: string, cb: (d: Buffer) => void) => {
+      if (ev === 'data') {
+        cb(Buffer.from(JSON.stringify({ type: 'thread.started', thread_id: 'thread-123' }) + '\n'));
+        cb(Buffer.from(JSON.stringify({ type: 'item.completed', item: { type: 'agent_message', text: 'fixed the bug' } }) + '\n'));
+      }
+    }) },
     stderr: { on: vi.fn() },
     on: vi.fn((ev: string, cb: (code: number) => void) => { if (ev === 'close') cb(0); }),
   })),
@@ -12,11 +17,11 @@ vi.mock('child_process', () => ({
 vi.mock('../../src/services/executor.js', () => ({ appendOutput: vi.fn(), requestApproval: vi.fn().mockResolvedValue('approved') }));
 
 describe('invoke_codex', () => {
-  it('returns stdout output on success', async () => {
+  it('returns parsed result and session id on success', async () => {
     const result = await invokeCodex(
       { prompt: 'fix the login bug' },
       { userId: 'u1', executionId: 'e1', repoPath: '/tmp/repo', apiKey: 'sk-test' }
     );
-    expect(result).toBe('fixed the bug');
+    expect(result).toEqual({ result: 'fixed the bug', sessionId: 'thread-123' });
   });
 });

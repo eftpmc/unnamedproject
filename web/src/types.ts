@@ -138,3 +138,31 @@ export interface ScheduledTask {
   next_run_at: number;
   last_run_at: number | null;
 }
+
+export interface CampaignTask {
+  id: string;
+  campaign_id: string;
+  title: string;
+  agent: 'claude_code' | 'codex' | 'mcp';
+  status: 'waiting' | 'running' | 'done' | 'error';
+  execution_id: string | null;
+  position: number;
+  created_at: number;
+  completed_at: number | null;
+}
+
+export interface Campaign {
+  id: string;
+  project_id: string;
+  session_id: string | null;
+  title: string;
+  status: 'running' | 'done' | 'error' | 'cancelled';
+  created_at: number;
+  completed_at: number | null;
+}
+
+export interface WSCampaignTaskUpdated extends WSEvent {
+  type: 'campaign_task_updated';
+  taskId: string;
+  status: CampaignTask['status'];
+}

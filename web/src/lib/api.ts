@@ -1,5 +1,5 @@
 import { getToken, setToken, clearToken } from './auth.js';
-import type { Session, Message, Project, Connection, EffortLevel, ClaudeModelInfo, UserSettings, Memory, ScheduledTask, SessionWorktree } from '../types.js';
+import type { Session, Message, Project, Connection, EffortLevel, ClaudeModelInfo, UserSettings, Memory, ScheduledTask, SessionWorktree, Campaign, CampaignTask } from '../types.js';
 
 async function request<T>(path: string, init: RequestInit = {}): Promise<T> {
   const token = getToken();
@@ -142,4 +142,12 @@ export function updateScheduledTask(id: string, body: { enabled?: boolean; inter
 
 export function runScheduledTask(id: string): Promise<void> {
   return request(`/scheduled-tasks/${id}/run`, { method: 'POST' });
+}
+
+export function getProjectCampaigns(projectId: string): Promise<Campaign[]> {
+  return request(`/projects/${projectId}/campaigns`);
+}
+
+export function getCampaign(campaignId: string): Promise<{ campaign: Campaign; tasks: CampaignTask[] }> {
+  return request(`/campaigns/${campaignId}`);
 }

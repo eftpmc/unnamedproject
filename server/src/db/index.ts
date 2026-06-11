@@ -1,6 +1,7 @@
 import Database from 'better-sqlite3';
 import path from 'path';
 import fs from 'fs';
+import { newId } from '../lib/ids.js';
 
 let db: Database.Database;
 
@@ -100,14 +101,27 @@ function applySchema(): void {
       resolved_at INTEGER
     );
 
-    CREATE TABLE IF NOT EXISTS user_memory (
+    CREATE TABLE IF NOT EXISTS memories (
       id TEXT PRIMARY KEY,
       user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+      type TEXT NOT NULL CHECK(type IN ('user','feedback','project','reference')),
       key TEXT NOT NULL,
       value TEXT NOT NULL,
+      project_id TEXT REFERENCES projects(id) ON DELETE SET NULL,
       created_at INTEGER NOT NULL DEFAULT (unixepoch()),
       updated_at INTEGER NOT NULL DEFAULT (unixepoch()),
-      UNIQUE(user_id, key)
+      UNIQUE(user_id, type, key)
+    );
+
+    CREATE TABLE IF NOT EXISTS scheduled_tasks (
+      id TEXT PRIMARY KEY,
+      user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+      type TEXT NOT NULL,
+      interval_hours INTEGER NOT NULL,
+      enabled INTEGER NOT NULL DEFAULT 1,
+      next_run_at INTEGER NOT NULL,
+      last_run_at INTEGER,
+      created_at INTEGER NOT NULL DEFAULT (unixepoch())
     );
   `);
 
@@ -165,6 +179,16 @@ function applySchema(): void {
 
     db.exec('DROP TABLE workspaces');
   }
+
+  if (tableNames.some(t => t.name === 'user_memory')) {
+    db.exec(`
+      INSERT INTO memories (id, user_id, type, key, value, created_at, updated_at)
+      SELECT id, user_id, 'user', key, value, created_at, updated_at FROM user_memory
+      WHERE NOT EXISTS (SELECT 1 FROM memories WHERE memories.id = user_memory.id);
+
+      DROP TABLE user_memory;
+    `);
+  }
 }
 
 export interface DbProject {
@@ -201,4 +225,55 @@ export function setProjectsRoot(userId: string, projectsRoot: string): void {
       ON CONFLICT(user_id) DO UPDATE SET projects_root = excluded.projects_root
     `)
     .run(userId, projectsRoot);
+}
+
+export interface DbScheduledTask {
+  id: string;
+  type: string;
+  interval_hours: number;
+  enabled: number;
+  next_run_at: number;
+  last_run_at: number | null;
+}
+
+export function getScheduledTasksForUser(userId: string): DbScheduledTask[] {
+  return getDb()
+    .prepare('SELECT id, type, interval_hours, enabled, next_run_at, last_run_at FROM scheduled_tasks WHERE user_id = ?')
+    .all(userId) as DbScheduledTask[];
+}
+
+export function getScheduledTaskForUser(id: string, userId: string): DbScheduledTask | undefined {
+  return getDb()
+    .prepare('SELECT id, type, interval_hours, enabled, next_run_at, last_run_at FROM scheduled_tasks WHERE id = ? AND user_id = ?')
+    .get(id, userId) as DbScheduledTask | undefined;
+}
+
+export function updateScheduledTask(id: string, userId: string, updates: { enabled?: boolean; interval_hours?: number }): void {
+  if (updates.enabled !== undefined) {
+    getDb().prepare('UPDATE scheduled_tasks SET enabled = ? WHERE id = ? AND user_id = ?').run(updates.enabled ? 1 : 0, id, userId);
+  }
+  if (updates.interval_hours !== undefined) {
+    getDb().prepare('UPDATE scheduled_tasks SET interval_hours = ? WHERE id = ? AND user_id = ?').run(updates.interval_hours, id, userId);
+  }
+}
+
+export function createScheduledTask(userId: string, type: string, intervalHours: number): string {
+  const id = newId();
+  const nextRunAt = Math.floor(Date.now() / 1000) + intervalHours * 3600;
+  getDb()
+    .prepare('INSERT INTO scheduled_tasks (id, user_id, type, interval_hours, next_run_at) VALUES (?,?,?,?,?)')
+    .run(id, userId, type, intervalHours, nextRunAt);
+  return id;
+}
+
+export function getDueScheduledTasks(now: number): (DbScheduledTask & { user_id: string })[] {
+  return getDb()
+    .prepare('SELECT id, user_id, type, interval_hours, enabled, next_run_at, last_run_at FROM scheduled_tasks WHERE enabled = 1 AND next_run_at <= ?')
+    .all(now) as (DbScheduledTask & { user_id: string })[];
+}
+
+export function markScheduledTaskRun(id: string, now: number, intervalHours: number): void {
+  getDb()
+    .prepare('UPDATE scheduled_tasks SET last_run_at = ?, next_run_at = ? WHERE id = ?')
+    .run(now, now + intervalHours * 3600, id);
 }

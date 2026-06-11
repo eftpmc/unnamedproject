@@ -21,13 +21,17 @@ export default function Sidebar() {
   });
 
   async function handleNewChat() {
-    const { id } = await createChat();
-    await queryClient.invalidateQueries({ queryKey: ['chats'] });
-    navigate(`/c/${id}`);
+    try {
+      const { id } = await createChat();
+      await queryClient.invalidateQueries({ queryKey: ['chats'] });
+      navigate(`/c/${id}`);
+    } catch (err) {
+      console.error('Failed to create chat:', err);
+    }
   }
 
   const activeChatId = location.pathname.startsWith('/c/')
-    ? location.pathname.slice(3)
+    ? location.pathname.split('/')[2]
     : null;
 
   const isActive = (path: string) => location.pathname === path || location.pathname.startsWith(path + '/');

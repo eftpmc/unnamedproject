@@ -9,7 +9,7 @@ router.use(requireAuth);
 router.get('/', (req, res) => {
   const { userId } = req as AuthedRequest;
   const rows = getDb()
-    .prepare('SELECT id, name, description, repo_path, enabled_connection_ids, created_at FROM workspaces WHERE user_id = ? ORDER BY name')
+    .prepare('SELECT id, name, description, repo_path, enabled_connection_ids, created_at FROM projects WHERE user_id = ? ORDER BY name')
     .all(userId) as any[];
   res.json(rows.map(r => ({ ...r, enabled_connection_ids: JSON.parse(r.enabled_connection_ids) })));
 });
@@ -23,10 +23,10 @@ router.post('/', (req, res) => {
   const id = newId();
   try {
     getDb()
-      .prepare('INSERT INTO workspaces (id, user_id, name, description, repo_path, enabled_connection_ids) VALUES (?,?,?,?,?,?)')
+      .prepare('INSERT INTO projects (id, user_id, name, description, repo_path, enabled_connection_ids) VALUES (?,?,?,?,?,?)')
       .run(id, userId, name, description ?? null, repo_path ?? null, JSON.stringify(enabled_connection_ids));
   } catch {
-    res.status(409).json({ error: 'Workspace name already exists' });
+    res.status(409).json({ error: 'Project name already exists' });
     return;
   }
   res.status(201).json({ id });
@@ -35,7 +35,7 @@ router.post('/', (req, res) => {
 router.delete('/:id', (req, res) => {
   const { userId } = req as unknown as AuthedRequest;
   const result = getDb()
-    .prepare('DELETE FROM workspaces WHERE id = ? AND user_id = ?')
+    .prepare('DELETE FROM projects WHERE id = ? AND user_id = ?')
     .run(req.params.id, userId);
   if (result.changes === 0) { res.status(404).json({ error: 'Not found' }); return; }
   res.status(204).send();

@@ -11,34 +11,45 @@ beforeAll(async () => {
   initDb();
   const res = await request(app)
     .post('/auth/register')
-    .send({ email: `ws-${Date.now()}@test.com`, password: 'pass' });
+    .send({ email: `proj-${Date.now()}@test.com`, password: 'pass' });
   token = res.body.token;
 });
 
-describe('workspaces', () => {
-  let wsId: string;
+describe('projects', () => {
+  let projectId: string;
 
-  it('creates a workspace', async () => {
+  it('creates a project with a repo path', async () => {
     const res = await request(app)
-      .post('/workspaces')
+      .post('/projects')
       .set('Authorization', `Bearer ${token}`)
       .send({ name: 'api', description: 'My API project', enabled_connection_ids: [] });
     expect(res.status).toBe(201);
-    wsId = res.body.id;
+    projectId = res.body.id;
   });
 
-  it('lists workspaces with parsed enabled_connection_ids', async () => {
+  it('creates a project without a repo path', async () => {
     const res = await request(app)
-      .get('/workspaces')
+      .post('/projects')
+      .set('Authorization', `Bearer ${token}`)
+      .send({ name: 'notes', enabled_connection_ids: [] });
+    expect(res.status).toBe(201);
+    expect(res.body.id).toBeTruthy();
+  });
+
+  it('lists projects with parsed enabled_connection_ids and nullable repo_path', async () => {
+    const res = await request(app)
+      .get('/projects')
       .set('Authorization', `Bearer ${token}`);
     expect(res.status).toBe(200);
-    expect(res.body.length).toBeGreaterThanOrEqual(1);
+    expect(res.body.length).toBeGreaterThanOrEqual(2);
     expect(Array.isArray(res.body[0].enabled_connection_ids)).toBe(true);
+    const notes = res.body.find((p: { name: string }) => p.name === 'notes');
+    expect(notes.repo_path).toBeNull();
   });
 
-  it('deletes a workspace', async () => {
+  it('deletes a project', async () => {
     const res = await request(app)
-      .delete(`/workspaces/${wsId}`)
+      .delete(`/projects/${projectId}`)
       .set('Authorization', `Bearer ${token}`);
     expect(res.status).toBe(204);
   });

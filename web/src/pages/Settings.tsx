@@ -18,11 +18,14 @@ import {
   getConnections,
   getMemory,
   getProjects,
+  getScheduledTasks,
   getSettings,
+  runScheduledTask,
+  updateScheduledTask,
   updateSettings,
 } from '../lib/api.js';
 import { clearToken } from '../lib/auth.js';
-import type { Connection, Project, UserSettings } from '../types.js';
+import type { Connection, Memory, Project, ScheduledTask, UserSettings } from '../types.js';
 
 type SetupKind = 'lead_agent' | 'claude_code' | 'codex' | 'github' | 'mcp';
 
@@ -120,7 +123,8 @@ export default function Settings() {
 
   const { data: connections = [] } = useQuery<Connection[]>({ queryKey: ['connections'], queryFn: getConnections });
   const { data: projects = [] } = useQuery<Project[]>({ queryKey: ['projects'], queryFn: getProjects });
-  const { data: memory = {} } = useQuery<Record<string, string>>({ queryKey: ['memory'], queryFn: getMemory });
+  const { data: memory = [] } = useQuery<Memory[]>({ queryKey: ['memory'], queryFn: getMemory });
+  const { data: scheduledTasks = [] } = useQuery<ScheduledTask[]>({ queryKey: ['scheduledTasks'], queryFn: getScheduledTasks });
   const { data: settings } = useQuery<UserSettings>({ queryKey: ['settings'], queryFn: getSettings });
 
   const [activeSetup, setActiveSetup] = useState<SetupKind | null>(null);
@@ -217,6 +221,16 @@ export default function Settings() {
     mutationFn: () => updateSettings({ projects_root: projectsRoot }),
     onSuccess: () => qc.invalidateQueries({ queryKey: ['settings'] }),
     onError: (e: Error) => setProjectsRootError(e.message),
+  });
+
+  const updateTaskMutation = useMutation({
+    mutationFn: ({ id, body }: { id: string; body: { enabled?: boolean; interval_hours?: number } }) => updateScheduledTask(id, body),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['scheduledTasks'] }),
+  });
+
+  const runTaskMutation = useMutation({
+    mutationFn: runScheduledTask,
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['scheduledTasks'] }),
   });
 
   function openSetupModal(kind: SetupKind) {
@@ -478,14 +492,67 @@ export default function Settings() {
       </Section>
 
       <Section title="Memory">
-        {Object.keys(memory).length === 0 ? (
+        {memory.length === 0 ? (
           <div className="text-muted-foreground/70 text-sm">No memory stored yet.</div>
         ) : (
+          <div className="grid gap-4">
+            {(['user', 'feedback', 'project', 'reference'] as const).map(type => {
+              const entries = memory.filter(m => m.type === type);
+              if (entries.length === 0) return null;
+              return (
+                <div key={type}>
+                  <h3 className="mb-2 text-sm font-medium capitalize text-muted-foreground">{type}</h3>
+                  <div className="grid gap-2">
+                    {entries.map(m => (
+                      <div key={`${m.type}-${m.key}`} className={rowCls}>
+                        <div className="w-40 text-muted-foreground text-sm font-mono shrink-0">
+                          {m.key}
+                          {m.type === 'project' && (
+                            <div className="text-muted-foreground/60 text-xs font-sans">
+                              {projects.find(p => p.id === m.project_id)?.name ?? m.project_id}
+                            </div>
+                          )}
+                        </div>
+                        <div className="flex-1 text-foreground/75 text-sm">{m.value}</div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        )}
+      </Section>
+
+      <Section title="Scheduled Tasks">
+        {scheduledTasks.length === 0 ? (
+          <div className="text-muted-foreground/70 text-sm">No scheduled tasks.</div>
+        ) : (
           <div className="grid gap-2">
-            {Object.entries(memory).map(([k, v]) => (
-              <div key={k} className={rowCls}>
-                <div className="w-36 text-muted-foreground text-sm font-mono shrink-0">{k}</div>
-                <div className="flex-1 text-foreground/75 text-sm">{v}</div>
+            {scheduledTasks.map(task => (
+              <div key={task.id} className={rowCls}>
+                <div className="flex-1">
+                  <div className="text-sm font-medium">
+                    {task.type === 'reorganize_memory' ? 'Memory reorganization' : task.type}
+                  </div>
+                  <div className="text-muted-foreground/70 text-xs mt-0.5">
+                    {task.last_run_at
+                      ? `Last ran ${new Date(task.last_run_at * 1000).toLocaleString()}`
+                      : 'Never run'}
+                  </div>
+                </div>
+                <button onClick={() => runTaskMutation.mutate(task.id)} className={ghostBtn}>
+                  Run now
+                </button>
+                <label className="flex items-center gap-2 cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={!!task.enabled}
+                    onChange={e => updateTaskMutation.mutate({ id: task.id, body: { enabled: e.target.checked } })}
+                    className="h-4 w-4 rounded border-border bg-background accent-primary"
+                  />
+                  <span className="text-sm text-foreground/70">Enabled</span>
+                </label>
               </div>
             ))}
           </div>

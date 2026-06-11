@@ -6,6 +6,7 @@ import { initDb, getDb } from '../src/db/index.js';
 import { newId } from '../src/lib/ids.js';
 
 vi.mock('../src/services/socket.js', () => ({ broadcast: vi.fn(), initSocket: vi.fn() }));
+vi.mock('../src/lib/process-registry.js', () => ({ killProcess: vi.fn().mockReturnValue(true) }));
 
 let token: string;
 let userId: string;
@@ -52,5 +53,45 @@ describe('executions', () => {
       .set('Authorization', `Bearer ${token}`);
     expect(res.status).toBe(200);
     expect(res.body.status).toBe('approved');
+  });
+
+  it('cancels a running execution', async () => {
+    const db = getDb();
+    const sessionId = newId();
+    const msgId = newId();
+    const projId = newId();
+    const runningExecId = newId();
+    db.prepare('INSERT INTO sessions (id, user_id) VALUES (?,?)').run(sessionId, userId);
+    db.prepare('INSERT INTO messages (id, session_id, role, content) VALUES (?,?,?,?)').run(msgId, sessionId, 'user', 'run');
+    db.prepare('INSERT INTO projects (id, user_id, name) VALUES (?,?,?)').run(projId, userId, `proj-${newId()}`);
+    db.prepare("INSERT INTO executions (id, message_id, project_id, tool, status) VALUES (?,?,?,?,?)").run(runningExecId, msgId, projId, 'invoke_claude_code', 'running');
+
+    const res = await request(app)
+      .post(`/executions/${runningExecId}/cancel`)
+      .set('Authorization', `Bearer ${token}`);
+    expect(res.status).toBe(200);
+    expect(res.body.ok).toBe(true);
+
+    const check = await request(app)
+      .get(`/executions/${runningExecId}`)
+      .set('Authorization', `Bearer ${token}`);
+    expect(check.body.status).toBe('error');
+  });
+
+  it('returns 404 when cancelling a completed execution', async () => {
+    const db = getDb();
+    const sessionId = newId();
+    const msgId = newId();
+    const projId = newId();
+    const doneExecId = newId();
+    db.prepare('INSERT INTO sessions (id, user_id) VALUES (?,?)').run(sessionId, userId);
+    db.prepare('INSERT INTO messages (id, session_id, role, content) VALUES (?,?,?,?)').run(msgId, sessionId, 'user', 'run');
+    db.prepare('INSERT INTO projects (id, user_id, name) VALUES (?,?,?)').run(projId, userId, `proj-${newId()}`);
+    db.prepare("INSERT INTO executions (id, message_id, project_id, tool, status) VALUES (?,?,?,?,?)").run(doneExecId, msgId, projId, 'invoke_claude_code', 'done');
+
+    const res = await request(app)
+      .post(`/executions/${doneExecId}/cancel`)
+      .set('Authorization', `Bearer ${token}`);
+    expect(res.status).toBe(404);
   });
 });

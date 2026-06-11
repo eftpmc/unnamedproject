@@ -64,7 +64,15 @@ async function dispatchTool(
 
     switch (toolName) {
       case 'invoke_claude_code': {
-        const connectionIds: string[] = JSON.parse(project?.enabled_connection_ids ?? '[]');
+        if (!project) {
+          result = `Error: project ${projectId} not found`;
+          break;
+        }
+        if (!project.repo_path) {
+          result = `Project '${project.name}' has no repo. Create a new repo-backed project with create_project (with_repo=true) for this work.`;
+          break;
+        }
+        const connectionIds: string[] = JSON.parse(project.enabled_connection_ids ?? '[]');
         let apiKey = getAnthropicKey(userId);
         if (connectionIds.length > 0) {
           const anthropicConn = getDb()
@@ -74,12 +82,20 @@ async function dispatchTool(
         }
         result = await invokeClaudeCode(
           { prompt: toolInput.prompt as string },
-          { userId, executionId, repoPath: project?.repo_path ?? '/tmp', apiKey }
+          { userId, executionId, repoPath: project.repo_path, apiKey }
         );
         break;
       }
       case 'invoke_codex': {
-        const connectionIds: string[] = JSON.parse(project?.enabled_connection_ids ?? '[]');
+        if (!project) {
+          result = `Error: project ${projectId} not found`;
+          break;
+        }
+        if (!project.repo_path) {
+          result = `Project '${project.name}' has no repo. Create a new repo-backed project with create_project (with_repo=true) for this work.`;
+          break;
+        }
+        const connectionIds: string[] = JSON.parse(project.enabled_connection_ids ?? '[]');
         let apiKey = '';
         if (connectionIds.length > 0) {
           const openaiConn = getDb()
@@ -89,7 +105,7 @@ async function dispatchTool(
         }
         result = await invokeCodex(
           { prompt: toolInput.prompt as string },
-          { userId, executionId, repoPath: project?.repo_path ?? '/tmp', apiKey }
+          { userId, executionId, repoPath: project.repo_path, apiKey }
         );
         break;
       }
@@ -110,9 +126,17 @@ async function dispatchTool(
         break;
       }
       case 'git_op': {
+        if (!project) {
+          result = `Error: project ${projectId} not found`;
+          break;
+        }
+        if (!project.repo_path) {
+          result = `Project '${project.name}' has no repo. Create a new repo-backed project with create_project (with_repo=true) for this work.`;
+          break;
+        }
         result = await runGitOp(
           { op: toolInput.op as 'log' | 'diff' | 'status' | 'commit' | 'push', message: toolInput.message as string | undefined },
-          { userId, executionId, projectId, repoPath: project?.repo_path ?? '/tmp' }
+          { userId, executionId, projectId, repoPath: project.repo_path }
         );
         break;
       }

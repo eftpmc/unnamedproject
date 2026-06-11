@@ -38,6 +38,15 @@ vi.mock('../../src/services/executor.js', () => ({
   requestApproval: vi.fn().mockResolvedValue('approved'),
 }));
 
+const { runGitOpMock, invokeClaudeCodeMock, invokeCodexMock } = vi.hoisted(() => ({
+  runGitOpMock: vi.fn().mockResolvedValue('git op result'),
+  invokeClaudeCodeMock: vi.fn().mockResolvedValue('claude code result'),
+  invokeCodexMock: vi.fn().mockResolvedValue('codex result'),
+}));
+vi.mock('../../src/tools/git_op.js', () => ({ runGitOp: runGitOpMock }));
+vi.mock('../../src/tools/invoke_claude_code.js', () => ({ invokeClaudeCode: invokeClaudeCodeMock }));
+vi.mock('../../src/tools/invoke_codex.js', () => ({ invokeCodex: invokeCodexMock }));
+
 const userId = newId();
 let sessionId: string;
 let messageId: string;
@@ -96,5 +105,114 @@ describe('agent', () => {
     expect(call.system).toContain('demo');
     expect(call.tools.some((t: { name: string }) => t.name === 'create_project')).toBe(true);
     expect(call.tools.some((t: { name: string }) => t.name === 'delete_project')).toBe(true);
+  });
+
+  it('returns "no repo" error for git_op on a project without repo_path and does not call runGitOp', async () => {
+    const db = getDb();
+    const projectId = newId();
+    db.prepare('INSERT INTO projects (id, user_id, name, description, repo_path, enabled_connection_ids) VALUES (?,?,?,?,?,?)')
+      .run(projectId, userId, 'norepo', 'No repo project', null, '[]');
+
+    runGitOpMock.mockClear();
+
+    let toolCallCount = 0;
+    streamMock.mockImplementationOnce(() => {
+      toolCallCount++;
+      const listeners: Record<string, ((...args: unknown[]) => void)[]> = {};
+      return {
+        on: (event: string, cb: (...args: unknown[]) => void) => {
+          (listeners[event] ??= []).push(cb);
+          return { on: () => ({ finalMessage: async () => ({}) }) };
+        },
+        finalMessage: async () => ({
+          stop_reason: 'tool_use',
+          content: [{ type: 'tool_use', id: 'tool-1', name: 'git_op', input: { project_id: projectId, op: 'status' } }],
+        }),
+      };
+    });
+    streamMock.mockImplementationOnce(() => {
+      const listeners: Record<string, ((...args: unknown[]) => void)[]> = {};
+      return {
+        on: (event: string, cb: (...args: unknown[]) => void) => {
+          (listeners[event] ??= []).push(cb);
+          return { on: () => ({ finalMessage: async () => ({}) }) };
+        },
+        finalMessage: async () => {
+          for (const cb of listeners.text ?? []) cb('done');
+          return {
+            stop_reason: 'end_turn',
+            content: [{ type: 'text', text: 'done' }],
+          };
+        },
+      };
+    });
+
+    const msgId = newId();
+    db.prepare('INSERT INTO messages (id, session_id, role, content) VALUES (?,?,?,?)').run(msgId, sessionId, 'user', 'do git status');
+
+    await runAgentTurn(userId, sessionId, msgId);
+
+    expect(runGitOpMock).not.toHaveBeenCalled();
+
+    const secondCall = streamMock.mock.calls[streamMock.mock.calls.length - 1][0];
+    const toolResultMsg = secondCall.messages.find((m: { role: string; content: unknown }) =>
+      m.role === 'user' && Array.isArray(m.content) && (m.content as { type: string }[]).some(c => c.type === 'tool_result')
+    );
+    const toolResult = (toolResultMsg.content as { content: string }[])[0].content;
+    expect(toolResult).toBe("Project 'norepo' has no repo. Create a new repo-backed project with create_project (with_repo=true) for this work.");
+    expect(toolCallCount).toBe(1);
+  });
+
+  it('returns "no repo" error for invoke_claude_code on a project without repo_path and does not call invokeClaudeCode', async () => {
+    const db = getDb();
+    const projectId = newId();
+    db.prepare('INSERT INTO projects (id, user_id, name, description, repo_path, enabled_connection_ids) VALUES (?,?,?,?,?,?)')
+      .run(projectId, userId, 'norepo2', 'No repo project 2', null, '[]');
+
+    invokeClaudeCodeMock.mockClear();
+
+    streamMock.mockImplementationOnce(() => {
+      const listeners: Record<string, ((...args: unknown[]) => void)[]> = {};
+      return {
+        on: (event: string, cb: (...args: unknown[]) => void) => {
+          (listeners[event] ??= []).push(cb);
+          return { on: () => ({ finalMessage: async () => ({}) }) };
+        },
+        finalMessage: async () => ({
+          stop_reason: 'tool_use',
+          content: [{ type: 'tool_use', id: 'tool-2', name: 'invoke_claude_code', input: { project_id: projectId, prompt: 'fix bug' } }],
+        }),
+      };
+    });
+    streamMock.mockImplementationOnce(() => {
+      const listeners: Record<string, ((...args: unknown[]) => void)[]> = {};
+      return {
+        on: (event: string, cb: (...args: unknown[]) => void) => {
+          (listeners[event] ??= []).push(cb);
+          return { on: () => ({ finalMessage: async () => ({}) }) };
+        },
+        finalMessage: async () => {
+          for (const cb of listeners.text ?? []) cb('done');
+          return {
+            stop_reason: 'end_turn',
+            content: [{ type: 'text', text: 'done' }],
+          };
+        },
+      };
+    });
+
+    const msgId = newId();
+    db.prepare('INSERT INTO messages (id, session_id, role, content) VALUES (?,?,?,?)').run(msgId, sessionId, 'user', 'fix the bug');
+
+    await runAgentTurn(userId, sessionId, msgId);
+
+    expect(invokeClaudeCodeMock).not.toHaveBeenCalled();
+
+    const secondCall = streamMock.mock.calls[streamMock.mock.calls.length - 1][0];
+    const toolResultMsg = secondCall.messages.find((m: { role: string; content: unknown }) =>
+      m.role === 'user' && Array.isArray(m.content) && (m.content as { type: string }[]).some(c => c.type === 'tool_result')
+    );
+    const toolResult = (toolResultMsg.content as { content: string }[])[0].content;
+    expect(toolResult).toBe("Project 'norepo2' has no repo. Create a new repo-backed project with create_project (with_repo=true) for this work.");
   });
 });

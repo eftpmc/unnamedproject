@@ -3,6 +3,7 @@ export interface Session {
   title: string | null;
   effort: EffortLevel;
   model: string | null;
+  pinned_project_id: string | null;
   created_at: number;
   updated_at: number;
 }

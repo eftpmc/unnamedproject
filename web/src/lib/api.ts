@@ -40,7 +40,7 @@ export function createChat(title?: string): Promise<{ id: string }> {
   return request('/sessions', { method: 'POST', body: JSON.stringify({ title }) });
 }
 
-export function updateChatConfig(chatId: string, config: { effort?: EffortLevel; model?: string | null }): Promise<void> {
+export function updateChatConfig(chatId: string, config: { effort?: EffortLevel; model?: string | null; pinned_project_id?: string | null }): Promise<void> {
   return request(`/sessions/${chatId}`, { method: 'PATCH', body: JSON.stringify(config) });
 }
 

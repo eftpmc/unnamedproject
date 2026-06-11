@@ -11,7 +11,7 @@ router.use(requireAuth);
 router.get('/', (req, res) => {
   const { userId } = req as AuthedRequest;
   const rows = getDb()
-    .prepare('SELECT id, title, effort, model, created_at, updated_at FROM sessions WHERE user_id = ? ORDER BY updated_at DESC')
+    .prepare('SELECT id, title, effort, model, pinned_project_id, created_at, updated_at FROM sessions WHERE user_id = ? ORDER BY updated_at DESC')
     .all(userId);
   res.json(rows);
 });
@@ -33,10 +33,10 @@ router.get('/models', async (req, res) => {
 
 router.patch('/:id', (req, res) => {
   const { userId } = req as unknown as AuthedRequest;
-  const { effort, model, title } = req.body as { effort?: string; model?: string | null; title?: string };
+  const { effort, model, title, pinned_project_id } = req.body as { effort?: string; model?: string | null; title?: string; pinned_project_id?: string | null };
 
-  if (effort === undefined && model === undefined && title === undefined) {
-    res.status(400).json({ error: 'effort, model, or title required' });
+  if (effort === undefined && model === undefined && title === undefined && pinned_project_id === undefined) {
+    res.status(400).json({ error: 'effort, model, title, or pinned_project_id required' });
     return;
   }
   if (effort !== undefined && !isEffortLevel(effort)) {
@@ -59,6 +59,9 @@ router.patch('/:id', (req, res) => {
   }
   if (title !== undefined) {
     getDb().prepare('UPDATE sessions SET title = ? WHERE id = ?').run(title, req.params.id);
+  }
+  if (pinned_project_id !== undefined) {
+    getDb().prepare('UPDATE sessions SET pinned_project_id = ? WHERE id = ?').run(pinned_project_id, req.params.id);
   }
   res.json({ ok: true });
 });

@@ -55,12 +55,12 @@ export const toolDefinitions: Anthropic.Tool[] = [
   },
   {
     name: 'git_op',
-    description: "Run git operations in this session's isolated agent worktree (its own branch off the project's default branch). Write ops (commit, push) require user approval. Push defaults to this session's branch so changes can be reviewed via a PR before merging.",
+    description: "Run git operations in this session's isolated agent worktree. To commit: run add first (stages everything), then commit. Push sends the session branch for PR review. Status and diff are useful for summarizing what changed.",
     input_schema: {
       type: 'object',
       properties: {
         project_id: { type: 'string' },
-        op: { type: 'string', enum: ['log', 'diff', 'status', 'commit', 'push'] },
+        op: { type: 'string', enum: ['log', 'diff', 'status', 'add', 'commit', 'push'] },
         message: { type: 'string', description: 'Commit message (for commit op)' },
         branch: { type: 'string', description: "Branch name to push (for push op, defaults to this session's agent branch)" },
       },

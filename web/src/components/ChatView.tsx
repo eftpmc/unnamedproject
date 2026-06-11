@@ -1,12 +1,13 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { GitMerge } from 'lucide-react';
+import { GitMerge, FolderOpen } from 'lucide-react';
 import MessageList from './MessageList.js';
 import MessageInput from './MessageInput.js';
-import { getMessages, sendMessage, getChats, updateChatConfig, getModelsForEffort, getSessionWorktree, mergeSessionBranch } from '../lib/api.js';
+import { getMessages, sendMessage, getChats, updateChatConfig, getModelsForEffort, getSessionWorktree, mergeSessionBranch, getProjects } from '../lib/api.js';
 import { subscribe } from '../lib/ws.js';
 import type { EffortLevel, Message, Session, WSEvent, WSMessageCreated, WSMessageStarted, WSMessageDelta, WSExecutionUpdate, WSApprovalRequested, WSAutoApproved, WSSessionTitleUpdated } from '../types.js';
 import { Skeleton } from '@/components/ui/skeleton';
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
 
 interface InlineExecution {
   executionId: string;
@@ -44,8 +45,14 @@ export default function ChatView({ chatId }: ChatViewProps) {
     queryFn: () => getModelsForEffort(effort),
   });
 
+  const { data: projects = [] } = useQuery({
+    queryKey: ['projects'],
+    queryFn: getProjects,
+  });
+  const pinnedProject = projects.find(p => p.id === chat?.pinned_project_id) ?? null;
+
   const configMutation = useMutation({
-    mutationFn: (config: { effort?: EffortLevel; model?: string | null }) => updateChatConfig(chatId, config),
+    mutationFn: (config: { effort?: EffortLevel; model?: string | null; pinned_project_id?: string | null }) => updateChatConfig(chatId, config),
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ['chats'] }),
   });
 
@@ -231,6 +238,36 @@ export default function ChatView({ chatId }: ChatViewProps) {
         <div className="min-w-0 flex-1">
           <div className="truncate text-sm font-medium">{chatTitle}</div>
         </div>
+        {projects.length > 0 && (
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <button className="flex items-center gap-1.5 rounded-lg px-2.5 py-1.5 text-xs text-muted-foreground hover:bg-muted hover:text-foreground transition-colors">
+                <FolderOpen size={13} />
+                <span className="max-w-32 truncate">{pinnedProject?.name ?? 'No project'}</span>
+              </button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end" className="w-52">
+              {projects.map(p => (
+                <DropdownMenuItem
+                  key={p.id}
+                  onSelect={() => configMutation.mutate({ pinned_project_id: p.id === chat?.pinned_project_id ? null : p.id })}
+                  className={p.id === chat?.pinned_project_id ? 'font-medium' : ''}
+                >
+                  {p.name}
+                  {p.id === chat?.pinned_project_id && <span className="ml-auto text-muted-foreground">✓</span>}
+                </DropdownMenuItem>
+              ))}
+              {chat?.pinned_project_id && (
+                <>
+                  <DropdownMenuSeparator />
+                  <DropdownMenuItem onSelect={() => configMutation.mutate({ pinned_project_id: null })} className="text-muted-foreground">
+                    Clear project
+                  </DropdownMenuItem>
+                </>
+              )}
+            </DropdownMenuContent>
+          </DropdownMenu>
+        )}
       </header>
 
       {worktree && (worktree.ahead > 0 || worktree.has_uncommitted) && (

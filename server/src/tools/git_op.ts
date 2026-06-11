@@ -2,7 +2,7 @@ import simpleGit from 'simple-git';
 import { requestApproval, appendOutput } from '../services/executor.js';
 
 interface GitOpInput {
-  op: 'log' | 'diff' | 'status' | 'commit' | 'push';
+  op: 'log' | 'diff' | 'status' | 'add' | 'commit' | 'push';
   message?: string;
   branch?: string;
 }
@@ -14,7 +14,7 @@ interface ToolContext {
   repoPath: string;
 }
 
-const AGENT_OPS = new Set(['commit']);
+const AGENT_OPS = new Set(['add', 'commit']);
 const USER_OPS = new Set(['push']);
 
 export async function runGitOp(input: GitOpInput, ctx: ToolContext): Promise<string> {
@@ -30,6 +30,11 @@ export async function runGitOp(input: GitOpInput, ctx: ToolContext): Promise<str
   }
 
   switch (input.op) {
+    case 'add': {
+      await git.add('-A');
+      const s = await git.status();
+      return `staged ${s.staged.length} file(s)`;
+    }
     case 'log': {
       const log = await git.log({ maxCount: 20 });
       return log.all.map(c => `${c.hash.slice(0, 7)} ${c.message}`).join('\n');

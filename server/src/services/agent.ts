@@ -85,9 +85,19 @@ function getRecentChats(userId: string, currentSessionId: string): Array<{ id: s
 function buildSystemPrompt(userId: string, sessionId: string): string {
   const memory = recallAll(userId);
   const projects = getProjects(userId);
+  const session = getDb()
+    .prepare('SELECT pinned_project_id FROM sessions WHERE id = ?')
+    .get(sessionId) as { pinned_project_id: string | null } | undefined;
+  const pinnedProject = session?.pinned_project_id
+    ? projects.find(p => p.id === session.pinned_project_id)
+    : null;
+
   const memoryText = memory.length > 0
     ? `\n\nUser memory:\n${memory.map(e => `- ${formatEntry(userId, e)}`).join('\n')}`
     : '\n\nUser memory:\nNo memories stored yet.';
+  const pinnedProjectText = pinnedProject
+    ? `\n\nActive project: **${pinnedProject.name}** (id: ${pinnedProject.id}${pinnedProject.repo_path ? ', repo: ' + pinnedProject.repo_path : ', no repo'})${pinnedProject.description ? ' — ' + pinnedProject.description : ''}\nUse this project for all coding work unless the user explicitly asks about a different one.`
+    : '';
   const projectsText = projects.length > 0
     ? `\n\nAvailable projects:\n${projects.map(p => `- ${p.name} (id: ${p.id}${p.repo_path ? '' : ', no repo'})${p.description ? ': ' + p.description : ''}`).join('\n')}`
     : '\n\nNo projects yet.';
@@ -122,7 +132,7 @@ All coding tools operate on an isolated git branch (separate per session). The u
 - User-approved (pauses): git push, write_file, github write ops, delete_project
 
 Never skip a user-approved action — just proceed and the system handles the pause.
-${memoryText}
+${pinnedProjectText}${memoryText}
 ${projectsText}${recentChatsText}`;
 }
 

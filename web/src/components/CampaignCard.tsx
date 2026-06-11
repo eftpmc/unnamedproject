@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { Link } from 'react-router-dom';
+import { Bot, FileEdit, GitBranch } from 'lucide-react';
 import { getCampaign } from '../lib/api.js';
 import { subscribe } from '../lib/ws.js';
 import { cn } from '@/lib/utils';
@@ -24,6 +25,15 @@ const AGENT_LABEL: Record<CampaignTask['agent'], string> = {
   mcp: 'MCP',
   file_write: 'Write File',
   git: 'Git',
+};
+
+// file_write/git steps run synchronously inline; claude_code/codex/mcp delegate to a long-running agent.
+const AGENT_ICON: Record<CampaignTask['agent'], typeof Bot> = {
+  claude_code: Bot,
+  codex: Bot,
+  mcp: Bot,
+  file_write: FileEdit,
+  git: GitBranch,
 };
 
 export default function CampaignCard({ campaignId, projectId }: CampaignCardProps) {
@@ -89,7 +99,10 @@ export default function CampaignCard({ campaignId, projectId }: CampaignCardProp
             <div key={task.id} className="flex items-center gap-2">
               <div className={cn('size-1.5 shrink-0 rounded-full', STATUS_DOT[status])} />
               <span className="flex-1 truncate text-xs text-foreground/80">{task.title}</span>
-              <span className="shrink-0 text-[10px] text-muted-foreground">{AGENT_LABEL[task.agent]}</span>
+              <span className="shrink-0 flex items-center gap-1 text-[10px] text-muted-foreground">
+                {(() => { const Icon = AGENT_ICON[task.agent]; return <Icon className="size-2.5" />; })()}
+                {AGENT_LABEL[task.agent]}
+              </span>
             </div>
           );
         })}

@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { useParams, Link } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
-import { ArrowLeft } from 'lucide-react';
+import { ArrowLeft, Bot, FileEdit, GitBranch } from 'lucide-react';
 import { getCampaign } from '../lib/api.js';
 import { subscribe } from '../lib/ws.js';
 import { cn } from '@/lib/utils';
@@ -36,6 +36,15 @@ const AGENT_LABEL: Record<CampaignTask['agent'], string> = {
   mcp: 'MCP',
   file_write: 'Write File',
   git: 'Git',
+};
+
+// file_write/git steps run synchronously inline; claude_code/codex/mcp delegate to a long-running agent.
+const AGENT_ICON: Record<CampaignTask['agent'], typeof Bot> = {
+  claude_code: Bot,
+  codex: Bot,
+  mcp: Bot,
+  file_write: FileEdit,
+  git: GitBranch,
 };
 
 const CAMPAIGN_STATUS_COLORS = {
@@ -158,7 +167,10 @@ function TaskRow({ task, status }: { task: CampaignTask; status: CampaignTask['s
           </span>
         </div>
         <div className="flex items-center gap-3 shrink-0 ml-3">
-          <span className="text-xs text-muted-foreground">{AGENT_LABEL[task.agent]}</span>
+          <span className="flex items-center gap-1 text-xs text-muted-foreground">
+            {(() => { const Icon = AGENT_ICON[task.agent]; return <Icon className="size-3" />; })()}
+            {AGENT_LABEL[task.agent]}
+          </span>
           <span className={cn(
             'text-xs font-medium',
             status === 'done' && 'text-green-600',

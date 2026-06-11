@@ -82,7 +82,7 @@ describe('agent', () => {
 
     const payload = streamMock.mock.calls[0][0] as Record<string, unknown>;
     expect(payload).toMatchObject({
-      max_tokens: 4096,
+      max_tokens: 8192,
       messages: expect.any(Array),
       tools: expect.any(Array),
     });

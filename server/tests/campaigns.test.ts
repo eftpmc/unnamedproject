@@ -140,4 +140,34 @@ describe('campaigns routes', () => {
     const res = await request(app).get(`/projects/${projectId}/campaigns`);
     expect(res.status).toBe(401);
   });
+
+  it('POST /campaigns accepts file_write and git steps', async () => {
+    const res = await request(app)
+      .post('/campaigns')
+      .set('Authorization', `Bearer ${token}`)
+      .send({
+        project_id: projectId,
+        title: 'Mixed-step campaign',
+        tasks: [
+          { title: 'Implement feature', agent: 'claude_code' },
+          { title: 'Write config file', agent: 'file_write' },
+          { title: 'Commit changes', agent: 'git' },
+        ],
+      });
+    expect(res.status).toBe(201);
+    expect(res.body.tasks.map((t: { agent: string }) => t.agent)).toEqual(['claude_code', 'file_write', 'git']);
+
+    const get = await request(app)
+      .get(`/campaigns/${res.body.campaign_id}`)
+      .set('Authorization', `Bearer ${token}`);
+    expect(get.status).toBe(200);
+    expect(get.body.tasks).toHaveLength(3);
+
+    // Walk all tasks to done and confirm the campaign auto-completes.
+    for (const task of get.body.tasks as { id: string }[]) {
+      updateCampaignTaskStatus(task.id, 'done');
+    }
+    const status = maybeCompleteCampaign(res.body.campaign_id);
+    expect(status).toBe('done');
+  });
 });

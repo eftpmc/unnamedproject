@@ -280,7 +280,10 @@ async function dispatchTool(
           .prepare("SELECT id FROM connections WHERE user_id = ? AND type = 'github' LIMIT 1")
           .get(userId) as { id: string } | undefined;
         const token = ghConn ? getDecryptedConfig(ghConn.id).token ?? '' : '';
+        const ghTaskId = toolInput.campaign_task_id as string | undefined;
+        if (ghTaskId) startCampaignTask(userId, ghTaskId, executionId);
         result = await runGithubApi(toolInput as unknown as Parameters<typeof runGithubApi>[0], { userId, executionId, token });
+        if (ghTaskId) finishCampaignTask(userId, ghTaskId, result);
         break;
       }
       case 'mcp_call': {
@@ -386,7 +389,7 @@ async function dispatchTool(
           {
             project_id: toolInput.project_id as string,
             title: toolInput.title as string,
-            tasks: toolInput.tasks as Array<{ title: string; agent: 'claude_code' | 'codex' | 'mcp' | 'file_write' | 'git' }>,
+            tasks: toolInput.tasks as Array<{ title: string; agent: 'claude_code' | 'codex' | 'mcp' | 'file_write' | 'git' | 'github' }>,
             session_id: sessionId,
           },
           userId

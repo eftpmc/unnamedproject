@@ -155,7 +155,7 @@ function applySchema(): void {
       id TEXT PRIMARY KEY,
       campaign_id TEXT NOT NULL REFERENCES campaigns(id) ON DELETE CASCADE,
       title TEXT NOT NULL,
-      agent TEXT NOT NULL CHECK(agent IN ('claude_code','codex','mcp','file_write','git')),
+      agent TEXT NOT NULL CHECK(agent IN ('claude_code','codex','mcp','file_write','git','github')),
       status TEXT NOT NULL DEFAULT 'waiting'
         CHECK(status IN ('waiting','running','done','error')),
       execution_id TEXT REFERENCES executions(id) ON DELETE SET NULL,
@@ -261,9 +261,9 @@ function applySchema(): void {
     `);
   }
 
-  // Widen campaign_tasks.agent CHECK to allow non-agent step types (file_write, git).
+  // Widen campaign_tasks.agent CHECK to allow non-agent step types (file_write, git, github).
   const campaignTasksSql = (db.prepare("SELECT sql FROM sqlite_master WHERE type='table' AND name='campaign_tasks'").get() as { sql: string } | undefined)?.sql;
-  if (campaignTasksSql && !campaignTasksSql.includes('file_write')) {
+  if (campaignTasksSql && !campaignTasksSql.includes('github')) {
     db.exec(`
       PRAGMA foreign_keys = OFF;
       ALTER TABLE campaign_tasks RENAME TO campaign_tasks_old;
@@ -271,7 +271,7 @@ function applySchema(): void {
         id TEXT PRIMARY KEY,
         campaign_id TEXT NOT NULL REFERENCES campaigns(id) ON DELETE CASCADE,
         title TEXT NOT NULL,
-        agent TEXT NOT NULL CHECK(agent IN ('claude_code','codex','mcp','file_write','git')),
+        agent TEXT NOT NULL CHECK(agent IN ('claude_code','codex','mcp','file_write','git','github')),
         status TEXT NOT NULL DEFAULT 'waiting'
           CHECK(status IN ('waiting','running','done','error')),
         execution_id TEXT REFERENCES executions(id) ON DELETE SET NULL,
@@ -449,7 +449,7 @@ export interface DbCampaignTask {
   id: string;
   campaign_id: string;
   title: string;
-  agent: 'claude_code' | 'codex' | 'mcp' | 'file_write' | 'git';
+  agent: 'claude_code' | 'codex' | 'mcp' | 'file_write' | 'git' | 'github';
   status: 'waiting' | 'running' | 'done' | 'error';
   execution_id: string | null;
   position: number;

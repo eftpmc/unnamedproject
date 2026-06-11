@@ -141,7 +141,7 @@ describe('campaigns routes', () => {
     expect(res.status).toBe(401);
   });
 
-  it('POST /campaigns accepts file_write and git steps', async () => {
+  it('POST /campaigns accepts file_write, git, and github steps', async () => {
     const res = await request(app)
       .post('/campaigns')
       .set('Authorization', `Bearer ${token}`)
@@ -152,16 +152,17 @@ describe('campaigns routes', () => {
           { title: 'Implement feature', agent: 'claude_code' },
           { title: 'Write config file', agent: 'file_write' },
           { title: 'Commit changes', agent: 'git' },
+          { title: 'Open pull request', agent: 'github' },
         ],
       });
     expect(res.status).toBe(201);
-    expect(res.body.tasks.map((t: { agent: string }) => t.agent)).toEqual(['claude_code', 'file_write', 'git']);
+    expect(res.body.tasks.map((t: { agent: string }) => t.agent)).toEqual(['claude_code', 'file_write', 'git', 'github']);
 
     const get = await request(app)
       .get(`/campaigns/${res.body.campaign_id}`)
       .set('Authorization', `Bearer ${token}`);
     expect(get.status).toBe(200);
-    expect(get.body.tasks).toHaveLength(3);
+    expect(get.body.tasks).toHaveLength(4);
 
     // Walk all tasks to done and confirm the campaign auto-completes.
     for (const task of get.body.tasks as { id: string }[]) {

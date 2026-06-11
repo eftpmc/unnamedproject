@@ -44,6 +44,7 @@ export const toolDefinitions: Anthropic.Tool[] = [
         base: { type: 'string', description: 'Target branch (for create_pull_request, defaults to main)' },
         labels: { type: 'array', items: { type: 'string' }, description: 'Labels (for create_issue)' },
         comment_body: { type: 'string', description: 'Comment text (for create_issue_comment)' },
+        campaign_task_id: { type: 'string', description: 'Campaign task ID to link this execution to (from create_campaign response)' },
       },
       required: ['op'],
     },
@@ -225,7 +226,7 @@ export const toolDefinitions: Anthropic.Tool[] = [
   },
   {
     name: 'create_campaign',
-    description: 'Create a campaign to track a coordinated multi-task plan. Call this BEFORE dispatching the individual tasks. The response includes task IDs — pass each task\'s id as campaign_task_id when calling invoke_claude_code, invoke_codex, mcp_call, write_file, or git_op so the tasks are linked and their status tracked. Task agent types: claude_code/codex/mcp for delegated agent work, file_write for a write_file step, git for a git_op step (e.g. a final commit after several coding tasks).',
+    description: 'Create a campaign to track a coordinated multi-task plan. Call this BEFORE dispatching the individual tasks. The response includes task IDs — pass each task\'s id as campaign_task_id when calling invoke_claude_code, invoke_codex, mcp_call, write_file, git_op, or github_api so the tasks are linked and their status tracked. Task agent types: claude_code/codex/mcp for delegated agent work, file_write for a write_file step, git for a git_op step (e.g. a commit after coding tasks), github for a github_api step (e.g. opening the final PR).',
     input_schema: {
       type: 'object',
       properties: {
@@ -238,7 +239,7 @@ export const toolDefinitions: Anthropic.Tool[] = [
             type: 'object',
             properties: {
               title: { type: 'string' },
-              agent: { type: 'string', enum: ['claude_code', 'codex', 'mcp', 'file_write', 'git'] },
+              agent: { type: 'string', enum: ['claude_code', 'codex', 'mcp', 'file_write', 'git', 'github'] },
             },
             required: ['title', 'agent'],
           },

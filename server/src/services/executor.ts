@@ -6,7 +6,7 @@ import { waitForApproval } from '../lib/approval.js';
 export function createExecution(
   userId: string,
   messageId: string,
-  workspaceId: string,
+  workspaceId: string | null,
   tool: string
 ): string {
   const id = newId();

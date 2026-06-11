@@ -55,14 +55,14 @@ async function dispatchTool(
   messageId: string
 ): Promise<string> {
   const workspaceId = (toolInput.workspace_id as string | undefined) ?? 'unknown';
-  const executionId = createExecution(userId, messageId, workspaceId, toolName);
+  const ws = getWorkspaceForUser(workspaceId, userId);
+  const executionId = createExecution(userId, messageId, ws?.id ?? null, toolName);
 
   try {
     let result: string;
 
     switch (toolName) {
       case 'invoke_claude_code': {
-        const ws = getWorkspaceForUser(workspaceId, userId);
         const connectionIds: string[] = JSON.parse(ws?.enabled_connection_ids ?? '[]');
         let apiKey = getAnthropicKey(userId);
         if (connectionIds.length > 0) {
@@ -78,7 +78,6 @@ async function dispatchTool(
         break;
       }
       case 'invoke_codex': {
-        const ws = getWorkspaceForUser(workspaceId, userId);
         const connectionIds: string[] = JSON.parse(ws?.enabled_connection_ids ?? '[]');
         let apiKey = '';
         if (connectionIds.length > 0) {
@@ -110,7 +109,6 @@ async function dispatchTool(
         break;
       }
       case 'git_op': {
-        const ws = getWorkspaceForUser(workspaceId, userId);
         result = await runGitOp(
           { op: toolInput.op as 'log' | 'diff' | 'status' | 'commit' | 'push', message: toolInput.message as string | undefined },
           { userId, executionId, workspaceId, repoPath: ws?.repo_path ?? '/tmp' }

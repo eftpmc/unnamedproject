@@ -9,6 +9,7 @@ const subscribers = new Set<Subscriber>();
 export function connect(): void {
   const token = getToken();
   if (!token) return;
+  if (socket && (socket.readyState === WebSocket.OPEN || socket.readyState === WebSocket.CONNECTING)) return;
 
   const wsUrl = `ws://${window.location.hostname}:3000?token=${token}`;
   socket = new WebSocket(wsUrl);

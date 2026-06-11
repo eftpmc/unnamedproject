@@ -120,6 +120,7 @@ function buildSystemPrompt(userId: string, sessionId: string): string {
 For short, self-contained tasks (a code snippet, a script, a quick HTML demo, a one-off file, an answer, an explanation):
 - Just respond. Write the code inline. Do not create a project or invoke tools unless the user asks you to save or run it.
 - If the user says "make me a file" or "save this" or "put this in a project", THEN use write_file or create_project. Otherwise, just show the output.
+- Rule of thumb: if the work will need multiple files, persistence across sessions, or running/testing code, use create_project (with_repo=true for code, false for docs); if it's a single self-contained answer, just respond inline.
 
 ## Project work — delegate to coding agents
 When the task clearly belongs to an existing codebase or the user wants persistent, saved, runnable code:
@@ -127,14 +128,14 @@ When the task clearly belongs to an existing codebase or the user wants persiste
 - Figure out which project it belongs to. If none fits and the user explicitly wants a project, call create_project (pick a sensible name, don't ask).
 - Use project_query to understand the codebase before dispatching work.
 - Give the coding agent a rich, detailed prompt — it can implement entire features, run tests, fix failures, refactor across files, install dependencies, and more. Don't hold back.
-- After coding work completes, run git_op status to summarize what changed. To commit: run git_op add (stages everything), then git_op commit with a message. Then tell the user what was done and what branch it's on.
+- After coding work completes, run git_op status to summarize what changed, then immediately run git_op add (stages everything) and git_op commit with a message — do not ask the user for permission first, commits are auto-approved and the work is on an isolated branch. Then tell the user what was done, that it's committed, and what branch it's on.
 - invoke_claude_code and invoke_codex maintain context across calls — you can follow up, correct, or extend in subsequent calls.
 - Prefer invoke_claude_code by default. Use invoke_codex for OpenAI preference or a second approach.
 
 ## Writing, research, and conversation
 For writing, research, brainstorming, explaining, planning, answering questions:
 - Respond directly. Do not use invoke_claude_code or invoke_codex.
-- Use web_search for research. Use recall/remember for memory. Use read_chat for past context.
+- Use web_search to find sources, then web_fetch to read the full content of a promising page (search results alone are often too thin). Use recall/remember for memory. Use read_chat for past context.
 - For writing that should be saved to a file (a spec, a doc, a plan), use write_file — but confirm with the user first which project/path to use.
 
 ## Worktree isolation
@@ -144,7 +145,7 @@ All coding tools operate on an isolated git branch (separate per session). The u
 - Auto-approved: invoke_claude_code, invoke_codex, git commit, create_project, update_project, project_query, read/list file ops
 - User-approved (pauses): git push, write_file, github write ops, delete_project
 
-Never skip a user-approved action — just proceed and the system handles the pause.
+Never skip a user-approved action — just proceed and the system handles the pause. Conversely, never ask the user for permission to take an auto-approved action (e.g. committing) — just do it.
 ${pinnedProjectText}${memoryText}
 ${projectsText}${recentChatsText}`;
 }
@@ -169,6 +170,21 @@ function getMcpServersForUser(userId: string): Record<string, McpServerConfig> {
     } catch { /* skip misconfigured connections */ }
   }
   return servers;
+}
+
+function startCampaignTask(userId: string, taskId: string, executionId: string): void {
+  updateCampaignTaskStatus(taskId, 'running', executionId);
+  broadcast(userId, { type: 'campaign_task_updated', taskId, status: 'running' });
+}
+
+function finishCampaignTask(userId: string, taskId: string, result: string): void {
+  const status = result.startsWith('Error') ? 'error' : 'done';
+  updateCampaignTaskStatus(taskId, status);
+  const taskRow = getDb()
+    .prepare('SELECT campaign_id FROM campaign_tasks WHERE id = ?')
+    .get(taskId) as { campaign_id: string } | undefined;
+  if (taskRow) maybeCompleteCampaign(taskRow.campaign_id);
+  broadcast(userId, { type: 'campaign_task_updated', taskId, status });
 }
 
 async function dispatchTool(
@@ -206,24 +222,20 @@ async function dispatchTool(
         }
         const ccWorktree = await ensureWorktree(project, sessionId);
         const ccTaskId = toolInput.campaign_task_id as string | undefined;
-        if (ccTaskId) {
-          updateCampaignTaskStatus(ccTaskId, 'running', executionId);
-          broadcast(userId, { type: 'campaign_task_updated', taskId: ccTaskId, status: 'running' });
-        }
+        if (ccTaskId) startCampaignTask(userId, ccTaskId, executionId);
         const ccResult = await invokeClaudeCode(
           { prompt: toolInput.prompt as string },
           { userId, executionId, repoPath: ccWorktree.worktree_path, apiKey: ccApiKey, resumeSessionId: ccWorktree.claude_session_id, mcpServers: getMcpServersForUser(userId) }
         );
         if (ccResult.sessionId) setAgentWorktreeSession(ccWorktree.id, 'claude', ccResult.sessionId);
         result = ccResult.result;
-        if (ccTaskId) {
-          const taskFinalStatus = result.startsWith('Error') ? 'error' : 'done';
-          updateCampaignTaskStatus(ccTaskId, taskFinalStatus, executionId);
-          const taskRow = getDb()
-            .prepare('SELECT campaign_id FROM campaign_tasks WHERE id = ?')
-            .get(ccTaskId) as { campaign_id: string } | undefined;
-          if (taskRow) maybeCompleteCampaign(taskRow.campaign_id);
-          broadcast(userId, { type: 'campaign_task_updated', taskId: ccTaskId, status: taskFinalStatus });
+        if (ccTaskId) finishCampaignTask(userId, ccTaskId, result);
+        if (!result.startsWith('Error')) {
+          let ccGraphKey: string | null = null;
+          try { ccGraphKey = getAnthropicKey(userId); } catch { /* none configured */ }
+          buildGraph(project.repo_path, project.id, ccGraphKey).catch(err =>
+            console.error(`rebuild_graph after invoke_claude_code failed for project ${project.id}:`, err)
+          );
         }
         break;
       }
@@ -246,24 +258,20 @@ async function dispatchTool(
         }
         const codexWorktree = await ensureWorktree(project, sessionId);
         const codexTaskId = toolInput.campaign_task_id as string | undefined;
-        if (codexTaskId) {
-          updateCampaignTaskStatus(codexTaskId, 'running', executionId);
-          broadcast(userId, { type: 'campaign_task_updated', taskId: codexTaskId, status: 'running' });
-        }
+        if (codexTaskId) startCampaignTask(userId, codexTaskId, executionId);
         const codexResult = await invokeCodex(
           { prompt: toolInput.prompt as string },
           { userId, executionId, repoPath: codexWorktree.worktree_path, apiKey: codexApiKey, resumeSessionId: codexWorktree.codex_session_id, mcpServers: getMcpServersForUser(userId) }
         );
         if (codexResult.sessionId) setAgentWorktreeSession(codexWorktree.id, 'codex', codexResult.sessionId);
         result = codexResult.result;
-        if (codexTaskId) {
-          const taskFinalStatus = result.startsWith('Error') ? 'error' : 'done';
-          updateCampaignTaskStatus(codexTaskId, taskFinalStatus, executionId);
-          const taskRow = getDb()
-            .prepare('SELECT campaign_id FROM campaign_tasks WHERE id = ?')
-            .get(codexTaskId) as { campaign_id: string } | undefined;
-          if (taskRow) maybeCompleteCampaign(taskRow.campaign_id);
-          broadcast(userId, { type: 'campaign_task_updated', taskId: codexTaskId, status: taskFinalStatus });
+        if (codexTaskId) finishCampaignTask(userId, codexTaskId, result);
+        if (!result.startsWith('Error')) {
+          let codexGraphKey: string | null = null;
+          try { codexGraphKey = getAnthropicKey(userId); } catch { /* none configured */ }
+          buildGraph(project.repo_path, project.id, codexGraphKey).catch(err =>
+            console.error(`rebuild_graph after invoke_codex failed for project ${project.id}:`, err)
+          );
         }
         break;
       }
@@ -278,10 +286,7 @@ async function dispatchTool(
       case 'mcp_call': {
         const mcpConfig = getDecryptedConfig(toolInput.connection_id as string);
         const mcpTaskId = toolInput.campaign_task_id as string | undefined;
-        if (mcpTaskId) {
-          updateCampaignTaskStatus(mcpTaskId, 'running', executionId);
-          broadcast(userId, { type: 'campaign_task_updated', taskId: mcpTaskId, status: 'running' });
-        }
+        if (mcpTaskId) startCampaignTask(userId, mcpTaskId, executionId);
         result = await callMcpTool(
           toolInput.connection_id as string,
           mcpConfig.command,
@@ -290,15 +295,7 @@ async function dispatchTool(
           toolInput.tool_name as string,
           toolInput.tool_input as Record<string, unknown>,
         );
-        if (mcpTaskId) {
-          const mcpFinalStatus = result.startsWith('Error') ? 'error' : 'done';
-          updateCampaignTaskStatus(mcpTaskId, mcpFinalStatus, executionId);
-          const mcpTaskRow = getDb()
-            .prepare('SELECT campaign_id FROM campaign_tasks WHERE id = ?')
-            .get(mcpTaskId) as { campaign_id: string } | undefined;
-          if (mcpTaskRow) maybeCompleteCampaign(mcpTaskRow.campaign_id);
-          broadcast(userId, { type: 'campaign_task_updated', taskId: mcpTaskId, status: mcpFinalStatus });
-        }
+        if (mcpTaskId) finishCampaignTask(userId, mcpTaskId, result);
         break;
       }
       case 'git_op': {
@@ -311,10 +308,13 @@ async function dispatchTool(
           break;
         }
         const gitWorktree = await ensureWorktree(project, sessionId);
+        const gitTaskId = toolInput.campaign_task_id as string | undefined;
+        if (gitTaskId) startCampaignTask(userId, gitTaskId, executionId);
         result = await runGitOp(
           { op: toolInput.op as 'log' | 'diff' | 'status' | 'commit' | 'push', message: toolInput.message as string | undefined, branch: toolInput.branch as string | undefined ?? gitWorktree.branch },
           { userId, executionId, projectId, repoPath: gitWorktree.worktree_path }
         );
+        if (gitTaskId) finishCampaignTask(userId, gitTaskId, result);
         break;
       }
       case 'project_query': {
@@ -358,12 +358,16 @@ async function dispatchTool(
       case 'list_dir':
         result = await listDir({ project_id: projectId, path: toolInput.path as string | undefined }, { userId, executionId, projectId, sessionId });
         break;
-      case 'write_file':
+      case 'write_file': {
+        const writeTaskId = toolInput.campaign_task_id as string | undefined;
+        if (writeTaskId) startCampaignTask(userId, writeTaskId, executionId);
         result = await writeFile(
           { project_id: projectId, path: toolInput.path as string, content: toolInput.content as string },
           { userId, executionId, projectId, sessionId }
         );
+        if (writeTaskId) finishCampaignTask(userId, writeTaskId, result);
         break;
+      }
       case 'create_project':
         result = await createProject(
           { name: toolInput.name as string, description: toolInput.description as string | undefined, with_repo: toolInput.with_repo as boolean },
@@ -441,10 +445,12 @@ export async function runAgentTurn(userId: string, sessionId: string, userMessag
     while (true) {
       const stream = client.messages.stream({
         model,
-        max_tokens: 4096,
+        max_tokens: 8192,
         system: systemPrompt,
         tools: toolDefinitions,
         messages: currentMessages,
+      }, {
+        headers: { 'anthropic-beta': 'web-fetch-2025-09-10' },
       });
 
       stream.on('text', (delta) => {

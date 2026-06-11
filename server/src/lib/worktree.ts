@@ -34,7 +34,10 @@ export async function ensureWorktree(project: DbProject, sessionId: string): Pro
   await ensureInitialCommit(git);
 
   const branch = existing?.branch ?? `agent/${sessionId}`;
-  const worktreePath = existing?.worktree_path ?? path.join(getDataDir(), 'worktrees', project.id, sessionId);
+  // Must be absolute: simple-git runs with cwd=project.repo_path, so a relative
+  // path here would be resolved by git against the repo dir while fs.* below
+  // resolve it against the server's cwd, putting the worktree in two places.
+  const worktreePath = existing?.worktree_path ?? path.resolve(getDataDir(), 'worktrees', project.id, sessionId);
   await fs.mkdir(path.dirname(worktreePath), { recursive: true });
   await fs.rm(worktreePath, { recursive: true, force: true });
 

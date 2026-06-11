@@ -22,6 +22,8 @@ const AGENT_LABEL: Record<CampaignTask['agent'], string> = {
   claude_code: 'Claude Code',
   codex: 'Codex',
   mcp: 'MCP',
+  file_write: 'Write File',
+  git: 'Git',
 };
 
 export default function CampaignCard({ campaignId, projectId }: CampaignCardProps) {

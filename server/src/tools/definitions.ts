@@ -72,13 +72,14 @@ export const toolDefinitions: Anthropic.Tool[] = [
         op: { type: 'string', enum: ['log', 'diff', 'status', 'add', 'commit', 'push'] },
         message: { type: 'string', description: 'Commit message (for commit op)' },
         branch: { type: 'string', description: "Branch name to push (for push op, defaults to this session's agent branch)" },
+        campaign_task_id: { type: 'string', description: 'Campaign task ID to link this execution to (from create_campaign response)' },
       },
       required: ['project_id', 'op'],
     },
   },
   {
     name: 'project_query',
-    description: 'Ask a question about a project codebase (structure, where something is implemented, how things connect). Queries a pre-built knowledge graph — fast and token-efficient. Call rebuild_graph first if significant code changes were made since the last query.',
+    description: 'Ask a question about a project codebase (structure, where something is implemented, how things connect). Queries a pre-built knowledge graph — fast and token-efficient. The graph is rebuilt automatically after invoke_claude_code/invoke_codex finish, so it should already reflect recent changes; call rebuild_graph manually only if you suspect it is stale (e.g. after manual write_file edits).',
     input_schema: {
       type: 'object',
       properties: {
@@ -206,6 +207,7 @@ export const toolDefinitions: Anthropic.Tool[] = [
         project_id: { type: 'string' },
         path: { type: 'string', description: 'Path relative to the workspace root' },
         content: { type: 'string', description: 'New file contents' },
+        campaign_task_id: { type: 'string', description: 'Campaign task ID to link this execution to (from create_campaign response)' },
       },
       required: ['project_id', 'path', 'content'],
     },
@@ -223,7 +225,7 @@ export const toolDefinitions: Anthropic.Tool[] = [
   },
   {
     name: 'create_campaign',
-    description: 'Create a campaign to track a coordinated multi-task delegation across Claude Code, Codex, or MCP tools. Call this BEFORE dispatching the individual tasks. The response includes task IDs — pass each task\'s id as campaign_task_id when calling invoke_claude_code, invoke_codex, or mcp_call so the tasks are linked and their status tracked.',
+    description: 'Create a campaign to track a coordinated multi-task plan. Call this BEFORE dispatching the individual tasks. The response includes task IDs — pass each task\'s id as campaign_task_id when calling invoke_claude_code, invoke_codex, mcp_call, write_file, or git_op so the tasks are linked and their status tracked. Task agent types: claude_code/codex/mcp for delegated agent work, file_write for a write_file step, git for a git_op step (e.g. a final commit after several coding tasks).',
     input_schema: {
       type: 'object',
       properties: {
@@ -236,7 +238,7 @@ export const toolDefinitions: Anthropic.Tool[] = [
             type: 'object',
             properties: {
               title: { type: 'string' },
-              agent: { type: 'string', enum: ['claude_code', 'codex', 'mcp'] },
+              agent: { type: 'string', enum: ['claude_code', 'codex', 'mcp', 'file_write', 'git'] },
             },
             required: ['title', 'agent'],
           },
@@ -248,5 +250,10 @@ export const toolDefinitions: Anthropic.Tool[] = [
   {
     type: 'web_search_20250305',
     name: 'web_search',
+  } as unknown as Anthropic.Tool,
+  {
+    type: 'web_fetch_20250910',
+    name: 'web_fetch',
+    max_uses: 5,
   } as unknown as Anthropic.Tool,
 ];

@@ -3,7 +3,7 @@ import { createCampaign, type DbCampaignTask } from '../db/index.js';
 interface CreateCampaignInput {
   project_id: string;
   title: string;
-  tasks: Array<{ title: string; agent: 'claude_code' | 'codex' | 'mcp' }>;
+  tasks: Array<{ title: string; agent: 'claude_code' | 'codex' | 'mcp' | 'file_write' | 'git' }>;
   session_id?: string;
 }
 

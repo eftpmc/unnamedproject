@@ -1,6 +1,6 @@
 import express from 'express';
 import { createServer } from 'http';
-import { initDb } from './db/index.js';
+import { initDb, reconcileOrphanedExecutions } from './db/index.js';
 import { initSocket } from './services/socket.js';
 import { startScheduler } from './services/scheduler.js';
 import authRoutes from './routes/auth.js';
@@ -26,6 +26,7 @@ const app = express();
 app.use(express.json());
 
 initDb();
+reconcileOrphanedExecutions();
 app.use('/auth', authRoutes);
 app.use('/connections', connectionsRoutes);
 app.use('/projects', projectsRoutes);

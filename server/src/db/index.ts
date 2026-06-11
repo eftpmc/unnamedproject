@@ -155,7 +155,7 @@ function applySchema(): void {
       id TEXT PRIMARY KEY,
       campaign_id TEXT NOT NULL REFERENCES campaigns(id) ON DELETE CASCADE,
       title TEXT NOT NULL,
-      agent TEXT NOT NULL CHECK(agent IN ('claude_code','codex','mcp')),
+      agent TEXT NOT NULL CHECK(agent IN ('claude_code','codex','mcp','file_write','git')),
       status TEXT NOT NULL DEFAULT 'waiting'
         CHECK(status IN ('waiting','running','done','error')),
       execution_id TEXT REFERENCES executions(id) ON DELETE SET NULL,
@@ -260,6 +260,59 @@ function applySchema(): void {
       PRAGMA foreign_keys = ON;
     `);
   }
+
+  // Widen campaign_tasks.agent CHECK to allow non-agent step types (file_write, git).
+  const campaignTasksSql = (db.prepare("SELECT sql FROM sqlite_master WHERE type='table' AND name='campaign_tasks'").get() as { sql: string } | undefined)?.sql;
+  if (campaignTasksSql && !campaignTasksSql.includes('file_write')) {
+    db.exec(`
+      PRAGMA foreign_keys = OFF;
+      ALTER TABLE campaign_tasks RENAME TO campaign_tasks_old;
+      CREATE TABLE campaign_tasks (
+        id TEXT PRIMARY KEY,
+        campaign_id TEXT NOT NULL REFERENCES campaigns(id) ON DELETE CASCADE,
+        title TEXT NOT NULL,
+        agent TEXT NOT NULL CHECK(agent IN ('claude_code','codex','mcp','file_write','git')),
+        status TEXT NOT NULL DEFAULT 'waiting'
+          CHECK(status IN ('waiting','running','done','error')),
+        execution_id TEXT REFERENCES executions(id) ON DELETE SET NULL,
+        position INTEGER NOT NULL,
+        created_at INTEGER NOT NULL DEFAULT (unixepoch()),
+        completed_at INTEGER
+      );
+      INSERT INTO campaign_tasks (id, campaign_id, title, agent, status, execution_id, position, created_at, completed_at)
+        SELECT id, campaign_id, title, agent, status, execution_id, position, created_at, completed_at
+        FROM campaign_tasks_old;
+      DROP TABLE campaign_tasks_old;
+      PRAGMA foreign_keys = ON;
+    `);
+  }
+}
+
+/**
+ * Marks executions/campaign tasks left in 'running' from a previous process
+ * (crash or restart) as errored, and removes the empty assistant messages
+ * they were streaming into — an empty assistant message would otherwise be
+ * sent back to the Anthropic API on the next turn and be rejected.
+ */
+export function reconcileOrphanedExecutions(): void {
+  const db = getDb();
+  const stale = db.prepare("SELECT id, message_id FROM executions WHERE status = 'running'").all() as
+    { id: string; message_id: string | null }[];
+  if (stale.length === 0) return;
+
+  const markError = db.prepare(
+    "UPDATE executions SET status = 'error', result = 'Interrupted by server restart', completed_at = unixepoch() WHERE id = ?"
+  );
+  const deleteEmptyMessage = db.prepare(
+    "DELETE FROM messages WHERE id = ? AND role = 'assistant' AND content = ''"
+  );
+  for (const { id, message_id } of stale) {
+    markError.run(id);
+    if (message_id) deleteEmptyMessage.run(message_id);
+  }
+
+  db.prepare("UPDATE campaign_tasks SET status = 'error', completed_at = unixepoch() WHERE status = 'running'").run();
+  console.log(`Reconciled ${stale.length} orphaned execution(s) from a previous run.`);
 }
 
 export interface DbProject {
@@ -396,7 +449,7 @@ export interface DbCampaignTask {
   id: string;
   campaign_id: string;
   title: string;
-  agent: 'claude_code' | 'codex' | 'mcp';
+  agent: 'claude_code' | 'codex' | 'mcp' | 'file_write' | 'git';
   status: 'waiting' | 'running' | 'done' | 'error';
   execution_id: string | null;
   position: number;

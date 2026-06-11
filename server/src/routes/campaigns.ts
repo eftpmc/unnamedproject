@@ -5,6 +5,7 @@ import {
   getCampaignById,
   getCampaignTasks,
   getProjectForUser,
+  type DbCampaignTask,
 } from '../db/index.js';
 
 const router = Router();
@@ -26,7 +27,7 @@ router.post('/', (req, res) => {
   if (!project) { res.status(404).json({ error: 'Project not found' }); return; }
 
   const { campaign, tasks: createdTasks } = createCampaign(
-    project_id, session_id ?? null, title, tasks as Array<{ title: string; agent: 'claude_code' | 'codex' | 'mcp' }>
+    project_id, session_id ?? null, title, tasks as Array<{ title: string; agent: DbCampaignTask['agent'] }>
   );
   res.status(201).json({
     campaign_id: campaign.id,

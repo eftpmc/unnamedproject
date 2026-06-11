@@ -34,6 +34,8 @@ const AGENT_LABEL: Record<CampaignTask['agent'], string> = {
   claude_code: 'Claude Code',
   codex: 'Codex',
   mcp: 'MCP',
+  file_write: 'Write File',
+  git: 'Git',
 };
 
 const CAMPAIGN_STATUS_COLORS = {

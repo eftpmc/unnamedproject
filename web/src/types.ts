@@ -148,7 +148,7 @@ export interface CampaignTask {
   id: string;
   campaign_id: string;
   title: string;
-  agent: 'claude_code' | 'codex' | 'mcp';
+  agent: 'claude_code' | 'codex' | 'mcp' | 'file_write' | 'git';
   status: 'waiting' | 'running' | 'done' | 'error';
   execution_id: string | null;
   position: number;

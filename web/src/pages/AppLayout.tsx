@@ -22,7 +22,7 @@ export default function AppLayout() {
     navigate(`/c/${id}`);
   }
 
-  const isPageRoute = PAGE_ROUTES.includes(location.pathname);
+  const isPageRoute = PAGE_ROUTES.some(r => location.pathname === r || location.pathname.startsWith(r + '/'));
 
   const mainContent = isPageRoute
     ? <Outlet />

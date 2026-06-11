@@ -6,6 +6,8 @@ import AppLayout from './pages/AppLayout.js';
 import Settings from './pages/Settings.js';
 import ChatsPage from './pages/ChatsPage.js';
 import ProjectsPage from './pages/ProjectsPage.js';
+import ProjectPage from './pages/ProjectPage.js';
+import CampaignPage from './pages/CampaignPage.js';
 
 const queryClient = new QueryClient({
   defaultOptions: { queries: { retry: 1, staleTime: 30_000 } },
@@ -23,6 +25,8 @@ const router = createBrowserRouter([
       { path: 'c/:chatId', element: null },
       { path: 'chats', element: <ChatsPage /> },
       { path: 'projects', element: <ProjectsPage /> },
+      { path: 'projects/:projectId', element: <ProjectPage /> },
+      { path: 'projects/:projectId/campaigns/:campaignId', element: <CampaignPage /> },
       { path: 'settings', element: <Settings /> },
     ],
   },

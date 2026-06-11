@@ -2,6 +2,7 @@ import express from 'express';
 import { createServer } from 'http';
 import { initDb } from './db/index.js';
 import { initSocket } from './services/socket.js';
+import { startScheduler } from './services/scheduler.js';
 import authRoutes from './routes/auth.js';
 import connectionsRoutes from './routes/connections.js';
 import projectsRoutes from './routes/projects.js';
@@ -41,6 +42,7 @@ if (NODE_ENV !== 'test') {
   server.listen(parseInt(PORT), () => {
     console.log(`Server running on port ${PORT}`);
   });
+  startScheduler();
 }
 
 export { app, server };

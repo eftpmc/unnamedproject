@@ -272,6 +272,11 @@ async function dispatchTool(
       }
       case 'mcp_call': {
         const mcpConfig = getDecryptedConfig(toolInput.connection_id as string);
+        const mcpTaskId = toolInput.campaign_task_id as string | undefined;
+        if (mcpTaskId) {
+          updateCampaignTaskStatus(mcpTaskId, 'running', executionId);
+          broadcast(userId, { type: 'campaign_task_updated', taskId: mcpTaskId, status: 'running' });
+        }
         result = await callMcpTool(
           toolInput.connection_id as string,
           mcpConfig.command,
@@ -280,6 +285,15 @@ async function dispatchTool(
           toolInput.tool_name as string,
           toolInput.tool_input as Record<string, unknown>,
         );
+        if (mcpTaskId) {
+          const mcpFinalStatus = result.startsWith('Error') ? 'error' : 'done';
+          updateCampaignTaskStatus(mcpTaskId, mcpFinalStatus, executionId);
+          const mcpTaskRow = getDb()
+            .prepare('SELECT campaign_id FROM campaign_tasks WHERE id = ?')
+            .get(mcpTaskId) as { campaign_id: string } | undefined;
+          if (mcpTaskRow) maybeCompleteCampaign(mcpTaskRow.campaign_id);
+          broadcast(userId, { type: 'campaign_task_updated', taskId: mcpTaskId, status: mcpFinalStatus });
+        }
         break;
       }
       case 'git_op': {

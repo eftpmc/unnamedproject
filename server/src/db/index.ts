@@ -232,6 +232,34 @@ function applySchema(): void {
       DROP TABLE user_memory;
     `);
   }
+
+  // Remove dangling workspace_id FK from executions (references dropped workspaces table).
+  // PRAGMA foreign_keys = ON means SQLite rejects any statement touching executions when the
+  // referenced table is gone, so we must recreate the table to drop the bad constraint.
+  const executionCols2 = db.prepare("SELECT name FROM pragma_table_info('executions')").all() as { name: string }[];
+  if (executionCols2.some(c => c.name === 'workspace_id')) {
+    db.exec(`
+      PRAGMA foreign_keys = OFF;
+      ALTER TABLE executions RENAME TO executions_old;
+      CREATE TABLE executions (
+        id TEXT PRIMARY KEY,
+        message_id TEXT REFERENCES messages(id) ON DELETE SET NULL,
+        project_id TEXT REFERENCES projects(id) ON DELETE SET NULL,
+        tool TEXT NOT NULL,
+        status TEXT NOT NULL DEFAULT 'pending'
+          CHECK(status IN ('pending','running','done','error','awaiting_approval')),
+        output_log TEXT NOT NULL DEFAULT '',
+        result TEXT,
+        created_at INTEGER NOT NULL DEFAULT (unixepoch()),
+        completed_at INTEGER
+      );
+      INSERT INTO executions (id, message_id, project_id, tool, status, output_log, result, created_at, completed_at)
+        SELECT id, message_id, project_id, tool, status, output_log, result, created_at, completed_at
+        FROM executions_old;
+      DROP TABLE executions_old;
+      PRAGMA foreign_keys = ON;
+    `);
+  }
 }
 
 export interface DbProject {

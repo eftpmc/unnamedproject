@@ -5,7 +5,7 @@ import MessageList from './MessageList.js';
 import MessageInput from './MessageInput.js';
 import { getMessages, sendMessage, getChats, updateChatConfig, getModelsForEffort, getSessionWorktree, mergeSessionBranch, getProjects } from '../lib/api.js';
 import { subscribe } from '../lib/ws.js';
-import type { EffortLevel, Message, Session, WSEvent, WSMessageCreated, WSMessageStarted, WSMessageDelta, WSExecutionUpdate, WSApprovalRequested, WSAutoApproved, WSSessionTitleUpdated } from '../types.js';
+import type { EffortLevel, Message, Session, WSEvent, WSMessageCreated, WSMessageStarted, WSMessageDelta, WSExecutionUpdate, WSApprovalRequested, WSAutoApproved, WSSessionTitleUpdated, WSAgentError } from '../types.js';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 
@@ -84,6 +84,7 @@ export default function ChatView({ chatId }: ChatViewProps) {
   const [streamingIds, setStreamingIds] = useState<Set<string>>(new Set());
 
   const [sending, setSending] = useState(false);
+  const [agentError, setAgentError] = useState<string | null>(null);
 
   const mutation = useMutation({
     mutationFn: (content: string) => sendMessage(chatId, content),
@@ -98,7 +99,9 @@ export default function ChatView({ chatId }: ChatViewProps) {
 
   const handleWsEvent = useCallback((event: WSEvent) => {
     if (event.type === 'agent_error') {
+      const ev = event as WSAgentError;
       setSending(false);
+      setAgentError(ev.error ?? 'The agent encountered an error. Please try again.');
     }
 
     if (event.type === 'message_started') {
@@ -304,8 +307,15 @@ export default function ChatView({ chatId }: ChatViewProps) {
         <MessageList messages={messages} executions={executions} streamingIds={streamingIds} sessionId={chatId} />
       )}
 
+      {agentError && (
+        <div className="shrink-0 flex items-center justify-between gap-3 border-t border-destructive/20 bg-destructive/5 px-5 py-2.5 text-xs text-destructive">
+          <span>{agentError}</span>
+          <button onClick={() => setAgentError(null)} className="shrink-0 text-destructive/60 hover:text-destructive">✕</button>
+        </div>
+      )}
+
       <MessageInput
-        onSend={content => mutation.mutate(content)}
+        onSend={content => { setAgentError(null); mutation.mutate(content); }}
         disabled={sending}
       />
     </div>

@@ -67,6 +67,11 @@ export interface WSEvent {
   [key: string]: unknown;
 }
 
+export interface WSAgentError extends WSEvent {
+  type: 'agent_error';
+  error: string;
+}
+
 export interface WSExecutionUpdate extends WSEvent {
   type: 'execution_update';
   executionId: string;

@@ -3,24 +3,24 @@ import type Anthropic from '@anthropic-ai/sdk';
 export const toolDefinitions: Anthropic.Tool[] = [
   {
     name: 'invoke_claude_code',
-    description: 'Spawn Claude Code CLI in a workspace repo to write, edit, or analyze code.',
+    description: `Dispatch Claude Code — a fully autonomous AI coding agent — to work inside the project repo. Claude Code can handle entire features end-to-end: it reads the codebase, plans changes, writes and edits files across multiple modules, runs tests and fixes failures, installs dependencies, sets up frameworks, refactors, debugs complex issues, and more. It operates in an isolated worktree so it never touches the main branch. Use this for any non-trivial coding task — don't limit it to small edits. Write rich, detailed prompts: describe what you want built, the context it fits into, relevant constraints, and what "done" looks like. Claude Code maintains conversation context across calls on the same session, so you can follow up, course-correct, or ask it to continue.`,
     input_schema: {
       type: 'object',
       properties: {
-        project_id: { type: 'string', description: 'ID of the workspace to work in' },
-        prompt: { type: 'string', description: 'The task to give Claude Code' },
+        project_id: { type: 'string', description: 'ID of the project to work in' },
+        prompt: { type: 'string', description: 'The task to give Claude Code. Be specific and thorough — it can handle complex, multi-file work. Include context, constraints, and what done looks like.' },
       },
       required: ['project_id', 'prompt'],
     },
   },
   {
     name: 'invoke_codex',
-    description: 'Spawn Codex CLI in a workspace repo to write, edit, or analyze code.',
+    description: `Dispatch Codex — OpenAI's autonomous coding agent — to work inside the project repo. Like Claude Code, Codex can implement features, write and edit files, run commands, fix tests, and reason about a codebase. It operates in the same isolated worktree. Use Codex when the user prefers OpenAI models, or in parallel with Claude Code to get a second implementation or approach. Write detailed prompts — Codex performs best with clear context about the codebase, the goal, and expected output.`,
     input_schema: {
       type: 'object',
       properties: {
-        project_id: { type: 'string', description: 'ID of the workspace to work in' },
-        prompt: { type: 'string', description: 'The task to give Codex' },
+        project_id: { type: 'string', description: 'ID of the project to work in' },
+        prompt: { type: 'string', description: 'The task to give Codex. Be specific — include codebase context, what to build, and what done looks like.' },
       },
       required: ['project_id', 'prompt'],
     },

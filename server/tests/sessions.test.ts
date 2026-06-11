@@ -70,4 +70,41 @@ describe('sessions', () => {
       .set('Authorization', `Bearer ${token}`);
     expect(list.body[0].title).toBe('Fix the login bug');
   });
+
+  it('DELETE /sessions/:id deletes the session', async () => {
+    const create = await request(app)
+      .post('/sessions')
+      .set('Authorization', `Bearer ${token}`)
+      .send({});
+    const id = create.body.id;
+
+    const del = await request(app)
+      .delete(`/sessions/${id}`)
+      .set('Authorization', `Bearer ${token}`);
+    expect(del.status).toBe(200);
+    expect(del.body.ok).toBe(true);
+
+    const list = await request(app)
+      .get('/sessions')
+      .set('Authorization', `Bearer ${token}`);
+    expect(list.body.find((s: { id: string }) => s.id === id)).toBeUndefined();
+  });
+
+  it('DELETE /sessions/:id returns 404 for another user', async () => {
+    const create = await request(app)
+      .post('/sessions')
+      .set('Authorization', `Bearer ${token}`)
+      .send({});
+    const id = create.body.id;
+
+    const other = await request(app)
+      .post('/auth/register')
+      .send({ email: `other-del-${Date.now()}@test.com`, password: 'pass' });
+    const otherToken = other.body.token;
+
+    const del = await request(app)
+      .delete(`/sessions/${id}`)
+      .set('Authorization', `Bearer ${otherToken}`);
+    expect(del.status).toBe(404);
+  });
 });

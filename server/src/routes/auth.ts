@@ -3,6 +3,7 @@ import bcrypt from 'bcrypt';
 import { getDb, createScheduledTask } from '../db/index.js';
 import { newId } from '../lib/ids.js';
 import { signToken } from '../lib/jwt.js';
+import { requireAuth, type AuthedRequest } from '../middleware/auth.js';
 
 const router = Router();
 
@@ -54,6 +55,15 @@ router.post('/login', async (req, res) => {
   }
 
   res.json({ token: signToken(user.id) });
+});
+
+router.get('/me', requireAuth, (req, res) => {
+  const { userId } = req as AuthedRequest;
+  const user = getDb()
+    .prepare('SELECT email FROM users WHERE id = ?')
+    .get(userId) as { email: string } | undefined;
+  if (!user) { res.status(404).json({ error: 'User not found' }); return; }
+  res.json({ email: user.email });
 });
 
 export default router;

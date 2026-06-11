@@ -72,4 +72,14 @@ router.post('/', (req, res) => {
   res.status(201).json({ id });
 });
 
+router.delete('/:id', (req, res) => {
+  const { userId } = req as unknown as AuthedRequest;
+  const session = getDb()
+    .prepare('SELECT id FROM sessions WHERE id = ? AND user_id = ?')
+    .get(req.params.id, userId);
+  if (!session) { res.status(404).json({ error: 'Session not found' }); return; }
+  getDb().prepare('DELETE FROM sessions WHERE id = ?').run(req.params.id);
+  res.json({ ok: true });
+});
+
 export default router;

@@ -4,9 +4,15 @@ import fs from 'fs';
 import { app } from '../src/index.js';
 import { initDb, getDb } from '../src/db/index.js';
 
-beforeAll(() => {
+let token: string;
+
+beforeAll(async () => {
   fs.mkdirSync(process.env.DATA_DIR!, { recursive: true });
   initDb();
+  const res = await request(app)
+    .post('/auth/register')
+    .send({ email: `me-${Date.now()}@test.com`, password: 'password123' });
+  token = res.body.token;
 });
 
 describe('POST /auth/register', () => {
@@ -29,6 +35,21 @@ describe('POST /auth/register', () => {
       .post('/auth/register')
       .send({ email, password: 'password123' });
     expect(res.status).toBe(409);
+  });
+});
+
+describe('GET /auth/me', () => {
+  it('GET /auth/me returns current user email', async () => {
+    const res = await request(app)
+      .get('/auth/me')
+      .set('Authorization', `Bearer ${token}`);
+    expect(res.status).toBe(200);
+    expect(res.body.email).toMatch(/@test\.com$/);
+  });
+
+  it('GET /auth/me returns 401 without token', async () => {
+    const res = await request(app).get('/auth/me');
+    expect(res.status).toBe(401);
   });
 });
 

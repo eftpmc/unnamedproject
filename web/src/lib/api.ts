@@ -32,16 +32,24 @@ export async function login(email: string, password: string): Promise<string> {
   return data.token;
 }
 
-export function getSessions(): Promise<Session[]> {
+export function getChats(): Promise<Session[]> {
   return request('/sessions');
 }
 
-export function createSession(title?: string): Promise<{ id: string }> {
+export function createChat(title?: string): Promise<{ id: string }> {
   return request('/sessions', { method: 'POST', body: JSON.stringify({ title }) });
 }
 
-export function updateSessionConfig(sessionId: string, config: { effort?: EffortLevel; model?: string | null }): Promise<void> {
-  return request(`/sessions/${sessionId}`, { method: 'PATCH', body: JSON.stringify(config) });
+export function updateChatConfig(chatId: string, config: { effort?: EffortLevel; model?: string | null }): Promise<void> {
+  return request(`/sessions/${chatId}`, { method: 'PATCH', body: JSON.stringify(config) });
+}
+
+export function deleteChat(id: string): Promise<void> {
+  return request(`/sessions/${id}`, { method: 'DELETE' });
+}
+
+export function getMe(): Promise<{ email: string }> {
+  return request('/auth/me');
 }
 
 export function getModelsForEffort(effort: EffortLevel): Promise<ClaudeModelInfo[]> {

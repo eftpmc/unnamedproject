@@ -10,7 +10,7 @@ vi.mock('./auth', () => ({
 const mockFetch = vi.fn();
 globalThis.fetch = mockFetch;
 
-const { login, getSessions, createSession } = await import('./api');
+const { login, getChats, createChat } = await import('./api');
 
 beforeEach(() => {
   mockFetch.mockReset();
@@ -31,16 +31,16 @@ describe('api', () => {
     }));
   });
 
-  it('getSessions includes auth header', async () => {
+  it('getChats includes auth header', async () => {
     mockFetch.mockResolvedValueOnce({ ok: true, json: async () => [] });
-    await getSessions();
+    await getChats();
     const [, opts] = mockFetch.mock.calls[0];
     expect(opts.headers.Authorization).toBe('Bearer test-token');
   });
 
-  it('createSession returns new session id', async () => {
+  it('createChat returns new session id', async () => {
     mockFetch.mockResolvedValueOnce({ ok: true, json: async () => ({ id: 'sess-1' }) });
-    const result = await createSession('My session');
+    const result = await createChat('My session');
     expect(result.id).toBe('sess-1');
   });
 });

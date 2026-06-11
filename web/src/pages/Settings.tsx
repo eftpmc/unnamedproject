@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Trash2 } from 'lucide-react';
@@ -12,15 +12,17 @@ import { Separator } from '@/components/ui/separator';
 import { Textarea } from '@/components/ui/textarea';
 import {
   createConnection,
-  createWorkspace,
+  createProject,
   deleteConnection,
-  deleteWorkspace,
+  deleteProject,
   getConnections,
   getMemory,
-  getWorkspaces,
+  getProjects,
+  getSettings,
+  updateSettings,
 } from '../lib/api.js';
 import { clearToken } from '../lib/auth.js';
-import type { Connection, Workspace } from '../types.js';
+import type { Connection, Project, UserSettings } from '../types.js';
 
 type SetupKind = 'lead_agent' | 'claude_code' | 'codex' | 'github' | 'mcp';
 
@@ -117,8 +119,9 @@ export default function Settings() {
   const qc = useQueryClient();
 
   const { data: connections = [] } = useQuery<Connection[]>({ queryKey: ['connections'], queryFn: getConnections });
-  const { data: workspaces = [] } = useQuery<Workspace[]>({ queryKey: ['workspaces'], queryFn: getWorkspaces });
+  const { data: projects = [] } = useQuery<Project[]>({ queryKey: ['projects'], queryFn: getProjects });
   const { data: memory = {} } = useQuery<Record<string, string>>({ queryKey: ['memory'], queryFn: getMemory });
+  const { data: settings } = useQuery<UserSettings>({ queryKey: ['settings'], queryFn: getSettings });
 
   const [activeSetup, setActiveSetup] = useState<SetupKind | null>(null);
   const [setupName, setSetupName] = useState('');
@@ -128,12 +131,14 @@ export default function Settings() {
   const [mcpEnv, setMcpEnv] = useState('{}');
   const [setupError, setSetupError] = useState('');
 
-  const [showWorkspaceModal, setShowWorkspaceModal] = useState(false);
-  const [wsName, setWsName] = useState('');
-  const [wsDesc, setWsDesc] = useState('');
-  const [wsRepo, setWsRepo] = useState('');
-  const [wsConnIds, setWsConnIds] = useState<string[]>([]);
-  const [wsError, setWsError] = useState('');
+  const [showProjectModal, setShowProjectModal] = useState(false);
+  const [projName, setProjName] = useState('');
+  const [projDesc, setProjDesc] = useState('');
+  const [projRepo, setProjRepo] = useState('');
+  const [projConnIds, setProjConnIds] = useState<string[]>([]);
+  const [projError, setProjError] = useState('');
+  const [projectsRoot, setProjectsRoot] = useState('');
+  const [projectsRootError, setProjectsRootError] = useState('');
 
   const inputCls = 'text-sm';
   const textareaCls = 'text-sm font-mono resize-y';
@@ -144,7 +149,11 @@ export default function Settings() {
   const leadAgent = connections.find(c => c.purpose === 'lead_agent');
   const toolConnections = connections.filter(c => c.purpose === 'claude_code' || c.purpose === 'codex' || c.purpose === 'github');
   const mcpConnections = connections.filter(c => c.purpose === 'mcp');
-  const workspaceConnections = connections.filter(c => c.purpose !== 'lead_agent');
+  const projectConnections = connections.filter(c => c.purpose !== 'lead_agent');
+
+  useEffect(() => {
+    if (settings?.projects_root) setProjectsRoot(settings.projects_root);
+  }, [settings]);
 
   const createConnMutation = useMutation({
     mutationFn: () => {
@@ -185,23 +194,29 @@ export default function Settings() {
     onSuccess: () => qc.invalidateQueries({ queryKey: ['connections'] }),
   });
 
-  const createWsMutation = useMutation({
-    mutationFn: () => createWorkspace({
-      name: wsName,
-      description: wsDesc || undefined,
-      repo_path: wsRepo || undefined,
-      enabled_connection_ids: wsConnIds,
+  const createProjMutation = useMutation({
+    mutationFn: () => createProject({
+      name: projName,
+      description: projDesc || undefined,
+      repo_path: projRepo || undefined,
+      enabled_connection_ids: projConnIds,
     }),
     onSuccess: () => {
-      qc.invalidateQueries({ queryKey: ['workspaces'] });
-      closeWorkspaceModal();
+      qc.invalidateQueries({ queryKey: ['projects'] });
+      closeProjectModal();
     },
-    onError: (e: Error) => setWsError(e.message),
+    onError: (e: Error) => setProjError(e.message),
   });
 
-  const deleteWsMutation = useMutation({
-    mutationFn: deleteWorkspace,
-    onSuccess: () => qc.invalidateQueries({ queryKey: ['workspaces'] }),
+  const deleteProjMutation = useMutation({
+    mutationFn: deleteProject,
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['projects'] }),
+  });
+
+  const updateSettingsMutation = useMutation({
+    mutationFn: () => updateSettings({ projects_root: projectsRoot }),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['settings'] }),
+    onError: (e: Error) => setProjectsRootError(e.message),
   });
 
   function openSetupModal(kind: SetupKind) {
@@ -224,22 +239,22 @@ export default function Settings() {
     setSetupError('');
   }
 
-  function openWorkspaceModal() {
-    setShowWorkspaceModal(true);
-    setWsName('');
-    setWsDesc('');
-    setWsRepo('');
-    setWsConnIds([]);
-    setWsError('');
+  function openProjectModal() {
+    setShowProjectModal(true);
+    setProjName('');
+    setProjDesc('');
+    setProjRepo('');
+    setProjConnIds([]);
+    setProjError('');
   }
 
-  function closeWorkspaceModal() {
-    setShowWorkspaceModal(false);
-    setWsName('');
-    setWsDesc('');
-    setWsRepo('');
-    setWsConnIds([]);
-    setWsError('');
+  function closeProjectModal() {
+    setShowProjectModal(false);
+    setProjName('');
+    setProjDesc('');
+    setProjRepo('');
+    setProjConnIds([]);
+    setProjError('');
   }
 
   function handleSignOut() {
@@ -332,33 +347,33 @@ export default function Settings() {
     );
   }
 
-  function WorkspaceModal() {
-    if (!showWorkspaceModal) return null;
+  function ProjectModal() {
+    if (!showProjectModal) return null;
     return (
-      <Modal title="Workspace" onClose={closeWorkspaceModal}>
+      <Modal title="Project" onClose={closeProjectModal}>
         <div className="flex flex-col gap-3">
           <div>
             <Label>Name</Label>
-            <Input placeholder="Main app" value={wsName} onChange={e => setWsName(e.target.value)} className={inputCls} />
+            <Input placeholder="Main app" value={projName} onChange={e => setProjName(e.target.value)} className={inputCls} />
           </div>
           <div>
             <Label>Description</Label>
-            <Input placeholder="Optional" value={wsDesc} onChange={e => setWsDesc(e.target.value)} className={inputCls} />
+            <Input placeholder="Optional" value={projDesc} onChange={e => setProjDesc(e.target.value)} className={inputCls} />
           </div>
           <div>
-            <Label>Repo path</Label>
-            <Input placeholder="/Users/you/project" value={wsRepo} onChange={e => setWsRepo(e.target.value)} className={inputCls} />
+            <Label>Repo path (optional)</Label>
+            <Input placeholder="/Users/you/project" value={projRepo} onChange={e => setProjRepo(e.target.value)} className={inputCls} />
           </div>
-          {workspaceConnections.length > 0 && (
+          {projectConnections.length > 0 && (
             <div>
               <Label>Allowed tools</Label>
               <div className="mt-2 rounded-xl border bg-card px-3 py-2">
-                {workspaceConnections.map(c => (
+                {projectConnections.map(c => (
                   <label key={c.id} className="flex items-center gap-2 py-1.5 cursor-pointer">
                     <input
                       type="checkbox"
-                      checked={wsConnIds.includes(c.id)}
-                      onChange={e => setWsConnIds(prev => e.target.checked ? [...prev, c.id] : prev.filter(id => id !== c.id))}
+                      checked={projConnIds.includes(c.id)}
+                      onChange={e => setProjConnIds(prev => e.target.checked ? [...prev, c.id] : prev.filter(id => id !== c.id))}
                       className="h-4 w-4 rounded border-border bg-background accent-primary"
                     />
                     <span className="text-sm text-foreground/70">{c.name}</span>
@@ -368,10 +383,10 @@ export default function Settings() {
               </div>
             </div>
           )}
-          {wsError && <div className="text-destructive text-sm">{wsError}</div>}
+          {projError && <div className="text-destructive text-sm">{projError}</div>}
           <DialogFooter>
-            <button onClick={closeWorkspaceModal} className={ghostBtn}>Cancel</button>
-            <button onClick={() => createWsMutation.mutate()} className={primaryBtn} disabled={!wsName.trim()}>Save workspace</button>
+            <button onClick={closeProjectModal} className={ghostBtn}>Cancel</button>
+            <button onClick={() => createProjMutation.mutate()} className={primaryBtn} disabled={!projName.trim()}>Save project</button>
           </DialogFooter>
         </div>
       </Modal>
@@ -424,21 +439,42 @@ export default function Settings() {
         </div>
       </Section>
 
-      <Section title="Workspaces">
-        {workspaces.length > 0 && (
+      <Section title="Projects">
+        <div className="mb-3 flex items-end gap-3">
+          <div className="flex-1">
+            <Label>Projects root</Label>
+            <Input
+              placeholder="/Users/you/projects"
+              value={projectsRoot}
+              onChange={e => setProjectsRoot(e.target.value)}
+              className={inputCls}
+            />
+          </div>
+          <button onClick={() => updateSettingsMutation.mutate()} className={ghostBtn} disabled={!projectsRoot.trim()}>
+            Save
+          </button>
+        </div>
+        {projectsRootError && <div className="text-destructive text-sm mb-3">{projectsRootError}</div>}
+        <p className="text-muted-foreground/70 text-xs mb-3">
+          The agent creates new repo-backed projects under this directory.
+        </p>
+        {projects.length > 0 && (
           <div className="mb-3 grid gap-2">
-            {workspaces.map(w => (
-              <div key={w.id} className={rowCls}>
+            {projects.map(p => (
+              <div key={p.id} className={rowCls}>
                 <div className="flex-1">
-                  <div className="text-sm font-medium">{w.name}</div>
-                  {w.description && <div className="text-muted-foreground/70 text-xs mt-0.5">{w.description}</div>}
+                  <div className="text-sm font-medium">
+                    {p.name}
+                    {!p.repo_path && <span className="ml-2 text-muted-foreground/70 text-xs">(no repo)</span>}
+                  </div>
+                  {p.description && <div className="text-muted-foreground/70 text-xs mt-0.5">{p.description}</div>}
                 </div>
-                <DeleteBtn onClick={() => deleteWsMutation.mutate(w.id)} />
+                <DeleteBtn onClick={() => deleteProjMutation.mutate(p.id)} />
               </div>
             ))}
           </div>
         )}
-        <button onClick={openWorkspaceModal} className={primaryBtn}>Add workspace</button>
+        <button onClick={openProjectModal} className={primaryBtn}>Add project</button>
       </Section>
 
       <Section title="Memory">
@@ -461,7 +497,7 @@ export default function Settings() {
       </Section>
 
       <SetupModal />
-      <WorkspaceModal />
+      <ProjectModal />
       </div>
     </div>
   );

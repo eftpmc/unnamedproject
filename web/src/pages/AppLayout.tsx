@@ -14,7 +14,7 @@ export default function AppLayout() {
   const navigate = useNavigate();
   const isSettings = location.pathname === '/settings';
 
-  const [activePanel, setActivePanel] = useState<'sessions' | 'workspaces'>('sessions');
+  const [activePanel, setActivePanel] = useState<'sessions' | 'projects'>('sessions');
   const showPanel = !isSettings;
 
   const { data: sessions = [], refetch: refetchSessions } = useQuery({
@@ -26,7 +26,7 @@ export default function AppLayout() {
     connect();
   }, []);
 
-  function handlePanelToggle(panel: 'sessions' | 'workspaces') {
+  function handlePanelToggle(panel: 'sessions' | 'projects') {
     setActivePanel(panel);
   }
 

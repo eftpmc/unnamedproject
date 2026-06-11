@@ -1,8 +1,8 @@
 import { useNavigate } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
 import { Plus } from 'lucide-react';
-import { getWorkspaces, getConnections } from '../lib/api.js';
-import type { Session, Workspace, Connection } from '../types.js';
+import { getProjects, getConnections } from '../lib/api.js';
+import type { Session, Project, Connection } from '../types.js';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { ScrollArea } from '@/components/ui/scroll-area';
@@ -30,7 +30,7 @@ function connectionLabel(connection: Connection): string {
 }
 
 interface NavPanelProps {
-  activePanel: 'sessions' | 'workspaces';
+  activePanel: 'sessions' | 'projects';
   sessions: Session[];
   activeSessionId?: string;
   onNewSession: () => void;
@@ -39,16 +39,16 @@ interface NavPanelProps {
 export default function NavPanel({ activePanel, sessions, activeSessionId, onNewSession }: NavPanelProps) {
   const navigate = useNavigate();
 
-  const { data: workspaces = [] } = useQuery<Workspace[]>({
-    queryKey: ['workspaces'],
-    queryFn: getWorkspaces,
-    enabled: activePanel === 'workspaces',
+  const { data: projects = [] } = useQuery<Project[]>({
+    queryKey: ['projects'],
+    queryFn: getProjects,
+    enabled: activePanel === 'projects',
   });
 
   const { data: connections = [] } = useQuery<Connection[]>({
     queryKey: ['connections'],
     queryFn: getConnections,
-    enabled: activePanel === 'workspaces',
+    enabled: activePanel === 'projects',
   });
 
   return (
@@ -102,25 +102,26 @@ export default function NavPanel({ activePanel, sessions, activeSessionId, onNew
       ) : (
         <>
           <div className="px-4 py-4">
-            <div className="text-sm font-medium">Workspaces</div>
-            <div className="text-xs text-muted-foreground">{workspaces.length} configured</div>
+            <div className="text-sm font-medium">Projects</div>
+            <div className="text-xs text-muted-foreground">{projects.length} total</div>
           </div>
           <Separator className="mx-4 w-auto bg-border/60" />
           <ScrollArea className="flex-1">
             <div className="p-2.5">
-            {workspaces.map(w => (
-              <div key={w.id} className="rounded-2xl px-3 py-2.5 hover:bg-background/65">
+            {projects.map(p => (
+              <div key={p.id} className="rounded-2xl px-3 py-2.5 hover:bg-background/65">
                 <div className="truncate text-sm font-medium">
-                  {w.name}
+                  {p.name}
+                  {!p.repo_path && <span className="ml-2 text-xs text-muted-foreground">(no repo)</span>}
                 </div>
-                {w.description && (
+                {p.description && (
                   <div className="mt-1 truncate text-xs text-muted-foreground">
-                    {w.description}
+                    {p.description}
                   </div>
                 )}
               </div>
             ))}
-            {workspaces.length > 0 && connections.length > 0 && (
+            {projects.length > 0 && connections.length > 0 && (
               <div className="mt-3 space-y-1 border-t border-border/60 pt-3">
                 <div className="px-3 pb-1 text-xs font-medium text-muted-foreground">Setup</div>
                 {connections.map(c => (

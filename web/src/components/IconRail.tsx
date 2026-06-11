@@ -6,8 +6,8 @@ import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip
 import { cn } from '@/lib/utils';
 
 interface IconRailProps {
-  activePanel: 'sessions' | 'workspaces' | null;
-  onPanelToggle: (panel: 'sessions' | 'workspaces') => void;
+  activePanel: 'sessions' | 'projects' | null;
+  onPanelToggle: (panel: 'sessions' | 'projects') => void;
 }
 
 function IconBtn({ active, onClick, title, children }: {
@@ -67,11 +67,11 @@ export default function IconRail({ activePanel, onPanelToggle }: IconRailProps) 
         <MessagesSquare size={20} strokeWidth={1.75} />
       </IconBtn>
 
-      {/* Workspaces */}
+      {/* Projects */}
       <IconBtn
-        title="Workspaces"
-        active={activePanel === 'workspaces' && !isSettings}
-        onClick={() => onPanelToggle('workspaces')}
+        title="Projects"
+        active={activePanel === 'projects' && !isSettings}
+        onClick={() => onPanelToggle('projects')}
       >
         <LayoutGrid size={20} strokeWidth={1.75} />
       </IconBtn>

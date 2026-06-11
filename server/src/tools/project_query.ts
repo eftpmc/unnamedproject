@@ -6,14 +6,15 @@ interface ProjectQueryInput {
   question: string;
 }
 
-export async function runProjectQuery(input: ProjectQueryInput, userId: string): Promise<string> {
+export async function runProjectQuery(input: ProjectQueryInput, userId: string, apiKey?: string | null): Promise<string> {
   const project = getProjectForUser(input.project_id, userId);
   if (!project) return 'Project not found.';
   if (!project.repo_path) return 'Project has no repo path configured.';
 
-  if (!await hasGraph(input.project_id)) {
-    await buildGraph(project.repo_path, input.project_id);
+  const repoPath = project.repo_path;
+  if (!await hasGraph(repoPath)) {
+    await buildGraph(repoPath, input.project_id, apiKey);
   }
 
-  return await queryGraph(input.question, input.project_id);
+  return await queryGraph(input.question, repoPath, apiKey);
 }

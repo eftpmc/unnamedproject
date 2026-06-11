@@ -16,15 +16,18 @@ initDb();
 const userId = newId();
 getDb().prepare('INSERT INTO users (id, email, hashed_password) VALUES (?,?,?)').run(userId, `${userId}@test.com`, 'x');
 
+const anthropicKey = process.env.ANTHROPIC_API_KEY ?? '';
 const connId = newId();
-const encryptedConfig = encrypt(JSON.stringify({ apiKey: '' }), deriveKey());
+const encryptedConfig = encrypt(JSON.stringify({ apiKey: anthropicKey }), deriveKey());
 getDb()
   .prepare('INSERT INTO connections (id, user_id, name, type, purpose, encrypted_config) VALUES (?,?,?,?,?,?)')
   .run(connId, userId, 'smoke-anthropic', 'anthropic', 'lead_agent', encryptedConfig);
 
 const repoPath = fs.mkdtempSync(path.join(os.tmpdir(), 'smoke-repo-'));
 await simpleGit(repoPath).init();
-fs.writeFileSync(path.join(repoPath, 'README.md'), '# Smoke Test Repo\n');
+// Code-only repo so graphify doesn't need an LLM key for doc extraction
+fs.writeFileSync(path.join(repoPath, 'index.ts'), 'export function greet(name: string): string {\n  return `Hello, ${name}!`;\n}\n');
+fs.writeFileSync(path.join(repoPath, 'utils.ts'), 'export function add(a: number, b: number): number { return a + b; }\n');
 await simpleGit(repoPath).add('.').commit('initial commit');
 
 const projectId = newId();
@@ -48,7 +51,7 @@ function makeExecution(tool: string): string {
 }
 
 console.log('--- Step 1: project_query (plan mode) ---');
-const queryResult = await runProjectQuery({ project_id: projectId, question: 'What files are in this repo?', session_id: sessionId }, userId);
+const queryResult = await runProjectQuery({ project_id: projectId, question: 'What files are in this repo?' }, userId, anthropicKey || null);
 console.log(queryResult);
 
 console.log('\n--- Step 2: ensureWorktree ---');
@@ -58,7 +61,7 @@ console.log('worktree:', worktree);
 console.log('\n--- Step 3: invoke_claude_code (turn 1, create a file) ---');
 const r1 = await invokeClaudeCode(
   { prompt: 'Create a file named hello.txt containing the text "hello world" and nothing else.' },
-  { userId, executionId: makeExecution('invoke_claude_code'), repoPath: worktree.worktree_path, apiKey: '', resumeSessionId: worktree.claude_session_id }
+  { userId, executionId: makeExecution('invoke_claude_code'), repoPath: worktree.worktree_path, apiKey: anthropicKey || null, resumeSessionId: worktree.claude_session_id }
 );
 console.log('result:', r1.result);
 console.log('sessionId:', r1.sessionId);
@@ -68,7 +71,7 @@ console.log('hello.txt exists in main repo:', fs.existsSync(path.join(repoPath, 
 console.log('\n--- Step 4: invoke_claude_code (turn 2, resume + verify continuity) ---');
 const r2 = await invokeClaudeCode(
   { prompt: 'What did you just create in the previous step? Reply with just the filename.' },
-  { userId, executionId: makeExecution('invoke_claude_code'), repoPath: worktree.worktree_path, apiKey: '', resumeSessionId: r1.sessionId }
+  { userId, executionId: makeExecution('invoke_claude_code'), repoPath: worktree.worktree_path, apiKey: anthropicKey || null, resumeSessionId: r1.sessionId }
 );
 console.log('result:', r2.result);
 console.log('sessionId:', r2.sessionId);

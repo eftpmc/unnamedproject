@@ -44,6 +44,6 @@ describe('project_query', () => {
     vi.mocked(hasGraph).mockResolvedValueOnce(false);
 
     await runProjectQuery({ project_id: 'p2', question: 'what is this?' }, 'u1');
-    expect(buildGraph).toHaveBeenCalledWith('/tmp/repo2', 'p2');
+    expect(buildGraph).toHaveBeenCalledWith('/tmp/repo2', 'p2', undefined);
   });
 });

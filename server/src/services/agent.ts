@@ -226,15 +226,20 @@ async function dispatchTool(
         );
         break;
       }
-      case 'project_query':
-        result = await runProjectQuery({ project_id: projectId, question: toolInput.question as string }, userId);
+      case 'project_query': {
+        let pqKey: string | null = null;
+        try { pqKey = getAnthropicKey(userId); } catch { /* none configured */ }
+        result = await runProjectQuery({ project_id: projectId, question: toolInput.question as string }, userId, pqKey);
         break;
+      }
       case 'rebuild_graph': {
         if (!project?.repo_path) {
           result = project ? `Project '${project.name}' has no repo.` : `Project ${projectId} not found.`;
           break;
         }
-        await buildGraph(project.repo_path, projectId);
+        let rgKey: string | null = null;
+        try { rgKey = getAnthropicKey(userId); } catch { /* none configured */ }
+        await buildGraph(project.repo_path, projectId, rgKey);
         result = 'Knowledge graph rebuilt successfully.';
         break;
       }

@@ -1,30 +1,15 @@
 import { useState, type KeyboardEvent } from 'react';
 import { ArrowUp } from 'lucide-react';
 import { Button } from '@/components/ui/button';
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from '@/components/ui/select';
 import { Textarea } from '@/components/ui/textarea';
 import { cn } from '@/lib/utils';
-import type { ClaudeModelInfo, EffortLevel } from '../types.js';
-
-const EFFORT_OPTIONS: EffortLevel[] = ['low', 'medium', 'high'];
 
 interface MessageInputProps {
   onSend: (content: string) => void;
   disabled?: boolean;
-  effort: EffortLevel;
-  onEffortChange: (effort: EffortLevel) => void;
-  model: string | null;
-  onModelChange: (model: string | null) => void;
-  models: ClaudeModelInfo[];
 }
 
-export default function MessageInput({ onSend, disabled, effort, onEffortChange, model, onModelChange, models }: MessageInputProps) {
+export default function MessageInput({ onSend, disabled }: MessageInputProps) {
   const [value, setValue] = useState('');
 
   function handleKeyDown(e: KeyboardEvent<HTMLTextAreaElement>) {
@@ -56,42 +41,7 @@ export default function MessageInput({ onSend, disabled, effort, onEffortChange,
             disabled && 'text-muted-foreground',
           )}
         />
-        <div className="mb-1 flex shrink-0 items-center gap-2">
-          <Select
-            value={effort}
-            onValueChange={value => onEffortChange(value as EffortLevel)}
-          >
-            <SelectTrigger
-              size="sm"
-              className="h-10 w-28 rounded-2xl border-border/60 bg-muted/60 text-xs dark:border-white/10 dark:bg-background/50 dark:hover:bg-background/60"
-              aria-label="Effort"
-            >
-              <SelectValue placeholder="Effort" />
-            </SelectTrigger>
-            <SelectContent>
-              {EFFORT_OPTIONS.map(option => (
-                <SelectItem key={option} value={option}>{option}</SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-          <Select
-            value={model ?? 'auto'}
-            onValueChange={value => onModelChange(value === 'auto' ? null : value)}
-          >
-            <SelectTrigger
-              size="sm"
-              className="h-10 w-36 rounded-2xl border-border/60 bg-muted/60 text-xs dark:border-white/10 dark:bg-background/50 dark:hover:bg-background/60"
-              aria-label="Model"
-            >
-              <SelectValue placeholder="Model" />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="auto">Auto</SelectItem>
-              {models.map(m => (
-                <SelectItem key={m.id} value={m.id}>{m.display_name}</SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
+        <div className="mb-1">
           <Button
             size="icon-lg"
             onClick={submit}
@@ -99,7 +49,7 @@ export default function MessageInput({ onSend, disabled, effort, onEffortChange,
             title="Send"
             className={cn(
               'rounded-2xl bg-foreground text-background hover:bg-foreground/90',
-              disabled || !value.trim() ? 'bg-muted text-muted-foreground hover:bg-muted' : '',
+              (disabled || !value.trim()) && 'bg-muted text-muted-foreground hover:bg-muted',
             )}
           >
             <ArrowUp size={16} strokeWidth={2} />

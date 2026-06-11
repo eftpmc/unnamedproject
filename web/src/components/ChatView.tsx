@@ -1,13 +1,13 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { GitMerge, FolderOpen } from 'lucide-react';
+import { GitMerge } from 'lucide-react';
 import MessageList from './MessageList.js';
 import MessageInput from './MessageInput.js';
 import { getMessages, sendMessage, getChats, updateChatConfig, getModelsForEffort, getSessionWorktree, mergeSessionBranch, getProjects } from '../lib/api.js';
 import { subscribe } from '../lib/ws.js';
 import type { EffortLevel, Message, Session, WSEvent, WSMessageCreated, WSMessageStarted, WSMessageDelta, WSExecutionUpdate, WSApprovalRequested, WSAutoApproved, WSSessionTitleUpdated } from '../types.js';
 import { Skeleton } from '@/components/ui/skeleton';
-import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 
 interface InlineExecution {
   executionId: string;
@@ -220,8 +220,6 @@ export default function ChatView({ chatId }: ChatViewProps) {
     return unsub;
   }, [handleWsEvent]);
 
-  const chatTitle = chat?.title ?? messages.find(m => m.role === 'user')?.content?.slice(0, 40) ?? 'Chat';
-
   if (isLoading) {
     return (
       <div className="flex flex-1 flex-col gap-4 p-6">
@@ -234,40 +232,44 @@ export default function ChatView({ chatId }: ChatViewProps) {
 
   return (
     <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
-      <header className="flex h-16 shrink-0 items-center gap-3 px-6">
-        <div className="min-w-0 flex-1">
-          <div className="truncate text-sm font-medium">{chatTitle}</div>
+      <header className="flex h-14 shrink-0 items-center justify-between border-b border-border/40 px-5">
+        <div className="flex min-w-0 flex-col">
+          <span className="truncate text-sm font-semibold text-foreground">
+            {chat?.title ?? 'Untitled chat'}
+          </span>
+          {pinnedProject && (
+            <div className="flex items-center gap-1.5">
+              <span className="size-1.5 shrink-0 rounded-full bg-muted-foreground/40" />
+              <span className="text-xs text-muted-foreground truncate">{pinnedProject.name}</span>
+            </div>
+          )}
         </div>
-        {projects.length > 0 && (
-          <DropdownMenu>
-            <DropdownMenuTrigger asChild>
-              <button className="flex items-center gap-1.5 rounded-lg px-2.5 py-1.5 text-xs text-muted-foreground hover:bg-muted hover:text-foreground transition-colors">
-                <FolderOpen size={13} />
-                <span className="max-w-32 truncate">{pinnedProject?.name ?? 'No project'}</span>
-              </button>
-            </DropdownMenuTrigger>
-            <DropdownMenuContent align="end" className="w-52">
-              {projects.map(p => (
-                <DropdownMenuItem
-                  key={p.id}
-                  onSelect={() => configMutation.mutate({ pinned_project_id: p.id === chat?.pinned_project_id ? null : p.id })}
-                  className={p.id === chat?.pinned_project_id ? 'font-medium' : ''}
-                >
-                  {p.name}
-                  {p.id === chat?.pinned_project_id && <span className="ml-auto text-muted-foreground">✓</span>}
-                </DropdownMenuItem>
+        <div className="flex shrink-0 items-center gap-2">
+          <Select value={effort} onValueChange={value => configMutation.mutate({ effort: value as EffortLevel })}>
+            <SelectTrigger size="sm" className="h-7 w-24 rounded-lg border-border/50 bg-muted/50 text-xs">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              {(['low', 'medium', 'high'] as EffortLevel[]).map(o => (
+                <SelectItem key={o} value={o}>{o}</SelectItem>
               ))}
-              {chat?.pinned_project_id && (
-                <>
-                  <DropdownMenuSeparator />
-                  <DropdownMenuItem onSelect={() => configMutation.mutate({ pinned_project_id: null })} className="text-muted-foreground">
-                    Clear project
-                  </DropdownMenuItem>
-                </>
-              )}
-            </DropdownMenuContent>
-          </DropdownMenu>
-        )}
+            </SelectContent>
+          </Select>
+          <Select
+            value={chat?.model ?? 'auto'}
+            onValueChange={value => configMutation.mutate({ model: value === 'auto' ? null : value })}
+          >
+            <SelectTrigger size="sm" className="h-7 w-32 rounded-lg border-border/50 bg-muted/50 text-xs">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="auto">Auto</SelectItem>
+              {models.map(m => (
+                <SelectItem key={m.id} value={m.id}>{m.display_name}</SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </div>
       </header>
 
       {worktree && (worktree.ahead > 0 || worktree.has_uncommitted) && (
@@ -305,11 +307,6 @@ export default function ChatView({ chatId }: ChatViewProps) {
       <MessageInput
         onSend={content => mutation.mutate(content)}
         disabled={sending}
-        effort={effort}
-        onEffortChange={newEffort => configMutation.mutate({ effort: newEffort, model: null })}
-        model={chat?.model ?? null}
-        onModelChange={model => configMutation.mutate({ model })}
-        models={models}
       />
     </div>
   );

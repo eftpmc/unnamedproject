@@ -49,6 +49,14 @@ interface ExecutionCardProps {
   action: string | null;
 }
 
+const BORDER_COLOR: Record<ExecutionStatus, string> = {
+  pending: 'border-l-muted-foreground/20',
+  running: 'border-l-blue-400',
+  done: 'border-l-green-400',
+  error: 'border-l-destructive',
+  awaiting_approval: 'border-l-amber-400',
+};
+
 const STATUS_DOT: Record<ExecutionStatus, string> = {
   pending: 'bg-foreground/20',
   running: 'bg-success',
@@ -104,6 +112,8 @@ export default function ExecutionCard({
   return (
     <Card className={cn(
       'overflow-hidden rounded-2xl py-0 shadow-xs',
+      'border-l-2',
+      BORDER_COLOR[status],
       status === 'awaiting_approval' && !decided ? 'ring-2 ring-warning/25' : '',
     )}>
       <div

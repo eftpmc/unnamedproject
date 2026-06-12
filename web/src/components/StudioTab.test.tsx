@@ -17,7 +17,6 @@ const project: Project = {
   description: null,
   repo_path: null,
   enabled_connection_ids: [],
-  type: 'video',
 };
 
 function renderTab() {

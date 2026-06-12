@@ -21,7 +21,7 @@ export function detectCapabilities(projectId: string, repoPath?: string | null):
 
   if (!has_media && repoPath) {
     const outDir = path.join(repoPath, 'out');
-    has_media = fs.existsSync(outDir) && fs.readdirSync(outDir).some(f => f.endsWith('.mp4'));
+    has_media = fs.existsSync(outDir) && fs.readdirSync(outDir).some(f => f.toLowerCase().endsWith('.mp4'));
   }
 
   return { has_remotion, has_media };

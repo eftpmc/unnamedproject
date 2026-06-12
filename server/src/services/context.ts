@@ -16,7 +16,9 @@ function readWorkspaceMd(project: DbProject): string | null {
     : path.join(getDataDir(), 'doc-projects', project.id, 'files', 'workspace.md');
   try {
     const content = fs.readFileSync(filePath, 'utf8').trim();
-    return content || null;
+    if (!content) return null;
+    const MAX = 4000;
+    return content.length > MAX ? content.slice(0, MAX) + '\n\n_(workspace.md truncated — file exceeds 4000 chars)_' : content;
   } catch {
     return null;
   }

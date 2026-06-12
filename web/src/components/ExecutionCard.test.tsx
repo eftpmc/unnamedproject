@@ -54,4 +54,11 @@ describe('ExecutionCard', () => {
     // None of the status border classes should be present
     expect(card.className).not.toMatch(/border-l-/);
   });
+
+  it('renders a tool icon box with status-tinted background', () => {
+    const { container } = render(<ExecutionCard {...baseCard} status="done" />);
+    const iconBox = container.querySelector('[data-testid="tool-icon-box"]');
+    expect(iconBox).toBeInTheDocument();
+    expect(iconBox?.className).toMatch(/bg-success/);
+  });
 });

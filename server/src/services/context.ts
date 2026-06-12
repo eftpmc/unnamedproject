@@ -102,7 +102,7 @@ function projectContextBlock(project: DbProject): string {
   if (caps.has_remotion) capLabels.push('remotion (can call generate_video)');
   if (caps.has_media) capLabels.push('rendered media available in Studio tab');
   if (caps.has_graph) capLabels.push('code graph indexed — use project_query for broad codebase questions before reading individual files');
-  if (caps.has_research) capLabels.push('research saved — write findings as .md files to {dataDir}/projects/{id}/research/');
+  if (caps.has_research) capLabels.push(`research notes exist — read them with read_file/list_dir from ${path.join(getDataDir(), 'projects', project.id, 'research')} before starting new research`);
 
   const header = `## Active project: **${project.name}** (id: ${project.id})${project.description ? ' — ' + project.description : ''}`;
 

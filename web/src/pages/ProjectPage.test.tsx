@@ -3,8 +3,6 @@ import { render, screen } from '@testing-library/react';
 import { MemoryRouter, Routes, Route } from 'react-router-dom';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import ProjectPage from './ProjectPage.js';
-import { PROJECT_TYPE_REGISTRY } from '../projectTypes.js';
-import type { Project } from '../types.js';
 
 vi.mock('../lib/api.js', () => ({
   getProjects: vi.fn().mockResolvedValue([
@@ -14,10 +12,10 @@ vi.mock('../lib/api.js', () => ({
       description: null,
       repo_path: null,
       enabled_connection_ids: [],
-      type: 'widget',
     },
   ]),
   getProjectCampaigns: vi.fn().mockResolvedValue([]),
+  getProjectCapabilities: vi.fn().mockResolvedValue({ has_remotion: false, has_media: false }),
   createChat: vi.fn(),
   updateChatConfig: vi.fn(),
   deleteProject: vi.fn(),
@@ -26,13 +24,8 @@ vi.mock('../lib/api.js', () => ({
 
 vi.mock('../components/FileBrowser.js', () => ({ default: () => <div>FileBrowser</div> }));
 
-function WidgetTab({ project }: { project: Project }) {
-  return <div>Widget tab for {project.name}</div>;
-}
-
 function renderPage(path: string) {
   const queryClient = new QueryClient();
-  PROJECT_TYPE_REGISTRY.widget = { extraTabs: [{ id: 'widgets', label: 'Widgets', component: WidgetTab }] };
   return render(
     <QueryClientProvider client={queryClient}>
       <MemoryRouter initialEntries={[path]}>
@@ -44,14 +37,15 @@ function renderPage(path: string) {
   );
 }
 
-describe('ProjectPage extra tabs', () => {
-  it('shows the registry-provided extra tab', async () => {
+describe('ProjectPage', () => {
+  it('renders the project overview tab', async () => {
     renderPage('/projects/proj-1');
-    expect(await screen.findByRole('tab', { name: 'Widgets' })).toBeInTheDocument();
+    expect(await screen.findByRole('tab', { name: 'Overview' })).toBeInTheDocument();
   });
 
-  it('renders extra tab content when selected via URL', async () => {
-    renderPage('/projects/proj-1/widgets');
-    expect(await screen.findByText('Widget tab for Test Project')).toBeInTheDocument();
+  it('does not show studio tab when capabilities are false', async () => {
+    renderPage('/projects/proj-1');
+    await screen.findByRole('tab', { name: 'Overview' });
+    expect(screen.queryByRole('tab', { name: 'Studio' })).not.toBeInTheDocument();
   });
 });

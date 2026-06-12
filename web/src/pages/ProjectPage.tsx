@@ -20,7 +20,7 @@ import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { cn } from '@/lib/utils';
 import FileBrowser from '../components/FileBrowser.js';
 import { timeAgo } from '../lib/utils.js';
-import { getProjectTypeConfig } from '../projectTypes.js';
+import { useProjectCapabilities } from '../hooks/useProjectCapabilities.js';
 import type { Project, Campaign } from '../types.js';
 
 type Tab = string;
@@ -84,6 +84,8 @@ export default function ProjectPage() {
     },
   });
 
+  const { tabs: extraTabs } = useProjectCapabilities(projectId ?? '');
+
   if (!project) {
     return (
       <PageShell>
@@ -94,8 +96,6 @@ export default function ProjectPage() {
 
   const runningCampaigns = campaigns.filter(c => c.status === 'running');
   const recentCampaign = campaigns[0] ?? null;
-
-  const extraTabs = getProjectTypeConfig(project.type).extraTabs;
 
   const TABS: { id: Tab; label: string }[] = [
     { id: 'overview', label: 'Overview' },

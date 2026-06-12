@@ -167,3 +167,17 @@ export function updateProject(projectId: string, body: { description?: string })
     body: JSON.stringify(body),
   });
 }
+
+export interface ProjectMediaFile {
+  name: string;
+  url: string;
+  createdAt: number;
+}
+
+export function getProjectMedia(projectId: string): Promise<{ files: ProjectMediaFile[] }> {
+  return request(`/projects/${projectId}/media`);
+}
+
+export function mediaFileUrl(projectId: string, filename: string): string {
+  return `/projects/${projectId}/media/${encodeURIComponent(filename)}?token=${encodeURIComponent(getToken() ?? '')}`;
+}

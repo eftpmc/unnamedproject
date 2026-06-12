@@ -86,6 +86,18 @@ function detectLanguage(filePath: string): string {
   return map[ext] ?? 'text';
 }
 
+// Currently unused by FileBrowser itself — provided for use by StudioTab/media-aware
+// viewers operating on the dedicated `/media` routes. getProjectFile returns repo-tree
+// files as UTF-8 text, which would corrupt binary media; this distinction is why
+// FileBrowser doesn't use this for repo-tree files.
+export function detectFileKind(filePath: string): 'image' | 'video' | 'audio' | 'text' {
+  const ext = filePath.split('.').pop()?.toLowerCase() ?? '';
+  if (['png', 'jpg', 'jpeg', 'gif', 'webp', 'svg'].includes(ext)) return 'image';
+  if (['mp4', 'webm', 'mov'].includes(ext)) return 'video';
+  if (['mp3', 'wav', 'ogg'].includes(ext)) return 'audio';
+  return 'text';
+}
+
 export default function FileBrowser({ projectId }: FileBrowserProps) {
   const [selectedPath, setSelectedPath] = useState<string | null>(null);
 

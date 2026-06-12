@@ -10,7 +10,7 @@ vi.mock('./auth', () => ({
 const mockFetch = vi.fn();
 globalThis.fetch = mockFetch;
 
-const { login, getChats, createChat } = await import('./api');
+const { login, getChats, createChat, getProjectMedia, mediaFileUrl } = await import('./api');
 
 beforeEach(() => {
   mockFetch.mockReset();
@@ -42,5 +42,16 @@ describe('api', () => {
     mockFetch.mockResolvedValueOnce({ ok: true, json: async () => ({ id: 'sess-1' }) });
     const result = await createChat('My session');
     expect(result.id).toBe('sess-1');
+  });
+
+  it('getProjectMedia fetches the project media list', async () => {
+    mockFetch.mockResolvedValueOnce({ ok: true, json: async () => ({ files: [] }) });
+    await getProjectMedia('proj-1');
+    expect(mockFetch).toHaveBeenCalledWith('/projects/proj-1/media', expect.any(Object));
+  });
+
+  it('mediaFileUrl builds an encoded url with token', () => {
+    const url = mediaFileUrl('proj-1', 'my clip.mp4');
+    expect(url).toBe('/projects/proj-1/media/my%20clip.mp4?token=test-token');
   });
 });

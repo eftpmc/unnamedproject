@@ -1,0 +1,192 @@
+import type Anthropic from '@anthropic-ai/sdk';
+import { getDb, type DbProject } from '../db/index.js';
+import { recallRelevant } from './memory.js';
+import { formatEntry } from '../tools/memory_tools.js';
+import { toolDefinitions } from '../tools/definitions.js';
+import type { Intent } from './intent.js';
+
+// ─── Block builders ────────────────────────────────────────────────────────
+
+function baseBlock(intent: Intent): string {
+  const isCode = intent.domain === 'code' || intent.domain === 'multi' || intent.domain === 'general';
+  const autoApproved = isCode
+    ? 'invoke_claude_code, invoke_codex, git_op add/commit, create_project, project_query, rebuild_graph, read_file, list_dir, recall, remember, forget, create_campaign'
+    : 'create_project, read_file, list_dir, recall, remember, forget, write_file, web_search, web_fetch';
+
+  return `You are a personal AI operator and orchestrator. You decide how work gets done — you never implement code, write files, or run git operations yourself when the task belongs to a coding agent.
+
+## Core rules
+- Auto-approved (do without asking): ${autoApproved}
+- User-approved (proceed and the system handles the pause): git_op push, write_file, github_api write ops, delete_project
+- If a task has multiple coordinated workstreams: call create_campaign first, then dispatch tasks with their campaign_task_id. Never dispatch parallel agents without a campaign tracking them.
+- Never ask the user for permission on an auto-approved action — just do it.`;
+}
+
+function researchBlock(): string {
+  return `## Research discipline
+web_search returns snippet previews only — always follow with web_fetch to read the full page before drawing conclusions.
+Use recall before searching; the answer may already be in memory.
+When a coding task requires external knowledge (library APIs, patterns, examples): complete the research pass first and include findings in the agent brief.`;
+}
+
+function domainBlock(intent: Intent): string {
+  switch (intent.domain) {
+    case 'code':
+      return `## Coding tasks
+worktree isolation: coding agents work on an isolated branch — the user's main checkout is never touched.
+
+Scoping rules — choose the right unit of work:
+- One coherent feature with clear scope → one ambitious invoke_claude_code prompt (describe what exists, what to build, what "done" means including tests passing)
+- Independent parallel workstreams → campaign with parallel tasks
+- Strict ordering (e.g. schema → API → frontend) → campaign with sequenced tasks
+- Never break a coherent task into multiple small round-trips — it wastes context and loses continuity
+
+Sub-agent model hints (pass as model param to invoke_claude_code):
+- 'haiku': trivial edits, single-file changes
+- 'sonnet': standard feature work (default)
+- 'opus': architectural decisions, large refactors, complex multi-file reasoning
+
+Agent brief quality: always include — what already exists (from project_query or research), what to build, and what "done" means.
+
+Result evaluation: after invoke_claude_code or invoke_codex returns, read the result for failure signals (test failures, errors, "could not", partial completion). If present, send a targeted follow-up correction before committing. On confirmed success: run git_op add then git_op commit. Do not ask permission to commit.
+
+Prefer invoke_claude_code. Use invoke_codex for OpenAI preference or a parallel second approach.`;
+
+    case 'writing':
+      return `## Writing tasks
+Use write_file for output to save; respond inline for drafts the user has not asked to save.
+Confirm path and project with the user before writing any file.
+Do not invoke coding agents for writing, documentation, or note-taking tasks.`;
+
+    case 'research':
+      return `## Research tasks
+Always read the full source — web_search alone is insufficient, always follow with web_fetch.
+Cite sources in your response.
+Check recall first before any web search.`;
+
+    case 'creative':
+      return `## Creative tasks
+Respond inline for short creative work. Use write_file when the user wants output saved.
+Research often improves creative work — check for relevant context before generating.`;
+
+    case 'multi':
+      return `## Multi-domain tasks
+Always use create_campaign to track coordinated work before dispatching any tasks.
+Suggested order: research → setup → implementation → verification → git → github.`;
+
+    default:
+      return '';
+  }
+}
+
+function projectContextBlock(project: DbProject): string {
+  const isCode = !!project.repo_path;
+  const header = `## Active project: **${project.name}** (id: ${project.id})${project.description ? ' — ' + project.description : ''}`;
+  const guidance = isCode
+    ? `\nCode project (repo: ${project.repo_path}). Delegate coding tasks to invoke_claude_code or invoke_codex with full context. Use git_op add→commit after work completes. For non-code tasks (docs, notes), use write_file/read_file directly.`
+    : `\nDoc/writing project (no git repo). Use write_file/read_file/list_dir directly — no Claude Code or Codex needed. Create files in this project for any output the user wants saved.`;
+  return header + guidance;
+}
+
+function memoryBlock(userId: string, intent: Intent, pinnedProjectId?: string): string {
+  const entries = recallRelevant(userId, intent, pinnedProjectId);
+  if (entries.length === 0) return 'User memory:\nNo memories stored yet.';
+  return `User memory:\n${entries.map(e => `- ${formatEntry(userId, e)}`).join('\n')}`;
+}
+
+function timeAgo(unixSeconds: number): string {
+  const diff = Date.now() / 1000 - unixSeconds;
+  if (diff <= 0) return 'just now';
+  if (diff < 3600) return `${Math.floor(diff / 60)}m ago`;
+  if (diff < 86400) return `${Math.floor(diff / 3600)}h ago`;
+  return `${Math.floor(diff / 86400)}d ago`;
+}
+
+function recentChatsBlock(userId: string, sessionId: string): string {
+  const chats = getDb()
+    .prepare('SELECT id, title, updated_at FROM sessions WHERE user_id = ? AND id != ? ORDER BY updated_at DESC LIMIT 10')
+    .all(userId, sessionId) as Array<{ id: string; title: string | null; updated_at: number }>;
+  if (chats.length === 0) return '';
+  return `Recent chats (use read_chat to retrieve full context when relevant):\n${chats.map(c => `- "${c.title ?? 'Untitled'}" (id: ${c.id}, ${timeAgo(c.updated_at)})`).join('\n')}`;
+}
+
+function projectsListBlock(userId: string): string {
+  const projects = getDb()
+    .prepare('SELECT id, name, description, repo_path FROM projects WHERE user_id = ?')
+    .all(userId) as Array<{ id: string; name: string; description: string | null; repo_path: string | null }>;
+  if (projects.length === 0) return 'No projects yet.';
+  return `Available projects:\n${projects.map(p => `- ${p.name} (id: ${p.id}${p.repo_path ? '' : ', no repo'})${p.description ? ': ' + p.description : ''}`).join('\n')}`;
+}
+
+function sessionSummaryBlock(sessionId: string): string {
+  const row = getDb()
+    .prepare('SELECT summary FROM sessions WHERE id = ?')
+    .get(sessionId) as { summary: string | null } | undefined;
+  if (!row?.summary) return '';
+  return `Earlier in this session:\n${row.summary}`;
+}
+
+// ─── Public API ────────────────────────────────────────────────────────────
+
+export function buildContext(userId: string, sessionId: string, intent: Intent): string {
+  const session = getDb()
+    .prepare('SELECT pinned_project_id FROM sessions WHERE id = ?')
+    .get(sessionId) as { pinned_project_id: string | null } | undefined;
+  const pinnedProjectId = session?.pinned_project_id ?? undefined;
+
+  const pinnedProject = pinnedProjectId
+    ? getDb().prepare('SELECT id, name, description, repo_path, enabled_connection_ids FROM projects WHERE id = ?')
+        .get(pinnedProjectId) as DbProject | undefined
+    : undefined;
+
+  const blocks: string[] = [
+    baseBlock(intent),
+    researchBlock(),
+  ];
+
+  const domain = domainBlock(intent);
+  if (domain) blocks.push(domain);
+
+  if (pinnedProject) blocks.push(projectContextBlock(pinnedProject));
+
+  blocks.push(memoryBlock(userId, intent, pinnedProjectId));
+  blocks.push(projectsListBlock(userId));
+
+  const chats = recentChatsBlock(userId, sessionId);
+  if (chats) blocks.push(chats);
+
+  const summary = sessionSummaryBlock(sessionId);
+  if (summary) blocks.push(summary);
+
+  return blocks.join('\n\n');
+}
+
+// ─── Tool subsetting ───────────────────────────────────────────────────────
+
+const TOOL_SETS: Record<string, string[]> = {
+  code: [
+    'invoke_claude_code', 'invoke_codex', 'git_op', 'github_api',
+    'project_query', 'rebuild_graph', 'create_campaign',
+    'read_file', 'list_dir', 'write_file', 'create_project', 'update_project',
+    'remember', 'recall', 'forget', 'read_chat',
+    'web_search', 'web_fetch',
+  ],
+  writing: [
+    'write_file', 'read_file', 'list_dir', 'create_project', 'update_project',
+    'web_search', 'web_fetch', 'remember', 'recall', 'forget', 'read_chat',
+  ],
+  research: [
+    'web_search', 'web_fetch', 'recall', 'remember', 'forget',
+    'read_chat', 'read_file', 'write_file',
+  ],
+  creative: [
+    'write_file', 'read_file', 'create_project',
+    'web_search', 'web_fetch', 'remember', 'recall', 'forget', 'read_chat',
+  ],
+};
+
+export function getToolSubset(intent: Intent): Anthropic.Tool[] {
+  const allowed = TOOL_SETS[intent.domain];
+  if (!allowed) return toolDefinitions; // multi, general, image → all tools
+  return toolDefinitions.filter(t => allowed.includes(t.name));
+}

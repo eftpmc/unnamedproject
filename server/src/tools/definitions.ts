@@ -253,6 +253,31 @@ export const toolDefinitions: Anthropic.Tool[] = [
     },
   },
   {
+    name: 'generate_video',
+    description: 'Render an MP4 video for a project from structured scene data. Runs asynchronously; returns immediately with the execution id, and the project\'s Studio tab will show the finished video once rendering completes.',
+    input_schema: {
+      type: 'object',
+      properties: {
+        project_id: { type: 'string', description: 'ID of the project (should be a video-type project)' },
+        title: { type: 'string', description: 'Video title' },
+        scenes: {
+          type: 'array',
+          description: 'Ordered list of scenes to render',
+          items: {
+            type: 'object',
+            properties: {
+              text: { type: 'string', description: 'Text to display during this scene' },
+              durationInSeconds: { type: 'number', description: 'How long this scene lasts' },
+              imageUrl: { type: 'string', description: 'Optional background image URL for this scene' },
+            },
+            required: ['text', 'durationInSeconds'],
+          },
+        },
+      },
+      required: ['project_id', 'title', 'scenes'],
+    },
+  },
+  {
     type: 'web_search_20250305',
     name: 'web_search',
   } as unknown as Anthropic.Tool,

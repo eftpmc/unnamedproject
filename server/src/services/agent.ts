@@ -3,7 +3,7 @@ import { getDb, getProjectForUser, setAgentWorktreeSession, updateCampaignTaskSt
 import { runAgentPipeline, type AgentPipelineCtx } from './agent_pipeline.js';
 import { ensureWorktree } from '../lib/worktree.js';
 import { getDecryptedConfig } from '../routes/connections.js';
-import { createExecution, completeExecution } from './executor.js';
+import { createExecution, completeExecution, appendOutput } from './executor.js';
 import { runGitOp } from '../tools/git_op.js';
 import { runGithubApi } from '../tools/github_api.js';
 import { invokeClaudeCode } from '../tools/invoke_claude_code.js';
@@ -22,6 +22,7 @@ import { DEFAULT_EFFORT, getAnthropicKey, resolveModelForTurn, listClaudeModels,
 import { extractIntent, DEFAULT_INTENT } from './intent.js';
 import { buildContext, getToolSubset } from './context.js';
 import { extractAndRemember } from './extract-memory.js';
+import { renderVideo, type VideoScene } from './video.js';
 import { maybeDistill } from './distill.js';
 
 async function maybeGenerateSessionTitle(userId: string, sessionId: string): Promise<void> {
@@ -126,6 +127,7 @@ async function dispatchTool(
 
   try {
     let result: string;
+    let asyncExecution = false;
 
     switch (toolName) {
       case 'invoke_claude_code': {
@@ -334,11 +336,26 @@ async function dispatchTool(
         );
         break;
       }
+      case 'generate_video': {
+        const title = toolInput.title as string;
+        const scenes = toolInput.scenes as VideoScene[];
+        renderVideo(projectId, title, scenes, (progress) => {
+          appendOutput(executionId, userId, `progress:${Math.round(progress * 100)}%\n`);
+        })
+          .then((fileName) => completeExecution(executionId, userId, 'done', `Rendered ${fileName}`))
+          .catch((err) => completeExecution(executionId, userId, 'error', err instanceof Error ? err.message : String(err)));
+
+        result = `Video render started (execution ${executionId}). It will appear in the project's Studio tab when done.`;
+        asyncExecution = true;
+        break;
+      }
       default:
         result = `Unknown tool: ${toolName}`;
     }
 
-    completeExecution(executionId, userId, 'done', result);
+    if (!asyncExecution) {
+      completeExecution(executionId, userId, 'done', result);
+    }
     return result;
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err);

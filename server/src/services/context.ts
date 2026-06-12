@@ -198,7 +198,7 @@ const TOOL_SETS: Record<string, string[]> = {
     'read_chat', 'read_file', 'write_file',
   ],
   creative: [
-    'write_file', 'read_file', 'create_project',
+    'write_file', 'read_file', 'create_project', 'generate_video',
     'web_search', 'web_fetch', 'remember', 'recall', 'forget', 'read_chat',
   ],
 };

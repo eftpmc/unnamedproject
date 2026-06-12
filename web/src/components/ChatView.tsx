@@ -1,16 +1,18 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useNavigate } from 'react-router-dom';
-import { GitMerge } from 'lucide-react';
+import { ChevronDown, GitMerge } from 'lucide-react';
 import MessageList from './MessageList.js';
 import MessageInput from './MessageInput.js';
 import { getMessages, sendMessage, getChats, updateChatConfig, getModelsForEffort, getSessionWorktree, mergeSessionBranch, getProjects } from '../lib/api.js';
 import { subscribe } from '../lib/ws.js';
 import { cn } from '../lib/utils.js';
-import type { EffortLevel, Message, MessageExecution, Session, WSEvent, WSMessageCreated, WSMessageStarted, WSMessageDelta, WSExecutionUpdate, WSApprovalRequested, WSAutoApproved, WSSessionTitleUpdated, WSAgentError } from '../types.js';
+import type { EffortLevel, Message, MessageExecution, Session, WSEvent, WSMessageCreated, WSMessageStarted, WSMessageDelta, WSExecutionUpdate, WSApprovalRequested, WSAutoApproved, WSSessionTitleUpdated, WSAgentError, ClaudeModelInfo } from '../types.js';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Button } from '@/components/ui/button';
+import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
+import { PageHeader } from '@/components/ui/app-layout';
 
 type InlineExecution = MessageExecution;
 
@@ -252,52 +254,30 @@ export default function ChatView({ chatId }: ChatViewProps) {
 
   return (
     <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
-      <header className="flex min-h-14 shrink-0 flex-wrap items-center justify-between gap-2 border-b border-border/40 px-4 py-2 sm:flex-nowrap sm:px-5">
-        <div className="flex min-w-0 flex-col">
-          <span className="truncate text-sm font-semibold text-foreground">
-            {chat?.title ?? 'Untitled chat'}
-          </span>
-          {pinnedProject && (
-            <button
-              onClick={() => navigate(`/projects/${pinnedProject.id}`)}
-              className="flex w-fit max-w-full items-center gap-1.5 text-left text-xs text-muted-foreground transition-colors hover:text-foreground"
-              title={`Open ${pinnedProject.name}`}
-            >
-              <span className={cn(
-                'size-1.5 shrink-0 rounded-full',
-                agentActive ? 'bg-success' : 'bg-muted-foreground/40',
-              )} />
-              <span className="text-xs text-muted-foreground truncate">{pinnedProject.name}</span>
-            </button>
-          )}
-        </div>
-        <div className="flex min-w-0 shrink-0 items-center gap-2">
-          <Select value={effort} onValueChange={value => configMutation.mutate({ effort: value as EffortLevel })}>
-            <SelectTrigger size="sm" className="h-7 w-24 rounded-lg border-border/50 bg-muted/70 text-xs">
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-              {(['low', 'medium', 'high'] as EffortLevel[]).map(o => (
-                <SelectItem key={o} value={o}>{o}</SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-          <Select
-            value={chat?.model ?? 'auto'}
-            onValueChange={value => configMutation.mutate({ model: value === 'auto' ? null : value })}
+      <PageHeader
+        title={chat?.title ?? 'Untitled chat'}
+        description={pinnedProject ? (
+          <button
+            onClick={() => navigate(`/projects/${pinnedProject.id}`)}
+            className="flex w-fit max-w-full items-center gap-1.5 text-left text-xs text-muted-foreground transition-colors hover:text-foreground"
+            title={`Open ${pinnedProject.name}`}
           >
-            <SelectTrigger size="sm" className="h-7 w-40 rounded-lg border-border/50 bg-muted/70 text-xs sm:w-44">
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="auto">Auto</SelectItem>
-              {models.map(m => (
-                <SelectItem key={m.id} value={m.id}>{m.display_name}</SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-        </div>
-      </header>
+            <span className={cn(
+              'size-1.5 shrink-0 rounded-full',
+              agentActive ? 'bg-success' : 'bg-muted-foreground/40',
+            )} />
+            <span className="truncate">{pinnedProject.name}</span>
+          </button>
+        ) : undefined}
+        actions={
+          <ChatConfigPopover
+            effort={effort}
+            model={chat?.model ?? null}
+            models={models}
+            onConfigChange={(config) => configMutation.mutate(config)}
+          />
+        }
+      />
 
       {worktree && (worktree.ahead > 0 || worktree.has_uncommitted) && (
         <div className="shrink-0 flex items-center gap-3 border-b px-6 py-2 text-xs text-muted-foreground bg-muted/30">
@@ -394,5 +374,72 @@ function EmptyChatState({
         </div>
       </div>
     </div>
+  );
+}
+
+function ChatConfigPopover({
+  effort,
+  model,
+  models,
+  onConfigChange,
+}: {
+  effort: EffortLevel;
+  model: string | null;
+  models: ClaudeModelInfo[];
+  onConfigChange: (config: { effort?: EffortLevel; model?: string | null }) => void;
+}) {
+  const currentModel = models.find(m => m.id === model);
+  const label = `${effort} · ${currentModel?.display_name ?? 'Auto'}`;
+
+  return (
+    <Popover>
+      <PopoverTrigger asChild>
+        <Button
+          variant="ghost"
+          size="sm"
+          className="h-7 gap-1.5 rounded-lg border border-border/50 bg-muted/70 px-3 text-xs font-normal"
+        >
+          {label}
+          <ChevronDown size={11} className="text-muted-foreground" />
+        </Button>
+      </PopoverTrigger>
+      <PopoverContent align="end" className="w-52 p-3">
+        <div className="flex flex-col gap-3">
+          <div>
+            <div className="mb-1.5 text-xs font-medium text-muted-foreground">Effort</div>
+            <div className="flex gap-1">
+              {(['low', 'medium', 'high'] as EffortLevel[]).map(o => (
+                <Button
+                  key={o}
+                  size="sm"
+                  variant={effort === o ? 'default' : 'ghost'}
+                  className="h-7 flex-1 text-xs"
+                  onClick={() => onConfigChange({ effort: o })}
+                >
+                  {o}
+                </Button>
+              ))}
+            </div>
+          </div>
+          <div>
+            <div className="mb-1.5 text-xs font-medium text-muted-foreground">Model</div>
+            <Select
+              value={model ?? 'auto'}
+              onValueChange={value => onConfigChange({ model: value === 'auto' ? null : value })}
+            >
+              <SelectTrigger size="sm" className="h-7 text-xs">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="auto">Auto</SelectItem>
+                {models.map(m => (
+                  <SelectItem key={m.id} value={m.id}>{m.display_name}</SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+        </div>
+      </PopoverContent>
+    </Popover>
   );
 }

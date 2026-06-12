@@ -1,5 +1,7 @@
 import { describe, it, expect, beforeAll } from 'vitest';
 import fs from 'fs';
+import os from 'os';
+import path from 'path';
 import { initDb, getDb, recordAgentUsage, setAgentBudget } from '../../src/db/index.js';
 import { newId } from '../../src/lib/ids.js';
 import { buildContext, getToolSubset } from '../../src/services/context.js';
@@ -100,6 +102,40 @@ describe('buildContext', () => {
     expect(ctx).not.toMatch(/type:\s*(default|video)/);
 
     getDb().prepare('UPDATE sessions SET pinned_project_id = NULL WHERE id = ?').run(sessionId);
+  });
+
+  it('includes workspace.md content in project context when file exists', () => {
+    const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'ws-test-'));
+    const workspaceContent = '## Goals\n- Build the login flow\n\n## Done\n- DB schema migration';
+    fs.writeFileSync(path.join(tmpDir, 'workspace.md'), workspaceContent);
+
+    const projectId = newId();
+    getDb()
+      .prepare('INSERT INTO projects (id, user_id, name, repo_path, enabled_connection_ids) VALUES (?,?,?,?,?)')
+      .run(projectId, userId, 'ws-project', tmpDir, '[]');
+    getDb().prepare('UPDATE sessions SET pinned_project_id = ? WHERE id = ?').run(projectId, sessionId);
+
+    const ctx = buildContext(userId, sessionId, DEFAULT_INTENT);
+    expect(ctx).toContain('Build the login flow');
+    expect(ctx).toContain('DB schema migration');
+
+    getDb().prepare('UPDATE sessions SET pinned_project_id = NULL WHERE id = ?').run(sessionId);
+    getDb().prepare('DELETE FROM projects WHERE id = ?').run(projectId);
+    fs.rmSync(tmpDir, { recursive: true, force: true });
+  });
+
+  it('includes workspace.md hint when no file exists', () => {
+    const projectId = newId();
+    getDb()
+      .prepare('INSERT INTO projects (id, user_id, name, repo_path, enabled_connection_ids) VALUES (?,?,?,?,?)')
+      .run(projectId, userId, 'no-ws-project', '/tmp/nonexistent-repo-path', '[]');
+    getDb().prepare('UPDATE sessions SET pinned_project_id = ? WHERE id = ?').run(projectId, sessionId);
+
+    const ctx = buildContext(userId, sessionId, DEFAULT_INTENT);
+    expect(ctx).toContain('workspace.md');
+
+    getDb().prepare('UPDATE sessions SET pinned_project_id = NULL WHERE id = ?').run(sessionId);
+    getDb().prepare('DELETE FROM projects WHERE id = ?').run(projectId);
   });
 });
 

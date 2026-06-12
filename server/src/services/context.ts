@@ -1,5 +1,7 @@
 import type Anthropic from '@anthropic-ai/sdk';
-import { getDb, getAgentBudgets, getMonthlyUsage, type DbProject } from '../db/index.js';
+import fs from 'fs';
+import path from 'path';
+import { getDb, getAgentBudgets, getMonthlyUsage, getDataDir, type DbProject } from '../db/index.js';
 import { recallRelevant } from './memory.js';
 import { formatEntry } from '../tools/memory_tools.js';
 import { toolDefinitions } from '../tools/definitions.js';
@@ -7,6 +9,18 @@ import type { Intent } from './intent.js';
 import { detectCapabilities } from './projectCapabilities.js';
 
 // ─── Block builders ────────────────────────────────────────────────────────
+
+function readWorkspaceMd(project: DbProject): string | null {
+  const filePath = project.repo_path
+    ? path.join(project.repo_path, 'workspace.md')
+    : path.join(getDataDir(), 'doc-projects', project.id, 'files', 'workspace.md');
+  try {
+    const content = fs.readFileSync(filePath, 'utf8').trim();
+    return content || null;
+  } catch {
+    return null;
+  }
+}
 
 function baseBlock(intent: Intent): string {
   const isCode = intent.domain === 'code' || intent.domain === 'multi' || intent.domain === 'general';
@@ -101,7 +115,12 @@ function projectContextBlock(project: DbProject): string {
     guidance = `\nDoc/writing project (no git repo). Use write_file/read_file/list_dir directly — no Claude Code or Codex needed.`;
   }
 
-  return header + guidance;
+  const workspaceMd = readWorkspaceMd(project);
+  const workspaceSection = workspaceMd
+    ? `\n\n### workspace.md\n${workspaceMd}\n\n_Update workspace.md after significant progress, decisions, or completed milestones._`
+    : `\n\n_No workspace.md yet. Use write_file to create workspace.md in the project root to record current goals, decisions, and progress for future sessions._`;
+
+  return header + guidance + workspaceSection;
 }
 
 function memoryBlock(userId: string, intent: Intent, pinnedProjectId?: string): string {

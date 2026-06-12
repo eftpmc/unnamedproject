@@ -109,6 +109,7 @@ export default function ProjectPage() {
 
   const runningCampaigns = campaigns.filter(c => c.status === 'running');
   const recentCampaign = campaigns[0] ?? null;
+  const activeCampaign = runningCampaigns[0] ?? null;
 
   const TABS: { id: Tab; label: string }[] = [
     { id: 'overview', label: 'Overview' },
@@ -150,9 +151,30 @@ export default function ProjectPage() {
       {/* Tab content */}
       <div className="flex-1 overflow-y-auto">
         {tab === 'overview' && (
-          <div className="max-w-4xl p-4 sm:p-6">
-            {/* Stats */}
-            <div className="mb-5 grid grid-cols-1 gap-3 sm:grid-cols-3">
+          <div className="max-w-4xl p-4 sm:p-6 flex flex-col gap-5">
+            {/* 1. Active campaign hero */}
+            {activeCampaign && (
+              <div>
+                <div className="text-xs font-medium text-muted-foreground mb-2">Active Campaign</div>
+                <Link
+                  to={`/projects/${projectId}/campaigns/${activeCampaign.id}`}
+                  className="block rounded-xl border-l-2 border-blue-500 border border-border/50 bg-background/55 p-4 transition-colors hover:bg-background/85"
+                >
+                  <div className="flex items-center justify-between">
+                    <span className="text-sm font-semibold">{activeCampaign.title}</span>
+                    <Badge variant="outline" className={cn('capitalize', STATUS_BADGE[activeCampaign.status])}>
+                      {activeCampaign.status}
+                    </Badge>
+                  </div>
+                  <div className="text-xs text-muted-foreground mt-1">
+                    Started {timeAgo(activeCampaign.created_at)}
+                  </div>
+                </Link>
+              </div>
+            )}
+
+            {/* 2. Stats row */}
+            <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
               <Surface className="p-4">
                 <div className="text-xs text-muted-foreground mb-1">Campaigns</div>
                 <div className="text-2xl font-semibold">{campaigns.length}</div>
@@ -161,63 +183,106 @@ export default function ProjectPage() {
                 )}
               </Surface>
               <Surface className="p-4">
-                <div className="text-xs text-muted-foreground mb-1">MCP tools</div>
-                <div className="text-2xl font-semibold">
-                  {project.enabled_connection_ids.length}
-                </div>
+                <div className="text-xs text-muted-foreground mb-1">Chats</div>
+                <div className="text-2xl font-semibold">{pinnedChats.length}</div>
               </Surface>
-              {project.repo_path && (
-                <Surface className="p-4">
-                  <div className="text-xs text-muted-foreground mb-1">Repo</div>
-                  <div className="flex items-center gap-1.5 mt-1">
-                    <GitBranch size={12} className="text-muted-foreground" />
-                    <span className="text-xs text-muted-foreground truncate">{project.repo_path.split('/').pop()}</span>
-                  </div>
-                </Surface>
-              )}
+              <Surface className="p-4">
+                <div className="text-xs text-muted-foreground mb-1">MCP Tools</div>
+                <div className="text-2xl font-semibold">{project.enabled_connection_ids.length}</div>
+              </Surface>
             </div>
-            {(caps?.has_graph || caps?.has_media) && (
-              <div className="mb-5">
+
+            {/* 3. Recent campaigns */}
+            {campaigns.filter(c => c.id !== activeCampaign?.id).length > 0 && (
+              <div>
+                <div className="flex items-center justify-between mb-2">
+                  <div className="text-xs font-medium text-muted-foreground">Recent Campaigns</div>
+                  <Link
+                    to={tabHref(project.id, 'campaigns')}
+                    className="text-xs text-indigo-500 hover:text-indigo-400 transition-colors"
+                  >
+                    View all →
+                  </Link>
+                </div>
+                <div className="overflow-hidden rounded-xl border border-border/50 bg-background/60 divide-y divide-border/50">
+                  {campaigns.filter(c => c.id !== activeCampaign?.id).slice(0, 3).map(c => (
+                    <Link
+                      key={c.id}
+                      to={`/projects/${projectId}/campaigns/${c.id}`}
+                      className="flex items-center justify-between px-4 py-3 hover:bg-muted/30 transition-colors"
+                    >
+                      <span className="text-sm font-medium truncate">{c.title}</span>
+                      <div className="flex items-center gap-3 shrink-0 ml-3">
+                        <Badge variant="outline" className={cn('capitalize', STATUS_BADGE[c.status])}>
+                          {c.status}
+                        </Badge>
+                        <span className="text-xs text-muted-foreground">{timeAgo(c.created_at)}</span>
+                      </div>
+                    </Link>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {/* 4. Recent chats */}
+            {pinnedChats.length > 0 && (
+              <div>
+                <div className="flex items-center justify-between mb-2">
+                  <div className="text-xs font-medium text-muted-foreground">Recent Chats</div>
+                  <Link
+                    to={tabHref(project.id, 'chats')}
+                    className="text-xs text-indigo-500 hover:text-indigo-400 transition-colors"
+                  >
+                    View all →
+                  </Link>
+                </div>
+                <div className="overflow-hidden rounded-xl border border-border/50 bg-background/60 divide-y divide-border/50">
+                  {pinnedChats.slice(0, 2).map(chat => (
+                    <button
+                      key={chat.id}
+                      onClick={() => navigate(`/c/${chat.id}`)}
+                      className="flex w-full items-center justify-between px-4 py-3 hover:bg-muted/30 transition-colors text-left"
+                    >
+                      <span className="text-sm font-medium truncate">{chat.title ?? 'Untitled chat'}</span>
+                      <span className="text-xs text-muted-foreground shrink-0 ml-3">{timeAgo(chat.updated_at)}</span>
+                    </button>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {/* 5. Capabilities */}
+            {(caps?.has_graph || caps?.has_media || project.repo_path) && (
+              <div>
                 <div className="text-xs font-medium text-muted-foreground mb-2">Capabilities</div>
                 <div className="flex flex-wrap gap-2">
-                  {caps.has_graph && (
+                  {caps?.has_graph && (
                     <span className="flex items-center gap-1.5 rounded-lg border border-border/50 bg-background/55 px-2.5 py-1.5 text-xs text-muted-foreground">
                       <GitGraph size={11} className="shrink-0" />
                       graph indexed
                     </span>
                   )}
-                  {caps.has_media && (
+                  {caps?.has_media && (
                     <span className="flex items-center gap-1.5 rounded-lg border border-border/50 bg-background/55 px-2.5 py-1.5 text-xs text-muted-foreground">
                       <Video size={11} className="shrink-0" />
                       videos rendered
                     </span>
                   )}
+                  {project.repo_path && (
+                    <span className="flex items-center gap-1.5 rounded-lg border border-border/50 bg-background/55 px-2.5 py-1.5 text-xs text-muted-foreground">
+                      <GitBranch size={11} className="shrink-0" />
+                      {project.repo_path.split('/').pop()}
+                    </span>
+                  )}
                 </div>
               </div>
             )}
-            {recentCampaign && (
-              <div>
-                <div className="text-xs font-medium text-muted-foreground mb-2">Recent campaign</div>
-                <Link
-                  to={`/projects/${projectId}/campaigns/${recentCampaign.id}`}
-                  className="block rounded-xl border border-border/50 bg-background/55 p-4 transition-colors hover:border-border hover:bg-background/85"
-                >
-                  <div className="flex items-center justify-between">
-                    <span className="text-sm font-medium">{recentCampaign.title}</span>
-                    <Badge variant="outline" className={cn('capitalize', STATUS_BADGE[recentCampaign.status])}>
-                      {recentCampaign.status}
-                    </Badge>
-                  </div>
-                  <div className="text-xs text-muted-foreground mt-1">
-                    Started {timeAgo(recentCampaign.created_at)}
-                  </div>
-                </Link>
-              </div>
-            )}
-            {campaigns.length === 0 && (
+
+            {/* 6. Empty state */}
+            {campaigns.length === 0 && pinnedChats.length === 0 && (
               <EmptyPanel
-                title="No campaigns yet"
-                description="When a chat delegates multi-step work, campaign progress will appear here."
+                title="Nothing here yet"
+                description="Start a chat and ask the orchestrator to get to work. Campaigns and activity will appear here."
               />
             )}
           </div>

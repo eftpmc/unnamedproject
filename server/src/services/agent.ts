@@ -299,13 +299,25 @@ async function dispatchTool(
       }
       case 'create_project':
         result = await createProject(
-          { name: toolInput.name as string, description: toolInput.description as string | undefined, with_repo: toolInput.with_repo as boolean },
+          {
+            name: toolInput.name as string,
+            description: toolInput.description as string | undefined,
+            with_repo: toolInput.with_repo as boolean,
+            type: toolInput.type as string | undefined,
+          },
           userId,
           executionId
         );
         break;
       case 'update_project':
-        result = await updateProject({ project_id: toolInput.project_id as string, description: toolInput.description as string }, userId);
+        result = await updateProject(
+          {
+            project_id: toolInput.project_id as string,
+            description: toolInput.description as string | undefined,
+            type: toolInput.type as string | undefined,
+          },
+          userId
+        );
         break;
       case 'delete_project':
         result = await deleteProject({ project_id: toolInput.project_id as string, delete_files: toolInput.delete_files as boolean }, userId, executionId);

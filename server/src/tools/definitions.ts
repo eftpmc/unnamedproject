@@ -142,27 +142,29 @@ export const toolDefinitions: Anthropic.Tool[] = [
   },
   {
     name: 'create_project',
-    description: 'Create a new project. If with_repo is true, creates a git repo under the configured projects root.',
+    description: "Create a new project. If with_repo is true, creates a git repo under the configured projects root. type is one of 'default' or 'video' (defaults to 'default').",
     input_schema: {
       type: 'object',
       properties: {
         name: { type: 'string', description: 'Project name' },
         description: { type: 'string', description: 'Optional description' },
         with_repo: { type: 'boolean', description: 'Whether to create a backing git repo for this project' },
+        type: { type: 'string', description: "Project type, one of: 'default', 'video'. Defaults to 'default'." },
       },
       required: ['name', 'with_repo'],
     },
   },
   {
     name: 'update_project',
-    description: "Update a project's description.",
+    description: "Update a project's description and/or type.",
     input_schema: {
       type: 'object',
       properties: {
         project_id: { type: 'string' },
         description: { type: 'string' },
+        type: { type: 'string', description: "Project type, one of: 'default', 'video'." },
       },
-      required: ['project_id', 'description'],
+      required: ['project_id'],
     },
   },
   {

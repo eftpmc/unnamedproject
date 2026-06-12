@@ -4,6 +4,7 @@ import simpleGit from 'simple-git';
 import { getDb, getProjectForUser, getProjectsRoot } from '../db/index.js';
 import { newId } from '../lib/ids.js';
 import { requestApproval } from '../services/executor.js';
+import { isValidProjectType } from '../services/projectTypes.js';
 
 function slugify(name: string): string {
   return name
@@ -13,10 +14,15 @@ function slugify(name: string): string {
 }
 
 export async function createProject(
-  input: { name: string; description?: string; with_repo: boolean },
+  input: { name: string; description?: string; with_repo: boolean; type?: string },
   userId: string,
   _executionId: string
 ): Promise<string> {
+  const type = input.type ?? 'default';
+  if (!isValidProjectType(type)) {
+    return `Error: invalid project type '${type}'`;
+  }
+
   let repoPath: string | null = null;
 
   if (input.with_repo) {
@@ -34,18 +40,27 @@ export async function createProject(
 
   const id = newId();
   getDb()
-    .prepare('INSERT INTO projects (id, user_id, name, description, repo_path, enabled_connection_ids) VALUES (?,?,?,?,?,?)')
-    .run(id, userId, input.name, input.description ?? null, repoPath, '[]');
+    .prepare('INSERT INTO projects (id, user_id, name, description, repo_path, enabled_connection_ids, type) VALUES (?,?,?,?,?,?,?)')
+    .run(id, userId, input.name, input.description ?? null, repoPath, '[]', type);
 
   return `Created project '${input.name}' (id: ${id})${repoPath ? ` with repo at ${repoPath}` : ' with no repo'}`;
 }
 
 export async function updateProject(
-  input: { project_id: string; description?: string },
+  input: { project_id: string; description?: string; type?: string },
   userId: string
 ): Promise<string> {
   const project = getProjectForUser(input.project_id, userId);
   if (!project) return `Error: project ${input.project_id} not found`;
+
+  if (input.type !== undefined) {
+    if (!isValidProjectType(input.type)) {
+      return `Error: invalid project type '${input.type}'`;
+    }
+    getDb()
+      .prepare('UPDATE projects SET type = ? WHERE id = ? AND user_id = ?')
+      .run(input.type, input.project_id, userId);
+  }
 
   if (input.description !== undefined) {
     getDb()

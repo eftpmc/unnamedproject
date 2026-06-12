@@ -21,6 +21,7 @@ import { DEFAULT_EFFORT, getAnthropicKey, resolveModelForTurn, listClaudeModels,
 import { extractIntent, DEFAULT_INTENT } from './intent.js';
 import { buildContext, getToolSubset } from './context.js';
 import { extractAndRemember } from './extract-memory.js';
+import { maybeDistill } from './distill.js';
 
 async function maybeGenerateSessionTitle(userId: string, sessionId: string): Promise<void> {
   // Only generate if session has no title yet
@@ -366,10 +367,26 @@ export async function runAgentTurn(userId: string, sessionId: string, userMessag
 
   const systemPrompt = buildContext(userId, sessionId, intent);
   const tools = getToolSubset(intent);
-  let currentMessages = [...history.map(m => ({
+
+  // When a session summary exists, use a sliding window of the last 20 messages
+  // to keep context bounded; prepend the summary as a synthetic exchange.
+  const windowedHistory = session?.summary
+    ? history.slice(-20)
+    : history;
+
+  const messages: Anthropic.MessageParam[] = windowedHistory.map(m => ({
     role: m.role as 'user' | 'assistant',
     content: m.content,
-  }))];
+  }));
+
+  if (session?.summary && messages.length > 0) {
+    messages.unshift(
+      { role: 'assistant', content: `Session context noted.` },
+      { role: 'user', content: `Earlier in this session: ${session.summary}` },
+    );
+  }
+
+  let currentMessages = [...messages];
 
   const replyId = newId();
   let fullText = '';
@@ -454,4 +471,5 @@ export async function runAgentTurn(userId: string, sessionId: string, userMessag
   maybeGenerateSessionTitle(userId, sessionId).catch(() => {});
 
   extractAndRemember(userId, sessionId, apiKey).catch(() => {});
+  maybeDistill(userId, sessionId, apiKey).catch(() => {});
 }

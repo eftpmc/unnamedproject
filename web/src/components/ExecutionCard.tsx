@@ -1,4 +1,10 @@
 import { useState, useMemo } from 'react';
+import { ChevronDown, ChevronUp, Check, X, Square, Terminal } from 'lucide-react';
+import { approveExecution, rejectExecution, cancelExecution } from '../lib/api.js';
+import { Badge } from '@/components/ui/badge';
+import { Button } from '@/components/ui/button';
+import { Card } from '@/components/ui/card';
+import { cn } from '@/lib/utils';
 
 const COLLAPSED_LINES = 6;
 
@@ -10,7 +16,7 @@ function OutputLog({ outputLog, result }: { outputLog: string; result: string | 
   const displayed = truncated ? lines.slice(-COLLAPSED_LINES).join('\n') : text;
 
   return (
-    <div className="border-t bg-muted/50">
+    <div className="border-t border-border/40 bg-muted/20">
       {truncated && (
         <button
           onClick={() => setShowAll(true)}
@@ -28,12 +34,6 @@ function OutputLog({ outputLog, result }: { outputLog: string; result: string | 
     </div>
   );
 }
-import { ChevronDown, ChevronUp, Check, X, Square } from 'lucide-react';
-import { approveExecution, rejectExecution, cancelExecution } from '../lib/api.js';
-import { Badge } from '@/components/ui/badge';
-import { Button } from '@/components/ui/button';
-import { Card } from '@/components/ui/card';
-import { cn } from '@/lib/utils';
 
 type ExecutionStatus = 'pending' | 'running' | 'done' | 'error' | 'awaiting_approval';
 
@@ -59,8 +59,8 @@ const BORDER_COLOR: Record<ExecutionStatus, string> = {
 
 const STATUS_DOT: Record<ExecutionStatus, string> = {
   pending: 'bg-foreground/20',
-  running: 'bg-success',
-  done: 'bg-foreground/30',
+  running: 'bg-blue-500',
+  done: 'bg-green-500',
   error: 'bg-destructive',
   awaiting_approval: 'bg-warning',
 };
@@ -82,7 +82,7 @@ export default function ExecutionCard({
   result,
   needsApproval,
   approvalId: _approvalId,
-  action: _action,
+  action,
 }: ExecutionCardProps) {
   const [expanded, setExpanded] = useState(false);
   const [decided, setDecided] = useState<'approved' | 'rejected' | null>(null);
@@ -111,7 +111,7 @@ export default function ExecutionCard({
 
   return (
     <Card className={cn(
-      'overflow-hidden rounded-2xl py-0 shadow-xs',
+      'overflow-hidden rounded-2xl bg-background/60 py-0 shadow-xs',
       'border-l-2',
       BORDER_COLOR[status],
       status === 'awaiting_approval' && !decided ? 'ring-2 ring-warning/25' : '',
@@ -126,7 +126,8 @@ export default function ExecutionCard({
             decided === 'approved' ? 'bg-success' : decided === 'rejected' ? 'bg-destructive' : dotColor
           }`}
         />
-        <span className="flex-1 select-none truncate text-sm text-muted-foreground">{label}</span>
+        <Terminal size={14} className="shrink-0 text-muted-foreground/55" />
+        <span className="flex-1 select-none truncate text-sm font-medium text-foreground/80">{label}</span>
         <Badge variant={status === 'error' ? 'destructive' : status === 'awaiting_approval' ? 'outline' : 'secondary'}>
           {decided ?? STATUS_LABEL[status]}
         </Badge>
@@ -170,6 +171,12 @@ export default function ExecutionCard({
           </span>
         )}
       </div>
+
+      {isApproval && action && (
+        <div className="border-t border-warning/20 bg-warning/5 px-4 py-2 text-xs text-muted-foreground">
+          Approval requested for <span className="font-medium text-foreground">{action}</span>
+        </div>
+      )}
 
       {/* Output area */}
       {expanded && !isApproval && (

@@ -1,11 +1,30 @@
 import { useState } from 'react';
-import { useParams, useNavigate, Link } from 'react-router-dom';
+import { useParams, useNavigate, Link, useLocation } from 'react-router-dom';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { ArrowLeft, FolderGit2, FileText, GitBranch } from 'lucide-react';
+import { FolderGit2, FileText, GitBranch } from 'lucide-react';
 import { getProjects, getProjectCampaigns, createChat, updateChatConfig, deleteProject, updateProject } from '../lib/api.js';
+import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
+import { EmptyPanel, PageLoading, PageShell, Surface } from '@/components/ui/app-layout';
+import {
+  Breadcrumb,
+  BreadcrumbItem,
+  BreadcrumbLink,
+  BreadcrumbList,
+  BreadcrumbPage,
+  BreadcrumbSeparator,
+} from '@/components/ui/breadcrumb';
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from '@/components/ui/table';
+import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { cn } from '@/lib/utils';
 import FileBrowser from '../components/FileBrowser.js';
 import { timeAgo } from '../lib/utils.js';
@@ -13,18 +32,31 @@ import type { Project, Campaign } from '../types.js';
 
 type Tab = 'overview' | 'campaigns' | 'files' | 'settings';
 
-const STATUS_COLORS: Record<Campaign['status'], string> = {
-  running: 'bg-blue-100 text-blue-700',
-  done: 'bg-green-100 text-green-700',
-  error: 'bg-red-100 text-red-700',
-  cancelled: 'bg-muted text-muted-foreground',
+const STATUS_BADGE: Record<Campaign['status'], string> = {
+  running: 'bg-blue-500/10 text-blue-700 dark:text-blue-300 border-blue-200 dark:border-blue-900',
+  done: 'bg-green-500/10 text-green-700 dark:text-green-300 border-green-200 dark:border-green-900',
+  error: 'bg-destructive/10 text-destructive border-destructive/20',
+  cancelled: 'bg-muted text-muted-foreground border-transparent',
 };
+
+function tabFromPath(pathname: string): Tab {
+  if (pathname.endsWith('/campaigns')) return 'campaigns';
+  if (pathname.endsWith('/files')) return 'files';
+  if (pathname.endsWith('/settings')) return 'settings';
+  return 'overview';
+}
+
+function tabHref(projectId: string, tab: Tab) {
+  if (tab === 'overview') return `/projects/${projectId}`;
+  return `/projects/${projectId}/${tab}`;
+}
 
 export default function ProjectPage() {
   const { projectId } = useParams<{ projectId: string }>();
   const navigate = useNavigate();
+  const location = useLocation();
   const queryClient = useQueryClient();
-  const [tab, setTab] = useState<Tab>('overview');
+  const tab = tabFromPath(location.pathname);
 
   const { data: projects = [] } = useQuery<Project[]>({
     queryKey: ['projects'],
@@ -57,7 +89,13 @@ export default function ProjectPage() {
     },
   });
 
-  if (!project) return null;
+  if (!project) {
+    return (
+      <PageShell>
+        <PageLoading rows={3} />
+      </PageShell>
+    );
+  }
 
   const runningCampaigns = campaigns.filter(c => c.status === 'running');
   const recentCampaign = campaigns[0] ?? null;
@@ -73,16 +111,21 @@ export default function ProjectPage() {
     <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
       {/* Header */}
       <div className="border-b border-border/40 bg-background/60 px-6 pt-4 pb-0">
-        <div className="flex items-center gap-2 mb-3">
-          <button onClick={() => navigate('/projects')} className="text-muted-foreground hover:text-foreground transition-colors">
-            <ArrowLeft size={15} />
-          </button>
-          <span className="text-xs text-muted-foreground">Projects</span>
-          <span className="text-xs text-muted-foreground/40">/</span>
-          <span className="text-xs text-foreground font-medium">{project.name}</span>
-        </div>
-        <div className="flex items-start justify-between mb-3">
-          <div>
+        <Breadcrumb className="mb-3 text-xs">
+          <BreadcrumbList className="text-xs">
+            <BreadcrumbItem>
+              <BreadcrumbLink asChild>
+                <Link to="/projects">Projects</Link>
+              </BreadcrumbLink>
+            </BreadcrumbItem>
+            <BreadcrumbSeparator />
+            <BreadcrumbItem>
+              <BreadcrumbPage className="max-w-48 truncate text-xs font-medium">{project.name}</BreadcrumbPage>
+            </BreadcrumbItem>
+          </BreadcrumbList>
+        </Breadcrumb>
+        <div className="mb-3 flex flex-wrap items-start justify-between gap-3">
+          <div className="min-w-0">
             <div className="flex items-center gap-2">
               {project.repo_path
                 ? <FolderGit2 size={15} className="text-muted-foreground" />
@@ -94,79 +137,85 @@ export default function ProjectPage() {
               </span>
             </div>
             {project.description && (
-              <p className="mt-0.5 text-xs text-muted-foreground ml-[23px]">{project.description}</p>
+              <p className="ml-[23px] mt-0.5 max-w-2xl text-xs text-muted-foreground">{project.description}</p>
             )}
+            <p className="ml-[23px] mt-1 max-w-full truncate text-xs text-muted-foreground/70">
+              {project.repo_path ?? 'Document project'}
+            </p>
           </div>
-          <Button
-            size="sm"
-            className="h-7 text-xs"
-            onClick={() => startChatMutation.mutate()}
-            disabled={startChatMutation.isPending}
-          >
-            Start chat
-          </Button>
         </div>
         {/* Tabs */}
-        <div className="flex gap-0">
-          {TABS.map(t => (
-            <button
-              key={t.id}
-              onClick={() => setTab(t.id)}
-              className={cn(
-                'px-4 py-2 text-xs font-medium border-b-2 transition-colors',
-                tab === t.id
-                  ? 'border-foreground text-foreground'
-                  : 'border-transparent text-muted-foreground hover:text-foreground',
-              )}
-            >
-              {t.label}
-            </button>
-          ))}
-        </div>
+        <Tabs value={tab} onValueChange={value => navigate(tabHref(project.id, value as Tab))}>
+          <TabsList variant="line" className="-mx-2 overflow-x-auto px-2">
+            {TABS.map(t => (
+              <TabsTrigger key={t.id} value={t.id} className="px-4 py-2 text-xs">
+                {t.label}
+              </TabsTrigger>
+            ))}
+          </TabsList>
+        </Tabs>
       </div>
 
       {/* Tab content */}
       <div className="flex-1 overflow-y-auto">
         {tab === 'overview' && (
-          <div className="p-6 max-w-3xl">
+          <div className="max-w-4xl p-4 sm:p-6">
             {/* Stats */}
-            <div className="grid grid-cols-3 gap-4 mb-6">
-              <div className="rounded-xl border border-border/50 bg-background/60 p-4">
+            <div className="mb-5 grid grid-cols-1 gap-3 sm:grid-cols-3">
+              <Surface className="p-4">
                 <div className="text-xs text-muted-foreground mb-1">Campaigns</div>
                 <div className="text-2xl font-semibold">{campaigns.length}</div>
                 {runningCampaigns.length > 0 && (
                   <div className="text-xs text-blue-600 font-medium mt-0.5">{runningCampaigns.length} running</div>
                 )}
-              </div>
-              <div className="rounded-xl border border-border/50 bg-background/60 p-4">
+              </Surface>
+              <Surface className="p-4">
                 <div className="text-xs text-muted-foreground mb-1">MCP tools</div>
                 <div className="text-2xl font-semibold">
                   {project.enabled_connection_ids.length}
                 </div>
-              </div>
+              </Surface>
               {project.repo_path && (
-                <div className="rounded-xl border border-border/50 bg-background/60 p-4">
+                <Surface className="p-4">
                   <div className="text-xs text-muted-foreground mb-1">Repo</div>
                   <div className="flex items-center gap-1.5 mt-1">
                     <GitBranch size={12} className="text-muted-foreground" />
                     <span className="text-xs text-muted-foreground truncate">{project.repo_path.split('/').pop()}</span>
                   </div>
-                </div>
+                </Surface>
               )}
             </div>
+            <Surface className="mb-6 p-4">
+              <div className="flex flex-wrap items-center justify-between gap-3">
+                <div>
+                  <div className="text-sm font-semibold">Work with this project</div>
+                  <p className="mt-1 text-xs text-muted-foreground">
+                    Start a chat with this project pinned so the agent has the right workspace context.
+                  </p>
+                </div>
+                <Button
+                  size="sm"
+                  className="h-8 text-xs"
+                  onClick={() => startChatMutation.mutate()}
+                  disabled={startChatMutation.isPending}
+                >
+                  Start chat
+                </Button>
+              </div>
+            </Surface>
             {/* Recent campaign */}
             {recentCampaign && (
               <div>
                 <div className="text-xs font-medium text-muted-foreground uppercase tracking-wide mb-2">Recent campaign</div>
                 <Link
                   to={`/projects/${projectId}/campaigns/${recentCampaign.id}`}
-                  className="block rounded-xl border border-border/50 bg-background/60 p-4 hover:border-border hover:bg-background/90 transition-all"
+                  className="block rounded-xl border border-border/50 bg-background/55 p-4 transition-colors hover:border-border hover:bg-background/85"
                 >
                   <div className="flex items-center justify-between">
                     <span className="text-sm font-medium">{recentCampaign.title}</span>
-                    <span className={cn('text-[10px] font-medium rounded-full px-2 py-0.5', STATUS_COLORS[recentCampaign.status])}>
+                    <Badge variant="outline" className={cn('capitalize', STATUS_BADGE[recentCampaign.status])}>
                       {recentCampaign.status}
-                    </span>
+                    </Badge>
                   </div>
                   <div className="text-xs text-muted-foreground mt-1">
                     Started {timeAgo(recentCampaign.created_at)}
@@ -175,32 +224,55 @@ export default function ProjectPage() {
               </div>
             )}
             {campaigns.length === 0 && (
-              <p className="text-sm text-muted-foreground/60">No campaigns yet. Start a chat to kick one off.</p>
+              <EmptyPanel
+                title="No campaigns yet"
+                description="When a chat delegates multi-step work, campaign progress will appear here."
+              />
             )}
           </div>
         )}
 
         {tab === 'campaigns' && (
-          <div className="p-6 max-w-3xl">
+          <div className="max-w-4xl p-4 sm:p-6">
             {campaigns.length === 0 ? (
-              <p className="text-sm text-muted-foreground/60">No campaigns yet.</p>
+              <EmptyPanel
+                title="No campaigns yet"
+                description="Campaigns are created when the agent coordinates multi-step work for this project."
+              />
             ) : (
-              <div className="flex flex-col gap-2">
-                {campaigns.map(c => (
-                  <Link
-                    key={c.id}
-                    to={`/projects/${projectId}/campaigns/${c.id}`}
-                    className="flex items-center justify-between rounded-xl border border-border/50 bg-background/60 px-4 py-3 hover:border-border hover:bg-background/90 transition-all"
-                  >
-                    <div>
-                      <div className="text-sm font-medium">{c.title}</div>
-                      <div className="text-xs text-muted-foreground mt-0.5">{timeAgo(c.created_at)}</div>
-                    </div>
-                    <span className={cn('text-[10px] font-medium rounded-full px-2 py-0.5', STATUS_COLORS[c.status])}>
-                      {c.status}
-                    </span>
-                  </Link>
-                ))}
+              <div className="overflow-hidden rounded-xl border border-border/50 bg-background/60">
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead>Campaign</TableHead>
+                      <TableHead>Status</TableHead>
+                      <TableHead className="hidden sm:table-cell">Started</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {campaigns.map(c => (
+                      <TableRow
+                        key={c.id}
+                        className="cursor-pointer"
+                        onClick={() => navigate(`/projects/${projectId}/campaigns/${c.id}`)}
+                      >
+                        <TableCell className="font-medium">
+                          <Link to={`/projects/${projectId}/campaigns/${c.id}`} className="hover:underline">
+                            {c.title}
+                          </Link>
+                        </TableCell>
+                        <TableCell>
+                          <Badge variant="outline" className={cn('capitalize', STATUS_BADGE[c.status])}>
+                            {c.status}
+                          </Badge>
+                        </TableCell>
+                        <TableCell className="hidden text-muted-foreground sm:table-cell">
+                          {timeAgo(c.created_at)}
+                        </TableCell>
+                      </TableRow>
+                    ))}
+                  </TableBody>
+                </Table>
               </div>
             )}
           </div>

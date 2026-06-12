@@ -32,9 +32,9 @@ export default function UserMenu() {
       <DropdownMenuContent side="top" align="start" className="w-48">
         <DropdownMenuItem onClick={toggleTheme}>
           {theme === 'unnamed-dark'
-            ? <Moon size={14} className="mr-2" />
-            : <Sun size={14} className="mr-2" />}
-          {theme === 'unnamed-dark' ? 'Dark mode' : 'Light mode'}
+            ? <Sun size={14} className="mr-2" />
+            : <Moon size={14} className="mr-2" />}
+          {theme === 'unnamed-dark' ? 'Light mode' : 'Dark mode'}
         </DropdownMenuItem>
         <DropdownMenuSeparator />
         <DropdownMenuItem onClick={() => navigate('/settings')}>

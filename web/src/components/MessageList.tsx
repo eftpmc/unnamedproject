@@ -52,28 +52,28 @@ export default function MessageList({ messages, executions, streamingIds, sessio
       behavior: initialScrollDone.current ? 'smooth' : 'instant',
     });
     initialScrollDone.current = true;
-  }, [messages.length]);
+  }, [messages.length, messages[messages.length - 1]?.content, streamingIds?.size]);
 
   return (
     <div className="flex-1 overflow-y-auto">
-      <div className="mx-auto flex w-full max-w-4xl flex-col gap-5 px-6 py-6">
+      <div className="mx-auto flex w-full max-w-4xl flex-col gap-5 px-4 py-5 sm:px-6 sm:py-6">
         {messages.map(msg => (
           <div key={msg.id}>
             {msg.role === 'user' ? (
               <div className="flex justify-end">
-                <Card className="max-w-[72%] rounded-3xl rounded-br-lg border-transparent bg-foreground py-0 text-background shadow-sm">
+                <Card className="max-w-[88%] rounded-2xl rounded-br-lg border-transparent bg-foreground py-0 text-background shadow-sm sm:max-w-[72%]">
                   <CardContent className="px-4 py-3 text-[15px] leading-relaxed whitespace-pre-wrap">
                     {msg.content}
                   </CardContent>
                 </Card>
               </div>
             ) : (
-              <div className="flex w-fit max-w-[86%] flex-col gap-2">
+              <div className="flex w-fit max-w-[94%] flex-col gap-2 sm:max-w-[86%]">
                 <div className="flex items-center gap-2 text-xs font-medium text-muted-foreground">
                   <span className="size-1.5 rounded-full bg-success" />
                   Assistant
                 </div>
-                <div className="rounded-3xl rounded-bl-lg bg-background/72 px-4 py-3 text-[15px] leading-7 text-foreground shadow-xs ring-1 ring-border/45">
+                <div className="rounded-2xl rounded-bl-lg bg-background/72 px-4 py-3 text-[15px] leading-7 text-foreground shadow-xs ring-1 ring-border/45">
                   <ReactMarkdown components={markdownComponents}>
                     {msg.content}
                   </ReactMarkdown>

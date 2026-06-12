@@ -17,11 +17,24 @@ export interface ClaudeModelInfo {
 
 export type EffortLevel = 'low' | 'medium' | 'high';
 
+export interface MessageExecution {
+  executionId: string;
+  tool: string;
+  projectName?: string;
+  status: 'pending' | 'running' | 'done' | 'error' | 'awaiting_approval';
+  outputLog: string;
+  result: string | null;
+  needsApproval: boolean;
+  approvalId: string | null;
+  action: string | null;
+}
+
 export interface Message {
   id: string;
   role: 'user' | 'assistant';
   content: string;
   created_at: number;
+  executions?: MessageExecution[];
 }
 
 export interface Execution {

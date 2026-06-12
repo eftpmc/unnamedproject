@@ -5,6 +5,9 @@ import { Bot, FileEdit, GitBranch, GitPullRequest } from 'lucide-react';
 import { getCampaign } from '../lib/api.js';
 import { subscribe } from '../lib/ws.js';
 import { cn } from '@/lib/utils';
+import { Badge } from '@/components/ui/badge';
+import { Skeleton } from '@/components/ui/skeleton';
+import { Surface } from '@/components/ui/app-layout';
 import type { CampaignTask, WSCampaignTaskUpdated } from '../types.js';
 
 interface CampaignCardProps {
@@ -65,11 +68,7 @@ export default function CampaignCard({ campaignId, projectId }: CampaignCardProp
   }, []);
 
   if (isLoading || !data) {
-    return (
-      <div className="mt-2 w-64 rounded-xl border border-border/50 bg-background/60 p-3 text-xs text-muted-foreground animate-pulse">
-        Loading campaign…
-      </div>
-    );
+    return <Skeleton className="mt-2 h-28 w-64 rounded-xl" />;
   }
 
   const { campaign, tasks } = data;
@@ -87,19 +86,22 @@ export default function CampaignCard({ campaignId, projectId }: CampaignCardProp
   const displayStatus = isDone ? 'done' : isError ? 'error' : isRunning ? 'running' : campaign.status;
 
   return (
-    <div className="mt-2 w-64 overflow-hidden rounded-xl border border-border/50 bg-background/80 shadow-sm">
+    <Surface className="mt-2 w-64 overflow-hidden bg-background/70 shadow-xs">
       {/* header */}
-      <div className="flex items-center justify-between border-b border-border/40 bg-muted/30 px-3 py-2">
+      <div className="flex items-center justify-between border-b border-border/40 bg-muted/20 px-3 py-2">
         <span className="text-xs font-semibold text-foreground truncate pr-2">{campaign.title}</span>
-        <span className={cn(
-          'shrink-0 rounded-full px-2 py-0.5 text-[10px] font-medium',
-          isRunning && 'bg-blue-100 text-blue-700',
-          isDone && 'bg-green-100 text-green-700',
-          isError && 'bg-red-100 text-red-700',
-          !isRunning && !isDone && !isError && 'bg-muted text-muted-foreground',
-        )}>
+        <Badge
+          variant="outline"
+          className={cn(
+            'shrink-0 capitalize',
+            isRunning && 'bg-blue-500/10 text-blue-700 border-blue-200 dark:text-blue-300 dark:border-blue-900',
+            isDone && 'bg-green-500/10 text-green-700 border-green-200 dark:text-green-300 dark:border-green-900',
+            isError && 'bg-destructive/10 text-destructive border-destructive/20',
+            !isRunning && !isDone && !isError && 'bg-muted text-muted-foreground border-transparent',
+          )}
+        >
           {displayStatus}
-        </span>
+        </Badge>
       </div>
       {/* tasks */}
       <div className="flex flex-col gap-1.5 px-3 py-2.5">
@@ -126,6 +128,6 @@ export default function CampaignCard({ campaignId, projectId }: CampaignCardProp
           View campaign →
         </Link>
       </div>
-    </div>
+    </Surface>
   );
 }

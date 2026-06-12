@@ -17,8 +17,44 @@ router.get('/:sessionId/messages', (req, res) => {
 
   const messages = getDb()
     .prepare('SELECT id, role, content, created_at FROM messages WHERE session_id = ? ORDER BY created_at')
-    .all(req.params.sessionId);
-  res.json(messages);
+    .all(req.params.sessionId) as { id: string; role: string; content: string; created_at: number }[];
+
+  const executions = getDb()
+    .prepare(`
+      SELECT e.id as executionId, e.message_id as messageId, e.tool, e.status, e.output_log as outputLog,
+             e.result, p.name as projectName, a.id as approvalId, a.action
+      FROM executions e
+      LEFT JOIN projects p ON p.id = e.project_id
+      LEFT JOIN approvals a ON a.execution_id = e.id AND a.status = 'pending'
+      WHERE e.message_id IN (${messages.map(() => '?').join(',') || "''"})
+      ORDER BY e.created_at
+    `)
+    .all(...messages.map(m => m.id)) as Array<{
+      executionId: string; messageId: string; tool: string; status: string; outputLog: string;
+      result: string | null; projectName: string | null; approvalId: string | null; action: string | null;
+    }>;
+
+  const executionsByMessage = new Map<string, typeof executions>();
+  for (const e of executions) {
+    const list = executionsByMessage.get(e.messageId) ?? [];
+    list.push(e);
+    executionsByMessage.set(e.messageId, list);
+  }
+
+  res.json(messages.map(m => ({
+    ...m,
+    executions: (executionsByMessage.get(m.id) ?? []).map(e => ({
+      executionId: e.executionId,
+      tool: e.tool,
+      projectName: e.projectName ?? undefined,
+      status: e.status,
+      outputLog: e.outputLog,
+      result: e.result,
+      needsApproval: e.status === 'awaiting_approval' && !!e.approvalId,
+      approvalId: e.approvalId,
+      action: e.action,
+    })),
+  })));
 });
 
 router.post('/:sessionId/messages', async (req, res) => {

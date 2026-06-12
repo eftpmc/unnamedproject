@@ -1,5 +1,4 @@
-import { Button } from '@/components/ui/button';
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
+import { CenteredEmptyState } from '@/components/ui/app-layout';
 
 interface EmptyStateProps {
   onNewChat: () => void;
@@ -7,16 +6,11 @@ interface EmptyStateProps {
 
 export default function EmptyState({ onNewChat }: EmptyStateProps) {
   return (
-    <div className="flex flex-1 items-center justify-center px-6">
-      <Card className="w-full max-w-md rounded-3xl border-border/60 bg-background/72 text-center shadow-sm">
-        <CardHeader>
-          <CardTitle>Start a chat</CardTitle>
-          <CardDescription>Talk to the agent to plan, execute, and manage work across your projects.</CardDescription>
-        </CardHeader>
-        <CardContent>
-          <Button onClick={onNewChat}>New chat</Button>
-        </CardContent>
-      </Card>
-    </div>
+    <CenteredEmptyState
+      title="Start a chat"
+      description="Talk to the agent to plan, execute, and manage work across your projects."
+      actionLabel="New chat"
+      onAction={onNewChat}
+    />
   );
 }

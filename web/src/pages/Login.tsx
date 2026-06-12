@@ -29,7 +29,7 @@ export default function Login() {
 
   return (
     <div className="flex h-full items-center justify-center bg-muted/40 p-6">
-      <Card className="w-full max-w-sm rounded-3xl shadow-sm">
+      <Card className="w-full max-w-sm rounded-xl shadow-sm">
         <CardHeader>
           <CardTitle>Sign in</CardTitle>
           <CardDescription>Open your local agent workspace.</CardDescription>

@@ -8,6 +8,7 @@ import ChatsPage from './pages/ChatsPage.js';
 import ProjectsPage from './pages/ProjectsPage.js';
 import ProjectPage from './pages/ProjectPage.js';
 import CampaignPage from './pages/CampaignPage.js';
+import { TooltipProvider } from '@/components/ui/tooltip';
 
 const queryClient = new QueryClient({
   defaultOptions: { queries: { retry: 1, staleTime: 30_000 } },
@@ -26,6 +27,9 @@ const router = createBrowserRouter([
       { path: 'chats', element: <ChatsPage /> },
       { path: 'projects', element: <ProjectsPage /> },
       { path: 'projects/:projectId', element: <ProjectPage /> },
+      { path: 'projects/:projectId/campaigns', element: <ProjectPage /> },
+      { path: 'projects/:projectId/files', element: <ProjectPage /> },
+      { path: 'projects/:projectId/settings', element: <ProjectPage /> },
       { path: 'projects/:projectId/campaigns/:campaignId', element: <CampaignPage /> },
       { path: 'settings', element: <Settings /> },
     ],
@@ -35,7 +39,9 @@ const router = createBrowserRouter([
 export default function App() {
   return (
     <QueryClientProvider client={queryClient}>
-      <RouterProvider router={router} />
+      <TooltipProvider>
+        <RouterProvider router={router} />
+      </TooltipProvider>
     </QueryClientProvider>
   );
 }

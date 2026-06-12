@@ -1,25 +1,18 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { useNavigate } from 'react-router-dom';
 import { GitMerge } from 'lucide-react';
 import MessageList from './MessageList.js';
 import MessageInput from './MessageInput.js';
 import { getMessages, sendMessage, getChats, updateChatConfig, getModelsForEffort, getSessionWorktree, mergeSessionBranch, getProjects } from '../lib/api.js';
 import { subscribe } from '../lib/ws.js';
-import type { EffortLevel, Message, Session, WSEvent, WSMessageCreated, WSMessageStarted, WSMessageDelta, WSExecutionUpdate, WSApprovalRequested, WSAutoApproved, WSSessionTitleUpdated, WSAgentError } from '../types.js';
+import { cn } from '../lib/utils.js';
+import type { EffortLevel, Message, MessageExecution, Session, WSEvent, WSMessageCreated, WSMessageStarted, WSMessageDelta, WSExecutionUpdate, WSApprovalRequested, WSAutoApproved, WSSessionTitleUpdated, WSAgentError } from '../types.js';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { Button } from '@/components/ui/button';
 
-interface InlineExecution {
-  executionId: string;
-  tool: string;
-  projectName?: string;
-  status: 'pending' | 'running' | 'done' | 'error' | 'awaiting_approval';
-  outputLog: string;
-  result: string | null;
-  needsApproval: boolean;
-  approvalId: string | null;
-  action: string | null;
-}
+type InlineExecution = MessageExecution;
 
 interface ChatViewProps {
   chatId: string;
@@ -27,6 +20,7 @@ interface ChatViewProps {
 
 export default function ChatView({ chatId }: ChatViewProps) {
   const queryClient = useQueryClient();
+  const navigate = useNavigate();
 
   const { data: messages = [], isLoading } = useQuery({
     queryKey: ['messages', chatId],
@@ -83,8 +77,26 @@ export default function ChatView({ chatId }: ChatViewProps) {
   // streaming text for in-progress assistant messages
   const [streamingIds, setStreamingIds] = useState<Set<string>>(new Set());
 
+  // Hydrate executions from persisted message data so reloading mid-execution
+  // or after completion still shows past tool runs and their output.
+  const hydratedRef = useRef(false);
+  useEffect(() => {
+    if (hydratedRef.current || !messages.length) return;
+    hydratedRef.current = true;
+    const byMessage: Record<string, InlineExecution[]> = {};
+    for (const msg of messages) {
+      if (!msg.executions?.length) continue;
+      byMessage[msg.id] = msg.executions;
+      for (const e of msg.executions) execToMsgRef.current[e.executionId] = msg.id;
+    }
+    if (Object.keys(byMessage).length) setExecutions(prev => ({ ...byMessage, ...prev }));
+  }, [messages]);
+
   const [sending, setSending] = useState(false);
   const [agentError, setAgentError] = useState<string | null>(null);
+  const agentActive = sending || streamingIds.size > 0 || Object.values(executions).some(list =>
+    list.some(exec => exec.status === 'running' || exec.status === 'awaiting_approval')
+  );
 
   const mutation = useMutation({
     mutationFn: (content: string) => sendMessage(chatId, content),
@@ -96,6 +108,11 @@ export default function ChatView({ chatId }: ChatViewProps) {
       );
     },
   });
+
+  const sendPrompt = useCallback((content: string) => {
+    setAgentError(null);
+    mutation.mutate(content);
+  }, [mutation]);
 
   const handleWsEvent = useCallback((event: WSEvent) => {
     if (event.type === 'agent_error') {
@@ -235,21 +252,28 @@ export default function ChatView({ chatId }: ChatViewProps) {
 
   return (
     <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
-      <header className="flex h-14 shrink-0 items-center justify-between border-b border-border/40 px-5">
+      <header className="flex min-h-14 shrink-0 flex-wrap items-center justify-between gap-2 border-b border-border/40 px-4 py-2 sm:flex-nowrap sm:px-5">
         <div className="flex min-w-0 flex-col">
           <span className="truncate text-sm font-semibold text-foreground">
             {chat?.title ?? 'Untitled chat'}
           </span>
           {pinnedProject && (
-            <div className="flex items-center gap-1.5">
-              <span className="size-1.5 shrink-0 rounded-full bg-muted-foreground/40" />
+            <button
+              onClick={() => navigate(`/projects/${pinnedProject.id}`)}
+              className="flex w-fit max-w-full items-center gap-1.5 text-left text-xs text-muted-foreground transition-colors hover:text-foreground"
+              title={`Open ${pinnedProject.name}`}
+            >
+              <span className={cn(
+                'size-1.5 shrink-0 rounded-full',
+                agentActive ? 'bg-success' : 'bg-muted-foreground/40',
+              )} />
               <span className="text-xs text-muted-foreground truncate">{pinnedProject.name}</span>
-            </div>
+            </button>
           )}
         </div>
-        <div className="flex shrink-0 items-center gap-2">
+        <div className="flex min-w-0 shrink-0 items-center gap-2">
           <Select value={effort} onValueChange={value => configMutation.mutate({ effort: value as EffortLevel })}>
-            <SelectTrigger size="sm" className="h-7 w-24 rounded-lg border-border/50 bg-muted/50 text-xs">
+            <SelectTrigger size="sm" className="h-7 w-24 rounded-lg border-border/50 bg-muted/70 text-xs">
               <SelectValue />
             </SelectTrigger>
             <SelectContent>
@@ -262,7 +286,7 @@ export default function ChatView({ chatId }: ChatViewProps) {
             value={chat?.model ?? 'auto'}
             onValueChange={value => configMutation.mutate({ model: value === 'auto' ? null : value })}
           >
-            <SelectTrigger size="sm" className="h-7 w-32 rounded-lg border-border/50 bg-muted/50 text-xs">
+            <SelectTrigger size="sm" className="h-7 w-40 rounded-lg border-border/50 bg-muted/70 text-xs sm:w-44">
               <SelectValue />
             </SelectTrigger>
             <SelectContent>
@@ -287,22 +311,24 @@ export default function ChatView({ chatId }: ChatViewProps) {
             {mergeState === 'done' && <span className="text-success text-xs">Merged</span>}
             {mergeState === 'error' && <span className="text-destructive text-xs truncate max-w-48" title={mergeError}>Merge failed</span>}
             {worktree.ahead > 0 && (
-              <button
+              <Button
+                size="sm"
                 onClick={() => mergeMutation.mutate()}
                 disabled={mergeState === 'merging'}
-                className="rounded-md px-2.5 py-1 text-xs font-medium bg-primary text-primary-foreground hover:bg-primary/90 disabled:opacity-50"
               >
                 {mergeState === 'merging' ? 'Merging…' : 'Merge to main'}
-              </button>
+              </Button>
             )}
           </div>
         </div>
       )}
 
       {messages.length === 0 ? (
-        <div className="flex flex-1 items-center justify-center">
-          <p className="text-sm text-muted-foreground/60">Send a message to get started</p>
-        </div>
+        <EmptyChatState
+          projectName={pinnedProject?.name}
+          disabled={sending}
+          onSelect={sendPrompt}
+        />
       ) : (
         <MessageList messages={messages} executions={executions} streamingIds={streamingIds} sessionId={chatId} />
       )}
@@ -315,9 +341,58 @@ export default function ChatView({ chatId }: ChatViewProps) {
       )}
 
       <MessageInput
-        onSend={content => { setAgentError(null); mutation.mutate(content); }}
+        onSend={sendPrompt}
         disabled={sending}
       />
+    </div>
+  );
+}
+
+function EmptyChatState({
+  projectName,
+  disabled,
+  onSelect,
+}: {
+  projectName?: string;
+  disabled: boolean;
+  onSelect: (content: string) => void;
+}) {
+  const prompts = projectName
+    ? [
+        `Give me a quick orientation to ${projectName}.`,
+        `Review the current state of ${projectName} and suggest next steps.`,
+        `Find the highest-impact UI/UX improvements for ${projectName}.`,
+      ]
+    : [
+        'Help me plan the next useful step.',
+        'Review this app and suggest the highest-impact improvements.',
+        'Start by asking me the fewest questions needed to get moving.',
+      ];
+
+  return (
+    <div className="flex flex-1 items-center justify-center px-4">
+      <div className="w-full max-w-xl text-center">
+        <div className="text-sm font-semibold text-foreground">
+          {projectName ? `Start with ${projectName}` : 'Start a chat'}
+        </div>
+        <p className="mx-auto mt-2 max-w-md text-sm leading-relaxed text-muted-foreground">
+          Ask for a plan, a review, or a concrete change. The agent will keep tool work and project context attached to this conversation.
+        </p>
+        <div className="mt-5 flex flex-col gap-2 sm:flex-row sm:flex-wrap sm:justify-center">
+          {prompts.map(prompt => (
+            <Button
+              key={prompt}
+              variant="outline"
+              size="sm"
+              disabled={disabled}
+              onClick={() => onSelect(prompt)}
+              className="h-auto justify-start rounded-xl px-3 py-2 text-left text-xs font-normal sm:max-w-56"
+            >
+              {prompt}
+            </Button>
+          ))}
+        </div>
+      </div>
     </div>
   );
 }

@@ -3,14 +3,14 @@ import { useNavigate } from 'react-router-dom';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Trash2 } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
-import { Button, buttonVariants } from '@/components/ui/button';
+import { Button } from '@/components/ui/button';
 import { Card, CardAction, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '@/components/ui/card';
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { ConfirmDialog } from '@/components/ui/confirm-dialog';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { Separator } from '@/components/ui/separator';
 import { Textarea } from '@/components/ui/textarea';
+import { ContentColumn, PageBody, PageHeader, PageSection, PageShell } from '@/components/ui/app-layout';
 import {
   createConnection,
   deleteConnection,
@@ -72,18 +72,6 @@ const SETUP_META: Record<SetupKind, {
   },
 };
 
-function Section({ title, children }: { title: string; children: React.ReactNode }) {
-  return (
-    <section className="space-y-4 py-7">
-      <div className="flex items-center gap-3">
-        <h2 className="text-base font-medium">{title}</h2>
-        <Separator className="flex-1" />
-      </div>
-      {children}
-    </section>
-  );
-}
-
 function Modal({ title, children, onClose }: { title: string; children: React.ReactNode; onClose: () => void }) {
   return (
     <Dialog open onOpenChange={open => { if (!open) onClose(); }}>
@@ -140,9 +128,7 @@ export default function Settings() {
 
   const inputCls = 'text-sm';
   const textareaCls = 'text-sm font-mono resize-y';
-  const primaryBtn = buttonVariants();
-  const ghostBtn = buttonVariants({ variant: 'ghost' });
-  const rowCls = 'flex items-center gap-3 rounded-xl border bg-card px-4 py-3';
+  const rowCls = 'flex items-center gap-3 rounded-xl border border-border/50 bg-card px-4 py-3';
 
   const leadAgent = connections.find(c => c.purpose === 'lead_agent');
   const toolConnections = connections.filter(c => c.purpose === 'claude_code' || c.purpose === 'codex' || c.purpose === 'github');
@@ -236,10 +222,10 @@ export default function Settings() {
   function SetupCard({ kind, connection }: { kind: SetupKind; connection?: Connection }) {
     const meta = SETUP_META[kind];
     return (
-      <Card className="min-h-36 rounded-2xl">
+      <Card className="rounded-xl bg-background/55 shadow-none" size="sm">
         <CardHeader>
           <CardTitle>{meta.title}</CardTitle>
-          <CardDescription>{meta.description}</CardDescription>
+          <CardDescription className="text-xs leading-relaxed">{meta.description}</CardDescription>
           <CardAction>
             <Badge variant={connection ? 'secondary' : 'outline'} className={connection ? 'text-success' : ''}>
             {connection ? 'Connected' : 'Not set'}
@@ -248,9 +234,9 @@ export default function Settings() {
         </CardHeader>
         {connection && <CardContent className="text-xs text-muted-foreground">{connection.name}</CardContent>}
         <CardFooter className="gap-2">
-          <button onClick={() => openSetupModal(kind)} className={connection ? ghostBtn : primaryBtn}>
+          <Button variant={connection ? 'ghost' : undefined} size="sm" onClick={() => openSetupModal(kind)}>
             {connection ? 'Details' : 'Connect'}
-          </button>
+          </Button>
           {connection && <DeleteBtn onClick={() => setPendingDelete({ id: connection.id })} />}
         </CardFooter>
       </Card>
@@ -276,7 +262,7 @@ export default function Settings() {
         )}
         {existing && activeSetup !== 'mcp' ? (
           <div className="flex justify-end">
-            <button onClick={closeSetupModal} className={ghostBtn}>Close</button>
+            <Button variant="ghost" onClick={closeSetupModal}>Close</Button>
           </div>
         ) : (
         <div className="flex flex-col gap-3">
@@ -307,10 +293,8 @@ export default function Settings() {
           )}
           {setupError && <div className="text-destructive text-sm">{setupError}</div>}
           <DialogFooter>
-            <button onClick={closeSetupModal} className={ghostBtn}>Cancel</button>
-            <button onClick={() => createConnMutation.mutate()} className={primaryBtn}>
-              Save setup
-            </button>
+            <Button variant="ghost" onClick={closeSetupModal}>Cancel</Button>
+            <Button onClick={() => createConnMutation.mutate()}>Save setup</Button>
           </DialogFooter>
         </div>
         )}
@@ -319,53 +303,58 @@ export default function Settings() {
   }
 
   return (
-    <div className="flex-1 overflow-y-auto px-8 py-8">
-      <div className="mx-auto max-w-5xl">
-      <div>
-        <h1 className="text-2xl font-semibold tracking-tight">Settings</h1>
-        <p className="mt-1 text-sm text-muted-foreground">Connect agents, tools, workspaces, and local memory.</p>
-      </div>
+    <PageShell>
+      <PageHeader
+        title="Settings"
+        description="Connect agents, tools, workspaces, and local memory."
+        size="page"
+        className="border-b-0 px-4 pb-0 pt-6 sm:px-8 sm:pt-8"
+      />
+      <PageBody className="px-4 pt-0 sm:px-8">
+      <ContentColumn>
 
-      <Section title="Lead Agent">
-        <SetupCard kind="lead_agent" connection={leadAgent} />
-      </Section>
+      <PageSection title="Lead Agent">
+        <div className="max-w-2xl">
+          <SetupCard kind="lead_agent" connection={leadAgent} />
+        </div>
+      </PageSection>
 
-      <Section title="Tools">
+      <PageSection title="Tools">
         <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
           <SetupCard kind="claude_code" connection={toolConnections.find(c => c.purpose === 'claude_code')} />
           <SetupCard kind="codex" connection={toolConnections.find(c => c.purpose === 'codex')} />
           <SetupCard kind="github" connection={toolConnections.find(c => c.purpose === 'github')} />
         </div>
-      </Section>
+      </PageSection>
 
-      <Section title="MCP">
+      <PageSection title="MCP">
         <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
           {mcpConnections.map(c => (
-            <Card key={c.id} className="rounded-2xl" size="sm">
+            <Card key={c.id} className="rounded-xl bg-background/55 shadow-none" size="sm">
               <CardHeader>
                 <CardTitle>{c.name}</CardTitle>
                 <CardAction><Badge variant="secondary" className="text-success">Connected</Badge></CardAction>
               </CardHeader>
               <CardFooter className="gap-2">
-                <button onClick={() => openSetupModal('mcp')} className={ghostBtn}>Details</button>
+                <Button variant="ghost" size="sm" onClick={() => openSetupModal('mcp')}>Details</Button>
                 <DeleteBtn onClick={() => setPendingDelete({ id: c.id })} />
               </CardFooter>
             </Card>
           ))}
-          <Card className="min-h-28 rounded-2xl border-dashed" size="sm">
+          <Card className="rounded-xl border-dashed bg-background/40 shadow-none" size="sm">
             <CardHeader>
               <CardTitle>Add MCP Server</CardTitle>
               <CardDescription>Run an MCP server process (command + args) to expose extra tools.</CardDescription>
               <CardAction>
-                <button onClick={() => openSetupModal('mcp')} className={primaryBtn}>Add</button>
+                <Button size="sm" onClick={() => openSetupModal('mcp')}>Add</Button>
               </CardAction>
             </CardHeader>
           </Card>
         </div>
-      </Section>
+      </PageSection>
 
-      <Section title="Projects">
-        <div className="mb-3 flex items-end gap-3">
+      <PageSection title="Projects">
+        <div className="mb-3 flex flex-col gap-3 sm:flex-row sm:items-end">
           <div className="flex-1">
             <Label>Projects root</Label>
             <Input
@@ -375,29 +364,27 @@ export default function Settings() {
               className={inputCls}
             />
           </div>
-          <button onClick={() => updateSettingsMutation.mutate(projectsRoot)} className={ghostBtn}>
+          <Button variant="ghost" onClick={() => updateSettingsMutation.mutate(projectsRoot)}>
             Save
-          </button>
-          <button
+          </Button>
+          <Button
+            variant="ghost"
             onClick={() => {
               setProjectsRoot('');
               updateSettingsMutation.mutate('');
             }}
-            className={ghostBtn}
           >
             Reset to default
-          </button>
+          </Button>
         </div>
         {projectsRootError && <div className="text-destructive text-sm mb-3">{projectsRootError}</div>}
-        <p className="text-muted-foreground/70 text-xs mb-3">
-          New repo-backed projects are created as folders under this directory — this is where the agent's local
-          checkouts of your project repos live. The path shown above is the current value, which defaults to a{' '}
-          <code>projects</code> folder inside the server's data directory. Change it if you'd rather keep project
-          repos somewhere else (e.g. <code>~/code</code>), or click "Reset to default" to go back to the default location.
+        <p className="mb-3 max-w-3xl text-xs leading-relaxed text-muted-foreground/70">
+          New repo-backed projects are created here. Keep the default app data folder, or point it at a workspace
+          location such as <code>~/code</code>.
         </p>
-      </Section>
+      </PageSection>
 
-      <Section title="Memory">
+      <PageSection title="Memory">
         {memory.length === 0 ? (
           <div className="text-muted-foreground/70 text-sm">No memory stored yet.</div>
         ) : (
@@ -428,9 +415,9 @@ export default function Settings() {
             })}
           </div>
         )}
-      </Section>
+      </PageSection>
 
-      <Section title="Scheduled Tasks">
+      <PageSection title="Scheduled Tasks">
         {scheduledTasks.length === 0 ? (
           <div className="text-muted-foreground/70 text-sm">No scheduled tasks.</div>
         ) : (
@@ -447,9 +434,9 @@ export default function Settings() {
                       : 'Never run'}
                   </div>
                 </div>
-                <button onClick={() => runTaskMutation.mutate(task.id)} className={ghostBtn}>
+                <Button variant="ghost" size="sm" onClick={() => runTaskMutation.mutate(task.id)}>
                   Run now
-                </button>
+                </Button>
                 <label className="flex items-center gap-2 cursor-pointer">
                   <input
                     type="checkbox"
@@ -463,11 +450,11 @@ export default function Settings() {
             ))}
           </div>
         )}
-      </Section>
+      </PageSection>
 
-      <Section title="Account">
+      <PageSection title="Account">
         <Button variant="destructive" onClick={handleSignOut}>Sign out</Button>
-      </Section>
+      </PageSection>
 
       {pendingDelete && (
         <ConfirmDialog
@@ -482,7 +469,8 @@ export default function Settings() {
         />
       )}
       <SetupModal />
-      </div>
-    </div>
+      </ContentColumn>
+      </PageBody>
+    </PageShell>
   );
 }

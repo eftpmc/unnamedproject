@@ -6,7 +6,7 @@ import { getProjects, createProject, getProjectCampaigns } from '../lib/api.js';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
-import { cn } from '@/lib/utils';
+import { CenteredEmptyState, PageBody, PageHeader, PageLoading, PageShell, Surface } from '@/components/ui/app-layout';
 import type { Project } from '../types.js';
 
 function ProjectCard({ project }: { project: Project }) {
@@ -19,34 +19,33 @@ function ProjectCard({ project }: { project: Project }) {
   const runningCount = campaigns.filter(c => c.status === 'running').length;
 
   return (
-    <button
-      onClick={() => navigate(`/projects/${project.id}`)}
-      className="group flex flex-col gap-3 rounded-2xl border border-border/50 bg-background/60 p-5 text-left shadow-sm transition-all hover:border-border hover:bg-background/90 hover:shadow-md"
-    >
-      <div className="flex items-start justify-between gap-2">
-        <div className="flex items-center gap-2.5">
-          {project.repo_path
-            ? <FolderGit2 size={16} className="shrink-0 text-muted-foreground" />
-            : <FileText size={16} className="shrink-0 text-muted-foreground" />
-          }
-          <span className="font-semibold text-sm text-foreground">{project.name}</span>
-        </div>
-        {runningCount > 0 && (
-          <div className="flex items-center gap-1 shrink-0">
-            <span className="size-2 rounded-full bg-blue-500 animate-pulse" />
-            <span className="text-[10px] text-blue-600 font-medium">{runningCount} running</span>
+    <button className="block w-full rounded-xl text-left" onClick={() => navigate(`/projects/${project.id}`)}>
+      <Surface interactive className="flex flex-col gap-2.5 p-4">
+        <div className="flex items-start justify-between gap-2">
+          <div className="flex items-center gap-2.5">
+            {project.repo_path
+              ? <FolderGit2 size={16} className="shrink-0 text-muted-foreground" />
+              : <FileText size={16} className="shrink-0 text-muted-foreground" />
+            }
+            <span className="font-semibold text-sm text-foreground">{project.name}</span>
           </div>
+          {runningCount > 0 && (
+            <div className="flex items-center gap-1 shrink-0">
+              <span className="size-2 rounded-full bg-blue-500 animate-pulse" />
+              <span className="text-[10px] text-blue-600 font-medium">{runningCount} running</span>
+            </div>
+          )}
+        </div>
+        {project.description && (
+          <p className="text-xs text-muted-foreground line-clamp-2">{project.description}</p>
         )}
-      </div>
-      {project.description && (
-        <p className="text-xs text-muted-foreground line-clamp-2">{project.description}</p>
-      )}
-      <div className="flex items-center gap-3 text-[11px] text-muted-foreground/60">
-        <span>{project.repo_path ? 'code repo' : 'doc project'}</span>
-        {campaigns.length > 0 && (
-          <span>{campaigns.length} campaign{campaigns.length !== 1 ? 's' : ''}</span>
-        )}
-      </div>
+        <div className="flex items-center gap-3 text-[11px] text-muted-foreground/60">
+          <span>{project.repo_path ? 'code repo' : 'doc project'}</span>
+          {campaigns.length > 0 && (
+            <span>{campaigns.length} campaign{campaigns.length !== 1 ? 's' : ''}</span>
+          )}
+        </div>
+      </Surface>
     </button>
   );
 }
@@ -77,29 +76,33 @@ export default function ProjectsPage() {
     },
   });
 
-  if (isLoading) return null;
-
   return (
-    <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
-      <header className="flex h-14 shrink-0 items-center justify-between px-6 border-b border-border/40">
-        <h1 className="text-sm font-semibold">Projects</h1>
-        <Button size="sm" variant="outline" className="h-7 gap-1.5 text-xs" onClick={() => setOpen(true)}>
-          <Plus size={13} />
-          New project
-        </Button>
-      </header>
+    <PageShell>
+      <PageHeader
+        title="Projects"
+        actions={(
+          <Button size="sm" variant="outline" className="h-7 gap-1.5 text-xs" onClick={() => setOpen(true)}>
+            <Plus size={13} />
+            New project
+          </Button>
+        )}
+      />
 
-      {projects.length === 0 ? (
-        <div className="flex flex-1 flex-col items-center justify-center gap-3">
-          <p className="text-sm text-muted-foreground/60">No projects yet.</p>
-          <Button size="sm" onClick={() => setOpen(true)}>Create your first project</Button>
-        </div>
+      {isLoading ? (
+        <PageLoading rows={3} />
+      ) : projects.length === 0 ? (
+        <CenteredEmptyState
+          title="No projects yet"
+          description="Create a project to give the agent a workspace, repo context, and saved settings."
+          actionLabel="Create your first project"
+          onAction={() => setOpen(true)}
+        />
       ) : (
-        <div className="flex-1 overflow-y-auto px-6 py-6">
+        <PageBody>
           <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3 max-w-5xl">
             {projects.map(p => <ProjectCard key={p.id} project={p} />)}
           </div>
-        </div>
+        </PageBody>
       )}
 
       <Dialog open={open} onOpenChange={setOpen}>
@@ -136,6 +139,6 @@ export default function ProjectsPage() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
-    </div>
+    </PageShell>
   );
 }

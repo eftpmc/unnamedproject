@@ -50,5 +50,33 @@ describe('messages', () => {
     expect(res.body.length).toBeGreaterThanOrEqual(2);
     const roles = (res.body as { role: string }[]).map(m => m.role);
     expect(roles).toContain('assistant');
+    expect(res.body.every((m: { executions: unknown[] }) => Array.isArray(m.executions))).toBe(true);
+  });
+
+  it('embeds executions linked to a message so a reload can rehydrate tool runs', async () => {
+    const assistant = getDb()
+      .prepare("SELECT id FROM messages WHERE session_id = ? AND role = 'assistant' LIMIT 1")
+      .get(sessionId) as { id: string };
+
+    const executionId = newId();
+    getDb()
+      .prepare("INSERT INTO executions (id, message_id, project_id, tool, status, output_log, result) VALUES (?,?,?,?,?,?,?)")
+      .run(executionId, assistant.id, null, 'invoke_claude_code', 'done', 'doing the work\n', 'Done.');
+
+    const res = await request(app)
+      .get(`/sessions/${sessionId}/messages`)
+      .set('Authorization', `Bearer ${token}`);
+    expect(res.status).toBe(200);
+
+    const withExec = (res.body as { id: string; executions: { executionId: string; tool: string; status: string; outputLog: string; result: string | null }[] }[])
+      .find(m => m.id === assistant.id)!;
+    expect(withExec.executions).toHaveLength(1);
+    expect(withExec.executions[0]).toMatchObject({
+      executionId,
+      tool: 'invoke_claude_code',
+      status: 'done',
+      outputLog: 'doing the work\n',
+      result: 'Done.',
+    });
   });
 });

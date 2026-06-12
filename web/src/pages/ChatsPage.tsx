@@ -7,6 +7,7 @@ import { timeAgo } from '../lib/utils.js';
 import { ConfirmDialog } from '@/components/ui/confirm-dialog';
 import { Button } from '@/components/ui/button';
 import { ScrollArea } from '@/components/ui/scroll-area';
+import { CenteredEmptyState, PageHeader, PageLoading, PageShell } from '@/components/ui/app-layout';
 import type { Session } from '../types.js';
 
 export default function ChatsPage() {
@@ -28,25 +29,25 @@ export default function ChatsPage() {
     onError: () => setPendingDelete(null),
   });
 
-  if (isLoading) return null;
-
   return (
-    <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
-      <header className="flex h-16 shrink-0 items-center px-6">
-        <h1 className="text-sm font-medium">Chats</h1>
-      </header>
+    <PageShell>
+      <PageHeader title="Chats" />
 
-      {chats.length === 0 ? (
-        <div className="flex flex-1 items-center justify-center">
-          <p className="text-sm text-muted-foreground/60">No chats yet. Start a new one.</p>
-        </div>
+      {isLoading ? (
+        <PageLoading rows={5} />
+      ) : chats.length === 0 ? (
+        <CenteredEmptyState
+          title="No chats yet"
+          description="Start a conversation to plan work, inspect a project, or make a change."
+        />
       ) : (
         <ScrollArea className="flex-1">
           <div className="px-6 pb-6">
-            <div className="divide-y divide-border/50 rounded-2xl border border-border/50 bg-background/40">
+            <div className="divide-y divide-border/50 rounded-xl border border-border/50 bg-background/40">
               {chats.map(chat => (
                 <div key={chat.id} className="flex items-center gap-3 px-4 py-3">
                   <button
+                    aria-label={`Open chat ${chat.title ?? 'Untitled chat'}, updated ${timeAgo(chat.updated_at)}`}
                     className="min-w-0 flex-1 text-left"
                     onClick={() => navigate(`/c/${chat.id}`)}
                   >
@@ -56,7 +57,7 @@ export default function ChatsPage() {
                   <Button
                     variant="ghost"
                     size="icon-sm"
-                    aria-label={`Delete ${chat.title ?? 'Untitled chat'}`}
+                    aria-label={`Delete chat ${chat.title ?? 'Untitled chat'}, updated ${timeAgo(chat.updated_at)}`}
                     className="shrink-0 text-muted-foreground hover:text-destructive"
                     onClick={() => setPendingDelete(chat.id)}
                   >
@@ -80,6 +81,6 @@ export default function ChatsPage() {
           onCancel={() => setPendingDelete(null)}
         />
       )}
-    </div>
+    </PageShell>
   );
 }

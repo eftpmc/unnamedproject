@@ -3,6 +3,7 @@ import { useQuery } from '@tanstack/react-query';
 import { ChevronRight, ChevronDown, FileText, Folder, FolderOpen, Loader2 } from 'lucide-react';
 import { getProjectTree, getProjectFile } from '../lib/api.js';
 import { cn } from '@/lib/utils';
+import { EmptyPanel, Surface } from '@/components/ui/app-layout';
 import type { FileEntry } from '../types.js';
 
 interface FileBrowserProps {
@@ -107,7 +108,7 @@ export default function FileBrowser({ projectId }: FileBrowserProps) {
   const isMd = lang === 'markdown';
 
   return (
-    <div className="flex min-h-0 flex-1 overflow-hidden rounded-xl border border-border/50 bg-background/40">
+    <Surface className="flex min-h-0 flex-1 overflow-hidden bg-background/40">
       {/* Tree panel */}
       <div className="w-52 shrink-0 overflow-y-auto border-r border-border/40 py-2">
         {isLoading && (
@@ -116,7 +117,13 @@ export default function FileBrowser({ projectId }: FileBrowserProps) {
           </div>
         )}
         {isEmpty && (
-          <p className="px-4 py-6 text-center text-xs text-muted-foreground/50">No files yet</p>
+          <div className="px-3 py-3">
+            <EmptyPanel
+              title="No files yet"
+              description="Files will appear here when the project workspace has content."
+              className="text-xs"
+            />
+          </div>
         )}
         {entries.map(entry => (
           <TreeNode
@@ -162,6 +169,6 @@ export default function FileBrowser({ projectId }: FileBrowserProps) {
           </>
         )}
       </div>
-    </div>
+    </Surface>
   );
 }

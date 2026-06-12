@@ -7,6 +7,8 @@ import { subscribe } from '../lib/ws.js';
 import { cn } from '@/lib/utils';
 import { timeAgo } from '../lib/utils.js';
 import { getToken } from '../lib/auth.js';
+import { ContentColumn, PageBody, PageHeader, PageLoading, PageShell, Surface } from '@/components/ui/app-layout';
+import { Button } from '@/components/ui/button';
 import type { Campaign, CampaignTask, WSCampaignTaskUpdated, WSCampaignUpdated } from '../types.js';
 
 const STATUS_DOT: Record<CampaignTask['status'], string> = {
@@ -18,16 +20,16 @@ const STATUS_DOT: Record<CampaignTask['status'], string> = {
 
 const STATUS_BORDER: Record<CampaignTask['status'], string> = {
   waiting: 'border-border/50',
-  running: 'border-blue-200',
-  done: 'border-green-200',
-  error: 'border-red-200',
+  running: 'border-blue-500/30',
+  done: 'border-green-500/30',
+  error: 'border-destructive/30',
 };
 
 const STATUS_BG: Record<CampaignTask['status'], string> = {
   waiting: 'bg-background/60',
-  running: 'bg-blue-50/60',
-  done: 'bg-green-50/40',
-  error: 'bg-red-50/40',
+  running: 'bg-blue-500/5',
+  done: 'bg-green-500/5',
+  error: 'bg-destructive/5',
 };
 
 const AGENT_LABEL: Record<CampaignTask['agent'], string> = {
@@ -50,9 +52,9 @@ const AGENT_ICON: Record<CampaignTask['agent'], typeof Bot> = {
 };
 
 const CAMPAIGN_STATUS_COLORS = {
-  running: 'bg-blue-100 text-blue-700',
-  done: 'bg-green-100 text-green-700',
-  error: 'bg-red-100 text-red-700',
+  running: 'bg-blue-500/10 text-blue-700 dark:text-blue-300',
+  done: 'bg-green-500/10 text-green-700 dark:text-green-300',
+  error: 'bg-destructive/10 text-destructive',
   cancelled: 'bg-muted text-muted-foreground',
 };
 
@@ -99,7 +101,13 @@ export default function CampaignPage() {
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ['campaign', campaignId] }),
   });
 
-  if (isLoading || !data) return null;
+  if (isLoading || !data) {
+    return (
+      <PageShell>
+        <PageLoading rows={4} />
+      </PageShell>
+    );
+  }
 
   const { campaign, tasks } = data;
   const effectiveCampaignStatus = campaignStatus ?? campaign.status;
@@ -108,9 +116,40 @@ export default function CampaignPage() {
   const progressPct = tasks.length > 0 ? (doneCount / tasks.length) * 100 : 0;
 
   return (
-    <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
-      {/* Header */}
-      <div className="border-b border-border/40 px-6 py-4">
+    <PageShell>
+      <PageHeader
+        title={campaign.title}
+        description={(
+          <>
+            Started {timeAgo(campaign.created_at)}
+            {campaign.completed_at && ` · completed ${timeAgo(campaign.completed_at)}`}
+          </>
+        )}
+        actions={(
+          <div className="flex items-center gap-2">
+            <span className={cn(
+              'rounded-full px-2.5 py-1 text-xs font-medium',
+              CAMPAIGN_STATUS_COLORS[effectiveCampaignStatus],
+            )}>
+              {effectiveCampaignStatus}
+            </span>
+            {effectiveCampaignStatus === 'running' && (
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => cancelMutation.mutate()}
+                disabled={cancelMutation.isPending}
+                className="h-7 gap-1 text-xs text-muted-foreground"
+              >
+                <X size={12} />
+                Cancel
+              </Button>
+            )}
+          </div>
+        )}
+        className="items-start"
+      />
+      <div className="border-b border-border/40 px-4 py-3 sm:px-6">
         <div className="flex items-center gap-2 mb-3">
           <Link to={`/projects/${projectId}`} className="text-muted-foreground hover:text-foreground transition-colors">
             <ArrowLeft size={15} />
@@ -123,35 +162,7 @@ export default function CampaignPage() {
           <span className="text-xs text-muted-foreground/40">/</span>
           <span className="text-xs text-foreground font-medium truncate max-w-xs">{campaign.title}</span>
         </div>
-        <div className="flex items-center justify-between">
-          <div>
-            <h1 className="text-base font-semibold">{campaign.title}</h1>
-            <p className="text-xs text-muted-foreground mt-0.5">
-              Started {timeAgo(campaign.created_at)}
-              {campaign.completed_at && ` · completed ${timeAgo(campaign.completed_at)}`}
-            </p>
-          </div>
-          <div className="flex items-center gap-2">
-            <span className={cn(
-              'rounded-full px-2.5 py-1 text-xs font-medium',
-              CAMPAIGN_STATUS_COLORS[effectiveCampaignStatus],
-            )}>
-              {effectiveCampaignStatus}
-            </span>
-            {effectiveCampaignStatus === 'running' && (
-              <button
-                onClick={() => cancelMutation.mutate()}
-                disabled={cancelMutation.isPending}
-                className="flex items-center gap-1 rounded-full border border-border/50 px-2.5 py-1 text-xs font-medium text-muted-foreground hover:text-foreground hover:bg-muted/60 transition-colors disabled:opacity-50"
-              >
-                <X size={12} />
-                Cancel
-              </button>
-            )}
-          </div>
-        </div>
-        {/* Progress bar */}
-        <div className="mt-4 flex items-center gap-3">
+        <div className="flex items-center gap-3">
           <div className="flex-1 h-1.5 bg-border/50 rounded-full overflow-hidden">
             <div
               className="h-full bg-blue-500 rounded-full transition-all duration-500"
@@ -162,9 +173,9 @@ export default function CampaignPage() {
         </div>
       </div>
 
-      {/* Task list */}
-      <div className="flex-1 overflow-y-auto px-6 py-5">
-        <div className="flex flex-col gap-3 max-w-2xl">
+      <PageBody>
+        <ContentColumn className="max-w-2xl">
+        <div className="flex flex-col gap-3">
           {tasks.map(task => {
             const status = taskStatuses[task.id] ?? task.status;
             return (
@@ -172,8 +183,9 @@ export default function CampaignPage() {
             );
           })}
         </div>
-      </div>
-    </div>
+        </ContentColumn>
+      </PageBody>
+    </PageShell>
   );
 }
 
@@ -181,11 +193,7 @@ function TaskRow({ task, status }: { task: CampaignTask; status: CampaignTask['s
   const [expanded, setExpanded] = useState(false);
 
   return (
-    <div className={cn(
-      'rounded-xl border transition-colors',
-      STATUS_BORDER[status],
-      STATUS_BG[status],
-    )}>
+    <Surface className={cn('transition-colors', STATUS_BORDER[status], STATUS_BG[status])}>
       <div className="flex items-center justify-between px-4 py-3">
         <div className="flex items-center gap-3 min-w-0">
           <div className={cn('size-2 shrink-0 rounded-full', STATUS_DOT[status])} />
@@ -220,7 +228,7 @@ function TaskRow({ task, status }: { task: CampaignTask; status: CampaignTask['s
       {expanded && task.execution_id && (
         <ExecutionOutput executionId={task.execution_id} />
       )}
-    </div>
+    </Surface>
   );
 }
 

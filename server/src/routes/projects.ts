@@ -1,12 +1,25 @@
 import { Router } from 'express';
 import fs from 'fs/promises';
+import fsSync from 'fs';
 import path from 'path';
-import { getDb, getDataDir, getCampaignsForProject } from '../db/index.js';
+import { getDb, getDataDir, getCampaignsForProject, getProjectForUser } from '../db/index.js';
 import { newId } from '../lib/ids.js';
-import { requireAuth, type AuthedRequest } from '../middleware/auth.js';
+import { requireAuthHeaderOrQuery, type AuthedRequest } from '../middleware/auth.js';
 
 const router = Router();
-router.use(requireAuth);
+router.use(requireAuthHeaderOrQuery);
+
+const MEDIA_CONTENT_TYPES: Record<string, string> = {
+  '.mp4': 'video/mp4',
+  '.webm': 'video/webm',
+  '.png': 'image/png',
+  '.jpg': 'image/jpeg',
+  '.jpeg': 'image/jpeg',
+  '.gif': 'image/gif',
+  '.webp': 'image/webp',
+  '.mp3': 'audio/mpeg',
+  '.wav': 'audio/wav',
+};
 
 router.get('/', (req, res) => {
   const { userId } = req as AuthedRequest;
@@ -121,6 +134,50 @@ router.patch('/:id', (req, res) => {
     .run(description ?? null, req.params.id, userId);
   if (result.changes === 0) { res.status(404).json({ error: 'Not found' }); return; }
   res.json({ ok: true });
+});
+
+router.get('/:id/media', (req, res) => {
+  const { userId } = req as unknown as AuthedRequest;
+  const project = getProjectForUser(req.params.id, userId);
+  if (!project) { res.status(404).json({ error: 'Not found' }); return; }
+
+  const mediaDir = path.join(getDataDir(), 'projects', project.id, 'media');
+  if (!fsSync.existsSync(mediaDir)) { res.json({ files: [] }); return; }
+
+  const entries = fsSync.readdirSync(mediaDir, { withFileTypes: true });
+  const files = entries
+    .filter(e => e.isFile())
+    .map(e => {
+      const stat = fsSync.statSync(path.join(mediaDir, e.name));
+      return {
+        name: e.name,
+        url: `/projects/${project.id}/media/${e.name}`,
+        createdAt: stat.birthtimeMs,
+      };
+    });
+  res.json({ files });
+});
+
+router.get('/:id/media/:filename', (req, res) => {
+  const { userId } = req as unknown as AuthedRequest;
+  const { filename } = req.params;
+
+  if (filename.includes('/') || filename.includes('..')) {
+    res.status(400).json({ error: 'Invalid filename' });
+    return;
+  }
+
+  const project = getProjectForUser(req.params.id, userId);
+  if (!project) { res.status(404).json({ error: 'Not found' }); return; }
+
+  const mediaDir = path.join(getDataDir(), 'projects', project.id, 'media');
+  const filePath = path.join(mediaDir, filename);
+  if (!fsSync.existsSync(filePath)) { res.status(404).json({ error: 'Not found' }); return; }
+
+  const ext = path.extname(filename).toLowerCase();
+  const contentType = MEDIA_CONTENT_TYPES[ext] || 'application/octet-stream';
+  res.setHeader('Content-Type', contentType);
+  fsSync.createReadStream(filePath).pipe(res);
 });
 
 export default router;

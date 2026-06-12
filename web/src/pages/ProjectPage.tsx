@@ -2,7 +2,7 @@ import { useState } from 'react';
 import { useParams, useNavigate, Link, useLocation } from 'react-router-dom';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { GitBranch, GitGraph, Video } from 'lucide-react';
-import { getProjects, getProjectCampaigns, getProjectCapabilities, createChat, updateChatConfig, deleteProject, updateProject } from '../lib/api.js';
+import { getProjects, getProjectCampaigns, getProjectCapabilities, createChat, updateChatConfig, deleteProject, updateProject, getChats } from '../lib/api.js';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -21,7 +21,7 @@ import { cn } from '@/lib/utils';
 import FileBrowser from '../components/FileBrowser.js';
 import { timeAgo } from '../lib/utils.js';
 import { useProjectCapabilities } from '../hooks/useProjectCapabilities.js';
-import type { Project, Campaign } from '../types.js';
+import type { Project, Campaign, Session } from '../types.js';
 
 type Tab = string;
 
@@ -67,6 +67,13 @@ export default function ProjectPage() {
     staleTime: 20_000,
   });
 
+  const { data: allChats = [] } = useQuery<Session[]>({
+    queryKey: ['chats'],
+    queryFn: getChats,
+    staleTime: 30_000,
+  });
+  const pinnedChats = allChats.filter(c => c.pinned_project_id === projectId);
+
   const startChatMutation = useMutation({
     mutationFn: async () => {
       const { id } = await createChat();
@@ -107,6 +114,7 @@ export default function ProjectPage() {
   const TABS: { id: Tab; label: string }[] = [
     { id: 'overview', label: 'Overview' },
     { id: 'campaigns', label: `Campaigns${campaigns.length > 0 ? ` (${campaigns.length})` : ''}` },
+    { id: 'chats', label: `Chats${pinnedChats.length > 0 ? ` (${pinnedChats.length})` : ''}` },
     { id: 'files', label: 'Files' },
     ...extraTabs.map(t => ({ id: t.id, label: t.label })),
     { id: 'settings', label: 'Settings' },
@@ -257,6 +265,37 @@ export default function ProjectPage() {
                     ))}
                   </TableBody>
                 </Table>
+              </div>
+            )}
+          </div>
+        )}
+
+        {tab === 'chats' && (
+          <div className="max-w-4xl p-4 sm:p-6">
+            {pinnedChats.length === 0 ? (
+              <EmptyPanel
+                title="No chats yet"
+                description="Start a chat from this project and it will appear here."
+              />
+            ) : (
+              <div className="overflow-hidden rounded-xl border border-border/50 bg-background/60">
+                {pinnedChats.map((chat, i) => (
+                  <button
+                    key={chat.id}
+                    onClick={() => navigate(`/c/${chat.id}`)}
+                    className={cn(
+                      'flex w-full items-center justify-between px-4 py-3 text-left hover:bg-muted/30 transition-colors',
+                      i < pinnedChats.length - 1 && 'border-b border-border/50',
+                    )}
+                  >
+                    <span className="text-sm font-medium truncate">
+                      {chat.title ?? 'Untitled chat'}
+                    </span>
+                    <span className="shrink-0 ml-3 text-xs text-muted-foreground">
+                      {timeAgo(chat.updated_at)}
+                    </span>
+                  </button>
+                ))}
               </div>
             )}
           </div>

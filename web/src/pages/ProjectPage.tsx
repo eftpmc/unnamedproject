@@ -1,21 +1,13 @@
 import { useState } from 'react';
 import { useParams, useNavigate, Link, useLocation } from 'react-router-dom';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { FolderGit2, FileText, GitBranch } from 'lucide-react';
+import { GitBranch } from 'lucide-react';
 import { getProjects, getProjectCampaigns, createChat, updateChatConfig, deleteProject, updateProject } from '../lib/api.js';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
-import { EmptyPanel, PageLoading, PageShell, Surface } from '@/components/ui/app-layout';
-import {
-  Breadcrumb,
-  BreadcrumbItem,
-  BreadcrumbLink,
-  BreadcrumbList,
-  BreadcrumbPage,
-  BreadcrumbSeparator,
-} from '@/components/ui/breadcrumb';
+import { EmptyPanel, PageHeader, PageLoading, PageShell, Surface } from '@/components/ui/app-layout';
 import {
   Table,
   TableBody,
@@ -108,54 +100,33 @@ export default function ProjectPage() {
   ];
 
   return (
-    <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
-      {/* Header */}
-      <div className="border-b border-border/40 bg-background/60 px-6 pt-4 pb-0">
-        <Breadcrumb className="mb-3 text-xs">
-          <BreadcrumbList className="text-xs">
-            <BreadcrumbItem>
-              <BreadcrumbLink asChild>
-                <Link to="/projects">Projects</Link>
-              </BreadcrumbLink>
-            </BreadcrumbItem>
-            <BreadcrumbSeparator />
-            <BreadcrumbItem>
-              <BreadcrumbPage className="max-w-48 truncate text-xs font-medium">{project.name}</BreadcrumbPage>
-            </BreadcrumbItem>
-          </BreadcrumbList>
-        </Breadcrumb>
-        <div className="mb-3 flex flex-wrap items-start justify-between gap-3">
-          <div className="min-w-0">
-            <div className="flex items-center gap-2">
-              {project.repo_path
-                ? <FolderGit2 size={15} className="text-muted-foreground" />
-                : <FileText size={15} className="text-muted-foreground" />
-              }
-              <h1 className="text-base font-semibold">{project.name}</h1>
-              <span className="text-xs text-muted-foreground/50 bg-muted/50 rounded px-1.5 py-0.5">
-                {project.repo_path ? 'code repo' : 'doc project'}
-              </span>
-            </div>
-            {project.description && (
-              <p className="ml-[23px] mt-0.5 max-w-2xl text-xs text-muted-foreground">{project.description}</p>
-            )}
-            <p className="ml-[23px] mt-1 max-w-full truncate text-xs text-muted-foreground/70">
-              {project.repo_path ?? 'Document project'}
-            </p>
-          </div>
-        </div>
-        {/* Tabs */}
+    <PageShell>
+      <PageHeader
+        title={project.name}
+        description={[project.description, project.repo_path].filter(Boolean).join(' · ') || undefined}
+        actions={
+          <Button
+            size="sm"
+            className="h-8 text-xs"
+            onClick={() => startChatMutation.mutate()}
+            disabled={startChatMutation.isPending}
+          >
+            Start chat
+          </Button>
+        }
+      />
+      {/* Tab strip */}
+      <div className="shrink-0 overflow-x-auto border-b border-border/40 px-4 sm:px-6">
         <Tabs value={tab} onValueChange={value => navigate(tabHref(project.id, value as Tab))}>
-          <TabsList variant="line" className="-mx-2 overflow-x-auto px-2">
+          <TabsList variant="line" className="-mx-1 px-1">
             {TABS.map(t => (
-              <TabsTrigger key={t.id} value={t.id} className="px-4 py-2 text-xs">
+              <TabsTrigger key={t.id} value={t.id} className="px-3 py-2 text-xs">
                 {t.label}
               </TabsTrigger>
             ))}
           </TabsList>
         </Tabs>
       </div>
-
       {/* Tab content */}
       <div className="flex-1 overflow-y-auto">
         {tab === 'overview' && (
@@ -185,28 +156,9 @@ export default function ProjectPage() {
                 </Surface>
               )}
             </div>
-            <Surface className="mb-6 p-4">
-              <div className="flex flex-wrap items-center justify-between gap-3">
-                <div>
-                  <div className="text-sm font-semibold">Work with this project</div>
-                  <p className="mt-1 text-xs text-muted-foreground">
-                    Start a chat with this project pinned so the agent has the right workspace context.
-                  </p>
-                </div>
-                <Button
-                  size="sm"
-                  className="h-8 text-xs"
-                  onClick={() => startChatMutation.mutate()}
-                  disabled={startChatMutation.isPending}
-                >
-                  Start chat
-                </Button>
-              </div>
-            </Surface>
-            {/* Recent campaign */}
             {recentCampaign && (
               <div>
-                <div className="text-xs font-medium text-muted-foreground uppercase tracking-wide mb-2">Recent campaign</div>
+                <div className="text-xs font-medium text-muted-foreground mb-2">Recent campaign</div>
                 <Link
                   to={`/projects/${projectId}/campaigns/${recentCampaign.id}`}
                   className="block rounded-xl border border-border/50 bg-background/55 p-4 transition-colors hover:border-border hover:bg-background/85"
@@ -279,18 +231,18 @@ export default function ProjectPage() {
         )}
 
         {tab === 'files' && (
-          <div className="p-6">
+          <div className="p-4 sm:p-6">
             <FileBrowser projectId={projectId!} />
           </div>
         )}
 
         {tab === 'settings' && (
-          <div className="p-6 max-w-lg">
+          <div className="p-4 sm:p-6 max-w-lg">
             <ProjectSettingsForm project={project} onDelete={() => deleteMutation.mutate()} />
           </div>
         )}
       </div>
-    </div>
+    </PageShell>
   );
 }
 

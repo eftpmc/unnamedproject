@@ -37,3 +37,22 @@ describe('buildMediaPath', () => {
     expect(emptyFileName).toMatch(/^\d+-video\.mp4$/);
   });
 });
+
+describe('renderVideo', () => {
+  it('renderVideo throws a helpful error when Remotion entry point is missing', async () => {
+    vi.resetModules();
+
+    // Mock fs before importing video module
+    vi.doMock('fs', () => ({
+      default: {
+        existsSync: vi.fn(() => false),
+        mkdirSync: vi.fn(),
+      },
+    }));
+
+    const { renderVideo } = await import('./video.js');
+    await expect(
+      renderVideo('proj-1', 'Test', [{ text: 'Hello', durationInSeconds: 2 }])
+    ).rejects.toThrow(/remotion.*not.*configured|remotion.*not found|scaffold/i);
+  });
+});

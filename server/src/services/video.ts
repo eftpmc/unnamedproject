@@ -45,6 +45,16 @@ export async function renderVideo(
   scenes: VideoScene[],
   onProgress?: (progress: number) => void,
 ): Promise<string> {
+  // Pre-flight: verify Remotion entry point exists before attempting to bundle
+  const entryPoint = path.resolve(__dirname, '../../../remotion/src/index.tsx');
+  if (!fs.existsSync(entryPoint)) {
+    throw new Error(
+      'Remotion is not configured on this server. To add video generation to a project, ' +
+      'delegate to invoke_claude_code to scaffold the remotion/ directory with package.json, ' +
+      'src/index.tsx, and src/Scenes.tsx, then install dependencies.'
+    );
+  }
+
   const serveUrl = await getBundle();
   const inputProps = { title, scenes };
 

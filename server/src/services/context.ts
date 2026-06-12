@@ -4,6 +4,7 @@ import { recallRelevant } from './memory.js';
 import { formatEntry } from '../tools/memory_tools.js';
 import { toolDefinitions } from '../tools/definitions.js';
 import type { Intent } from './intent.js';
+import { detectCapabilities } from './projectCapabilities.js';
 
 // ─── Block builders ────────────────────────────────────────────────────────
 
@@ -80,11 +81,26 @@ Suggested order: research → setup → implementation → verification → git 
 }
 
 function projectContextBlock(project: DbProject): string {
-  const isCode = !!project.repo_path;
+  const caps = detectCapabilities(project.id);
+  const capLabels: string[] = [];
+  if (caps.has_remotion) capLabels.push('remotion (can call generate_video)');
+  if (caps.has_media) capLabels.push('rendered media available in Studio tab');
+
   const header = `## Active project: **${project.name}** (id: ${project.id})${project.description ? ' — ' + project.description : ''}`;
-  const guidance = isCode
-    ? `\nCode project (repo: ${project.repo_path}). Delegate coding tasks to invoke_claude_code or invoke_codex with full context. Use git_op add→commit after work completes. For non-code tasks (docs, notes), use write_file/read_file directly.`
-    : `\nDoc/writing project (no git repo). Use write_file/read_file/list_dir directly — no Claude Code or Codex needed. Create files in this project for any output the user wants saved.`;
+
+  let guidance: string;
+  if (project.repo_path) {
+    const capNote = capLabels.length > 0
+      ? ` Detected capabilities: ${capLabels.join(', ')}.`
+      : ' No special capabilities detected yet.';
+    const scaffoldNote = !caps.has_remotion
+      ? ' To add video generation: delegate to invoke_claude_code to scaffold a Remotion setup (create remotion/ directory with package.json, composition, and index).'
+      : '';
+    guidance = `\nCode project (repo: ${project.repo_path}).${capNote}${scaffoldNote} Delegate coding tasks to invoke_claude_code or invoke_codex with full context. Use git_op add→commit after work completes. For non-code tasks (docs, notes), use write_file/read_file directly.`;
+  } else {
+    guidance = `\nDoc/writing project (no git repo). Use write_file/read_file/list_dir directly — no Claude Code or Codex needed.`;
+  }
+
   return header + guidance;
 }
 

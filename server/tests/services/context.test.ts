@@ -88,6 +88,19 @@ describe('buildContext', () => {
 
     getDb().prepare('UPDATE sessions SET pinned_project_id = NULL WHERE id = ?').run(sessionId);
   });
+
+  it('project context block does not reference a project type label', () => {
+    const projectId = newId();
+    getDb()
+      .prepare('INSERT INTO projects (id, user_id, name, description, enabled_connection_ids) VALUES (?,?,?,?,?)')
+      .run(projectId, userId, 'type-check-project', 'Testing no type label', '[]');
+    getDb().prepare('UPDATE sessions SET pinned_project_id = ? WHERE id = ?').run(projectId, sessionId);
+
+    const ctx = buildContext(userId, sessionId, DEFAULT_INTENT);
+    expect(ctx).not.toMatch(/type:\s*(default|video)/);
+
+    getDb().prepare('UPDATE sessions SET pinned_project_id = NULL WHERE id = ?').run(sessionId);
+  });
 });
 
 describe('getToolSubset', () => {

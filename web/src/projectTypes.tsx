@@ -1,4 +1,5 @@
 import type { ComponentType } from 'react';
+import StudioTab from './components/StudioTab.js';
 import type { Project } from './types.js';
 
 export interface ProjectTabDef {
@@ -15,6 +16,9 @@ export interface ProjectTypeConfig {
 export const PROJECT_TYPE_REGISTRY: Record<string, ProjectTypeConfig> = {
   default: {
     extraTabs: [],
+  },
+  video: {
+    extraTabs: [{ id: 'studio', label: 'Studio', component: StudioTab }],
   },
 };
 

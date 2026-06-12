@@ -225,6 +225,11 @@ function applySchema(): void {
     db.exec('ALTER TABLE sessions ADD COLUMN summary TEXT');
   }
 
+  const projectCols = db.prepare("SELECT name FROM pragma_table_info('projects')").all() as { name: string }[];
+  if (!projectCols.some(c => c.name === 'type')) {
+    db.exec("ALTER TABLE projects ADD COLUMN type TEXT NOT NULL DEFAULT 'default'");
+  }
+
   const tableNames = db.prepare("SELECT name FROM sqlite_master WHERE type='table'").all() as { name: string }[];
   if (tableNames.some(t => t.name === 'workspaces')) {
     db.exec(`
@@ -342,11 +347,12 @@ export interface DbProject {
   description: string | null;
   repo_path: string | null;
   enabled_connection_ids: string;
+  type: string;
 }
 
 export function getProjectForUser(projectId: string, userId: string): DbProject | undefined {
   return getDb()
-    .prepare('SELECT id, name, description, repo_path, enabled_connection_ids FROM projects WHERE id = ? AND user_id = ?')
+    .prepare('SELECT id, name, description, repo_path, enabled_connection_ids, type FROM projects WHERE id = ? AND user_id = ?')
     .get(projectId, userId) as DbProject | undefined;
 }
 
@@ -385,7 +391,7 @@ export function updateAgentWorktreePath(id: string, worktreePath: string): void 
 
 export function getProjectsForUser(userId: string): DbProject[] {
   return getDb()
-    .prepare('SELECT id, name, description, repo_path, enabled_connection_ids FROM projects WHERE user_id = ?')
+    .prepare('SELECT id, name, description, repo_path, enabled_connection_ids, type FROM projects WHERE user_id = ?')
     .all(userId) as DbProject[];
 }
 

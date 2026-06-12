@@ -16,6 +16,7 @@ const baseCard = {
   status: 'running' as const,
   outputLog: '',
   result: null,
+  createdAt: 1,
   needsApproval: false,
   approvalId: null,
   action: null,
@@ -45,5 +46,12 @@ describe('ExecutionCard', () => {
     render(<ExecutionCard {...baseCard} executionId="exec-2" status="awaiting_approval" needsApproval={true} approvalId="appr-1" action="git push" />);
     await userEvent.click(screen.getByRole('button', { name: /approve/i }));
     expect(approveExecution).toHaveBeenCalledWith('exec-2');
+  });
+
+  it('does not apply a left accent border class', () => {
+    const { container } = render(<ExecutionCard {...baseCard} status="running" />);
+    const card = container.firstChild as HTMLElement;
+    // None of the status border classes should be present
+    expect(card.className).not.toMatch(/border-l-/);
   });
 });

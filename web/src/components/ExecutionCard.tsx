@@ -1,5 +1,5 @@
 import { useState, useMemo } from 'react';
-import { ChevronDown, ChevronUp, Check, X, Square, Terminal } from 'lucide-react';
+import { AlertCircle, Bot, Check, CheckCircle2, ChevronDown, ChevronUp, Clock3, Code2, FileText, GitBranch, GitPullRequest, LoaderCircle, Square, X } from 'lucide-react';
 import { approveExecution, rejectExecution, cancelExecution } from '../lib/api.js';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -16,18 +16,18 @@ function OutputLog({ outputLog, result }: { outputLog: string; result: string | 
   const displayed = truncated ? lines.slice(-COLLAPSED_LINES).join('\n') : text;
 
   return (
-    <div className="border-t border-border/40 bg-muted/20">
+    <div className="border-t border-border/35 bg-muted/15">
       {truncated && (
         <button
           onClick={() => setShowAll(true)}
-          className="w-full px-4 py-1.5 text-left text-xs text-muted-foreground/60 hover:text-muted-foreground"
+          className="w-full px-3 py-1.5 text-left text-xs text-muted-foreground/60 hover:text-muted-foreground"
         >
           Show all {lines.length} lines
         </button>
       )}
       <div
         role="log"
-        className="max-h-48 overflow-y-auto px-4 py-3 font-mono text-xs leading-relaxed whitespace-pre-wrap text-muted-foreground"
+        className="max-h-48 overflow-y-auto px-3 py-3 font-mono text-xs leading-relaxed whitespace-pre-wrap text-muted-foreground"
       >
         {displayed}
       </div>
@@ -49,14 +49,6 @@ interface ExecutionCardProps {
   action: string | null;
 }
 
-const STATUS_DOT: Record<ExecutionStatus, string> = {
-  pending: 'bg-foreground/20',
-  running: 'bg-blue-500 animate-pulse',
-  done: 'bg-green-500',
-  error: 'bg-destructive',
-  awaiting_approval: 'bg-warning',
-};
-
 const STATUS_LABEL: Record<ExecutionStatus, string> = {
   pending: 'Pending',
   running: 'Running',
@@ -66,11 +58,35 @@ const STATUS_LABEL: Record<ExecutionStatus, string> = {
 };
 
 const STATUS_BADGE: Record<ExecutionStatus, string> = {
-  pending: 'bg-muted text-muted-foreground border-transparent',
-  running: 'bg-blue-500/10 text-blue-700 border-blue-200 dark:text-blue-300 dark:border-blue-900',
-  done: 'bg-green-500/10 text-green-700 border-green-200 dark:text-green-300 dark:border-green-900',
+  pending: 'bg-muted/70 text-muted-foreground border-transparent',
+  running: 'bg-blue-500/10 text-blue-700 border-blue-200/70 dark:text-blue-300 dark:border-blue-900',
+  done: 'bg-green-500/10 text-green-700 border-green-200/70 dark:text-green-300 dark:border-green-900',
   error: 'bg-destructive/10 text-destructive border-destructive/20',
   awaiting_approval: 'bg-warning/10 text-foreground border-warning/25',
+};
+
+const TOOL_ICON: Array<[RegExp, typeof Bot]> = [
+  [/claude|codex|mcp/i, Bot],
+  [/git/i, GitBranch],
+  [/github/i, GitPullRequest],
+  [/file|read|write/i, FileText],
+  [/project_query|code/i, Code2],
+];
+
+const STATUS_ICON: Record<ExecutionStatus, typeof Clock3> = {
+  pending: Clock3,
+  running: LoaderCircle,
+  done: CheckCircle2,
+  error: AlertCircle,
+  awaiting_approval: Clock3,
+};
+
+const STATUS_ICON_CLASS: Record<ExecutionStatus, string> = {
+  pending: 'text-muted-foreground/50',
+  running: 'text-blue-500 animate-spin',
+  done: 'text-success',
+  error: 'text-destructive',
+  awaiting_approval: 'text-warning',
 };
 
 function formatToolName(tool: string): string {
@@ -78,6 +94,10 @@ function formatToolName(tool: string): string {
     .replace(/^invoke_/, '')
     .replace(/_/g, ' ')
     .replace(/\b\w/g, char => char.toUpperCase());
+}
+
+function getToolIcon(tool: string): typeof Bot {
+  return TOOL_ICON.find(([pattern]) => pattern.test(tool))?.[1] ?? Clock3;
 }
 
 export default function ExecutionCard({
@@ -96,8 +116,9 @@ export default function ExecutionCard({
   const [acting, setActing] = useState(false);
   const [cancelling, setCancelling] = useState(false);
 
-  const dotColor = STATUS_DOT[status] ?? 'bg-foreground/20';
   const label = projectName ? `${formatToolName(tool)} · ${projectName}` : formatToolName(tool);
+  const ToolIcon = getToolIcon(tool);
+  const StatusIcon = decided === 'approved' ? CheckCircle2 : decided === 'rejected' ? AlertCircle : STATUS_ICON[status];
 
   async function handleApprove() {
     setActing(true);
@@ -118,20 +139,22 @@ export default function ExecutionCard({
 
   return (
     <Card className={cn(
-      'overflow-hidden rounded-xl border-border/45 bg-background/55 py-0 shadow-xs',
-      status === 'awaiting_approval' && !decided ? 'border-warning/30 bg-warning/5' : '',
+      'overflow-hidden rounded-2xl border-border/25 bg-background py-0 shadow-sm ring-1 ring-black/[0.03]',
+      status === 'awaiting_approval' && !decided ? 'bg-warning/5' : '',
     )}>
       <div
         role={!isApproval ? 'button' : undefined}
         onClick={!isApproval ? () => setExpanded(e => !e) : undefined}
-        className={`flex items-center gap-2.5 px-3 py-2.5 ${isApproval ? 'cursor-default' : 'cursor-pointer hover:bg-muted/20 transition-colors'}`}
+        className={`flex min-w-0 items-center gap-2.5 px-3 py-2.5 ${isApproval ? 'cursor-default' : 'cursor-pointer hover:bg-muted/20 transition-colors'}`}
       >
-        <div
-          className={`size-1.5 rounded-full shrink-0 ${
-            decided === 'approved' ? 'bg-success' : decided === 'rejected' ? 'bg-destructive' : dotColor
-          }`}
+        <StatusIcon
+          size={13}
+          className={cn(
+            'shrink-0',
+            decided === 'approved' ? 'text-success' : decided === 'rejected' ? 'text-destructive' : STATUS_ICON_CLASS[status],
+          )}
         />
-        <Terminal size={14} className="shrink-0 text-muted-foreground/55" />
+        <ToolIcon size={14} className="shrink-0 text-muted-foreground/55" />
         <span className="flex-1 select-none truncate text-xs font-medium text-foreground/75">{label}</span>
         <Badge
           variant="outline"
@@ -141,7 +164,7 @@ export default function ExecutionCard({
         </Badge>
 
         {isApproval && (
-          <div className="flex gap-1">
+          <div className="flex shrink-0 gap-1">
             <Button
               variant="outline"
               size="sm"

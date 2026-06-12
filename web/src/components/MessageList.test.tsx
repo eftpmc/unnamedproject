@@ -35,4 +35,46 @@ describe('MessageList', () => {
     expect(screen.getByText('Do the thing')).toBeInTheDocument();
     expect(container.textContent).toBe('Do the thing');
   });
+
+  it('renders assistant markdown tables as tables', () => {
+    const messages: Message[] = [
+      {
+        id: 'assistant-1',
+        role: 'assistant',
+        content: '| File | Size |\n|---|---:|\n| out/video.mp4 | 316 KB |',
+        created_at: 1,
+      },
+    ];
+
+    render(<MessageList messages={messages} executions={{}} />);
+
+    expect(screen.getByRole('table')).toBeInTheDocument();
+    expect(screen.getByRole('columnheader', { name: 'File' })).toBeInTheDocument();
+    expect(screen.getByRole('cell', { name: 'out/video.mp4' })).toBeInTheDocument();
+  });
+
+  it('renders execution cards in the same container as assistant messages', () => {
+    const messages: Message[] = [
+      { id: 'user-1', role: 'user', content: 'Do the thing', created_at: 1 },
+    ];
+    const executions = {
+      'user-1': [{
+        executionId: 'exec-1',
+        tool: 'invoke_claude_code',
+        status: 'done' as const,
+        outputLog: '',
+        result: null,
+        createdAt: 2,
+        needsApproval: false,
+        approvalId: null,
+        action: null,
+      }],
+    };
+
+    const { container } = render(<MessageList messages={messages} executions={executions} />);
+    // Execution card wrapper should NOT have the inner restrictive div
+    // (max-w-[92%] / sm:max-w-[82%])
+    const innerConstraint = container.querySelector('[class*="max-w-\\[92"]');
+    expect(innerConstraint).toBeNull();
+  });
 });

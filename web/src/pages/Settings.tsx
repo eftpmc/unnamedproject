@@ -307,10 +307,8 @@ export default function Settings() {
       <PageHeader
         title="Settings"
         description="Connect agents, tools, workspaces, and local memory."
-        size="page"
-        className="border-b-0 px-4 pb-0 pt-6 sm:px-8 sm:pt-8"
       />
-      <PageBody className="px-4 pt-0 sm:px-8">
+      <PageBody>
       <ContentColumn>
 
       <PageSection title="Lead Agent">

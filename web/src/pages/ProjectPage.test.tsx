@@ -130,8 +130,9 @@ describe('ProjectPage', () => {
   });
 
   it('shows nothing here yet empty panel when no campaigns and no chats', async () => {
-    const { getChats } = await import('../lib/api.js');
+    const { getChats, getProjectCampaigns } = await import('../lib/api.js');
     (getChats as ReturnType<typeof vi.fn>).mockResolvedValueOnce([]);
+    (getProjectCampaigns as ReturnType<typeof vi.fn>).mockResolvedValueOnce([]);
     renderPage('/projects/proj-1');
     expect(await screen.findByText('Nothing here yet')).toBeInTheDocument();
   });

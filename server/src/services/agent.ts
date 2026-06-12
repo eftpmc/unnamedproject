@@ -20,6 +20,7 @@ import { newId } from '../lib/ids.js';
 import { DEFAULT_EFFORT, getAnthropicKey, resolveModelForTurn, listClaudeModels, type EffortLevel } from './anthropic.js';
 import { extractIntent, DEFAULT_INTENT } from './intent.js';
 import { buildContext, getToolSubset } from './context.js';
+import { extractAndRemember } from './extract-memory.js';
 
 async function maybeGenerateSessionTitle(userId: string, sessionId: string): Promise<void> {
   // Only generate if session has no title yet
@@ -451,4 +452,6 @@ export async function runAgentTurn(userId: string, sessionId: string, userMessag
 
   // Fire-and-forget: generate title after first turn
   maybeGenerateSessionTitle(userId, sessionId).catch(() => {});
+
+  extractAndRemember(userId, sessionId, apiKey).catch(() => {});
 }

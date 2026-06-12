@@ -106,6 +106,7 @@ export async function resolveModelForEffort(client: Anthropic, effort: EffortLev
 }
 
 const FAMILY_TIER: Record<string, number> = { haiku: 0, sonnet: 1, fable: 2, opus: 3 };
+// high effort = no ceiling (tier 3); fable is reachable via intent.model='fable' explicitly
 const MAX_TIER_BY_EFFORT: Record<EffortLevel, number> = { low: 0, medium: 1, high: 3 };
 const TIER_FAMILY = ['haiku', 'sonnet', 'fable', 'opus'] as const;
 
@@ -120,17 +121,17 @@ export async function resolveModelForTurn(
   const effectiveTier = Math.min(intentTier, ceiling);
   const family = TIER_FAMILY[effectiveTier];
 
-  const envOverride = MODEL_OVERRIDE_BY_EFFORT[effort];
-  if (envOverride && effectiveTier === ceiling) return envOverride;
-
   try {
     const models = await listClaudeModelsForClient(client, apiKey);
     const matching = models
       .filter(m => m.id.startsWith('claude-') && m.id.toLowerCase().includes(family))
       .sort((a, b) => b.created_at.localeCompare(a.created_at));
     if (matching[0]) return matching[0].id;
-    // Fallback: highest-ranked model within the ceiling
-    const ranked = rankModels(models, effort);
+    // Fallback: highest-ranked model at or below the effective tier
+    const ranked = rankModels(models, effort).filter(m => {
+      const tier = Object.entries(FAMILY_TIER).find(([fam]) => m.id.toLowerCase().includes(fam))?.[1] ?? 99;
+      return tier <= effectiveTier;
+    });
     return ranked[0]?.id ?? DEFAULT_CLAUDE_MODEL;
   } catch {
     return DEFAULT_CLAUDE_MODEL;

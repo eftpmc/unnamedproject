@@ -42,7 +42,7 @@ export default function ChatsPage() {
         />
       ) : (
         <ScrollArea className="flex-1">
-          <div className="px-6 pb-6">
+          <div className="px-6 py-6">
             <div className="divide-y divide-border/50 rounded-xl border border-border/50 bg-background/40">
               {chats.map(chat => (
                 <div key={chat.id} className="flex items-center gap-3 px-4 py-3">

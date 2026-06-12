@@ -1,5 +1,5 @@
 import { useState, useMemo } from 'react';
-import { AlertCircle, Bot, Check, CheckCircle2, ChevronDown, ChevronUp, Clock3, Code2, FileText, GitBranch, GitPullRequest, LoaderCircle, Square, X } from 'lucide-react';
+import { AlertCircle, Bot, Check, CheckCircle2, ChevronDown, ChevronUp, Clock3, Code2, FileText, GitBranch, GitPullRequest, LoaderCircle, Square, Terminal, X } from 'lucide-react';
 import { approveExecution, rejectExecution, cancelExecution } from '../lib/api.js';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -67,8 +67,8 @@ const STATUS_BADGE: Record<ExecutionStatus, string> = {
 
 const TOOL_ICON: Array<[RegExp, typeof Bot]> = [
   [/claude|codex|mcp/i, Bot],
-  [/git/i, GitBranch],
   [/github/i, GitPullRequest],
+  [/git/i, GitBranch],
   [/file|read|write/i, FileText],
   [/project_query|code/i, Code2],
 ];
@@ -105,7 +105,7 @@ function formatToolName(tool: string): string {
 }
 
 function getToolIcon(tool: string): typeof Bot {
-  return TOOL_ICON.find(([pattern]) => pattern.test(tool))?.[1] ?? Clock3;
+  return TOOL_ICON.find(([pattern]) => pattern.test(tool))?.[1] ?? Terminal;
 }
 
 export default function ExecutionCard({

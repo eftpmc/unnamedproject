@@ -53,6 +53,7 @@ describe('extractIntentWithClient', () => {
     expect(result.model).toBe(DEFAULT_INTENT.model);
     expect(result.scope).toBe(DEFAULT_INTENT.scope);
     expect(result.needs_research).toBe(false);
+    expect(result.ambiguous).toBe(true); // DEFAULT_INTENT.ambiguous is true
   });
 
   it('truncates very long messages to 1000 chars before sending', async () => {

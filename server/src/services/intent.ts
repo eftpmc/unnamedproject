@@ -20,6 +20,8 @@ export const DEFAULT_INTENT: Intent = {
   ambiguous: true,
 };
 
+const KNOWN_TOOLS = ['invoke_claude_code','invoke_codex','git_op','github_api','web_search','web_fetch','write_file','read_file','image_gen'];
+
 const INTENT_SYSTEM = `You are a routing classifier. Given a user message, output JSON only — no prose, no markdown.
 
 Return exactly this shape:
@@ -74,12 +76,12 @@ export async function extractIntentWithClient(userMessage: string, client: Anthr
       model: (['haiku','sonnet','fable','opus'] as const).includes(parsed.model as never)
         ? parsed.model as Intent['model']
         : DEFAULT_INTENT.model,
-      tools: Array.isArray(parsed.tools) ? parsed.tools : [],
+      tools: Array.isArray(parsed.tools) ? parsed.tools.filter((t): t is string => typeof t === 'string' && KNOWN_TOOLS.includes(t)) : [],
       scope: (['inline','delegate','campaign'] as const).includes(parsed.scope as never)
         ? parsed.scope as Intent['scope']
         : DEFAULT_INTENT.scope,
       needs_research: typeof parsed.needs_research === 'boolean' ? parsed.needs_research : false,
-      ambiguous: typeof parsed.ambiguous === 'boolean' ? parsed.ambiguous : false,
+      ambiguous: typeof parsed.ambiguous === 'boolean' ? parsed.ambiguous : DEFAULT_INTENT.ambiguous,
     };
   } catch {
     return { ...DEFAULT_INTENT };

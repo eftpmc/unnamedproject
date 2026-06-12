@@ -20,7 +20,7 @@ vi.mock('../lib/api.js', () => ({
     {
       id: 'chat-1',
       title: 'Fix the render bug',
-      effort: 'normal',
+      effort: 'low',
       model: null,
       pinned_project_id: 'proj-1',
       created_at: Date.now() - 3600_000,
@@ -29,7 +29,7 @@ vi.mock('../lib/api.js', () => ({
     {
       id: 'chat-2',
       title: 'Other project chat',
-      effort: 'normal',
+      effort: 'low',
       model: null,
       pinned_project_id: 'proj-other',
       created_at: Date.now() - 7200_000,

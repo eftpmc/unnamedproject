@@ -70,7 +70,6 @@ export default function ProjectPage() {
   const { data: allChats = [] } = useQuery<Session[]>({
     queryKey: ['chats'],
     queryFn: getChats,
-    staleTime: 30_000,
   });
   const pinnedChats = allChats.filter(c => c.pinned_project_id === projectId);
 
@@ -278,15 +277,13 @@ export default function ProjectPage() {
                 description="Start a chat from this project and it will appear here."
               />
             ) : (
-              <div className="overflow-hidden rounded-xl border border-border/50 bg-background/60">
-                {pinnedChats.map((chat, i) => (
+              <div className="overflow-hidden rounded-xl border border-border/50 bg-background/60 divide-y divide-border/50">
+                {pinnedChats.map((chat) => (
                   <button
                     key={chat.id}
+                    aria-label={`Open chat ${chat.title ?? 'Untitled chat'}`}
                     onClick={() => navigate(`/c/${chat.id}`)}
-                    className={cn(
-                      'flex w-full items-center justify-between px-4 py-3 text-left hover:bg-muted/30 transition-colors',
-                      i < pinnedChats.length - 1 && 'border-b border-border/50',
-                    )}
+                    className="flex w-full items-center justify-between px-4 py-3 text-left hover:bg-muted/30 transition-colors"
                   >
                     <span className="text-sm font-medium truncate">
                       {chat.title ?? 'Untitled chat'}

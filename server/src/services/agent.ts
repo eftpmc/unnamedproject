@@ -358,6 +358,8 @@ async function dispatchTool(
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err);
     completeExecution(executionId, userId, 'error', msg);
+    const catchTaskId = toolInput.campaign_task_id as string | undefined;
+    if (catchTaskId) finishCampaignTask(userId, catchTaskId, `Error: ${msg}`);
     return `Error: ${msg}`;
   }
 }

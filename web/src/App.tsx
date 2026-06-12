@@ -31,6 +31,7 @@ const router = createBrowserRouter([
       { path: 'projects/:projectId/campaigns', element: <ProjectPage /> },
       { path: 'projects/:projectId/files', element: <ProjectPage /> },
       { path: 'projects/:projectId/settings', element: <ProjectPage /> },
+      { path: 'projects/:projectId/:tab', element: <ProjectPage /> },
       { path: 'projects/:projectId/campaigns/:campaignId', element: <CampaignPage /> },
       { path: 'settings', element: <Settings /> },
     ],

@@ -31,7 +31,8 @@ export interface VideoScene {
  */
 export function buildMediaPath(projectId: string, title: string): { dir: string; fileName: string } {
   const dir = path.join(getDataDir(), 'projects', projectId, 'media');
-  const slug = title.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '');
+  const rawSlug = title.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '');
+  const slug = rawSlug || 'video';
   const fileName = `${Date.now()}-${slug}.mp4`;
   return { dir, fileName };
 }

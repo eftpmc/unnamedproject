@@ -28,4 +28,12 @@ describe('buildMediaPath', () => {
 
     expect(first.fileName).not.toBe(second.fileName);
   });
+
+  it('falls back to "video" slug for empty/special-character titles', () => {
+    const { fileName } = buildMediaPath('proj123', '!!!');
+    expect(fileName).toMatch(/^\d+-video\.mp4$/);
+
+    const { fileName: emptyFileName } = buildMediaPath('proj123', '');
+    expect(emptyFileName).toMatch(/^\d+-video\.mp4$/);
+  });
 });

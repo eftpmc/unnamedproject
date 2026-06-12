@@ -5,6 +5,7 @@ import path from 'path';
 import { getDb, getDataDir, getCampaignsForProject, getProjectForUser } from '../db/index.js';
 import { newId } from '../lib/ids.js';
 import { requireAuthHeaderOrQuery, type AuthedRequest } from '../middleware/auth.js';
+import { detectCapabilities } from '../services/projectCapabilities.js';
 
 const router = Router();
 router.use(requireAuthHeaderOrQuery);
@@ -124,6 +125,20 @@ router.get('/:id/campaigns', (req, res) => {
     .get(req.params.id, userId);
   if (!project) { res.status(404).json({ error: 'Not found' }); return; }
   res.json(getCampaignsForProject(req.params.id));
+});
+
+router.get('/:id/capabilities', requireAuthHeaderOrQuery, (req, res) => {
+  const { userId } = req as unknown as AuthedRequest;
+  const project = getDb()
+    .prepare('SELECT id FROM projects WHERE id = ? AND user_id = ?')
+    .get(req.params.id, userId) as { id: string } | undefined;
+
+  if (!project) {
+    res.status(404).json({ error: 'project not found' });
+    return;
+  }
+
+  res.json(detectCapabilities(project.id));
 });
 
 router.patch('/:id', (req, res) => {

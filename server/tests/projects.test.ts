@@ -80,6 +80,20 @@ describe('projects', () => {
     expect(updated?.description).toBe('updated desc');
   });
 
+  it('returns capabilities for a project', async () => {
+    const create = await request(app)
+      .post('/projects')
+      .set('Authorization', `Bearer ${token}`)
+      .send({ name: 'caps-project', enabled_connection_ids: [] });
+    const id = (create.body as { id: string }).id;
+
+    const res = await request(app)
+      .get(`/projects/${id}/capabilities`)
+      .set('Authorization', `Bearer ${token}`);
+    expect(res.status).toBe(200);
+    expect(res.body).toMatchObject({ has_remotion: expect.any(Boolean), has_media: false });
+  });
+
   it('deletes a project', async () => {
     const res = await request(app)
       .delete(`/projects/${projectId}`)

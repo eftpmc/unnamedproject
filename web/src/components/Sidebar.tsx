@@ -3,7 +3,6 @@ import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { Plus, MessagesSquare, LayoutGrid } from 'lucide-react';
 import { getChats, createChat } from '../lib/api.js';
 import { timeAgo, cn } from '../lib/utils.js';
-import { ScrollArea } from '@/components/ui/scroll-area';
 import {
   Sidebar as SidebarRoot,
   SidebarContent,
@@ -110,25 +109,25 @@ export default function Sidebar({ className, onNavigate }: SidebarProps) {
         <SidebarGroup className="min-h-0 flex-1 pt-1">
           <SidebarGroupLabel className="h-6 px-2">Recent</SidebarGroupLabel>
           <SidebarGroupContent className="min-h-0 flex-1">
-          <ScrollArea className="h-full">
-            <SidebarMenu className="pb-2">
+          <div className="min-w-0 overflow-hidden">
+            <ul className="flex w-full max-w-full min-w-0 flex-col gap-0 overflow-hidden pb-2 pr-1">
               {recentChats.map(chat => (
-                <SidebarMenuItem key={chat.id}>
-                  <SidebarMenuButton
+                <li key={chat.id} className="w-full max-w-full min-w-0">
+                  <button
                     aria-label={`Open recent chat ${chat.title ?? 'Untitled chat'}, updated ${timeAgo(chat.updated_at)}`}
-                    isActive={activeChatId === chat.id}
                     onClick={() => go(`/c/${chat.id}`)}
-                    className="h-auto rounded-xl px-3 py-2 data-active:bg-background/80 data-active:shadow-xs data-active:ring-1 data-active:ring-border/50"
+                    className={cn(
+                      'flex w-full max-w-full min-w-0 flex-col rounded-xl px-3 py-2 text-left transition-colors hover:bg-background/60 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sidebar-ring',
+                      activeChatId === chat.id && 'bg-background/80 shadow-xs ring-1 ring-border/50',
+                    )}
                   >
-                    <span className="min-w-0">
-                      <span className="block truncate text-xs font-medium">{chat.title ?? 'Untitled chat'}</span>
-                      <span className="mt-0.5 block text-xs text-muted-foreground">{timeAgo(chat.updated_at)}</span>
-                    </span>
-                  </SidebarMenuButton>
-                </SidebarMenuItem>
+                    <span className="block w-full truncate text-xs font-medium">{chat.title ?? 'Untitled chat'}</span>
+                    <span className="mt-0.5 block text-xs text-muted-foreground">{timeAgo(chat.updated_at)}</span>
+                  </button>
+                </li>
               ))}
-            </SidebarMenu>
-          </ScrollArea>
+            </ul>
+          </div>
           </SidebarGroupContent>
         </SidebarGroup>
       )}

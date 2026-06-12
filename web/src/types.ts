@@ -24,6 +24,7 @@ export interface MessageExecution {
   status: 'pending' | 'running' | 'done' | 'error' | 'awaiting_approval';
   outputLog: string;
   result: string | null;
+  createdAt: number;
   needsApproval: boolean;
   approvalId: string | null;
   action: string | null;

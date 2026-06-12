@@ -22,7 +22,7 @@ router.get('/:sessionId/messages', (req, res) => {
   const executions = getDb()
     .prepare(`
       SELECT e.id as executionId, e.message_id as messageId, e.tool, e.status, e.output_log as outputLog,
-             e.result, p.name as projectName, a.id as approvalId, a.action
+             e.result, e.created_at as createdAt, p.name as projectName, a.id as approvalId, a.action
       FROM executions e
       LEFT JOIN projects p ON p.id = e.project_id
       LEFT JOIN approvals a ON a.execution_id = e.id AND a.status = 'pending'
@@ -31,7 +31,7 @@ router.get('/:sessionId/messages', (req, res) => {
     `)
     .all(...messages.map(m => m.id)) as Array<{
       executionId: string; messageId: string; tool: string; status: string; outputLog: string;
-      result: string | null; projectName: string | null; approvalId: string | null; action: string | null;
+      result: string | null; createdAt: number; projectName: string | null; approvalId: string | null; action: string | null;
     }>;
 
   const executionsByMessage = new Map<string, typeof executions>();
@@ -50,6 +50,7 @@ router.get('/:sessionId/messages', (req, res) => {
       status: e.status,
       outputLog: e.outputLog,
       result: e.result,
+      createdAt: e.createdAt,
       needsApproval: e.status === 'awaiting_approval' && !!e.approvalId,
       approvalId: e.approvalId,
       action: e.action,

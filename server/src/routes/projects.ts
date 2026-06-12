@@ -5,6 +5,7 @@ import path from 'path';
 import { getDb, getDataDir, getCampaignsForProject, getProjectForUser } from '../db/index.js';
 import { newId } from '../lib/ids.js';
 import { requireAuthHeaderOrQuery, type AuthedRequest } from '../middleware/auth.js';
+import { isValidProjectType } from '../services/projectTypes.js';
 
 const router = Router();
 router.use(requireAuthHeaderOrQuery);
@@ -24,22 +25,23 @@ const MEDIA_CONTENT_TYPES: Record<string, string> = {
 router.get('/', (req, res) => {
   const { userId } = req as AuthedRequest;
   const rows = getDb()
-    .prepare('SELECT id, name, description, repo_path, enabled_connection_ids, created_at FROM projects WHERE user_id = ? ORDER BY name')
+    .prepare('SELECT id, name, description, repo_path, enabled_connection_ids, type, created_at FROM projects WHERE user_id = ? ORDER BY name')
     .all(userId) as any[];
   res.json(rows.map(r => ({ ...r, enabled_connection_ids: JSON.parse(r.enabled_connection_ids) })));
 });
 
 router.post('/', (req, res) => {
   const { userId } = req as AuthedRequest;
-  const { name, description, repo_path, enabled_connection_ids = [] } = req.body as {
-    name?: string; description?: string; repo_path?: string; enabled_connection_ids?: string[];
+  const { name, description, repo_path, enabled_connection_ids = [], type = 'default' } = req.body as {
+    name?: string; description?: string; repo_path?: string; enabled_connection_ids?: string[]; type?: string;
   };
   if (!name) { res.status(400).json({ error: 'name required' }); return; }
+  if (!isValidProjectType(type)) { res.status(400).json({ error: `invalid project type '${type}'` }); return; }
   const id = newId();
   try {
     getDb()
-      .prepare('INSERT INTO projects (id, user_id, name, description, repo_path, enabled_connection_ids) VALUES (?,?,?,?,?,?)')
-      .run(id, userId, name, description ?? null, repo_path ?? null, JSON.stringify(enabled_connection_ids));
+      .prepare('INSERT INTO projects (id, user_id, name, description, repo_path, enabled_connection_ids, type) VALUES (?,?,?,?,?,?,?)')
+      .run(id, userId, name, description ?? null, repo_path ?? null, JSON.stringify(enabled_connection_ids), type);
   } catch {
     res.status(409).json({ error: 'Project name already exists' });
     return;
@@ -128,11 +130,23 @@ router.get('/:id/campaigns', (req, res) => {
 
 router.patch('/:id', (req, res) => {
   const { userId } = req as unknown as AuthedRequest;
-  const { description } = req.body as { description?: string };
-  const result = getDb()
-    .prepare('UPDATE projects SET description = ? WHERE id = ? AND user_id = ?')
-    .run(description ?? null, req.params.id, userId);
-  if (result.changes === 0) { res.status(404).json({ error: 'Not found' }); return; }
+  const { description, type } = req.body as { description?: string; type?: string };
+  const project = getProjectForUser(req.params.id, userId);
+  if (!project) { res.status(404).json({ error: 'Not found' }); return; }
+  if (type !== undefined && !isValidProjectType(type)) {
+    res.status(400).json({ error: `invalid project type '${type}'` });
+    return;
+  }
+  if (description !== undefined) {
+    getDb()
+      .prepare('UPDATE projects SET description = ? WHERE id = ? AND user_id = ?')
+      .run(description, req.params.id, userId);
+  }
+  if (type !== undefined) {
+    getDb()
+      .prepare('UPDATE projects SET type = ? WHERE id = ? AND user_id = ?')
+      .run(type, req.params.id, userId);
+  }
   res.json({ ok: true });
 });
 

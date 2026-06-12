@@ -92,7 +92,7 @@ export function getProjects(): Promise<Project[]> {
   return request('/projects');
 }
 
-export function createProject(body: { name: string; description?: string; repo_path?: string; enabled_connection_ids: string[] }): Promise<{ id: string }> {
+export function createProject(body: { name: string; description?: string; repo_path?: string; enabled_connection_ids: string[]; type?: string }): Promise<{ id: string }> {
   return request('/projects', { method: 'POST', body: JSON.stringify(body) });
 }
 
@@ -161,7 +161,7 @@ export function cancelCampaign(campaignId: string): Promise<{ campaign: Campaign
   return request(`/campaigns/${campaignId}/cancel`, { method: 'POST' });
 }
 
-export function updateProject(projectId: string, body: { description?: string }): Promise<void> {
+export function updateProject(projectId: string, body: { description?: string; type?: string }): Promise<void> {
   return request(`/projects/${projectId}`, {
     method: 'PATCH',
     body: JSON.stringify(body),

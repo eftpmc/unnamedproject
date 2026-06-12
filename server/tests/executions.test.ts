@@ -53,6 +53,41 @@ describe('executions', () => {
       .set('Authorization', `Bearer ${token}`);
     expect(res.status).toBe(200);
     expect(res.body.status).toBe('approved');
+
+    const db = getDb();
+    const approval = db.prepare('SELECT status, resolved_at FROM approvals WHERE execution_id = ?').get(executionId) as
+      { status: string; resolved_at: number | null };
+    const execution = db.prepare('SELECT status FROM executions WHERE id = ?').get(executionId) as { status: string };
+    expect(approval.status).toBe('approved');
+    expect(approval.resolved_at).toEqual(expect.any(Number));
+    expect(execution.status).toBe('running');
+  });
+
+  it('rejects an execution and persists the decision', async () => {
+    const db = getDb();
+    const sessionId = newId();
+    const msgId = newId();
+    const projId = newId();
+    const rejectExecId = newId();
+    const rejectApprovalId = newId();
+    db.prepare('INSERT INTO sessions (id, user_id) VALUES (?,?)').run(sessionId, userId);
+    db.prepare('INSERT INTO messages (id, session_id, role, content) VALUES (?,?,?,?)').run(msgId, sessionId, 'user', 'reject');
+    db.prepare('INSERT INTO projects (id, user_id, name) VALUES (?,?,?)').run(projId, userId, `reject-${newId()}`);
+    db.prepare("INSERT INTO executions (id, message_id, project_id, tool, status) VALUES (?,?,?,?,?)").run(rejectExecId, msgId, projId, 'git_op', 'awaiting_approval');
+    db.prepare("INSERT INTO approvals (id, execution_id, action, payload) VALUES (?,?,?,?)").run(rejectApprovalId, rejectExecId, 'git push', '{}');
+
+    const res = await request(app)
+      .post(`/executions/${rejectExecId}/reject`)
+      .set('Authorization', `Bearer ${token}`);
+    expect(res.status).toBe(200);
+    expect(res.body.status).toBe('rejected');
+
+    const approval = db.prepare('SELECT status, resolved_at FROM approvals WHERE id = ?').get(rejectApprovalId) as
+      { status: string; resolved_at: number | null };
+    const execution = db.prepare('SELECT status FROM executions WHERE id = ?').get(rejectExecId) as { status: string };
+    expect(approval.status).toBe('rejected');
+    expect(approval.resolved_at).toEqual(expect.any(Number));
+    expect(execution.status).toBe('running');
   });
 
   it('cancels a running execution', async () => {

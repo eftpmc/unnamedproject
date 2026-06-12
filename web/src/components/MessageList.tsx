@@ -20,8 +20,8 @@ interface InlineExecution {
 }
 
 type TimelineItem =
-  | { type: 'message'; message: Message; sortTime: number; index: number }
-  | { type: 'execution'; execution: InlineExecution; sortTime: number; index: number };
+  | { type: 'message'; message: Message }
+  | { type: 'execution'; execution: InlineExecution };
 
 interface MessageListProps {
   messages: Message[];
@@ -83,21 +83,27 @@ function renderExecutionCard(exec: InlineExecution) {
 export default function MessageList({ messages, executions, streamingIds, sessionId }: MessageListProps) {
   const bottomRef = useRef<HTMLDivElement>(null);
   const initialScrollDone = useRef(false);
-  const executionItems = Object.values(executions).flat();
-  const timeline: TimelineItem[] = [
-    ...messages.map((message, index) => ({
-      type: 'message' as const,
-      message,
-      sortTime: message.created_at,
-      index: index * 2,
-    })),
-    ...executionItems.map((execution, index) => ({
-      type: 'execution' as const,
-      execution,
-      sortTime: execution.createdAt,
-      index: index * 2 + 1,
-    })),
-  ].sort((a, b) => a.sortTime - b.sortTime || a.index - b.index);
+
+  // Build timeline by anchoring each message's executions immediately after
+  // that message, so tool calls always appear between the triggering message
+  // and any follow-up assistant message — regardless of client/server clock skew.
+  const sortedMessages = [...messages].sort((a, b) => a.created_at - b.created_at);
+  const knownMessageIds = new Set(sortedMessages.map(m => m.id));
+  const timeline: TimelineItem[] = [];
+  sortedMessages.forEach((message) => {
+    timeline.push({ type: 'message' as const, message });
+    (executions[message.id] ?? []).forEach((execution) => {
+      timeline.push({ type: 'execution' as const, execution });
+    });
+  });
+  // Orphaned executions (no matching message yet) go at the end
+  Object.entries(executions).forEach(([msgId, execs]) => {
+    if (!knownMessageIds.has(msgId)) {
+      execs.forEach((execution) => {
+        timeline.push({ type: 'execution' as const, execution });
+      });
+    }
+  });
 
   useEffect(() => {
     initialScrollDone.current = false;

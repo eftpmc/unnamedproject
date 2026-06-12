@@ -37,6 +37,12 @@ router.post('/:id/approve', (req, res) => {
     `)
     .get(req.params.id, userId) as { id: string } | undefined;
   if (!approval) { res.status(404).json({ error: 'No pending approval found' }); return; }
+  getDb()
+    .prepare("UPDATE approvals SET status = 'approved', resolved_at = unixepoch() WHERE id = ?")
+    .run(approval.id);
+  getDb()
+    .prepare("UPDATE executions SET status = 'running' WHERE id = ? AND status = 'awaiting_approval'")
+    .run(req.params.id);
   resolveApproval(approval.id, 'approved');
   res.json({ status: 'approved' });
 });
@@ -53,6 +59,12 @@ router.post('/:id/reject', (req, res) => {
     `)
     .get(req.params.id, userId) as { id: string } | undefined;
   if (!approval) { res.status(404).json({ error: 'No pending approval found' }); return; }
+  getDb()
+    .prepare("UPDATE approvals SET status = 'rejected', resolved_at = unixepoch() WHERE id = ?")
+    .run(approval.id);
+  getDb()
+    .prepare("UPDATE executions SET status = 'running' WHERE id = ? AND status = 'awaiting_approval'")
+    .run(req.params.id);
   resolveApproval(approval.id, 'rejected');
   res.json({ status: 'rejected' });
 });

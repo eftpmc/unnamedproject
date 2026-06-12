@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useNavigate } from 'react-router-dom';
-import { ChevronDown, GitMerge } from 'lucide-react';
+import { ChevronDown, GitMerge, X } from 'lucide-react';
 import MessageList from './MessageList.js';
 import MessageInput from './MessageInput.js';
 import { getMessages, sendMessage, getChats, updateChatConfig, getModelsForEffort, getSessionWorktree, mergeSessionBranch, getProjects } from '../lib/api.js';
@@ -72,7 +72,7 @@ export default function ChatView({ chatId }: ChatViewProps) {
     onError: (e: Error) => { setMergeState('error'); setMergeError(e.message); },
   });
 
-  // executions: messageId → list of execution cards
+  // executions: messageId -> list of execution cards
   const [executions, setExecutions] = useState<Record<string, InlineExecution[]>>({});
   // map executionId → messageId (ref: never rendered, needs latest value in callbacks)
   const execToMsgRef = useRef<Record<string, string>>({});
@@ -170,6 +170,7 @@ export default function ChatView({ chatId }: ChatViewProps) {
           status: 'running',
           outputLog: '',
           result: null,
+          createdAt: Math.floor(Date.now() / 1000),
           needsApproval: false,
           approvalId: null,
           action: null,
@@ -316,7 +317,9 @@ export default function ChatView({ chatId }: ChatViewProps) {
       {agentError && (
         <div className="shrink-0 flex items-center justify-between gap-3 border-t border-destructive/20 bg-destructive/5 px-5 py-2.5 text-xs text-destructive">
           <span>{agentError}</span>
-          <button onClick={() => setAgentError(null)} className="shrink-0 text-destructive/60 hover:text-destructive">✕</button>
+          <button onClick={() => setAgentError(null)} className="shrink-0 text-destructive/60 hover:text-destructive" aria-label="Dismiss error">
+            <X size={14} />
+          </button>
         </div>
       )}
 

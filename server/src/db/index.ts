@@ -203,6 +203,9 @@ function applySchema(): void {
   if (!sessionCols.some(c => c.name === 'pinned_project_id')) {
     db.exec('ALTER TABLE sessions ADD COLUMN pinned_project_id TEXT REFERENCES projects(id) ON DELETE SET NULL');
   }
+  if (!sessionCols.some(c => c.name === 'summary')) {
+    db.exec('ALTER TABLE sessions ADD COLUMN summary TEXT');
+  }
 
   const tableNames = db.prepare("SELECT name FROM sqlite_master WHERE type='table'").all() as { name: string }[];
   if (tableNames.some(t => t.name === 'workspaces')) {

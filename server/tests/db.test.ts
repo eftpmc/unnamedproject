@@ -33,4 +33,11 @@ describe('database schema', () => {
     const cols = db.prepare("SELECT name FROM pragma_table_info('executions')").all() as { name: string }[];
     expect(cols.some(c => c.name === 'project_id')).toBe(true);
   });
+
+  it('sessions table has a summary column', () => {
+    const cols = getDb()
+      .prepare("SELECT name FROM pragma_table_info('sessions')")
+      .all() as { name: string }[];
+    expect(cols.some(c => c.name === 'summary')).toBe(true);
+  });
 });

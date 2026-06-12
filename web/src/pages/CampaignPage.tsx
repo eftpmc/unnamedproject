@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { useParams, Link } from 'react-router-dom';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { ArrowLeft, Bot, FileEdit, GitBranch, GitPullRequest, X } from 'lucide-react';
+import { Bot, FileEdit, GitBranch, GitPullRequest, X } from 'lucide-react';
 import { getCampaign, cancelCampaign } from '../lib/api.js';
 import { subscribe } from '../lib/ws.js';
 import { cn } from '@/lib/utils';
@@ -118,6 +118,13 @@ export default function CampaignPage() {
   return (
     <PageShell>
       <PageHeader
+        breadcrumb={(
+          <nav className="flex items-center gap-1.5">
+            <Link to={`/projects/${projectId}`} className="hover:text-foreground transition-colors">Project</Link>
+            <span className="text-muted-foreground/40">/</span>
+            <Link to={`/projects/${projectId}/campaigns`} className="hover:text-foreground transition-colors">Campaigns</Link>
+          </nav>
+        )}
         title={campaign.title}
         description={(
           <>
@@ -147,32 +154,15 @@ export default function CampaignPage() {
             )}
           </div>
         )}
-        className="items-start"
       />
-      <div className="border-b border-border/40 px-4 py-3 sm:px-6">
-        <div className="flex items-center gap-2 mb-3">
-          <Link to={`/projects/${projectId}`} className="text-muted-foreground hover:text-foreground transition-colors">
-            <ArrowLeft size={15} />
-          </Link>
-          <Link to={`/projects/${projectId}`} className="text-xs text-muted-foreground hover:text-foreground transition-colors">
-            Project
-          </Link>
-          <span className="text-xs text-muted-foreground/40">/</span>
-          <span className="text-xs text-muted-foreground">Campaigns</span>
-          <span className="text-xs text-muted-foreground/40">/</span>
-          <span className="text-xs text-foreground font-medium truncate max-w-xs">{campaign.title}</span>
-        </div>
+      <div className="border-b border-border/40 px-4 py-2.5 sm:px-6">
         <div className="flex items-center gap-3">
           <div className="flex-1 h-1.5 bg-border/50 rounded-full overflow-hidden">
-            <div
-              className="h-full bg-blue-500 rounded-full transition-all duration-500"
-              style={{ width: `${progressPct}%` }}
-            />
+            <div className="h-full bg-blue-500 rounded-full transition-all duration-500" style={{ width: `${progressPct}%` }} />
           </div>
           <span className="text-xs text-muted-foreground shrink-0">{doneCount} / {tasks.length}</span>
         </div>
       </div>
-
       <PageBody>
         <ContentColumn className="max-w-2xl">
         <div className="flex flex-col gap-3">

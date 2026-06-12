@@ -34,7 +34,7 @@ describe('invoke_codex', () => {
     proc.emit('close', 0);
 
     const result = await promise;
-    expect(result).toEqual({ result: 'fixed the bug', sessionId: 'thread-123' });
+    expect(result).toEqual({ result: 'fixed the bug', sessionId: 'thread-123', costUsd: 0 });
   });
 
   it('passes model override to the CLI', async () => {

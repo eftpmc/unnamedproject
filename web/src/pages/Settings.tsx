@@ -20,6 +20,7 @@ import {
   getScheduledTasks,
   getSettings,
   runScheduledTask,
+  updateAgentBudgets,
   updateScheduledTask,
   updateSettings,
 } from '../lib/api.js';
@@ -34,6 +35,8 @@ const SETUP_META: Record<SetupKind, {
   type: Connection['type'];
   placeholder: string;
   secretLabel: string;
+  secretOptional?: boolean;
+  secretOptionalHint?: string;
 }> = {
   lead_agent: {
     title: 'Lead Agent',
@@ -46,15 +49,19 @@ const SETUP_META: Record<SetupKind, {
     title: 'Claude Code',
     description: 'Runs coding tasks in a workspace repo.',
     type: 'anthropic',
-    placeholder: 'sk-ant-...',
+    placeholder: 'sk-ant-... (optional)',
     secretLabel: 'Anthropic API key',
+    secretOptional: true,
+    secretOptionalHint: "Leave blank to use this server's local `claude` CLI login (subscription auth) instead of a metered API key.",
   },
   codex: {
     title: 'Codex',
     description: 'Runs Codex coding tasks in a workspace repo.',
     type: 'openai',
-    placeholder: 'sk-...',
+    placeholder: 'sk-... (optional)',
     secretLabel: 'OpenAI API key',
+    secretOptional: true,
+    secretOptionalHint: "Leave blank to use this server's local `codex` CLI login instead of a metered API key.",
   },
   github: {
     title: 'GitHub',
@@ -71,6 +78,86 @@ const SETUP_META: Record<SetupKind, {
     secretLabel: '',
   },
 };
+
+interface McpPreset {
+  id: string;
+  name: string;
+  description: string;
+  command: string;
+  args: string[];
+  /** If set, shows an extra input appended as the final arg (e.g. a path or connection string). */
+  extraArgLabel?: string;
+  extraArgPlaceholder?: string;
+  envVars?: { key: string; label: string; placeholder?: string }[];
+}
+
+const MCP_PRESETS: McpPreset[] = [
+  {
+    id: 'sequential-thinking',
+    name: 'Sequential Thinking',
+    description: 'Structured step-by-step reasoning tool for complex problems.',
+    command: 'npx',
+    args: ['-y', '@modelcontextprotocol/server-sequential-thinking'],
+  },
+  {
+    id: 'playwright',
+    name: 'Playwright',
+    description: 'Browser automation — navigate, click, screenshot, test web UIs.',
+    command: 'npx',
+    args: ['-y', '@playwright/mcp@latest'],
+  },
+  {
+    id: 'puppeteer',
+    name: 'Puppeteer',
+    description: 'Headless Chrome browser automation and screenshots.',
+    command: 'npx',
+    args: ['-y', '@modelcontextprotocol/server-puppeteer'],
+  },
+  {
+    id: 'brave-search',
+    name: 'Brave Search',
+    description: 'Web and local search via the Brave Search API.',
+    command: 'npx',
+    args: ['-y', '@modelcontextprotocol/server-brave-search'],
+    envVars: [{ key: 'BRAVE_API_KEY', label: 'Brave API key' }],
+  },
+  {
+    id: 'github',
+    name: 'GitHub (extended)',
+    description: 'Full GitHub API coverage beyond the built-in github_api tool.',
+    command: 'npx',
+    args: ['-y', '@modelcontextprotocol/server-github'],
+    envVars: [{ key: 'GITHUB_PERSONAL_ACCESS_TOKEN', label: 'Personal access token', placeholder: 'ghp_...' }],
+  },
+  {
+    id: 'slack',
+    name: 'Slack',
+    description: 'Read and post messages, list channels.',
+    command: 'npx',
+    args: ['-y', '@modelcontextprotocol/server-slack'],
+    envVars: [
+      { key: 'SLACK_BOT_TOKEN', label: 'Bot token', placeholder: 'xoxb-...' },
+      { key: 'SLACK_TEAM_ID', label: 'Team ID', placeholder: 'T0123456' },
+    ],
+  },
+  {
+    id: 'postgres',
+    name: 'Postgres',
+    description: 'Read-only schema inspection and queries against a Postgres database.',
+    command: 'npx',
+    args: ['-y', '@modelcontextprotocol/server-postgres'],
+    extraArgLabel: 'Connection string',
+    extraArgPlaceholder: 'postgresql://user:pass@host:5432/db',
+  },
+  {
+    id: 'notion',
+    name: 'Notion',
+    description: 'Read and write Notion pages and databases.',
+    command: 'npx',
+    args: ['-y', '@notionhq/notion-mcp-server'],
+    envVars: [{ key: 'NOTION_TOKEN', label: 'Internal integration token', placeholder: 'ntn_...' }],
+  },
+];
 
 function Modal({ title, children, onClose }: { title: string; children: React.ReactNode; onClose: () => void }) {
   return (
@@ -120,11 +207,18 @@ export default function Settings() {
   const [mcpCommand, setMcpCommand] = useState('');
   const [mcpArgs, setMcpArgs] = useState('');
   const [mcpEnv, setMcpEnv] = useState('{}');
+  const [mcpPreset, setMcpPreset] = useState<string>('custom');
+  const [mcpExtraArg, setMcpExtraArg] = useState('');
+  const [mcpEnvValues, setMcpEnvValues] = useState<Record<string, string>>({});
   const [setupError, setSetupError] = useState('');
 
   const [projectsRoot, setProjectsRoot] = useState('');
   const [pendingDelete, setPendingDelete] = useState<{ id: string } | null>(null);
   const [projectsRootError, setProjectsRootError] = useState('');
+
+  const [claudeCodeBudget, setClaudeCodeBudget] = useState('');
+  const [codexBudget, setCodexBudget] = useState('');
+  const [agentBudgetsError, setAgentBudgetsError] = useState('');
 
   const inputCls = 'text-sm';
   const textareaCls = 'text-sm font-mono resize-y';
@@ -139,6 +233,12 @@ export default function Settings() {
     if (settings?.projects_root) setProjectsRoot(settings.projects_root);
   }, [settings]);
 
+  useEffect(() => {
+    if (!settings) return;
+    setClaudeCodeBudget(settings.agent_budgets.claude_code !== null ? String(settings.agent_budgets.claude_code) : '');
+    setCodexBudget(settings.agent_budgets.codex !== null ? String(settings.agent_budgets.codex) : '');
+  }, [settings]);
+
   const createConnMutation = useMutation({
     mutationFn: () => {
       if (!activeSetup) throw new Error('Pick what you want to set up');
@@ -146,16 +246,31 @@ export default function Settings() {
       let config: Record<string, unknown>;
 
       if (activeSetup === 'mcp') {
-        if (!mcpCommand.trim()) throw new Error('Command required');
-        try {
-          if (mcpArgs.trim()) JSON.parse(mcpArgs);
-          JSON.parse(mcpEnv);
-        } catch {
-          throw new Error('MCP args and env must be valid JSON');
+        const preset = MCP_PRESETS.find(p => p.id === mcpPreset);
+        if (preset) {
+          const args = [...preset.args];
+          if (preset.extraArgLabel) {
+            if (!mcpExtraArg.trim()) throw new Error(`${preset.extraArgLabel} required`);
+            args.push(mcpExtraArg.trim());
+          }
+          const env: Record<string, string> = {};
+          for (const v of preset.envVars ?? []) {
+            if (!mcpEnvValues[v.key]?.trim()) throw new Error(`${v.label} required`);
+            env[v.key] = mcpEnvValues[v.key].trim();
+          }
+          config = { command: preset.command, args: JSON.stringify(args), env: JSON.stringify(env) };
+        } else {
+          if (!mcpCommand.trim()) throw new Error('Command required');
+          try {
+            if (mcpArgs.trim()) JSON.parse(mcpArgs);
+            JSON.parse(mcpEnv);
+          } catch {
+            throw new Error('MCP args and env must be valid JSON');
+          }
+          config = { command: mcpCommand.trim(), args: mcpArgs.trim() || '[]', env: mcpEnv.trim() || '{}' };
         }
-        config = { command: mcpCommand.trim(), args: mcpArgs.trim() || '[]', env: mcpEnv.trim() || '{}' };
       } else {
-        if (!secret.trim()) throw new Error(`${meta.secretLabel} required`);
+        if (!secret.trim() && !meta.secretOptional) throw new Error(`${meta.secretLabel} required`);
         config = activeSetup === 'github' ? { token: secret.trim() } : { apiKey: secret.trim() };
       }
 
@@ -184,6 +299,29 @@ export default function Settings() {
     onError: (e: Error) => setProjectsRootError(e.message),
   });
 
+  const updateAgentBudgetsMutation = useMutation({
+    mutationFn: (body: { claude_code?: number | null; codex?: number | null }) => updateAgentBudgets(body),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['settings'] }),
+    onError: (e: Error) => setAgentBudgetsError(e.message),
+  });
+
+  function saveAgentBudgets() {
+    setAgentBudgetsError('');
+    const parseBudget = (v: string): number | null => {
+      if (!v.trim()) return null;
+      const n = Number(v);
+      if (!Number.isFinite(n) || n < 0) throw new Error('Budgets must be non-negative numbers');
+      return n;
+    };
+    try {
+      const claude_code = parseBudget(claudeCodeBudget);
+      const codex = parseBudget(codexBudget);
+      updateAgentBudgetsMutation.mutate({ claude_code, codex });
+    } catch (e) {
+      setAgentBudgetsError((e as Error).message);
+    }
+  }
+
   const updateTaskMutation = useMutation({
     mutationFn: ({ id, body }: { id: string; body: { enabled?: boolean; interval_hours?: number } }) => updateScheduledTask(id, body),
     onSuccess: () => qc.invalidateQueries({ queryKey: ['scheduledTasks'] }),
@@ -201,7 +339,19 @@ export default function Settings() {
     setMcpCommand('');
     setMcpArgs('');
     setMcpEnv('{}');
+    setMcpPreset('custom');
+    setMcpExtraArg('');
+    setMcpEnvValues({});
     setSetupError('');
+  }
+
+  function selectMcpPreset(presetId: string) {
+    setMcpPreset(presetId);
+    setMcpExtraArg('');
+    setMcpEnvValues({});
+    setSetupError('');
+    const preset = MCP_PRESETS.find(p => p.id === presetId);
+    setSetupName(preset ? preset.name : SETUP_META.mcp.title);
   }
 
   function closeSetupModal() {
@@ -211,6 +361,9 @@ export default function Settings() {
     setMcpCommand('');
     setMcpArgs('');
     setMcpEnv('{}');
+    setMcpPreset('custom');
+    setMcpExtraArg('');
+    setMcpEnvValues({});
     setSetupError('');
   }
 
@@ -266,29 +419,99 @@ export default function Settings() {
           </div>
         ) : (
         <div className="flex flex-col gap-3">
+          {activeSetup === 'mcp' && (
+            <div>
+              <Label>Preset</Label>
+              <div className="mt-1 flex flex-wrap gap-1.5">
+                <Button
+                  type="button"
+                  size="sm"
+                  variant={mcpPreset === 'custom' ? 'secondary' : 'outline'}
+                  onClick={() => selectMcpPreset('custom')}
+                >
+                  Custom
+                </Button>
+                {MCP_PRESETS.map(p => (
+                  <Button
+                    key={p.id}
+                    type="button"
+                    size="sm"
+                    variant={mcpPreset === p.id ? 'secondary' : 'outline'}
+                    onClick={() => selectMcpPreset(p.id)}
+                  >
+                    {p.name}
+                  </Button>
+                ))}
+              </div>
+              {mcpPreset !== 'custom' && (
+                <p className="mt-1 text-xs text-muted-foreground">
+                  {MCP_PRESETS.find(p => p.id === mcpPreset)?.description}
+                </p>
+              )}
+            </div>
+          )}
           <div>
             <Label>Name</Label>
             <Input value={setupName} onChange={e => setSetupName(e.target.value)} className={inputCls} />
           </div>
           {activeSetup === 'mcp' ? (
-            <>
-              <div>
-                <Label>Command</Label>
-                <Input placeholder="npx" value={mcpCommand} onChange={e => setMcpCommand(e.target.value)} className={inputCls} />
-              </div>
-              <div>
-                <Label>Args JSON</Label>
-                <Textarea rows={2} placeholder='["-y", "@modelcontextprotocol/server-filesystem", "/path"]' value={mcpArgs} onChange={e => setMcpArgs(e.target.value)} className={textareaCls} />
-              </div>
-              <div>
-                <Label>Env JSON</Label>
-                <Textarea rows={2} placeholder='{"TOKEN":"..."}' value={mcpEnv} onChange={e => setMcpEnv(e.target.value)} className={textareaCls} />
-              </div>
-            </>
+            mcpPreset !== 'custom' ? (
+              <>
+                {(() => {
+                  const preset = MCP_PRESETS.find(p => p.id === mcpPreset);
+                  if (!preset) return null;
+                  return (
+                    <>
+                      {preset.extraArgLabel && (
+                        <div>
+                          <Label>{preset.extraArgLabel}</Label>
+                          <Input
+                            placeholder={preset.extraArgPlaceholder}
+                            value={mcpExtraArg}
+                            onChange={e => setMcpExtraArg(e.target.value)}
+                            className={inputCls}
+                          />
+                        </div>
+                      )}
+                      {(preset.envVars ?? []).map(v => (
+                        <div key={v.key}>
+                          <Label>{v.label}</Label>
+                          <Input
+                            type="password"
+                            placeholder={v.placeholder}
+                            value={mcpEnvValues[v.key] ?? ''}
+                            onChange={e => setMcpEnvValues(prev => ({ ...prev, [v.key]: e.target.value }))}
+                            className={inputCls}
+                          />
+                        </div>
+                      ))}
+                    </>
+                  );
+                })()}
+              </>
+            ) : (
+              <>
+                <div>
+                  <Label>Command</Label>
+                  <Input placeholder="npx" value={mcpCommand} onChange={e => setMcpCommand(e.target.value)} className={inputCls} />
+                </div>
+                <div>
+                  <Label>Args JSON</Label>
+                  <Textarea rows={2} placeholder='["-y", "@modelcontextprotocol/server-filesystem", "/path"]' value={mcpArgs} onChange={e => setMcpArgs(e.target.value)} className={textareaCls} />
+                </div>
+                <div>
+                  <Label>Env JSON</Label>
+                  <Textarea rows={2} placeholder='{"TOKEN":"..."}' value={mcpEnv} onChange={e => setMcpEnv(e.target.value)} className={textareaCls} />
+                </div>
+              </>
+            )
           ) : (
             <div>
-              <Label>{meta.secretLabel}</Label>
+              <Label>{meta.secretLabel}{meta.secretOptional ? ' (optional)' : ''}</Label>
               <Input type="password" placeholder={meta.placeholder} value={secret} onChange={e => setSecret(e.target.value)} className={inputCls} />
+              {meta.secretOptionalHint && (
+                <p className="mt-1 text-xs text-muted-foreground">{meta.secretOptionalHint}</p>
+              )}
             </div>
           )}
           {setupError && <div className="text-destructive text-sm">{setupError}</div>}
@@ -379,6 +602,43 @@ export default function Settings() {
         <p className="mb-3 max-w-3xl text-xs leading-relaxed text-muted-foreground/70">
           New repo-backed projects are created here. Keep the default app data folder, or point it at a workspace
           location such as <code>~/code</code>.
+        </p>
+      </PageSection>
+
+      <PageSection title="Agent budgets">
+        <div className="mb-3 flex flex-col gap-3 sm:flex-row sm:items-end">
+          <div className="flex-1">
+            <Label>Claude Code monthly budget (USD)</Label>
+            <Input
+              type="number"
+              min="0"
+              step="0.01"
+              placeholder="No limit"
+              value={claudeCodeBudget}
+              onChange={e => setClaudeCodeBudget(e.target.value)}
+              className={inputCls}
+            />
+          </div>
+          <div className="flex-1">
+            <Label>Codex monthly budget (USD)</Label>
+            <Input
+              type="number"
+              min="0"
+              step="0.01"
+              placeholder="No limit"
+              value={codexBudget}
+              onChange={e => setCodexBudget(e.target.value)}
+              className={inputCls}
+            />
+          </div>
+          <Button variant="ghost" onClick={saveAgentBudgets}>
+            Save
+          </Button>
+        </div>
+        {agentBudgetsError && <div className="text-destructive text-sm mb-3">{agentBudgetsError}</div>}
+        <p className="mb-3 max-w-3xl text-xs leading-relaxed text-muted-foreground/70">
+          Set a monthly spend cap for each coding agent. Leave blank for no limit. The lead agent sees current
+          spend against these budgets and can favor the less-constrained agent when nearly exhausted.
         </p>
       </PageSection>
 

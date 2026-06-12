@@ -1,6 +1,6 @@
 import { describe, it, expect, beforeAll } from 'vitest';
 import fs from 'fs';
-import { initDb, getDb } from '../../src/db/index.js';
+import { initDb, getDb, recordAgentUsage, setAgentBudget } from '../../src/db/index.js';
 import { newId } from '../../src/lib/ids.js';
 import { buildContext, getToolSubset } from '../../src/services/context.js';
 import { DEFAULT_INTENT } from '../../src/services/intent.js';
@@ -50,6 +50,22 @@ describe('buildContext', () => {
   it('includes citation guidance for research domain', () => {
     const ctx = buildContext(userId, sessionId, researchIntent);
     expect(ctx).toContain('Cite');
+  });
+
+  it('includes agent usage block for code domain, reflecting budgets and spend', () => {
+    setAgentBudget(userId, 'claude_code', 20);
+    recordAgentUsage(userId, 'claude_code', 5);
+    recordAgentUsage(userId, 'codex', 1.5);
+
+    const ctx = buildContext(userId, sessionId, codeIntent);
+    expect(ctx).toContain('Agent usage this month');
+    expect(ctx).toContain('Claude Code (invoke_claude_code): $5.00 / $20.00 used (25%)');
+    expect(ctx).toContain('Codex (invoke_codex): $1.50 spent (no budget set)');
+  });
+
+  it('omits agent usage block for non-code, non-multi domains', () => {
+    const ctx = buildContext(userId, sessionId, writingIntent);
+    expect(ctx).not.toContain('Agent usage this month');
   });
 
   it('includes session summary when present', () => {

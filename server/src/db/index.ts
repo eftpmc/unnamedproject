@@ -62,7 +62,17 @@ function applySchema(): void {
 
     CREATE TABLE IF NOT EXISTS user_settings (
       user_id TEXT PRIMARY KEY REFERENCES users(id) ON DELETE CASCADE,
-      projects_root TEXT
+      projects_root TEXT,
+      claude_code_budget_usd REAL,
+      codex_budget_usd REAL
+    );
+
+    CREATE TABLE IF NOT EXISTS agent_usage (
+      id TEXT PRIMARY KEY,
+      user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+      tool TEXT NOT NULL CHECK(tool IN ('claude_code','codex')),
+      cost_usd REAL NOT NULL,
+      created_at INTEGER NOT NULL DEFAULT (unixepoch())
     );
 
     CREATE TABLE IF NOT EXISTS sessions (
@@ -191,6 +201,14 @@ function applySchema(): void {
         ) WHERE rn = 1
       );
     `);
+  }
+
+  const userSettingsCols = db.prepare("SELECT name FROM pragma_table_info('user_settings')").all() as { name: string }[];
+  if (!userSettingsCols.some(c => c.name === 'claude_code_budget_usd')) {
+    db.exec('ALTER TABLE user_settings ADD COLUMN claude_code_budget_usd REAL');
+  }
+  if (!userSettingsCols.some(c => c.name === 'codex_budget_usd')) {
+    db.exec('ALTER TABLE user_settings ADD COLUMN codex_budget_usd REAL');
   }
 
   const sessionCols = db.prepare("SELECT name FROM pragma_table_info('sessions')").all() as { name: string }[];
@@ -385,6 +403,48 @@ export function setProjectsRoot(userId: string, projectsRoot: string): void {
       ON CONFLICT(user_id) DO UPDATE SET projects_root = excluded.projects_root
     `)
     .run(userId, projectsRoot);
+}
+
+export type AgentUsageTool = 'claude_code' | 'codex';
+
+export interface AgentBudgets {
+  claude_code: number | null;
+  codex: number | null;
+}
+
+export function getAgentBudgets(userId: string): AgentBudgets {
+  const row = getDb()
+    .prepare('SELECT claude_code_budget_usd, codex_budget_usd FROM user_settings WHERE user_id = ?')
+    .get(userId) as { claude_code_budget_usd: number | null; codex_budget_usd: number | null } | undefined;
+  return {
+    claude_code: row?.claude_code_budget_usd ?? null,
+    codex: row?.codex_budget_usd ?? null,
+  };
+}
+
+export function setAgentBudget(userId: string, tool: AgentUsageTool, budgetUsd: number | null): void {
+  const column = tool === 'claude_code' ? 'claude_code_budget_usd' : 'codex_budget_usd';
+  getDb()
+    .prepare(`
+      INSERT INTO user_settings (user_id, ${column}) VALUES (?, ?)
+      ON CONFLICT(user_id) DO UPDATE SET ${column} = excluded.${column}
+    `)
+    .run(userId, budgetUsd);
+}
+
+export function recordAgentUsage(userId: string, tool: AgentUsageTool, costUsd: number): void {
+  if (!costUsd) return;
+  getDb()
+    .prepare('INSERT INTO agent_usage (id, user_id, tool, cost_usd) VALUES (?, ?, ?, ?)')
+    .run(newId(), userId, tool, costUsd);
+}
+
+export function getMonthlyUsage(userId: string, tool: AgentUsageTool): number {
+  const monthStart = Math.floor(new Date(new Date().toISOString().slice(0, 7) + '-01T00:00:00Z').getTime() / 1000);
+  const row = getDb()
+    .prepare('SELECT COALESCE(SUM(cost_usd), 0) as total FROM agent_usage WHERE user_id = ? AND tool = ? AND created_at >= ?')
+    .get(userId, tool, monthStart) as { total: number };
+  return row.total;
 }
 
 export interface DbScheduledTask {

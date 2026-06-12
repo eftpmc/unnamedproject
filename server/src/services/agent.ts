@@ -1,5 +1,5 @@
 import Anthropic from '@anthropic-ai/sdk';
-import { getDb, getProjectForUser, setAgentWorktreeSession, updateCampaignTaskStatus, maybeCompleteCampaign, getCampaignForTask } from '../db/index.js';
+import { getDb, getProjectForUser, setAgentWorktreeSession, updateCampaignTaskStatus, maybeCompleteCampaign, getCampaignForTask, recordAgentUsage } from '../db/index.js';
 import { ensureWorktree } from '../lib/worktree.js';
 import { getDecryptedConfig } from '../routes/connections.js';
 import { createExecution, completeExecution } from './executor.js';
@@ -153,6 +153,7 @@ async function dispatchTool(
           { userId, executionId, repoPath: ccWorktree.worktree_path, apiKey: ccApiKey, resumeSessionId: ccWorktree.claude_session_id, mcpServers: getMcpServersForUser(userId) }
         );
         if (ccResult.sessionId) setAgentWorktreeSession(ccWorktree.id, 'claude', ccResult.sessionId);
+        recordAgentUsage(userId, 'claude_code', ccResult.costUsd);
         result = ccResult.result;
         if (ccTaskId) finishCampaignTask(userId, ccTaskId, result);
         if (!result.startsWith('Error')) {
@@ -189,6 +190,7 @@ async function dispatchTool(
           { userId, executionId, repoPath: codexWorktree.worktree_path, apiKey: codexApiKey, resumeSessionId: codexWorktree.codex_session_id, mcpServers: getMcpServersForUser(userId) }
         );
         if (codexResult.sessionId) setAgentWorktreeSession(codexWorktree.id, 'codex', codexResult.sessionId);
+        recordAgentUsage(userId, 'codex', codexResult.costUsd);
         result = codexResult.result;
         if (codexTaskId) finishCampaignTask(userId, codexTaskId, result);
         if (!result.startsWith('Error')) {

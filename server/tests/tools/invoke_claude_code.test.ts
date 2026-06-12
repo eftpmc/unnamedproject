@@ -29,12 +29,12 @@ describe('invoke_claude_code', () => {
     );
     await new Promise(setImmediate);
 
-    const resultEvent = JSON.stringify({ type: 'result', result: 'fixed the bug', session_id: 'sess-123' });
+    const resultEvent = JSON.stringify({ type: 'result', result: 'fixed the bug', session_id: 'sess-123', total_cost_usd: 0.042 });
     proc.stdout.emit('data', Buffer.from(resultEvent + '\n'));
     proc.emit('close', 0);
 
     const result = await promise;
-    expect(result).toEqual({ result: 'fixed the bug', sessionId: 'sess-123' });
+    expect(result).toEqual({ result: 'fixed the bug', sessionId: 'sess-123', costUsd: 0.042 });
   });
 
   it('appends delegate framing on a fresh session but not when resuming', async () => {

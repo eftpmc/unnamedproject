@@ -1,5 +1,5 @@
 import type Anthropic from '@anthropic-ai/sdk';
-import { getDb, type DbProject } from '../db/index.js';
+import { getDb, getAgentBudgets, getMonthlyUsage, type DbProject } from '../db/index.js';
 import { recallRelevant } from './memory.js';
 import { formatEntry } from '../tools/memory_tools.js';
 import { toolDefinitions } from '../tools/definitions.js';
@@ -50,7 +50,7 @@ Agent brief quality: always include — what already exists (from project_query 
 
 Result evaluation: after invoke_claude_code or invoke_codex returns, read the result for failure signals (test failures, errors, "could not", partial completion). If present, send a targeted follow-up correction before committing. On confirmed success: run git_op add then git_op commit. Do not ask permission to commit.
 
-Prefer invoke_claude_code. Use invoke_codex for OpenAI preference or a parallel second approach.`;
+Choosing invoke_claude_code vs invoke_codex: pick whichever fits the task best — both are capable coding agents. Use the agent usage section to weigh cost/budget when the two are otherwise a toss-up, and consider a parallel second approach (one task on each) for tasks that benefit from comparing two independent implementations.`;
 
     case 'writing':
       return `## Writing tasks
@@ -118,6 +118,22 @@ function projectsListBlock(userId: string): string {
   return `Available projects:\n${projects.map(p => `- ${p.name} (id: ${p.id}${p.repo_path ? '' : ', no repo'})${p.description ? ': ' + p.description : ''}`).join('\n')}`;
 }
 
+function formatUsageLine(label: string, spent: number, budget: number | null): string {
+  if (budget === null) return `- ${label}: $${spent.toFixed(2)} spent (no budget set)`;
+  const pct = budget > 0 ? Math.round((spent / budget) * 100) : 100;
+  return `- ${label}: $${spent.toFixed(2)} / $${budget.toFixed(2)} used (${pct}%)`;
+}
+
+function usageBlock(userId: string): string {
+  const budgets = getAgentBudgets(userId);
+  const claudeSpent = getMonthlyUsage(userId, 'claude_code');
+  const codexSpent = getMonthlyUsage(userId, 'codex');
+  return `## Agent usage this month
+${formatUsageLine('Claude Code (invoke_claude_code)', claudeSpent, budgets.claude_code)}
+${formatUsageLine('Codex (invoke_codex)', codexSpent, budgets.codex)}
+When a budget is set and nearly exhausted, route routine work to the other agent and reserve the constrained one for tasks where it's clearly the better fit.`;
+}
+
 function sessionSummaryBlock(sessionId: string): string {
   const row = getDb()
     .prepare('SELECT summary FROM sessions WHERE id = ?')
@@ -148,6 +164,8 @@ export function buildContext(userId: string, sessionId: string, intent: Intent):
   if (domain) blocks.push(domain);
 
   if (pinnedProject) blocks.push(projectContextBlock(pinnedProject));
+
+  if (intent.domain === 'code' || intent.domain === 'multi') blocks.push(usageBlock(userId));
 
   blocks.push(memoryBlock(userId, intent, pinnedProjectId));
   blocks.push(projectsListBlock(userId));

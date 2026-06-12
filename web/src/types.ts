@@ -63,8 +63,14 @@ export interface FileEntry {
   path: string;
 }
 
+export interface AgentBudgets {
+  claude_code: number | null;
+  codex: number | null;
+}
+
 export interface UserSettings {
   projects_root: string;
+  agent_budgets: AgentBudgets;
 }
 
 export interface Connection {

@@ -22,6 +22,7 @@ interface ToolContext {
 export interface ClaudeCodeResult {
   result: string;
   sessionId: string | null;
+  costUsd: number;
 }
 
 function summarizeToolUse(name: string, input: Record<string, unknown>): string {
@@ -62,6 +63,7 @@ export async function invokeClaudeCode(input: ClaudeCodeInput, ctx: ToolContext)
     let buffer = '';
     let sessionId: string | null = null;
     let resultText = '';
+    let costUsd = 0;
     let stderrText = '';
     let timedOut = false;
 
@@ -97,6 +99,7 @@ export async function invokeClaudeCode(input: ClaudeCodeInput, ctx: ToolContext)
         if (event.type === 'result') {
           resultText = typeof event.result === 'string' ? event.result : '';
           if (typeof event.session_id === 'string') sessionId = event.session_id;
+          if (typeof event.total_cost_usd === 'number') costUsd = event.total_cost_usd;
         }
       }
     });
@@ -123,7 +126,7 @@ export async function invokeClaudeCode(input: ClaudeCodeInput, ctx: ToolContext)
         reject(new Error(`claude exited with code ${code}${stderrText.trim() ? `: ${stderrText.trim()}` : ''}`));
         return;
       }
-      resolve({ result: resultText || 'Done.', sessionId });
+      resolve({ result: resultText || 'Done.', sessionId, costUsd });
     });
   });
 }

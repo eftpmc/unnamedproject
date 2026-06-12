@@ -22,6 +22,21 @@ interface ToolContext {
 export interface CodexResult {
   result: string;
   sessionId: string | null;
+  costUsd: number;
+}
+
+// Approximate $/1M token rates, used only to estimate spend for the usage budget display.
+// Update if OpenAI changes pricing or codex's default model.
+const CODEX_PRICING: Record<string, { input: number; output: number }> = {
+  'gpt-5-codex': { input: 1.25, output: 10 },
+  'gpt-5': { input: 1.25, output: 10 },
+  'gpt-5-mini': { input: 0.25, output: 2 },
+};
+const DEFAULT_CODEX_PRICING = CODEX_PRICING['gpt-5-codex'];
+
+function estimateCodexCost(model: string | undefined, inputTokens: number, outputTokens: number): number {
+  const pricing = (model ? CODEX_PRICING[model] : undefined) ?? DEFAULT_CODEX_PRICING;
+  return (inputTokens / 1_000_000) * pricing.input + (outputTokens / 1_000_000) * pricing.output;
 }
 
 // codex exec has no --mcp-config flag (that's a Claude Code option) — MCP
@@ -79,6 +94,7 @@ export async function invokeCodex(input: CodexInput, ctx: ToolContext): Promise<
     let buffer = '';
     let sessionId: string | null = null;
     let resultText = '';
+    let costUsd = 0;
     let stderrText = '';
     let timedOut = false;
 
@@ -105,6 +121,10 @@ export async function invokeCodex(input: CodexInput, ctx: ToolContext): Promise<
             appendOutput(ctx.executionId, ctx.userId, item.text + '\n');
           }
         }
+        if (event.type === 'turn.completed') {
+          const usage = event.usage as { input_tokens?: number; output_tokens?: number } | undefined;
+          if (usage) costUsd += estimateCodexCost(input.model, usage.input_tokens ?? 0, usage.output_tokens ?? 0);
+        }
       }
     });
 
@@ -126,7 +146,7 @@ export async function invokeCodex(input: CodexInput, ctx: ToolContext): Promise<
         reject(new Error(`codex timed out after ${DELEGATE_TIMEOUT_MS / 1000}s and was killed`));
         return;
       }
-      if (code === 0) resolve({ result: resultText.trim() || 'Done.', sessionId });
+      if (code === 0) resolve({ result: resultText.trim() || 'Done.', sessionId, costUsd });
       else reject(new Error(`codex exited with code ${code}${stderrText.trim() ? `: ${stderrText.trim()}` : ''}`));
     });
   });

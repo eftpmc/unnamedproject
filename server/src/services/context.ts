@@ -131,7 +131,7 @@ function usageBlock(userId: string): string {
   return `## Agent usage this month
 ${formatUsageLine('Claude Code (invoke_claude_code)', claudeSpent, budgets.claude_code)}
 ${formatUsageLine('Codex (invoke_codex)', codexSpent, budgets.codex)}
-When a budget is set and nearly exhausted, route routine work to the other agent and reserve the constrained one for tasks where it's clearly the better fit.`;
+When a budget is set and nearly exhausted, route routine work to the other agent and reserve the constrained one for tasks where it's clearly the better fit. Once a budget is fully used, that agent's tool will return an error instead of running until the next month or until the budget is raised in Settings.`;
 }
 
 function sessionSummaryBlock(sessionId: string): string {

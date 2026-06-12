@@ -1,5 +1,6 @@
 import Anthropic from '@anthropic-ai/sdk';
-import { getDb, getProjectForUser, setAgentWorktreeSession, updateCampaignTaskStatus, maybeCompleteCampaign, getCampaignForTask, recordAgentUsage } from '../db/index.js';
+import { getDb, getProjectForUser, setAgentWorktreeSession, updateCampaignTaskStatus, maybeCompleteCampaign, getCampaignForTask } from '../db/index.js';
+import { runAgentPipeline, type AgentPipelineCtx } from './agent_pipeline.js';
 import { ensureWorktree } from '../lib/worktree.js';
 import { getDecryptedConfig } from '../routes/connections.js';
 import { createExecution, completeExecution } from './executor.js';
@@ -148,21 +149,20 @@ async function dispatchTool(
         const ccWorktree = await ensureWorktree(project, sessionId);
         const ccTaskId = toolInput.campaign_task_id as string | undefined;
         if (ccTaskId) startCampaignTask(userId, ccTaskId, executionId);
-        const ccResult = await invokeClaudeCode(
-          { prompt: toolInput.prompt as string, model: toolInput.model as string | undefined },
-          { userId, executionId, repoPath: ccWorktree.worktree_path, apiKey: ccApiKey, resumeSessionId: ccWorktree.claude_session_id, mcpServers: getMcpServersForUser(userId) }
-        );
-        if (ccResult.sessionId) setAgentWorktreeSession(ccWorktree.id, 'claude', ccResult.sessionId);
-        recordAgentUsage(userId, 'claude_code', ccResult.costUsd);
-        result = ccResult.result;
-        if (ccTaskId) finishCampaignTask(userId, ccTaskId, result);
-        if (!result.startsWith('Error')) {
-          let ccGraphKey: string | null = null;
-          try { ccGraphKey = getAnthropicKey(userId); } catch { /* none configured */ }
-          buildGraph(project.repo_path, project.id, ccGraphKey).catch(err =>
-            console.error(`rebuild_graph after invoke_claude_code failed for project ${project.id}:`, err)
+        let ccGraphKey: string | null = null;
+        try { ccGraphKey = getAnthropicKey(userId); } catch { /* none configured */ }
+        const ccCtx: AgentPipelineCtx = { userId, tool: 'claude_code', repoPath: project.repo_path, projectId: project.id, graphKey: ccGraphKey };
+        await runAgentPipeline(ccCtx, async () => {
+          const ccResult = await invokeClaudeCode(
+            { prompt: toolInput.prompt as string, model: toolInput.model as string | undefined },
+            { userId, executionId, repoPath: ccWorktree.worktree_path, apiKey: ccApiKey, resumeSessionId: ccWorktree.claude_session_id, mcpServers: getMcpServersForUser(userId) }
           );
-        }
+          if (ccResult.sessionId) setAgentWorktreeSession(ccWorktree.id, 'claude', ccResult.sessionId);
+          ccCtx.result = ccResult.result;
+          ccCtx.costUsd = ccResult.costUsd;
+        });
+        result = ccCtx.result!;
+        if (ccTaskId) finishCampaignTask(userId, ccTaskId, result);
         break;
       }
       case 'invoke_codex': {
@@ -185,21 +185,20 @@ async function dispatchTool(
         const codexWorktree = await ensureWorktree(project, sessionId);
         const codexTaskId = toolInput.campaign_task_id as string | undefined;
         if (codexTaskId) startCampaignTask(userId, codexTaskId, executionId);
-        const codexResult = await invokeCodex(
-          { prompt: toolInput.prompt as string, model: toolInput.model as string | undefined },
-          { userId, executionId, repoPath: codexWorktree.worktree_path, apiKey: codexApiKey, resumeSessionId: codexWorktree.codex_session_id, mcpServers: getMcpServersForUser(userId) }
-        );
-        if (codexResult.sessionId) setAgentWorktreeSession(codexWorktree.id, 'codex', codexResult.sessionId);
-        recordAgentUsage(userId, 'codex', codexResult.costUsd);
-        result = codexResult.result;
-        if (codexTaskId) finishCampaignTask(userId, codexTaskId, result);
-        if (!result.startsWith('Error')) {
-          let codexGraphKey: string | null = null;
-          try { codexGraphKey = getAnthropicKey(userId); } catch { /* none configured */ }
-          buildGraph(project.repo_path, project.id, codexGraphKey).catch(err =>
-            console.error(`rebuild_graph after invoke_codex failed for project ${project.id}:`, err)
+        let codexGraphKey: string | null = null;
+        try { codexGraphKey = getAnthropicKey(userId); } catch { /* none configured */ }
+        const codexCtx: AgentPipelineCtx = { userId, tool: 'codex', repoPath: project.repo_path, projectId: project.id, graphKey: codexGraphKey };
+        await runAgentPipeline(codexCtx, async () => {
+          const codexResult = await invokeCodex(
+            { prompt: toolInput.prompt as string, model: toolInput.model as string | undefined },
+            { userId, executionId, repoPath: codexWorktree.worktree_path, apiKey: codexApiKey, resumeSessionId: codexWorktree.codex_session_id, mcpServers: getMcpServersForUser(userId) }
           );
-        }
+          if (codexResult.sessionId) setAgentWorktreeSession(codexWorktree.id, 'codex', codexResult.sessionId);
+          codexCtx.result = codexResult.result;
+          codexCtx.costUsd = codexResult.costUsd;
+        });
+        result = codexCtx.result!;
+        if (codexTaskId) finishCampaignTask(userId, codexTaskId, result);
         break;
       }
       case 'github_api': {

@@ -22,13 +22,11 @@ function PageHeader({
   title,
   description,
   actions,
-  size = 'compact',
   className,
 }: {
   title: React.ReactNode;
   description?: React.ReactNode;
   actions?: React.ReactNode;
-  size?: 'compact' | 'page';
   className?: string;
 }) {
   return (
@@ -39,10 +37,7 @@ function PageHeader({
       )}
     >
       <div className="min-w-0">
-        <h1 className={cn(
-          'truncate font-semibold text-foreground',
-          size === 'page' ? 'text-2xl tracking-tight' : 'text-[15px]',
-        )}>
+        <h1 className="truncate font-semibold text-foreground text-[15px]">
           {title}
         </h1>
         {description && (

@@ -105,6 +105,38 @@ export async function resolveModelForEffort(client: Anthropic, effort: EffortLev
   }
 }
 
+const FAMILY_TIER: Record<string, number> = { haiku: 0, sonnet: 1, fable: 2, opus: 3 };
+const MAX_TIER_BY_EFFORT: Record<EffortLevel, number> = { low: 0, medium: 1, high: 3 };
+const TIER_FAMILY = ['haiku', 'sonnet', 'fable', 'opus'] as const;
+
+export async function resolveModelForTurn(
+  client: Anthropic,
+  intent: { model: string },
+  effort: EffortLevel,
+  apiKey?: string,
+): Promise<string> {
+  const intentTier = FAMILY_TIER[intent.model] ?? 1;
+  const ceiling = MAX_TIER_BY_EFFORT[effort];
+  const effectiveTier = Math.min(intentTier, ceiling);
+  const family = TIER_FAMILY[effectiveTier];
+
+  const envOverride = MODEL_OVERRIDE_BY_EFFORT[effort];
+  if (envOverride && effectiveTier === ceiling) return envOverride;
+
+  try {
+    const models = await listClaudeModelsForClient(client, apiKey);
+    const matching = models
+      .filter(m => m.id.startsWith('claude-') && m.id.toLowerCase().includes(family))
+      .sort((a, b) => b.created_at.localeCompare(a.created_at));
+    if (matching[0]) return matching[0].id;
+    // Fallback: highest-ranked model within the ceiling
+    const ranked = rankModels(models, effort);
+    return ranked[0]?.id ?? DEFAULT_CLAUDE_MODEL;
+  } catch {
+    return DEFAULT_CLAUDE_MODEL;
+  }
+}
+
 /** Models worth offering for a given effort level, ranked best-first. */
 export async function getModelsForEffort(userId: string, effort: EffortLevel): Promise<ClaudeModelInfo[]> {
   const apiKey = getAnthropicKey(userId);

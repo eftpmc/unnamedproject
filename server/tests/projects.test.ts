@@ -105,6 +105,18 @@ describe('project media', () => {
     expect(Buffer.from(res.body).toString('utf-8')).toBe('fake video data');
   });
 
+  it('serves a partial range of a media file with 206 status', async () => {
+    const res = await request(app)
+      .get(`/projects/${mediaProjectId}/media/clip.mp4`)
+      .set('Authorization', `Bearer ${token}`)
+      .set('Range', 'bytes=0-3');
+    expect(res.status).toBe(206);
+    expect(res.headers['content-range']).toBe('bytes 0-3/15');
+    expect(res.headers['content-length']).toBe('4');
+    expect(res.headers['accept-ranges']).toBe('bytes');
+    expect(Buffer.from(res.body).toString('utf-8')).toBe('fake');
+  });
+
   it('rejects filenames containing path traversal', async () => {
     const res1 = await request(app)
       .get(`/projects/${mediaProjectId}/media/..%2F..%2Fetc%2Fpasswd`)

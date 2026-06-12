@@ -177,7 +177,42 @@ router.get('/:id/media/:filename', (req, res) => {
   const ext = path.extname(filename).toLowerCase();
   const contentType = MEDIA_CONTENT_TYPES[ext] || 'application/octet-stream';
   res.setHeader('Content-Type', contentType);
-  fsSync.createReadStream(filePath).pipe(res);
+  res.setHeader('Accept-Ranges', 'bytes');
+
+  const stat = fsSync.statSync(filePath);
+  const fileSize = stat.size;
+  const range = req.headers.range;
+
+  let stream: fsSync.ReadStream;
+  if (range) {
+    const match = /^bytes=(\d*)-(\d*)$/.exec(range);
+    if (!match) {
+      res.status(416).setHeader('Content-Range', `bytes */${fileSize}`).end();
+      return;
+    }
+    let start = match[1] ? parseInt(match[1], 10) : 0;
+    let end = match[2] ? parseInt(match[2], 10) : fileSize - 1;
+    if (Number.isNaN(start) || Number.isNaN(end) || start > end || end >= fileSize) {
+      res.status(416).setHeader('Content-Range', `bytes */${fileSize}`).end();
+      return;
+    }
+    const chunkSize = end - start + 1;
+    res.status(206);
+    res.setHeader('Content-Range', `bytes ${start}-${end}/${fileSize}`);
+    res.setHeader('Content-Length', chunkSize);
+    stream = fsSync.createReadStream(filePath, { start, end });
+  } else {
+    res.setHeader('Content-Length', fileSize);
+    stream = fsSync.createReadStream(filePath);
+  }
+
+  stream.on('error', () => {
+    if (!res.headersSent) {
+      res.status(500);
+    }
+    res.destroy();
+  });
+  stream.pipe(res);
 });
 
 export default router;

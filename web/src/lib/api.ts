@@ -194,3 +194,29 @@ export interface ProjectCapabilities {
 export function getProjectCapabilities(projectId: string): Promise<ProjectCapabilities> {
   return request(`/projects/${projectId}/capabilities`);
 }
+
+export interface ResearchFile {
+  name: string;
+  title: string;
+  createdAt: number;
+}
+
+export function getResearchFiles(projectId: string): Promise<{ files: ResearchFile[] }> {
+  return request(`/projects/${projectId}/research`);
+}
+
+export async function getResearchFile(projectId: string, filename: string): Promise<string> {
+  const token = getToken();
+  const res = await fetch(`/projects/${projectId}/research/${encodeURIComponent(filename)}`, {
+    headers: {
+      ...(token ? { Authorization: `Bearer ${token}` } : {}),
+    },
+  });
+  if (res.status === 401) {
+    clearToken();
+    window.location.href = '/login';
+    throw new Error('Unauthorized');
+  }
+  if (!res.ok) throw new Error(`HTTP ${res.status}`);
+  return res.text();
+}

@@ -89,13 +89,6 @@ const STATUS_ICON_CLASS: Record<ExecutionStatus, string> = {
   awaiting_approval: 'text-warning',
 };
 
-const ICON_BOX_CLASS: Record<ExecutionStatus, string> = {
-  pending: 'bg-muted/60 border-border/30',
-  running: 'bg-blue-500/10 border-blue-200/50',
-  done: 'bg-success/10 border-success/25',
-  error: 'bg-destructive/10 border-destructive/20',
-  awaiting_approval: 'bg-warning/10 border-warning/25',
-};
 
 function formatToolName(tool: string): string {
   return tool
@@ -162,17 +155,7 @@ export default function ExecutionCard({
             decided === 'approved' ? 'text-success' : decided === 'rejected' ? 'text-destructive' : STATUS_ICON_CLASS[status],
           )}
         />
-        <span
-          data-testid="tool-icon-box"
-          className={cn(
-            'flex size-6 shrink-0 items-center justify-center rounded-lg border',
-            decided === 'approved' ? 'bg-success/10 border-success/25' :
-            decided === 'rejected' ? 'bg-destructive/10 border-destructive/20' :
-            ICON_BOX_CLASS[status],
-          )}
-        >
-          <ToolIcon size={12} className="text-foreground/60" />
-        </span>
+        <ToolIcon size={14} className="shrink-0 text-muted-foreground/50" />
         <span className="flex-1 select-none truncate text-xs font-medium text-foreground/75">{label}</span>
         <Badge
           variant="outline"

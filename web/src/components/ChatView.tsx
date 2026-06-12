@@ -366,7 +366,7 @@ function EmptyChatState({
               size="sm"
               disabled={disabled}
               onClick={() => onSelect(prompt)}
-              className="h-auto justify-start rounded-xl px-3 py-2 text-left text-xs font-normal sm:max-w-56"
+              className="h-auto whitespace-normal justify-start rounded-xl px-3 py-2 text-left text-xs font-normal sm:max-w-64"
             >
               {prompt}
             </Button>

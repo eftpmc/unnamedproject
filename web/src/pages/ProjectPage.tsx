@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { useParams, useNavigate, Link, useLocation } from 'react-router-dom';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { GitBranch, GitGraph, Video } from 'lucide-react';
+import { FileText, GitBranch, GitGraph, Video } from 'lucide-react';
 import { getProjects, getProjectCampaigns, getProjectCapabilities, createChat, updateChatConfig, deleteProject, updateProject, getChats } from '../lib/api.js';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -253,7 +253,7 @@ export default function ProjectPage() {
             )}
 
             {/* 5. Capabilities */}
-            {(caps?.has_graph || caps?.has_media || project.repo_path) && (
+            {(caps?.has_graph || caps?.has_media || caps?.has_research || project.repo_path) && (
               <div>
                 <div className="text-xs font-medium text-muted-foreground mb-2">Capabilities</div>
                 <div className="flex flex-wrap gap-2">
@@ -267,6 +267,12 @@ export default function ProjectPage() {
                     <span className="flex items-center gap-1.5 rounded-lg border border-border/50 bg-background/55 px-2.5 py-1.5 text-xs text-muted-foreground">
                       <Video size={11} className="shrink-0" />
                       videos rendered
+                    </span>
+                  )}
+                  {caps?.has_research && (
+                    <span className="flex items-center gap-1.5 rounded-lg border border-border/50 bg-background/55 px-2.5 py-1.5 text-xs text-muted-foreground">
+                      <FileText size={11} className="shrink-0" />
+                      research saved
                     </span>
                   )}
                   {project.repo_path && (

@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { Link } from 'react-router-dom';
-import { Bot, FileEdit, GitBranch, GitPullRequest } from 'lucide-react';
+import { AlertCircle, ArrowRight, Bot, CheckCircle2, Circle, FileEdit, GitBranch, GitPullRequest, LoaderCircle } from 'lucide-react';
 import { getCampaign } from '../lib/api.js';
 import { subscribe } from '../lib/ws.js';
 import { cn } from '@/lib/utils';
@@ -15,11 +15,18 @@ interface CampaignCardProps {
   projectId: string;
 }
 
-const STATUS_DOT: Record<CampaignTask['status'], string> = {
-  waiting: 'bg-muted-foreground/30',
-  running: 'bg-blue-500 animate-pulse',
-  done: 'bg-green-500',
-  error: 'bg-destructive',
+const STATUS_ICON: Record<CampaignTask['status'], typeof Circle> = {
+  waiting: Circle,
+  running: LoaderCircle,
+  done: CheckCircle2,
+  error: AlertCircle,
+};
+
+const STATUS_ICON_CLASS: Record<CampaignTask['status'], string> = {
+  waiting: 'text-muted-foreground/40',
+  running: 'text-blue-500 animate-spin',
+  done: 'text-success',
+  error: 'text-destructive',
 };
 
 const AGENT_LABEL: Record<CampaignTask['agent'], string> = {
@@ -68,11 +75,12 @@ export default function CampaignCard({ campaignId, projectId }: CampaignCardProp
   }, []);
 
   if (isLoading || !data) {
-    return <Skeleton className="mt-2 h-28 w-64 rounded-xl" />;
+    return <Skeleton className="h-28 w-full rounded-2xl" />;
   }
 
   const { campaign, tasks } = data;
-  const effectiveStatuses = tasks.map(t => taskStatuses[t.id] ?? t.status);
+  const orderedTasks = [...tasks].sort((a, b) => a.position - b.position);
+  const effectiveStatuses = orderedTasks.map(t => taskStatuses[t.id] ?? t.status);
   // Derive the displayed status from live task updates rather than the
   // (possibly stale) campaign.status fetched on initial load — the campaign
   // row is only updated server-side once all tasks settle, but WS task
@@ -86,9 +94,8 @@ export default function CampaignCard({ campaignId, projectId }: CampaignCardProp
   const displayStatus = isDone ? 'done' : isError ? 'error' : isRunning ? 'running' : campaign.status;
 
   return (
-    <Surface className="mt-2 w-64 overflow-hidden bg-background/70 shadow-xs">
-      {/* header */}
-      <div className="flex items-center justify-between border-b border-border/40 bg-muted/20 px-3 py-2">
+    <Surface className="w-full overflow-hidden rounded-2xl border-border/25 bg-background shadow-sm ring-1 ring-black/[0.03]">
+      <div className="flex items-center justify-between border-b border-border/35 bg-muted/15 px-3 py-2">
         <span className="text-xs font-semibold text-foreground truncate pr-2">{campaign.title}</span>
         <Badge
           variant="outline"
@@ -103,29 +110,30 @@ export default function CampaignCard({ campaignId, projectId }: CampaignCardProp
           {displayStatus}
         </Badge>
       </div>
-      {/* tasks */}
-      <div className="flex flex-col gap-1.5 px-3 py-2.5">
-        {tasks.map(task => {
+      <div className="flex flex-col gap-2 px-3 py-2.5">
+        {orderedTasks.map(task => {
           const status = taskStatuses[task.id] ?? task.status;
+          const StatusIcon = STATUS_ICON[status];
+          const AgentIcon = AGENT_ICON[task.agent];
           return (
-            <div key={task.id} className="flex items-center gap-2">
-              <div className={cn('size-1.5 shrink-0 rounded-full', STATUS_DOT[status])} />
+            <div key={task.id} className="flex min-w-0 items-center gap-2">
+              <StatusIcon size={13} className={cn('shrink-0', STATUS_ICON_CLASS[status])} />
               <span className="flex-1 truncate text-xs text-foreground/80">{task.title}</span>
               <span className="shrink-0 flex items-center gap-1 text-[10px] text-muted-foreground">
-                {(() => { const Icon = AGENT_ICON[task.agent]; return <Icon className="size-2.5" />; })()}
+                <AgentIcon className="size-2.5" />
                 {AGENT_LABEL[task.agent]}
               </span>
             </div>
           );
         })}
       </div>
-      {/* link */}
-      <div className="border-t border-border/40 px-3 py-2">
+      <div className="border-t border-border/35 px-3 py-2">
         <Link
           to={`/projects/${projectId}/campaigns/${campaignId}`}
-          className="block text-center text-xs font-medium text-foreground/70 hover:text-foreground transition-colors"
+          className="flex items-center justify-center gap-1.5 text-xs font-medium text-foreground/70 transition-colors hover:text-foreground"
         >
-          View campaign →
+          View campaign
+          <ArrowRight size={12} />
         </Link>
       </div>
     </Surface>

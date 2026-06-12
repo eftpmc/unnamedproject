@@ -6,6 +6,7 @@ import ExecutionCard from './ExecutionCard.js';
 vi.mock('../lib/api.js', () => ({
   approveExecution: vi.fn().mockResolvedValue(undefined),
   rejectExecution: vi.fn().mockResolvedValue(undefined),
+  cancelExecution: vi.fn().mockResolvedValue(undefined),
 }));
 
 const baseCard = {
@@ -23,13 +24,13 @@ const baseCard = {
 describe('ExecutionCard', () => {
   it('shows tool name collapsed by default', () => {
     render(<ExecutionCard {...baseCard} />);
-    expect(screen.getByText(/invoke_claude_code/)).toBeInTheDocument();
+    expect(screen.getByText(/Claude Code/)).toBeInTheDocument();
     expect(screen.queryByRole('log')).not.toBeInTheDocument();
   });
 
   it('expands output on click', async () => {
     render(<ExecutionCard {...baseCard} outputLog="line one\nline two" />);
-    await userEvent.click(screen.getByText(/invoke_claude_code/));
+    await userEvent.click(screen.getByText(/Claude Code/));
     expect(screen.getByRole('log')).toBeInTheDocument();
   });
 

@@ -1,4 +1,7 @@
 import { spawn } from 'child_process';
+import fs from 'fs/promises';
+import os from 'os';
+import path from 'path';
 import { appendOutput, requestApproval } from '../services/executor.js';
 import { registerProcess, unregisterProcess } from '../lib/process-registry.js';
 import { DELEGATE_FRAMING, DELEGATE_TIMEOUT_MS } from './agent_framing.js';
@@ -44,12 +47,17 @@ export async function invokeClaudeCode(input: ClaudeCodeInput, ctx: ToolContext)
   await requestApproval(ctx.executionId, ctx.userId, 'invoke_claude_code', { prompt: input.prompt }, 'agent');
 
   const args = ['--print', '--permission-mode', 'bypassPermissions', '--output-format', 'stream-json', '--verbose'];
+  let mcpConfigDir: string | null = null;
   if (input.model) args.push('--model', input.model);
   if (!ctx.resumeSessionId) args.push('--append-system-prompt', DELEGATE_FRAMING);
   if (ctx.resumeSessionId) args.push('--resume', ctx.resumeSessionId);
   if (ctx.mcpServers && Object.keys(ctx.mcpServers).length > 0) {
-    args.push('--mcp-config', JSON.stringify({ mcpServers: ctx.mcpServers }));
+    mcpConfigDir = await fs.mkdtemp(path.join(os.tmpdir(), 'unnamed-claude-mcp-'));
+    const mcpConfigPath = path.join(mcpConfigDir, 'mcp.json');
+    await fs.writeFile(mcpConfigPath, JSON.stringify({ mcpServers: ctx.mcpServers }));
+    args.push('--mcp-config', mcpConfigPath);
   }
+  args.push('--');
   args.push(input.prompt);
 
   return new Promise((resolve, reject) => {
@@ -112,12 +120,14 @@ export async function invokeClaudeCode(input: ClaudeCodeInput, ctx: ToolContext)
     proc.on('error', err => {
       clearTimeout(timeoutTimer);
       unregisterProcess(ctx.executionId);
+      if (mcpConfigDir) void fs.rm(mcpConfigDir, { recursive: true, force: true });
       reject(new Error(`Failed to launch claude: ${err.message}. Is the Claude Code CLI installed and on PATH?`));
     });
 
     proc.on('close', code => {
       clearTimeout(timeoutTimer);
       unregisterProcess(ctx.executionId);
+      if (mcpConfigDir) void fs.rm(mcpConfigDir, { recursive: true, force: true });
       if (timedOut) {
         reject(new Error(`claude timed out after ${DELEGATE_TIMEOUT_MS / 1000}s and was killed`));
         return;

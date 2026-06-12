@@ -17,6 +17,7 @@ const queryClient = new QueryClient({
 const router = createBrowserRouter([
   { path: '/login', element: <Login /> },
   { path: '/', element: <Navigate to="/c" replace /> },
+  { path: '/s', element: <Navigate to="/c" replace /> },
   { path: '/s/:sessionId', element: <Navigate to="/c" replace /> },
   {
     path: '/',

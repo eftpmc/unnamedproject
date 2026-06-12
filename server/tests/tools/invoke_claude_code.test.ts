@@ -1,6 +1,7 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { EventEmitter } from 'events';
 import { spawn } from 'child_process';
+import fs from 'fs/promises';
 import { invokeClaudeCode } from '../../src/tools/invoke_claude_code.js';
 
 function makeProc() {
@@ -71,6 +72,33 @@ describe('invoke_claude_code', () => {
     const idx = args.indexOf('--model');
     expect(idx).toBeGreaterThanOrEqual(0);
     expect(args[idx + 1]).toBe('opus');
+  });
+
+  it('passes MCP servers via a config file and separates the prompt from variadic options', async () => {
+    const proc = makeProc();
+    vi.mocked(spawn).mockReturnValue(proc as any);
+
+    const promise = invokeClaudeCode(
+      { prompt: 'fix the login bug' },
+      {
+        userId: 'u1',
+        executionId: 'e1',
+        repoPath: '/tmp/repo',
+        apiKey: 'sk-test',
+        mcpServers: { browser: { command: 'node', args: ['server.js'] } },
+      }
+    );
+    await vi.waitFor(() => expect(spawn).toHaveBeenCalled());
+
+    const args = vi.mocked(spawn).mock.calls[0][1] as string[];
+    const mcpIdx = args.indexOf('--mcp-config');
+    expect(mcpIdx).toBeGreaterThanOrEqual(0);
+    expect(args[mcpIdx + 1]).toMatch(/mcp\.json$/);
+    await expect(fs.readFile(args[mcpIdx + 1], 'utf-8')).resolves.toContain('"browser"');
+    expect(args.slice(-2)).toEqual(['--', 'fix the login bug']);
+
+    proc.emit('close', 0);
+    await promise;
   });
 
   it('does not append framing when resuming a session', async () => {

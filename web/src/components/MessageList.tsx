@@ -25,18 +25,36 @@ interface MessageListProps {
 }
 
 const markdownComponents: React.ComponentProps<typeof ReactMarkdown>['components'] = {
-  p: ({ children }) => <p className="mb-2 last:mb-0">{children}</p>,
+  p: ({ children }) => <p className="mb-2.5 last:mb-0">{children}</p>,
   strong: ({ children }) => <strong className="font-semibold">{children}</strong>,
   code: ({ children }) => (
-    <code className="rounded bg-muted px-1 font-mono text-[13px]">{children}</code>
+    <code className="rounded-md bg-muted/70 px-1.5 py-0.5 font-mono text-[13px] text-foreground/85">{children}</code>
   ),
   pre: ({ children }) => (
-    <pre className="my-2 overflow-x-auto rounded-lg bg-muted p-3 text-[13px] leading-relaxed font-mono">{children}</pre>
+    <pre className="my-3 overflow-x-auto rounded-xl border border-border/40 bg-muted/35 p-3 text-[13px] leading-relaxed font-mono">{children}</pre>
   ),
   ul: ({ children }) => <ul className="mb-2 ml-4 list-disc">{children}</ul>,
   ol: ({ children }) => <ol className="mb-2 ml-4 list-decimal">{children}</ol>,
   li: ({ children }) => <li className="mb-0.5">{children}</li>,
 };
+
+function renderExecutionCard(exec: InlineExecution) {
+  if (exec.tool === 'create_campaign' && exec.status === 'done' && exec.result) {
+    try {
+      const parsed = JSON.parse(exec.result) as { campaign_id: string; project_id: string };
+      if (parsed.campaign_id && parsed.project_id) {
+        return (
+          <CampaignCard
+            key={exec.executionId}
+            campaignId={parsed.campaign_id}
+            projectId={parsed.project_id}
+          />
+        );
+      }
+    } catch { /* fall through to ExecutionCard */ }
+  }
+  return <ExecutionCard key={exec.executionId} {...exec} />;
+}
 
 export default function MessageList({ messages, executions, streamingIds, sessionId }: MessageListProps) {
   const bottomRef = useRef<HTMLDivElement>(null);
@@ -56,52 +74,53 @@ export default function MessageList({ messages, executions, streamingIds, sessio
 
   return (
     <div className="flex-1 overflow-y-auto">
-      <div className="mx-auto flex w-full max-w-4xl flex-col gap-5 px-4 py-5 sm:px-6 sm:py-6">
-        {messages.map(msg => (
+      <div className="mx-auto flex w-full max-w-3xl flex-col gap-5 px-4 py-6 sm:px-6 sm:py-7">
+        {messages.map(msg => {
+          const msgExecutions = executions[msg.id] ?? [];
+          const isStreaming = streamingIds?.has(msg.id) ?? false;
+          if (msg.role === 'assistant' && !msg.content.trim() && msgExecutions.length === 0 && !isStreaming) {
+            return null;
+          }
+
+          return (
           <div key={msg.id}>
             {msg.role === 'user' ? (
-              <div className="flex justify-end">
-                <Card className="max-w-[88%] rounded-2xl rounded-br-lg border-transparent bg-foreground py-0 text-background shadow-sm sm:max-w-[72%]">
-                  <CardContent className="px-4 py-3 text-[15px] leading-relaxed whitespace-pre-wrap">
-                    {msg.content}
-                  </CardContent>
-                </Card>
+              <div className="flex flex-col items-end gap-2">
+                <div className="flex justify-end">
+                  <Card className="max-w-[88%] rounded-2xl rounded-br-md border-border/35 bg-muted/45 py-0 text-foreground shadow-none sm:max-w-[76%]">
+                    <CardContent className="px-4 py-3 text-[15px] leading-relaxed whitespace-pre-wrap">
+                      {msg.content}
+                    </CardContent>
+                  </Card>
+                </div>
+                {msgExecutions.map(exec => (
+                  <div key={exec.executionId} className="w-full max-w-[92%] sm:max-w-[82%]">
+                    {renderExecutionCard(exec)}
+                  </div>
+                ))}
               </div>
             ) : (
-              <div className="flex w-fit max-w-[94%] flex-col gap-2 sm:max-w-[86%]">
-                <div className="flex items-center gap-2 text-xs font-medium text-muted-foreground">
-                  <span className="size-1.5 rounded-full bg-success" />
-                  Assistant
-                </div>
-                <div className="rounded-2xl rounded-bl-lg bg-background/72 px-4 py-3 text-[15px] leading-7 text-foreground shadow-xs ring-1 ring-border/45">
-                  <ReactMarkdown components={markdownComponents}>
-                    {msg.content}
-                  </ReactMarkdown>
-                  {streamingIds?.has(msg.id) && (
-                    <span className="ml-1 inline-block h-4 w-1.5 animate-pulse align-middle rounded-full bg-foreground/40" />
-                  )}
-                </div>
-                {(executions[msg.id] ?? []).map(exec => {
-                  if (exec.tool === 'create_campaign' && exec.status === 'done' && exec.result) {
-                    try {
-                      const parsed = JSON.parse(exec.result) as { campaign_id: string; project_id: string };
-                      if (parsed.campaign_id && parsed.project_id) {
-                        return (
-                          <CampaignCard
-                            key={exec.executionId}
-                            campaignId={parsed.campaign_id}
-                            projectId={parsed.project_id}
-                          />
-                        );
-                      }
-                    } catch { /* fall through to ExecutionCard */ }
-                  }
-                  return <ExecutionCard key={exec.executionId} {...exec} />;
-                })}
+              <div className="flex max-w-[94%] flex-col gap-2 sm:max-w-[86%]">
+                {(msg.content.trim() || isStreaming) && (
+                  <div className="w-fit rounded-2xl rounded-bl-md border border-border/35 bg-background/55 px-4 py-3 text-[15px] leading-7 text-foreground shadow-xs">
+                    <ReactMarkdown components={markdownComponents}>
+                      {msg.content}
+                    </ReactMarkdown>
+                    {isStreaming && (
+                      <span className="ml-1 inline-block h-4 w-1.5 animate-pulse align-middle rounded-full bg-foreground/35" />
+                    )}
+                  </div>
+                )}
+                {msgExecutions.map(exec => (
+                  <div key={exec.executionId} className="w-full max-w-[92%] sm:max-w-[82%]">
+                    {renderExecutionCard(exec)}
+                  </div>
+                ))}
               </div>
             )}
           </div>
-        ))}
+          );
+        })}
         <div ref={bottomRef} />
       </div>
     </div>

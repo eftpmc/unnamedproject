@@ -49,17 +49,9 @@ interface ExecutionCardProps {
   action: string | null;
 }
 
-const BORDER_COLOR: Record<ExecutionStatus, string> = {
-  pending: 'border-l-muted-foreground/20',
-  running: 'border-l-blue-400',
-  done: 'border-l-green-400',
-  error: 'border-l-destructive',
-  awaiting_approval: 'border-l-amber-400',
-};
-
 const STATUS_DOT: Record<ExecutionStatus, string> = {
   pending: 'bg-foreground/20',
-  running: 'bg-blue-500',
+  running: 'bg-blue-500 animate-pulse',
   done: 'bg-green-500',
   error: 'bg-destructive',
   awaiting_approval: 'bg-warning',
@@ -72,6 +64,21 @@ const STATUS_LABEL: Record<ExecutionStatus, string> = {
   error: 'Error',
   awaiting_approval: 'Approval',
 };
+
+const STATUS_BADGE: Record<ExecutionStatus, string> = {
+  pending: 'bg-muted text-muted-foreground border-transparent',
+  running: 'bg-blue-500/10 text-blue-700 border-blue-200 dark:text-blue-300 dark:border-blue-900',
+  done: 'bg-green-500/10 text-green-700 border-green-200 dark:text-green-300 dark:border-green-900',
+  error: 'bg-destructive/10 text-destructive border-destructive/20',
+  awaiting_approval: 'bg-warning/10 text-foreground border-warning/25',
+};
+
+function formatToolName(tool: string): string {
+  return tool
+    .replace(/^invoke_/, '')
+    .replace(/_/g, ' ')
+    .replace(/\b\w/g, char => char.toUpperCase());
+}
 
 export default function ExecutionCard({
   executionId,
@@ -90,7 +97,7 @@ export default function ExecutionCard({
   const [cancelling, setCancelling] = useState(false);
 
   const dotColor = STATUS_DOT[status] ?? 'bg-foreground/20';
-  const label = projectName ? `${tool} · ${projectName}` : tool;
+  const label = projectName ? `${formatToolName(tool)} · ${projectName}` : formatToolName(tool);
 
   async function handleApprove() {
     setActing(true);
@@ -111,44 +118,45 @@ export default function ExecutionCard({
 
   return (
     <Card className={cn(
-      'overflow-hidden rounded-2xl bg-background/60 py-0 shadow-xs',
-      'border-l-2',
-      BORDER_COLOR[status],
-      status === 'awaiting_approval' && !decided ? 'ring-2 ring-warning/25' : '',
+      'overflow-hidden rounded-xl border-border/45 bg-background/55 py-0 shadow-xs',
+      status === 'awaiting_approval' && !decided ? 'border-warning/30 bg-warning/5' : '',
     )}>
       <div
         role={!isApproval ? 'button' : undefined}
         onClick={!isApproval ? () => setExpanded(e => !e) : undefined}
-        className={`flex items-center gap-2.5 px-4 py-3 ${isApproval ? 'cursor-default' : 'cursor-pointer'}`}
+        className={`flex items-center gap-2.5 px-3 py-2.5 ${isApproval ? 'cursor-default' : 'cursor-pointer hover:bg-muted/20 transition-colors'}`}
       >
         <div
-          className={`w-2 h-2 rounded-full shrink-0 ${
+          className={`size-1.5 rounded-full shrink-0 ${
             decided === 'approved' ? 'bg-success' : decided === 'rejected' ? 'bg-destructive' : dotColor
           }`}
         />
         <Terminal size={14} className="shrink-0 text-muted-foreground/55" />
-        <span className="flex-1 select-none truncate text-sm font-medium text-foreground/80">{label}</span>
-        <Badge variant={status === 'error' ? 'destructive' : status === 'awaiting_approval' ? 'outline' : 'secondary'}>
+        <span className="flex-1 select-none truncate text-xs font-medium text-foreground/75">{label}</span>
+        <Badge
+          variant="outline"
+          className={cn('capitalize', decided ? 'bg-muted text-muted-foreground border-transparent' : STATUS_BADGE[status])}
+        >
           {decided ?? STATUS_LABEL[status]}
         </Badge>
 
         {isApproval && (
-          <div className="flex gap-1.5">
+          <div className="flex gap-1">
             <Button
-              variant="secondary"
+              variant="outline"
               size="sm"
               onClick={handleApprove}
               disabled={acting}
-              className="text-success"
+              className="h-7 text-xs text-success"
             >
               <Check size={14} strokeWidth={2} /> Approve
             </Button>
             <Button
-              variant="secondary"
+              variant="ghost"
               size="sm"
               onClick={handleReject}
               disabled={acting}
-              className="text-muted-foreground"
+              className="h-7 text-xs text-muted-foreground"
             >
               <X size={14} strokeWidth={2} /> Reject
             </Button>
@@ -173,7 +181,7 @@ export default function ExecutionCard({
       </div>
 
       {isApproval && action && (
-        <div className="border-t border-warning/20 bg-warning/5 px-4 py-2 text-xs text-muted-foreground">
+        <div className="border-t border-warning/20 px-3 py-2 text-xs text-muted-foreground">
           Approval requested for <span className="font-medium text-foreground">{action}</span>
         </div>
       )}

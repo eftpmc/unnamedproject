@@ -35,8 +35,8 @@ export default function MessageInput({ onSend, disabled }: MessageInputProps) {
   }
 
   return (
-    <div className="shrink-0 px-4 pb-4 pt-3 sm:px-6 sm:pb-5">
-      <div className="mx-auto flex max-w-4xl items-end gap-2 rounded-xl border border-border/65 bg-background/82 p-2 shadow-sm backdrop-blur dark:border-white/10 dark:bg-card/75 sm:gap-3">
+    <div className="shrink-0 border-t border-border/35 bg-background/70 px-4 pb-4 pt-3 backdrop-blur sm:px-6 sm:pb-5">
+      <div className="mx-auto flex max-w-3xl items-end gap-2 rounded-2xl border border-border/45 bg-muted/20 p-2 shadow-xs dark:border-white/10 dark:bg-card/55 sm:gap-3">
         <Textarea
           ref={textareaRef}
           value={value}
@@ -46,7 +46,7 @@ export default function MessageInput({ onSend, disabled }: MessageInputProps) {
           disabled={disabled}
           rows={1}
           className={cn(
-            'max-h-44 min-h-12 flex-1 resize-none overflow-y-auto border-0 bg-transparent px-3 py-3 text-[15px] shadow-none focus-visible:ring-0 dark:bg-transparent',
+            'max-h-44 min-h-11 flex-1 resize-none overflow-y-auto border-0 bg-transparent px-3 py-2.5 text-[15px] shadow-none focus-visible:ring-0 dark:bg-transparent',
             disabled && 'text-muted-foreground',
           )}
         />

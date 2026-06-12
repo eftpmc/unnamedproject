@@ -1,5 +1,6 @@
 import { getDb, getProjectForUser } from '../db/index.js';
 import { newId } from '../lib/ids.js';
+import type { Intent } from './intent.js';
 
 export type MemoryType = 'user' | 'feedback' | 'project' | 'reference';
 
@@ -49,4 +50,40 @@ export function recallAll(userId: string, type?: MemoryType): MemoryEntry[] {
 export function projectNameFor(userId: string, projectId: string | null): string | null {
   if (!projectId) return null;
   return getProjectForUser(projectId, userId)?.name ?? null;
+}
+
+const MAX_USER_MEMORIES = 10;
+
+function scoreMemory(entry: MemoryEntry, intent: Intent): number {
+  const text = `${entry.key} ${entry.value}`.toLowerCase();
+  let score = 0;
+  if (text.includes(intent.domain)) score += 2;
+  for (const tool of intent.tools) {
+    const normalized = tool.toLowerCase().replace(/_/g, ' ');
+    if (text.includes(normalized) || text.includes(tool.toLowerCase())) score += 1;
+  }
+  return score;
+}
+
+export function recallRelevant(userId: string, intent: Intent, pinnedProjectId?: string): MemoryEntry[] {
+  const all = recallAll(userId);
+
+  const feedback = all.filter(e => e.type === 'feedback');
+
+  const project = pinnedProjectId
+    ? all.filter(e => e.type === 'project' && e.project_id === pinnedProjectId)
+    : all.filter(e => e.type === 'project' && scoreMemory(e, intent) > 0);
+
+  const reference = intent.domain === 'general'
+    ? all.filter(e => e.type === 'reference')
+    : all.filter(e => e.type === 'reference' && scoreMemory(e, intent) > 0);
+
+  const user = all
+    .filter(e => e.type === 'user')
+    .map(e => ({ entry: e, score: scoreMemory(e, intent) }))
+    .sort((a, b) => b.score - a.score)
+    .slice(0, MAX_USER_MEMORIES)
+    .map(s => s.entry);
+
+  return [...feedback, ...project, ...reference, ...user];
 }

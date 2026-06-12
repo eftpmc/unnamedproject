@@ -1,8 +1,9 @@
 import { describe, it, expect, beforeAll } from 'vitest';
 import fs from 'fs';
 import { initDb, getDb } from '../../src/db/index.js';
-import { rememberFact, recallFact, forgetFact, recallAll, projectNameFor } from '../../src/services/memory.js';
+import { rememberFact, recallFact, forgetFact, recallAll, projectNameFor, recallRelevant } from '../../src/services/memory.js';
 import { newId } from '../../src/lib/ids.js';
+import type { Intent } from '../../src/services/intent.js';
 
 const userId = newId();
 
@@ -67,5 +68,61 @@ describe('memory', () => {
 
   it('projectNameFor returns null for null project_id', () => {
     expect(projectNameFor(userId, null)).toBeNull();
+  });
+});
+
+const codeIntent: Intent = {
+  domain: 'code', complexity: 'medium', model: 'sonnet',
+  tools: ['invoke_claude_code', 'git_op'], scope: 'delegate',
+  needs_research: false, ambiguous: false,
+};
+const researchIntent: Intent = {
+  domain: 'research', complexity: 'low', model: 'haiku',
+  tools: ['web_search'], scope: 'inline',
+  needs_research: false, ambiguous: false,
+};
+
+describe('recallRelevant', () => {
+  const relUserId = newId();
+
+  beforeAll(() => {
+    getDb().prepare('INSERT INTO users (id, email, hashed_password) VALUES (?,?,?)').run(relUserId, `rel-${relUserId}@test.com`, 'x');
+    rememberFact(relUserId, 'feedback', 'always_commit', 'commit after every change');
+    rememberFact(relUserId, 'user', 'preferred_language', 'TypeScript');
+    rememberFact(relUserId, 'user', 'slack_workspace', 'company.slack.com');
+    rememberFact(relUserId, 'reference', 'bug_tracker', 'Linear INGEST project for pipeline bugs');
+    rememberFact(relUserId, 'reference', 'design_system', 'Figma link for UI components');
+  });
+
+  it('always includes all feedback entries', () => {
+    const result = recallRelevant(relUserId, researchIntent);
+    expect(result.some(e => e.type === 'feedback' && e.key === 'always_commit')).toBe(true);
+  });
+
+  it('scores user memories by domain relevance', () => {
+    const result = recallRelevant(relUserId, codeIntent);
+    const keys = result.map(e => e.key);
+    expect(keys).toContain('preferred_language');
+  });
+
+  it('filters project memories to pinned project when provided', () => {
+    const projectId = newId();
+    getDb().prepare('INSERT INTO projects (id, user_id, name, enabled_connection_ids) VALUES (?,?,?,?)').run(projectId, relUserId, `proj-${relUserId}`, '[]');
+    rememberFact(relUserId, 'project', 'auth_decision', 'using JWT with RS256', projectId);
+    rememberFact(relUserId, 'project', 'other_note', 'unrelated project fact');
+
+    const withPin = recallRelevant(relUserId, codeIntent, projectId);
+    expect(withPin.some(e => e.type === 'project' && e.key === 'auth_decision')).toBe(true);
+    expect(withPin.some(e => e.type === 'project' && e.key === 'other_note')).toBe(false);
+  });
+
+  it('caps user memories at 10 entries', () => {
+    const bigUserId = newId();
+    getDb().prepare('INSERT INTO users (id, email, hashed_password) VALUES (?,?,?)').run(bigUserId, `big-${bigUserId}@test.com`, 'x');
+    for (let i = 0; i < 15; i++) {
+      rememberFact(bigUserId, 'user', `key_${i}`, `value ${i}`);
+    }
+    const result = recallRelevant(bigUserId, codeIntent);
+    expect(result.filter(e => e.type === 'user').length).toBeLessThanOrEqual(10);
   });
 });

@@ -11,9 +11,11 @@ let bundleLocationPromise: Promise<string> | null = null;
 
 function getBundle(): Promise<string> {
   if (!bundleLocationPromise) {
-    bundleLocationPromise = bundle({
+    const pendingBundle = bundle({
       entryPoint: path.resolve(__dirname, '../../../remotion/src/index.tsx'),
     });
+    if (!pendingBundle) throw new Error('Failed to create Remotion bundle');
+    bundleLocationPromise = pendingBundle;
   }
   return bundleLocationPromise;
 }
@@ -58,7 +60,7 @@ export async function renderVideo(
     codec: 'h264',
     outputLocation,
     inputProps,
-    onProgress: ({ progress }) => onProgress?.(progress),
+    onProgress: ({ progress }: { progress: number }) => onProgress?.(progress),
   });
 
   return fileName;

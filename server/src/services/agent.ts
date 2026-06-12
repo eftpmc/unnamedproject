@@ -1,9 +1,7 @@
 import Anthropic from '@anthropic-ai/sdk';
-import { getDb, getProjectForUser, setAgentWorktreeSession, updateCampaignTaskStatus, maybeCompleteCampaign, getCampaignForTask, type DbProject } from '../db/index.js';
+import { getDb, getProjectForUser, setAgentWorktreeSession, updateCampaignTaskStatus, maybeCompleteCampaign, getCampaignForTask } from '../db/index.js';
 import { ensureWorktree } from '../lib/worktree.js';
 import { getDecryptedConfig } from '../routes/connections.js';
-import { recallAll } from './memory.js';
-import { toolDefinitions } from '../tools/definitions.js';
 import { createExecution, completeExecution } from './executor.js';
 import { runGitOp } from '../tools/git_op.js';
 import { runGithubApi } from '../tools/github_api.js';
@@ -12,14 +10,16 @@ import { invokeCodex } from '../tools/invoke_codex.js';
 import { callMcpTool } from '../tools/mcp_call.js';
 import { runProjectQuery } from '../tools/project_query.js';
 import { buildGraph } from './graphify.js';
-import { remember, recall, forget, formatEntry } from '../tools/memory_tools.js';
+import { remember, recall, forget } from '../tools/memory_tools.js';
 import { readFile, listDir, writeFile } from '../tools/file_ops.js';
 import { readChat } from '../tools/read_chat.js';
 import { createProject, updateProject, deleteProject } from '../tools/project_ops.js';
 import { runCreateCampaign } from '../tools/create_campaign.js';
 import { broadcast } from './socket.js';
 import { newId } from '../lib/ids.js';
-import { DEFAULT_EFFORT, getAnthropicKey, resolveModelForEffort, type EffortLevel } from './anthropic.js';
+import { DEFAULT_EFFORT, getAnthropicKey, resolveModelForTurn, listClaudeModels, type EffortLevel } from './anthropic.js';
+import { extractIntent, DEFAULT_INTENT } from './intent.js';
+import { buildContext, getToolSubset } from './context.js';
 
 async function maybeGenerateSessionTitle(userId: string, sessionId: string): Promise<void> {
   // Only generate if session has no title yet
@@ -63,92 +63,6 @@ async function maybeGenerateSessionTitle(userId: string, sessionId: string): Pro
 
 interface DbMessage { role: string; content: string; }
 
-function getProjects(userId: string): DbProject[] {
-  return getDb()
-    .prepare('SELECT id, name, description, repo_path, enabled_connection_ids FROM projects WHERE user_id = ?')
-    .all(userId) as DbProject[];
-}
-
-function timeAgo(unixSeconds: number): string {
-  const diff = Date.now() / 1000 - unixSeconds;
-  if (diff <= 0) return 'just now';
-  if (diff < 3600) return `${Math.floor(diff / 60)}m ago`;
-  if (diff < 86400) return `${Math.floor(diff / 3600)}h ago`;
-  return `${Math.floor(diff / 86400)}d ago`;
-}
-
-function getRecentChats(userId: string, currentSessionId: string): Array<{ id: string; title: string | null; updated_at: number }> {
-  return getDb()
-    .prepare('SELECT id, title, updated_at FROM sessions WHERE user_id = ? AND id != ? ORDER BY updated_at DESC LIMIT 10')
-    .all(userId, currentSessionId) as Array<{ id: string; title: string | null; updated_at: number }>;
-}
-
-function buildSystemPrompt(userId: string, sessionId: string): string {
-  const memory = recallAll(userId);
-  const projects = getProjects(userId);
-  const session = getDb()
-    .prepare('SELECT pinned_project_id FROM sessions WHERE id = ?')
-    .get(sessionId) as { pinned_project_id: string | null } | undefined;
-  const pinnedProject = session?.pinned_project_id
-    ? projects.find(p => p.id === session.pinned_project_id)
-    : null;
-
-  const memoryText = memory.length > 0
-    ? `\n\nUser memory:\n${memory.map(e => `- ${formatEntry(userId, e)}`).join('\n')}`
-    : '\n\nUser memory:\nNo memories stored yet.';
-  const pinnedProjectText = pinnedProject
-    ? (() => {
-        const isCode = !!pinnedProject.repo_path;
-        const header = `\n\nActive project: **${pinnedProject.name}** (id: ${pinnedProject.id})${pinnedProject.description ? ' — ' + pinnedProject.description : ''}`;
-        const guidance = isCode
-          ? `\nThis is a code project (repo: ${pinnedProject.repo_path}). For coding tasks, delegate to invoke_claude_code or invoke_codex — give them rich context. Use git_op add→commit after work completes. For non-code tasks within this project (docs, notes), use write_file/read_file.`
-          : `\nThis is a doc/writing project (no git repo). Use write_file/read_file/list_dir directly — no Claude Code or Codex needed. Create files in this project for any output the user wants saved.`;
-        return header + guidance;
-      })()
-    : '';
-  const projectsText = projects.length > 0
-    ? `\n\nAvailable projects:\n${projects.map(p => `- ${p.name} (id: ${p.id}${p.repo_path ? '' : ', no repo'})${p.description ? ': ' + p.description : ''}`).join('\n')}`
-    : '\n\nNo projects yet.';
-  const recentChats = getRecentChats(userId, sessionId);
-  const recentChatsText = recentChats.length > 0
-    ? `\n\nRecent chats (use read_chat to retrieve full context when relevant):\n${recentChats.map(c => `- "${c.title ?? 'Untitled'}" (id: ${c.id}, ${timeAgo(c.updated_at)})`).join('\n')}`
-    : '';
-
-  return `You are a personal AI operator and orchestrator.
-
-## Simple requests — respond directly
-For short, self-contained tasks (a code snippet, a script, a quick HTML demo, a one-off file, an answer, an explanation):
-- Just respond. Write the code inline. Do not create a project or invoke tools unless the user asks you to save or run it.
-- If the user says "make me a file" or "save this" or "put this in a project", THEN use write_file or create_project. Otherwise, just show the output.
-- Rule of thumb: if the work will need multiple files, persistence across sessions, or running/testing code, use create_project (with_repo=true for code, false for docs); if it's a single self-contained answer, just respond inline.
-
-## Project work — delegate to coding agents
-When the task clearly belongs to an existing codebase or the user wants persistent, saved, runnable code:
-- Use invoke_claude_code or invoke_codex. Do not implement it yourself.
-- Figure out which project it belongs to. If none fits and the user explicitly wants a project, call create_project (pick a sensible name, don't ask).
-- Use project_query to understand the codebase before dispatching work.
-- Give the coding agent a rich, detailed prompt — it can implement entire features, run tests, fix failures, refactor across files, install dependencies, and more. Don't hold back.
-- After coding work completes, run git_op status to summarize what changed, then immediately run git_op add (stages everything) and git_op commit with a message — do not ask the user for permission first, commits are auto-approved and the work is on an isolated branch. Then tell the user what was done, that it's committed, and what branch it's on.
-- invoke_claude_code and invoke_codex maintain context across calls — you can follow up, correct, or extend in subsequent calls.
-- Prefer invoke_claude_code by default. Use invoke_codex for OpenAI preference or a second approach.
-
-## Writing, research, and conversation
-For writing, research, brainstorming, explaining, planning, answering questions:
-- Respond directly. Do not use invoke_claude_code or invoke_codex.
-- Use web_search to find sources, then web_fetch to read the full content of a promising page (search results alone are often too thin). Use recall/remember for memory. Use read_chat for past context.
-- For writing that should be saved to a file (a spec, a doc, a plan), use write_file — but confirm with the user first which project/path to use.
-
-## Worktree isolation
-All coding tools operate on an isolated git branch (separate per session). The user's main checkout is never touched — mistakes are contained and reversible.
-
-## Approval tiers
-- Auto-approved: invoke_claude_code, invoke_codex, git commit, create_project, update_project, project_query, read/list file ops
-- User-approved (pauses): git push, write_file, github write ops, delete_project
-
-Never skip a user-approved action — just proceed and the system handles the pause. Conversely, never ask the user for permission to take an auto-approved action (e.g. committing) — just do it.
-${pinnedProjectText}${memoryText}
-${projectsText}${recentChatsText}`;
-}
 
 interface McpServerConfig { command: string; args?: string[]; env?: Record<string, string> }
 
@@ -432,22 +346,29 @@ export async function runAgentTurn(userId: string, sessionId: string, userMessag
   const client = new Anthropic({ apiKey });
 
   const session = getDb()
-    .prepare('SELECT effort, model FROM sessions WHERE id = ?')
-    .get(sessionId) as { effort: EffortLevel; model: string | null } | undefined;
+    .prepare('SELECT effort, model, summary FROM sessions WHERE id = ?')
+    .get(sessionId) as { effort: EffortLevel; model: string | null; summary: string | null } | undefined;
   const effort = session?.effort ?? DEFAULT_EFFORT;
-  const model = session?.model || await resolveModelForEffort(client, effort, apiKey);
 
   const history = getDb()
     .prepare('SELECT role, content FROM messages WHERE session_id = ? ORDER BY created_at')
     .all(sessionId) as DbMessage[];
 
-  const messages: Anthropic.MessageParam[] = history.map(m => ({
+  const lastUserMsg = [...history].reverse().find(m => m.role === 'user')?.content ?? '';
+
+  const [intent] = await Promise.all([
+    extractIntent(lastUserMsg, apiKey).catch(() => ({ ...DEFAULT_INTENT })),
+    listClaudeModels(userId).catch(() => {}),
+  ]);
+
+  const model = session?.model ?? await resolveModelForTurn(client, intent, effort, apiKey);
+
+  const systemPrompt = buildContext(userId, sessionId, intent);
+  const tools = getToolSubset(intent);
+  let currentMessages = [...history.map(m => ({
     role: m.role as 'user' | 'assistant',
     content: m.content,
-  }));
-
-  const systemPrompt = buildSystemPrompt(userId, sessionId);
-  let currentMessages = [...messages];
+  }))];
 
   const replyId = newId();
   let fullText = '';
@@ -459,7 +380,7 @@ export async function runAgentTurn(userId: string, sessionId: string, userMessag
         model,
         max_tokens: 8192,
         system: systemPrompt,
-        tools: toolDefinitions,
+        tools: tools,
         messages: currentMessages,
       }, {
         headers: { 'anthropic-beta': 'web-fetch-2025-09-10' },

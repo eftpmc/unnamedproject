@@ -247,6 +247,8 @@ describe('agent', () => {
     rememberFact(userId, 'feedback', 'package_manager', 'use pnpm, not npm');
     rememberFact(userId, 'project', 'status', 'auth refactor blocked on legal review', projectId);
 
+    db.prepare('UPDATE sessions SET pinned_project_id = ? WHERE id = ?').run(projectId, sessionId);
+
     const msgId = newId();
     db.prepare('INSERT INTO messages (id, session_id, role, content) VALUES (?,?,?,?)').run(msgId, sessionId, 'user', 'hi');
 

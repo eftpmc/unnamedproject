@@ -305,7 +305,6 @@ async function dispatchTool(
             name: toolInput.name as string,
             description: toolInput.description as string | undefined,
             with_repo: toolInput.with_repo as boolean,
-            type: toolInput.type as string | undefined,
           },
           userId,
           executionId
@@ -316,7 +315,6 @@ async function dispatchTool(
           {
             project_id: toolInput.project_id as string,
             description: toolInput.description as string | undefined,
-            type: toolInput.type as string | undefined,
           },
           userId
         );

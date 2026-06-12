@@ -48,38 +48,36 @@ describe('projects', () => {
     expect(notes.repo_path).toBeNull();
   });
 
-  it('creates and lists a video project type', async () => {
-    const created = await request(app)
+  it('creates a project without a type field', async () => {
+    const res = await request(app)
       .post('/projects')
       .set('Authorization', `Bearer ${token}`)
-      .send({ name: 'video-api', type: 'video', enabled_connection_ids: [] });
-    expect(created.status).toBe(201);
-
-    const listed = await request(app)
-      .get('/projects')
-      .set('Authorization', `Bearer ${token}`);
-    const project = listed.body.find((p: { id: string }) => p.id === created.body.id);
-    expect(project.type).toBe('video');
+      .send({ name: 'sandbox-project', enabled_connection_ids: [] });
+    expect(res.status).toBe(201);
+    const project = res.body as { id: string; name: string };
+    expect(project.id).toBeTruthy();
+    expect(project.name).toBe('sandbox-project');
+    expect((project as Record<string, unknown>).type).toBeUndefined();
   });
 
-  it('updates and validates project type', async () => {
-    const created = await request(app)
+  it('updates project description', async () => {
+    const create = await request(app)
       .post('/projects')
       .set('Authorization', `Bearer ${token}`)
-      .send({ name: 'type-update', enabled_connection_ids: [] });
-    expect(created.status).toBe(201);
+      .send({ name: 'update-test', enabled_connection_ids: [] });
+    const id = (create.body as { id: string }).id;
 
-    const updated = await request(app)
-      .patch(`/projects/${created.body.id}`)
+    const patch = await request(app)
+      .patch(`/projects/${id}`)
       .set('Authorization', `Bearer ${token}`)
-      .send({ type: 'video' });
-    expect(updated.status).toBe(200);
+      .send({ description: 'updated desc' });
+    expect(patch.status).toBe(200);
 
-    const invalid = await request(app)
-      .patch(`/projects/${created.body.id}`)
-      .set('Authorization', `Bearer ${token}`)
-      .send({ type: 'bogus' });
-    expect(invalid.status).toBe(400);
+    const list = await request(app)
+      .get('/projects')
+      .set('Authorization', `Bearer ${token}`);
+    const updated = (list.body as Array<{ id: string; description: string | null }>).find(p => p.id === id);
+    expect(updated?.description).toBe('updated desc');
   });
 
   it('deletes a project', async () => {

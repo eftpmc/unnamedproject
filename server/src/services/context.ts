@@ -81,7 +81,7 @@ Suggested order: research → setup → implementation → verification → git 
 
 function projectContextBlock(project: DbProject): string {
   const isCode = !!project.repo_path;
-  const header = `## Active project: **${project.name}** (id: ${project.id}, type: ${project.type})${project.description ? ' — ' + project.description : ''}`;
+  const header = `## Active project: **${project.name}** (id: ${project.id})${project.description ? ' — ' + project.description : ''}`;
   const guidance = isCode
     ? `\nCode project (repo: ${project.repo_path}). Delegate coding tasks to invoke_claude_code or invoke_codex with full context. Use git_op add→commit after work completes. For non-code tasks (docs, notes), use write_file/read_file directly.`
     : `\nDoc/writing project (no git repo). Use write_file/read_file/list_dir directly — no Claude Code or Codex needed. Create files in this project for any output the user wants saved.`;
@@ -112,10 +112,10 @@ function recentChatsBlock(userId: string, sessionId: string): string {
 
 function projectsListBlock(userId: string): string {
   const projects = getDb()
-    .prepare('SELECT id, name, description, repo_path, type FROM projects WHERE user_id = ?')
-    .all(userId) as Array<{ id: string; name: string; description: string | null; repo_path: string | null; type: string }>;
+    .prepare('SELECT id, name, description, repo_path FROM projects WHERE user_id = ?')
+    .all(userId) as Array<{ id: string; name: string; description: string | null; repo_path: string | null }>;
   if (projects.length === 0) return 'No projects yet.';
-  return `Available projects:\n${projects.map(p => `- ${p.name} (id: ${p.id}, type: ${p.type}${p.repo_path ? '' : ', no repo'})${p.description ? ': ' + p.description : ''}`).join('\n')}`;
+  return `Available projects:\n${projects.map(p => `- ${p.name} (id: ${p.id}${p.repo_path ? '' : ', no repo'})${p.description ? ': ' + p.description : ''}`).join('\n')}`;
 }
 
 function formatUsageLine(label: string, spent: number, budget: number | null): string {
@@ -151,7 +151,7 @@ export function buildContext(userId: string, sessionId: string, intent: Intent):
   const pinnedProjectId = session?.pinned_project_id ?? undefined;
 
   const pinnedProject = pinnedProjectId
-    ? getDb().prepare('SELECT id, name, description, repo_path, enabled_connection_ids, type FROM projects WHERE id = ?')
+    ? getDb().prepare('SELECT id, name, description, repo_path, enabled_connection_ids FROM projects WHERE id = ?')
         .get(pinnedProjectId) as DbProject | undefined
     : undefined;
 

@@ -75,16 +75,16 @@ describe('buildContext', () => {
     getDb().prepare('UPDATE sessions SET summary = NULL WHERE id = ?').run(sessionId);
   });
 
-  it('includes project type in project context', () => {
+  it('includes project name and id in project context', () => {
     const projectId = newId();
     getDb()
-      .prepare('INSERT INTO projects (id, user_id, name, description, enabled_connection_ids, type) VALUES (?,?,?,?,?,?)')
-      .run(projectId, userId, 'video-demo', 'A video project', '[]', 'video');
+      .prepare('INSERT INTO projects (id, user_id, name, description, enabled_connection_ids) VALUES (?,?,?,?,?)')
+      .run(projectId, userId, 'sandbox-demo', 'A sandbox project', '[]');
     getDb().prepare('UPDATE sessions SET pinned_project_id = ? WHERE id = ?').run(projectId, sessionId);
 
     const ctx = buildContext(userId, sessionId, DEFAULT_INTENT);
-    expect(ctx).toContain('type: video');
-    expect(ctx).toContain(`video-demo (id: ${projectId}, type: video`);
+    expect(ctx).toContain('sandbox-demo');
+    expect(ctx).toContain(projectId);
 
     getDb().prepare('UPDATE sessions SET pinned_project_id = NULL WHERE id = ?').run(sessionId);
   });

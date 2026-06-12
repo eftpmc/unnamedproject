@@ -233,4 +233,59 @@ router.get('/:id/media/:filename', (req, res) => {
   stream.pipe(res);
 });
 
+function researchFileTitle(filename: string): string {
+  return filename
+    .replace(/\.md$/, '')
+    .replace(/[-_]/g, ' ')
+    .replace(/\b\w/g, c => c.toUpperCase());
+}
+
+router.get('/:id/research', (req, res) => {
+  const { userId } = req as unknown as AuthedRequest;
+  const project = getProjectForUser(req.params.id, userId);
+  if (!project) { res.status(404).json({ error: 'Not found' }); return; }
+
+  const researchDir = path.join(getDataDir(), 'projects', project.id, 'research');
+  if (!fsSync.existsSync(researchDir)) {
+    res.json({ files: [] });
+    return;
+  }
+
+  const files = fsSync.readdirSync(researchDir)
+    .filter(f => f.endsWith('.md'))
+    .map(name => {
+      const stat = fsSync.statSync(path.join(researchDir, name));
+      return { name, title: researchFileTitle(name), createdAt: stat.birthtimeMs };
+    })
+    .sort((a, b) => b.createdAt - a.createdAt);
+
+  res.json({ files });
+});
+
+router.get('/:id/research/:filename', (req, res) => {
+  const { userId } = req as unknown as AuthedRequest;
+  const project = getProjectForUser(req.params.id, userId);
+  if (!project) { res.status(404).json({ error: 'Not found' }); return; }
+
+  const researchDir = path.join(getDataDir(), 'projects', project.id, 'research');
+  const rawFilename = req.params.filename;
+
+  // Path traversal guard: reject any filename containing slashes or dots that escape
+  if (rawFilename.includes('/') || rawFilename.includes('..')) {
+    res.status(400).json({ error: 'Invalid filename' });
+    return;
+  }
+
+  const filename = path.basename(rawFilename);
+  const filePath = path.join(researchDir, filename);
+
+  if (!fsSync.existsSync(filePath)) {
+    res.status(404).json({ error: 'Not found' });
+    return;
+  }
+
+  const content = fsSync.readFileSync(filePath, 'utf-8');
+  res.type('text/plain').send(content);
+});
+
 export default router;

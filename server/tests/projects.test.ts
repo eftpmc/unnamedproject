@@ -229,3 +229,77 @@ describe('project media', () => {
     expect(res.status).toBe(404);
   });
 });
+
+describe('project research', () => {
+  let researchProjectId: string;
+  let researchToken: string;
+
+  beforeAll(async () => {
+    const reg = await request(app)
+      .post('/auth/register')
+      .send({ email: `research-${Date.now()}@test.com`, password: 'pass' });
+    researchToken = reg.body.token;
+
+    const create = await request(app)
+      .post('/projects')
+      .set('Authorization', `Bearer ${researchToken}`)
+      .send({ name: 'research-test', enabled_connection_ids: [] });
+    researchProjectId = (create.body as { id: string }).id;
+
+    // Seed research files
+    const researchDir = path.join(process.env.DATA_DIR!, 'projects', researchProjectId, 'research');
+    fs.mkdirSync(researchDir, { recursive: true });
+    fs.writeFileSync(path.join(researchDir, 'ai-landscape.md'), '# AI Landscape\nSome findings.');
+    fs.writeFileSync(path.join(researchDir, 'market-analysis.md'), '# Market Analysis\nData here.');
+  });
+
+  it('lists research files for a project', async () => {
+    const res = await request(app)
+      .get(`/projects/${researchProjectId}/research`)
+      .set('Authorization', `Bearer ${researchToken}`);
+    expect(res.status).toBe(200);
+    expect(res.body.files).toHaveLength(2);
+    const names = res.body.files.map((f: { name: string }) => f.name);
+    expect(names).toContain('ai-landscape.md');
+    expect(names).toContain('market-analysis.md');
+    // Should have title and createdAt
+    expect(res.body.files[0]).toHaveProperty('title');
+    expect(res.body.files[0]).toHaveProperty('createdAt');
+  });
+
+  it('returns 200 with empty files array when no research dir exists', async () => {
+    const create2 = await request(app)
+      .post('/projects')
+      .set('Authorization', `Bearer ${researchToken}`)
+      .send({ name: 'empty-research', enabled_connection_ids: [] });
+    const emptyId = (create2.body as { id: string }).id;
+
+    const res = await request(app)
+      .get(`/projects/${emptyId}/research`)
+      .set('Authorization', `Bearer ${researchToken}`);
+    expect(res.status).toBe(200);
+    expect(res.body.files).toHaveLength(0);
+  });
+
+  it('returns markdown content of a research file', async () => {
+    const res = await request(app)
+      .get(`/projects/${researchProjectId}/research/ai-landscape.md`)
+      .set('Authorization', `Bearer ${researchToken}`);
+    expect(res.status).toBe(200);
+    expect(res.text).toContain('AI Landscape');
+  });
+
+  it('returns 404 for a research file that does not exist', async () => {
+    const res = await request(app)
+      .get(`/projects/${researchProjectId}/research/nonexistent.md`)
+      .set('Authorization', `Bearer ${researchToken}`);
+    expect(res.status).toBe(404);
+  });
+
+  it('rejects path traversal in research file request', async () => {
+    const res = await request(app)
+      .get(`/projects/${researchProjectId}/research/..%2F..%2Fetc%2Fpasswd`)
+      .set('Authorization', `Bearer ${researchToken}`);
+    expect(res.status).toBe(400);
+  });
+});

@@ -76,4 +76,36 @@ describe('detectCapabilities', () => {
 
     fs.rmSync(tmpDir, { recursive: true, force: true });
   });
+
+  it('has_media is true when repoPath/out/ has .mp4 files', async () => {
+    const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'caps-test-'));
+    const outDir = path.join(tmpDir, 'out');
+    fs.mkdirSync(outDir, { recursive: true });
+    fs.writeFileSync(path.join(outDir, 'scene.mp4'), 'fake');
+
+    vi.doMock('../db/index.js', () => ({
+      getDataDir: () => '/tmp/no-media-here',
+    }));
+    const { detectCapabilities } = await import('./projectCapabilities.js');
+    const result = detectCapabilities('proj-5', tmpDir);
+    expect(result.has_media).toBe(true);
+
+    fs.rmSync(tmpDir, { recursive: true, force: true });
+  });
+
+  it('has_media is false when repoPath/out/ has no .mp4 files', async () => {
+    const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'caps-test-'));
+    const outDir = path.join(tmpDir, 'out');
+    fs.mkdirSync(outDir, { recursive: true });
+    fs.writeFileSync(path.join(outDir, 'composition.js'), 'fake'); // not an mp4
+
+    vi.doMock('../db/index.js', () => ({
+      getDataDir: () => '/tmp/no-media-here',
+    }));
+    const { detectCapabilities } = await import('./projectCapabilities.js');
+    const result = detectCapabilities('proj-6', tmpDir);
+    expect(result.has_media).toBe(false);
+
+    fs.rmSync(tmpDir, { recursive: true, force: true });
+  });
 });

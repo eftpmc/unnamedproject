@@ -81,7 +81,7 @@ Suggested order: research → setup → implementation → verification → git 
 }
 
 function projectContextBlock(project: DbProject): string {
-  const caps = detectCapabilities(project.id);
+  const caps = detectCapabilities(project.id, project.repo_path);
   const capLabels: string[] = [];
   if (caps.has_remotion) capLabels.push('remotion (can call generate_video)');
   if (caps.has_media) capLabels.push('rendered media available in Studio tab');

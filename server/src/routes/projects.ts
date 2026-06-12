@@ -130,15 +130,15 @@ router.get('/:id/campaigns', (req, res) => {
 router.get('/:id/capabilities', requireAuthHeaderOrQuery, (req, res) => {
   const { userId } = req as unknown as AuthedRequest;
   const project = getDb()
-    .prepare('SELECT id FROM projects WHERE id = ? AND user_id = ?')
-    .get(req.params.id, userId) as { id: string } | undefined;
+    .prepare('SELECT id, repo_path FROM projects WHERE id = ? AND user_id = ?')
+    .get(req.params.id, userId) as { id: string; repo_path: string | null } | undefined;
 
   if (!project) {
     res.status(404).json({ error: 'project not found' });
     return;
   }
 
-  res.json(detectCapabilities(project.id));
+  res.json(detectCapabilities(project.id, project.repo_path));
 });
 
 router.patch('/:id', (req, res) => {

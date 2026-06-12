@@ -240,6 +240,7 @@ export default function ProjectPage() {
                   {pinnedChats.slice(0, 2).map(chat => (
                     <button
                       key={chat.id}
+                      aria-label={`Open chat ${chat.title ?? 'Untitled chat'}`}
                       onClick={() => navigate(`/c/${chat.id}`)}
                       className="flex w-full items-center justify-between px-4 py-3 hover:bg-muted/30 transition-colors text-left"
                     >

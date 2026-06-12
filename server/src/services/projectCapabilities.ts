@@ -9,6 +9,7 @@ export interface ProjectCapabilities {
   has_remotion: boolean;
   has_media: boolean;
   has_graph: boolean;
+  has_research: boolean;
 }
 
 export function detectCapabilities(projectId: string, repoPath?: string | null): ProjectCapabilities {
@@ -30,5 +31,10 @@ export function detectCapabilities(projectId: string, repoPath?: string | null):
     ? fs.existsSync(path.join(repoPath, 'graphify-out', 'graph.json'))
     : false;
 
-  return { has_remotion, has_media, has_graph };
+  // has_research: per-project — orchestrator writes .md files to research/ after deep research
+  const researchDir = path.join(getDataDir(), 'projects', projectId, 'research');
+  const has_research = fs.existsSync(researchDir) &&
+    fs.readdirSync(researchDir).some(f => f.endsWith('.md'));
+
+  return { has_remotion, has_media, has_graph, has_research };
 }

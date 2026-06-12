@@ -188,6 +188,7 @@ export interface ProjectCapabilities {
   has_remotion: boolean;
   has_media: boolean;
   has_graph: boolean;
+  has_research: boolean;
 }
 
 export function getProjectCapabilities(projectId: string): Promise<ProjectCapabilities> {

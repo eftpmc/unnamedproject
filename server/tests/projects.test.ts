@@ -94,6 +94,39 @@ describe('projects', () => {
     expect(res.body).toMatchObject({ has_remotion: expect.any(Boolean), has_media: false });
   });
 
+  it('returns has_research true when research files exist', async () => {
+    const create = await request(app)
+      .post('/projects')
+      .set('Authorization', `Bearer ${token}`)
+      .send({ name: 'research-project', enabled_connection_ids: [] });
+    const id = (create.body as { id: string }).id;
+
+    // Create research directory with a markdown file
+    const researchDir = path.join(process.env.DATA_DIR!, 'projects', id, 'research');
+    fs.mkdirSync(researchDir, { recursive: true });
+    fs.writeFileSync(path.join(researchDir, 'ai-landscape.md'), '# AI Landscape\nSome findings.');
+
+    const res = await request(app)
+      .get(`/projects/${id}/capabilities`)
+      .set('Authorization', `Bearer ${token}`);
+    expect(res.status).toBe(200);
+    expect(res.body.has_research).toBe(true);
+  });
+
+  it('returns has_research false when no research files exist', async () => {
+    const create = await request(app)
+      .post('/projects')
+      .set('Authorization', `Bearer ${token}`)
+      .send({ name: 'no-research-project', enabled_connection_ids: [] });
+    const id = (create.body as { id: string }).id;
+
+    const res = await request(app)
+      .get(`/projects/${id}/capabilities`)
+      .set('Authorization', `Bearer ${token}`);
+    expect(res.status).toBe(200);
+    expect(res.body.has_research).toBe(false);
+  });
+
   it('deletes a project', async () => {
     const res = await request(app)
       .delete(`/projects/${projectId}`)

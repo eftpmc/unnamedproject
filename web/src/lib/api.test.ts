@@ -54,4 +54,11 @@ describe('api', () => {
     const url = mediaFileUrl('proj-1', 'my clip.mp4');
     expect(url).toBe('/projects/proj-1/media/my%20clip.mp4?token=test-token');
   });
+
+  it('mediaFileUrl omits the token query string when unauthenticated', () => {
+    vi.mocked(getToken).mockReturnValue(null);
+    const url = mediaFileUrl('proj-1', 'my clip.mp4');
+    expect(url).toBe('/projects/proj-1/media/my%20clip.mp4');
+    expect(url).not.toContain('?token=');
+  });
 });

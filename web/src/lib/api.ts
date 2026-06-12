@@ -179,5 +179,7 @@ export function getProjectMedia(projectId: string): Promise<{ files: ProjectMedi
 }
 
 export function mediaFileUrl(projectId: string, filename: string): string {
-  return `/projects/${projectId}/media/${encodeURIComponent(filename)}?token=${encodeURIComponent(getToken() ?? '')}`;
+  const base = `/projects/${projectId}/media/${encodeURIComponent(filename)}`;
+  const token = getToken();
+  return token ? `${base}?token=${encodeURIComponent(token)}` : base;
 }

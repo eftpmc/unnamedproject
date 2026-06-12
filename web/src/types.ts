@@ -55,6 +55,7 @@ export interface Project {
   description: string | null;
   repo_path: string | null;
   enabled_connection_ids: string[];
+  type: string;
 }
 
 export interface FileEntry {

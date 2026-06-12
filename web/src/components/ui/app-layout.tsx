@@ -21,13 +21,11 @@ function PageShell({
 function PageHeader({
   title,
   description,
-  breadcrumb,
   actions,
   className,
 }: {
   title: React.ReactNode;
   description?: React.ReactNode;
-  breadcrumb?: React.ReactNode;
   actions?: React.ReactNode;
   className?: string;
 }) {
@@ -38,11 +36,6 @@ function PageHeader({
         className,
       )}
     >
-      {breadcrumb && (
-        <div className="mb-1.5 text-xs text-muted-foreground">
-          {breadcrumb}
-        </div>
-      )}
       <div className="flex min-h-8 items-center justify-between gap-3">
         <h1 className="truncate font-semibold text-foreground text-[15px]">
           {title}

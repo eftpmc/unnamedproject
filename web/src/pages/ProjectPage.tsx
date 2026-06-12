@@ -1,8 +1,8 @@
 import { useState } from 'react';
 import { useParams, useNavigate, Link, useLocation } from 'react-router-dom';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { GitBranch } from 'lucide-react';
-import { getProjects, getProjectCampaigns, createChat, updateChatConfig, deleteProject, updateProject } from '../lib/api.js';
+import { GitBranch, GitGraph, Video } from 'lucide-react';
+import { getProjects, getProjectCampaigns, getProjectCapabilities, createChat, updateChatConfig, deleteProject, updateProject } from '../lib/api.js';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -86,6 +86,13 @@ export default function ProjectPage() {
 
   const { tabs: extraTabs } = useProjectCapabilities(projectId ?? '');
 
+  const { data: caps } = useQuery({
+    queryKey: ['project-capabilities', projectId],
+    queryFn: () => getProjectCapabilities(projectId!),
+    enabled: !!projectId,
+    staleTime: 30_000,
+  });
+
   if (!project) {
     return (
       <PageShell>
@@ -109,7 +116,7 @@ export default function ProjectPage() {
     <PageShell>
       <PageHeader
         title={project.name}
-        description={[project.description, project.repo_path].filter(Boolean).join(' · ') || undefined}
+        description={project.description || undefined}
         actions={
           <Button
             size="sm"
@@ -124,9 +131,9 @@ export default function ProjectPage() {
       {/* Tab strip */}
       <div className="shrink-0 overflow-x-auto border-b border-border/40 px-4 sm:px-6">
         <Tabs value={tab} onValueChange={value => navigate(tabHref(project.id, value as Tab))}>
-          <TabsList variant="line" className="-mx-1 px-1">
+          <TabsList variant="line" className="-mx-1 px-1 self-start">
             {TABS.map(t => (
-              <TabsTrigger key={t.id} value={t.id} className="px-3 py-2 text-xs">
+              <TabsTrigger key={t.id} value={t.id} className="shrink-0 px-3 py-2 text-xs">
                 {t.label}
               </TabsTrigger>
             ))}
@@ -162,6 +169,25 @@ export default function ProjectPage() {
                 </Surface>
               )}
             </div>
+            {(caps?.has_graph || caps?.has_media) && (
+              <div className="mb-5">
+                <div className="text-xs font-medium text-muted-foreground mb-2">Capabilities</div>
+                <div className="flex flex-wrap gap-2">
+                  {caps.has_graph && (
+                    <span className="flex items-center gap-1.5 rounded-lg border border-border/50 bg-background/55 px-2.5 py-1.5 text-xs text-muted-foreground">
+                      <GitGraph size={11} className="shrink-0" />
+                      graph indexed
+                    </span>
+                  )}
+                  {caps.has_media && (
+                    <span className="flex items-center gap-1.5 rounded-lg border border-border/50 bg-background/55 px-2.5 py-1.5 text-xs text-muted-foreground">
+                      <Video size={11} className="shrink-0" />
+                      videos rendered
+                    </span>
+                  )}
+                </div>
+              </div>
+            )}
             {recentCampaign && (
               <div>
                 <div className="text-xs font-medium text-muted-foreground mb-2">Recent campaign</div>

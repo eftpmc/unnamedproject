@@ -32,21 +32,21 @@ function PageHeader({
   return (
     <header
       className={cn(
-        'flex min-h-14 shrink-0 flex-wrap items-center justify-between gap-4 border-b border-border/40 px-4 py-3 sm:px-6',
+        'shrink-0 border-b border-border/40 px-4 py-3 sm:px-6',
         className,
       )}
     >
-      <div className="min-w-0">
+      <div className="flex min-h-8 items-center justify-between gap-3">
         <h1 className="truncate font-semibold text-foreground text-[15px]">
           {title}
         </h1>
-        {description && (
-          <div className="mt-1 max-w-2xl text-sm leading-relaxed text-muted-foreground">
-            {description}
-          </div>
-        )}
+        {actions && <div className="shrink-0">{actions}</div>}
       </div>
-      {actions && <div className="shrink-0">{actions}</div>}
+      {description && (
+        <div className="mt-1 max-w-2xl text-sm leading-relaxed text-muted-foreground">
+          {description}
+        </div>
+      )}
     </header>
   );
 }

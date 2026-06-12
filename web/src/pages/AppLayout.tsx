@@ -50,7 +50,6 @@ export default function AppLayout() {
             className="size-9 rounded-xl border border-border/60 bg-background/80 text-foreground shadow-xs"
           />
         </div>
-        <div className="pointer-events-none absolute inset-x-8 top-0 h-px bg-gradient-to-r from-transparent via-foreground/10 to-transparent" />
         {mainContent}
       </SidebarInset>
     </SidebarProvider>

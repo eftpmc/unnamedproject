@@ -34,7 +34,7 @@ function PageHeader({
   return (
     <header
       className={cn(
-        'flex min-h-14 shrink-0 items-center justify-between gap-4 border-b border-border/40 px-4 py-3 sm:px-6',
+        'flex min-h-14 shrink-0 flex-wrap items-center justify-between gap-4 border-b border-border/40 px-4 py-3 sm:px-6',
         className,
       )}
     >

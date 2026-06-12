@@ -101,6 +101,7 @@ function projectContextBlock(project: DbProject): string {
   const capLabels: string[] = [];
   if (caps.has_remotion) capLabels.push('remotion (can call generate_video)');
   if (caps.has_media) capLabels.push('rendered media available in Studio tab');
+  if (caps.has_graph) capLabels.push('code graph indexed — use project_query for broad codebase questions before reading individual files');
 
   const header = `## Active project: **${project.name}** (id: ${project.id})${project.description ? ' — ' + project.description : ''}`;
 

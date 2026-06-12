@@ -187,6 +187,7 @@ export function mediaFileUrl(projectId: string, filename: string): string {
 export interface ProjectCapabilities {
   has_remotion: boolean;
   has_media: boolean;
+  has_graph: boolean;
 }
 
 export function getProjectCapabilities(projectId: string): Promise<ProjectCapabilities> {

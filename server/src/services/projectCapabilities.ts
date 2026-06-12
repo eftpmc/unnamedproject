@@ -8,6 +8,7 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url));
 export interface ProjectCapabilities {
   has_remotion: boolean;
   has_media: boolean;
+  has_graph: boolean;
 }
 
 export function detectCapabilities(projectId: string, repoPath?: string | null): ProjectCapabilities {
@@ -24,5 +25,10 @@ export function detectCapabilities(projectId: string, repoPath?: string | null):
     has_media = fs.existsSync(outDir) && fs.readdirSync(outDir).some(f => f.toLowerCase().endsWith('.mp4'));
   }
 
-  return { has_remotion, has_media };
+  // has_graph: per-project — graphify writes graph.json here when rebuild_graph is run
+  const has_graph = repoPath
+    ? fs.existsSync(path.join(repoPath, 'graphify-out', 'graph.json'))
+    : false;
+
+  return { has_remotion, has_media, has_graph };
 }

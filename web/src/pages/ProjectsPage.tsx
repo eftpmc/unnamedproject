@@ -1,8 +1,8 @@
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { Plus, FolderGit2, FileText } from 'lucide-react';
-import { getProjects, createProject, getProjectCampaigns } from '../lib/api.js';
+import { Plus, FolderGit2, FileText, Video, GitGraph } from 'lucide-react';
+import { getProjects, createProject, getProjectCampaigns, getProjectCapabilities } from '../lib/api.js';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
@@ -14,6 +14,11 @@ function ProjectCard({ project }: { project: Project }) {
   const { data: campaigns = [] } = useQuery({
     queryKey: ['project-campaigns', project.id],
     queryFn: () => getProjectCampaigns(project.id),
+    staleTime: 30_000,
+  });
+  const { data: caps } = useQuery({
+    queryKey: ['project-capabilities', project.id],
+    queryFn: () => getProjectCapabilities(project.id),
     staleTime: 30_000,
   });
   const runningCount = campaigns.filter(c => c.status === 'running').length;
@@ -39,10 +44,27 @@ function ProjectCard({ project }: { project: Project }) {
         {project.description && (
           <p className="text-xs text-muted-foreground line-clamp-2">{project.description}</p>
         )}
-        <div className="flex items-center gap-3 text-[11px] text-muted-foreground/60">
+        <div className="flex items-center gap-2 text-[11px] text-muted-foreground/60">
           <span>{project.repo_path ? 'code repo' : 'doc project'}</span>
+          {caps?.has_graph && (
+            <span className="flex items-center gap-1">
+              <span className="text-muted-foreground/30">·</span>
+              <GitGraph size={10} className="shrink-0" />
+              graph
+            </span>
+          )}
+          {caps?.has_media && (
+            <span className="flex items-center gap-1">
+              <span className="text-muted-foreground/30">·</span>
+              <Video size={10} className="shrink-0" />
+              videos
+            </span>
+          )}
           {campaigns.length > 0 && (
-            <span>{campaigns.length} campaign{campaigns.length !== 1 ? 's' : ''}</span>
+            <span>
+              <span className="text-muted-foreground/30">·</span>
+              {' '}{campaigns.length} campaign{campaigns.length !== 1 ? 's' : ''}
+            </span>
           )}
         </div>
       </Surface>

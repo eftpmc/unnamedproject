@@ -108,4 +108,38 @@ describe('detectCapabilities', () => {
 
     fs.rmSync(tmpDir, { recursive: true, force: true });
   });
+
+  it('has_graph is true when graphify-out/graph.json exists', async () => {
+    const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'caps-test-'));
+    const graphDir = path.join(tmpDir, 'graphify-out');
+    fs.mkdirSync(graphDir, { recursive: true });
+    fs.writeFileSync(path.join(graphDir, 'graph.json'), '{}');
+
+    vi.doMock('../db/index.js', () => ({
+      getDataDir: () => '/tmp/no-media-here',
+    }));
+    const { detectCapabilities } = await import('./projectCapabilities.js');
+    const result = detectCapabilities('proj-7', tmpDir);
+    expect(result.has_graph).toBe(true);
+
+    fs.rmSync(tmpDir, { recursive: true, force: true });
+  });
+
+  it('has_graph is false when no graphify-out/graph.json', async () => {
+    vi.doMock('../db/index.js', () => ({
+      getDataDir: () => '/tmp/no-media-here',
+    }));
+    const { detectCapabilities } = await import('./projectCapabilities.js');
+    const result = detectCapabilities('proj-8', '/tmp/repo-with-no-graph');
+    expect(result.has_graph).toBe(false);
+  });
+
+  it('has_graph is false when repoPath is not provided', async () => {
+    vi.doMock('../db/index.js', () => ({
+      getDataDir: () => '/tmp/no-media-here',
+    }));
+    const { detectCapabilities } = await import('./projectCapabilities.js');
+    const result = detectCapabilities('proj-9');
+    expect(result.has_graph).toBe(false);
+  });
 });

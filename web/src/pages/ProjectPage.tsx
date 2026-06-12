@@ -108,8 +108,8 @@ export default function ProjectPage() {
   }
 
   const runningCampaigns = campaigns.filter(c => c.status === 'running');
-  const recentCampaign = campaigns[0] ?? null;
   const activeCampaign = runningCampaigns[0] ?? null;
+  const recentCampaigns = campaigns.filter(c => c.id !== activeCampaign?.id);
 
   const TABS: { id: Tab; label: string }[] = [
     { id: 'overview', label: 'Overview' },
@@ -158,7 +158,7 @@ export default function ProjectPage() {
                 <div className="text-xs font-medium text-muted-foreground mb-2">Active Campaign</div>
                 <Link
                   to={`/projects/${projectId}/campaigns/${activeCampaign.id}`}
-                  className="block rounded-xl border-l-2 border-blue-500 border border-border/50 bg-background/55 p-4 transition-colors hover:bg-background/85"
+                  className="block rounded-xl border border-border/50 border-l-2 border-l-blue-500 bg-background/55 p-4 transition-colors hover:bg-background/85"
                 >
                   <div className="flex items-center justify-between">
                     <span className="text-sm font-semibold">{activeCampaign.title}</span>
@@ -193,7 +193,7 @@ export default function ProjectPage() {
             </div>
 
             {/* 3. Recent campaigns */}
-            {campaigns.filter(c => c.id !== activeCampaign?.id).length > 0 && (
+            {recentCampaigns.length > 0 && (
               <div>
                 <div className="flex items-center justify-between mb-2">
                   <div className="text-xs font-medium text-muted-foreground">Recent Campaigns</div>
@@ -205,7 +205,7 @@ export default function ProjectPage() {
                   </Link>
                 </div>
                 <div className="overflow-hidden rounded-xl border border-border/50 bg-background/60 divide-y divide-border/50">
-                  {campaigns.filter(c => c.id !== activeCampaign?.id).slice(0, 3).map(c => (
+                  {recentCampaigns.slice(0, 3).map(c => (
                     <Link
                       key={c.id}
                       to={`/projects/${projectId}/campaigns/${c.id}`}

@@ -255,7 +255,7 @@ router.get('/:id/research', (req, res) => {
     .filter(f => f.endsWith('.md'))
     .map(name => {
       const stat = fsSync.statSync(path.join(researchDir, name));
-      return { name, title: researchFileTitle(name), createdAt: stat.birthtimeMs };
+      return { name, title: researchFileTitle(name), createdAt: stat.birthtimeMs || stat.mtimeMs };
     })
     .sort((a, b) => b.createdAt - a.createdAt);
 
@@ -271,7 +271,7 @@ router.get('/:id/research/:filename', (req, res) => {
   const rawFilename = req.params.filename;
 
   // Path traversal guard: reject any filename containing slashes or dots that escape
-  if (rawFilename.includes('/') || rawFilename.includes('..')) {
+  if (rawFilename.includes('/') || rawFilename.includes('..') || rawFilename.includes('\0')) {
     res.status(400).json({ error: 'Invalid filename' });
     return;
   }

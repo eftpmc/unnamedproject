@@ -34,11 +34,13 @@ export default function ResearchTab({ project }: { project: Project }) {
     );
   }
 
+  const sortedFiles = [...files].sort((a, b) => b.createdAt - a.createdAt);
+
   return (
     <div className="flex h-full min-h-0">
       {/* File list */}
       <div className="w-52 shrink-0 border-r border-border/40 overflow-y-auto">
-        {files.map(file => (
+        {sortedFiles.map(file => (
           <button
             key={file.name}
             onClick={() => setSelectedFile(file.name)}

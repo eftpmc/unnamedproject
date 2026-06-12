@@ -86,4 +86,53 @@ describe('ProjectPage', () => {
     renderPage('/projects/proj-1/chats');
     expect(await screen.findByText('No chats yet')).toBeInTheDocument();
   });
+
+  it('shows active campaign hero when a campaign is running', async () => {
+    const { getProjectCampaigns } = await import('../lib/api.js');
+    (getProjectCampaigns as ReturnType<typeof vi.fn>).mockResolvedValueOnce([
+      {
+        id: 'camp-1',
+        project_id: 'proj-1',
+        session_id: null,
+        title: 'Implement auth flow',
+        status: 'running' as const,
+        created_at: Date.now() - 300_000,
+        completed_at: null,
+      },
+    ]);
+    renderPage('/projects/proj-1');
+    expect(await screen.findByText('Active Campaign')).toBeInTheDocument();
+    expect(screen.getByText('Implement auth flow')).toBeInTheDocument();
+  });
+
+  it('shows recent campaigns section with campaign title on overview', async () => {
+    const { getProjectCampaigns } = await import('../lib/api.js');
+    (getProjectCampaigns as ReturnType<typeof vi.fn>).mockResolvedValueOnce([
+      {
+        id: 'camp-2',
+        project_id: 'proj-1',
+        session_id: null,
+        title: 'Add dark mode',
+        status: 'done' as const,
+        created_at: Date.now() - 3600_000,
+        completed_at: Date.now() - 1800_000,
+      },
+    ]);
+    renderPage('/projects/proj-1');
+    expect(await screen.findByText('Recent Campaigns')).toBeInTheDocument();
+    expect(screen.getByText('Add dark mode')).toBeInTheDocument();
+  });
+
+  it('shows recent chats section on overview when chats are pinned', async () => {
+    renderPage('/projects/proj-1');
+    expect(await screen.findByText('Recent Chats')).toBeInTheDocument();
+    expect(screen.getByText('Fix the render bug')).toBeInTheDocument();
+  });
+
+  it('shows nothing here yet empty panel when no campaigns and no chats', async () => {
+    const { getChats } = await import('../lib/api.js');
+    (getChats as ReturnType<typeof vi.fn>).mockResolvedValueOnce([]);
+    renderPage('/projects/proj-1');
+    expect(await screen.findByText('Nothing here yet')).toBeInTheDocument();
+  });
 });

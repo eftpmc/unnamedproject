@@ -20,9 +20,10 @@ import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { cn } from '@/lib/utils';
 import FileBrowser from '../components/FileBrowser.js';
 import { timeAgo } from '../lib/utils.js';
+import { getProjectTypeConfig } from '../projectTypes.js';
 import type { Project, Campaign } from '../types.js';
 
-type Tab = 'overview' | 'campaigns' | 'files' | 'settings';
+type Tab = string;
 
 const STATUS_BADGE: Record<Campaign['status'], string> = {
   running: 'bg-blue-500/10 text-blue-700 dark:text-blue-300 border-blue-200 dark:border-blue-900',
@@ -32,9 +33,11 @@ const STATUS_BADGE: Record<Campaign['status'], string> = {
 };
 
 function tabFromPath(pathname: string): Tab {
-  if (pathname.endsWith('/campaigns')) return 'campaigns';
-  if (pathname.endsWith('/files')) return 'files';
-  if (pathname.endsWith('/settings')) return 'settings';
+  const segments = pathname.split('/').filter(Boolean);
+  const last = segments[segments.length - 1];
+  if (last === 'campaigns' || last === 'files' || last === 'settings') return last;
+  // Any other trailing segment after the project id is treated as an extra tab id.
+  if (segments.length >= 3 && segments[0] === 'projects') return last;
   return 'overview';
 }
 
@@ -92,10 +95,13 @@ export default function ProjectPage() {
   const runningCampaigns = campaigns.filter(c => c.status === 'running');
   const recentCampaign = campaigns[0] ?? null;
 
+  const extraTabs = getProjectTypeConfig(project.type).extraTabs;
+
   const TABS: { id: Tab; label: string }[] = [
     { id: 'overview', label: 'Overview' },
     { id: 'campaigns', label: `Campaigns${campaigns.length > 0 ? ` (${campaigns.length})` : ''}` },
     { id: 'files', label: 'Files' },
+    ...extraTabs.map(t => ({ id: t.id, label: t.label })),
     { id: 'settings', label: 'Settings' },
   ];
 
@@ -235,6 +241,14 @@ export default function ProjectPage() {
             <FileBrowser projectId={projectId!} />
           </div>
         )}
+
+        {extraTabs.map(t => (
+          tab === t.id && (
+            <div key={t.id} className="p-4 sm:p-6">
+              <t.component project={project} />
+            </div>
+          )
+        ))}
 
         {tab === 'settings' && (
           <div className="p-4 sm:p-6 max-w-lg">

@@ -15,7 +15,6 @@ import {
   SidebarMenu,
   SidebarMenuButton,
   SidebarMenuItem,
-  SidebarSeparator,
   useSidebar,
 } from '@/components/ui/sidebar';
 import UserMenu from './UserMenu.js';
@@ -85,8 +84,6 @@ export default function Sidebar({ className, onNavigate }: SidebarProps) {
           New chat
         </button>
       </SidebarHeader>
-
-      <SidebarSeparator className="mx-3 bg-sidebar-border/60" />
 
       <SidebarContent>
         <SidebarGroup className="pb-1">

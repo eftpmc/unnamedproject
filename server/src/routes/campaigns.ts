@@ -6,6 +6,7 @@ import {
   getCampaignById,
   getCampaignTasks,
   getProjectForUser,
+  getRecentCampaignsForUser,
   resumeCampaign,
   type DbCampaignTask,
 } from '../db/index.js';
@@ -15,6 +16,11 @@ import { broadcast } from '../services/socket.js';
 
 const router = Router();
 router.use(requireAuth);
+
+router.get('/', (req, res) => {
+  const { userId } = req as AuthedRequest;
+  res.json({ campaigns: getRecentCampaignsForUser(userId) });
+});
 
 router.post('/', (req, res) => {
   const { userId } = req as AuthedRequest;

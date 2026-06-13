@@ -19,13 +19,48 @@ import { runCreateCampaign } from '../tools/create_campaign.js';
 import { broadcast } from './socket.js';
 import { newId } from '../lib/ids.js';
 import { DEFAULT_EFFORT, getAnthropicKey, resolveModelForTurn, listClaudeModels, type EffortLevel } from './anthropic.js';
-import { extractIntent, DEFAULT_INTENT } from './intent.js';
-import { buildContext, getToolSubset } from './context.js';
+import { classifyIntent } from './intent.js';
+import { buildContext } from './context.js';
+import { toolDefinitions } from '../tools/definitions.js';
 import { extractAndRemember } from './extract-memory.js';
 import { renderVideo, type VideoScene } from './video.js';
 import { createTextArtifact, listProjectArtifacts, getArtifactById, readArtifactContent, registerFileAsArtifact } from './artifacts.js';
 import { listMcpTools } from '../lib/mcp-pool.js';
 import { maybeDistill } from './distill.js';
+
+function buildCampaignPriorContext(campaignTaskId: string): string | null {
+  const campaign = getCampaignForTask(campaignTaskId);
+  if (!campaign) return null;
+
+  const currentTask = getDb()
+    .prepare('SELECT position FROM campaign_tasks WHERE id = ?')
+    .get(campaignTaskId) as { position: number } | undefined;
+  if (!currentTask) return null;
+
+  const priorTasks = getDb()
+    .prepare(`
+      SELECT ct.title, ct.execution_id
+      FROM campaign_tasks ct
+      WHERE ct.campaign_id = ? AND ct.position < ? AND ct.status = 'done'
+      ORDER BY ct.position
+    `)
+    .all(campaign.id, currentTask.position) as Array<{ title: string; execution_id: string | null }>;
+
+  if (priorTasks.length === 0) return null;
+
+  const MAX_RESULT_CHARS = 2000;
+  const parts = priorTasks.map(t => {
+    if (!t.execution_id) return `### ${t.title}\n(no output recorded)`;
+    const ex = getExecutionById(t.execution_id);
+    if (!ex?.result) return `### ${t.title}\n(no output recorded)`;
+    const result = ex.result.length > MAX_RESULT_CHARS
+      ? ex.result.slice(0, MAX_RESULT_CHARS) + '\n…(truncated)'
+      : ex.result;
+    return `### ${t.title}\n${result}`;
+  });
+
+  return `## Prior campaign task results\nCampaign: "${campaign.title}"\n\n${parts.join('\n\n')}`;
+}
 
 async function maybeGenerateSessionTitle(userId: string, sessionId: string): Promise<void> {
   // Only generate if session has no title yet
@@ -200,9 +235,11 @@ async function dispatchTool(
         let ccGraphKey: string | null = null;
         try { ccGraphKey = getAnthropicKey(userId); } catch { /* none configured */ }
         const ccCtx: AgentPipelineCtx = { userId, tool: 'claude_code', repoPath: project.repo_path, projectId: project.id, graphKey: ccGraphKey };
+        const ccPrior = ccTaskId ? buildCampaignPriorContext(ccTaskId) : null;
+        const ccPrompt = ccPrior ? `${toolInput.prompt as string}\n\n${ccPrior}` : toolInput.prompt as string;
         await runAgentPipeline(ccCtx, async () => {
           const ccResult = await invokeClaudeCode(
-            { prompt: toolInput.prompt as string, model: toolInput.model as string | undefined },
+            { prompt: ccPrompt, model: toolInput.model as string | undefined },
             { userId, executionId, repoPath: ccWorktree.worktree_path, apiKey: ccApiKey, resumeSessionId: ccWorktree.claude_session_id, mcpServers: getMcpServersForUser(userId), permissionProfile: getPermissionProfile(userId) }
           );
           if (ccResult.sessionId) setAgentWorktreeSession(ccWorktree.id, 'claude', ccResult.sessionId);
@@ -236,9 +273,11 @@ async function dispatchTool(
         let codexGraphKey: string | null = null;
         try { codexGraphKey = getAnthropicKey(userId); } catch { /* none configured */ }
         const codexCtx: AgentPipelineCtx = { userId, tool: 'codex', repoPath: project.repo_path, projectId: project.id, graphKey: codexGraphKey };
+        const codexPrior = codexTaskId ? buildCampaignPriorContext(codexTaskId) : null;
+        const codexPrompt = codexPrior ? `${toolInput.prompt as string}\n\n${codexPrior}` : toolInput.prompt as string;
         await runAgentPipeline(codexCtx, async () => {
           const codexResult = await invokeCodex(
-            { prompt: toolInput.prompt as string, model: toolInput.model as string | undefined },
+            { prompt: codexPrompt, model: toolInput.model as string | undefined },
             { userId, executionId, repoPath: codexWorktree.worktree_path, apiKey: codexApiKey, resumeSessionId: codexWorktree.codex_session_id, mcpServers: getMcpServersForUser(userId), permissionProfile: getPermissionProfile(userId) }
           );
           if (codexResult.sessionId) setAgentWorktreeSession(codexWorktree.id, 'codex', codexResult.sessionId);
@@ -354,7 +393,7 @@ async function dispatchTool(
           title: toolInput.title as string | undefined,
           kind: toolInput.kind as string | undefined,
         });
-        result = JSON.stringify({ artifact_id: art.id, title: art.title, kind: art.kind, url: art.url });
+        result = JSON.stringify({ artifact_id: art.id, project_id: toolInput.project_id as string, title: art.title, kind: art.kind, mime_type: art.mime_type, url: art.url });
         if (regTaskId) finishCampaignTask(userId, regTaskId, result);
         break;
       }
@@ -460,7 +499,7 @@ async function dispatchTool(
           source_task_id: artifactTaskId ?? null,
           metadata: { producer: 'create_artifact', execution_id: executionId },
         });
-        result = JSON.stringify({ artifact_id: artifact.id, title: artifact.title, kind: artifact.kind });
+        result = JSON.stringify({ artifact_id: artifact.id, project_id: projectId, title: artifact.title, kind: artifact.kind, mime_type: artifact.mime_type });
         if (artifactTaskId) finishCampaignTask(userId, artifactTaskId, result);
         break;
       }
@@ -522,12 +561,14 @@ async function dispatchTool(
             result: null as string | null,
           })),
         }, null, 2);
-        // attach result strings from executions
+        // attach result strings from executions (truncated — use get_execution_output for full log)
+        const SUMMARY_CAP = 500;
         const parsed = JSON.parse(result) as { tasks: Array<{ execution_id: string | null; result: string | null }> };
         for (const t of parsed.tasks) {
           if (t.execution_id) {
             const ex = getExecutionById(t.execution_id);
-            t.result = ex?.result ?? null;
+            const r = ex?.result ?? null;
+            t.result = r && r.length > SUMMARY_CAP ? r.slice(0, SUMMARY_CAP) + '…(use get_execution_output for full output)' : r;
           }
         }
         result = JSON.stringify(parsed, null, 2);
@@ -655,15 +696,14 @@ export async function runAgentTurn(userId: string, sessionId: string, userMessag
 
   const lastUserMsg = [...history].reverse().find(m => m.role === 'user')?.content ?? '';
 
-  const [intent] = await Promise.all([
-    extractIntent(lastUserMsg, apiKey).catch(() => ({ ...DEFAULT_INTENT })),
-    listClaudeModels(userId).catch(() => {}),
-  ]);
+  // Fire and forget — warms the model list cache for the UI
+  listClaudeModels(userId).catch(() => {});
 
+  const intent = classifyIntent(lastUserMsg);
   const model = session?.model ?? await resolveModelForTurn(client, intent, effort, apiKey);
 
   const systemPrompt = buildContext(userId, sessionId, intent);
-  const tools = getToolSubset(intent);
+  const tools = toolDefinitions;
 
   // When a session summary exists, use a sliding window of the last 20 messages
   // to keep context bounded; prepend the summary as a synthetic exchange.

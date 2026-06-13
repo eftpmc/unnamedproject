@@ -8,6 +8,7 @@ import ChatsPage from './pages/ChatsPage.js';
 import ProjectsPage from './pages/ProjectsPage.js';
 import ProjectPage from './pages/ProjectPage.js';
 import CampaignPage from './pages/CampaignPage.js';
+import ActivityPage from './pages/ActivityPage.js';
 import { TooltipProvider } from '@/components/ui/tooltip';
 
 const queryClient = new QueryClient({
@@ -26,6 +27,7 @@ const router = createBrowserRouter([
       { path: 'c', element: null },
       { path: 'c/:chatId', element: null },
       { path: 'chats', element: <ChatsPage /> },
+      { path: 'activity', element: <ActivityPage /> },
       { path: 'projects', element: <ProjectsPage /> },
       { path: 'projects/:projectId', element: <ProjectPage /> },
       { path: 'projects/:projectId/campaigns', element: <ProjectPage /> },

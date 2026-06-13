@@ -2,7 +2,7 @@ import { useState } from 'react';
 import { useParams, useNavigate, Link, useLocation } from 'react-router-dom';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { FileText, GitBranch, GitGraph, Video } from 'lucide-react';
-import { getProjects, getProjectCampaigns, getProjectCapabilities, createChat, updateChatConfig, deleteProject, updateProject, getChats } from '../lib/api.js';
+import { getProjects, getProjectCampaigns, getProjectCapabilities, createChat, updateChatConfig, deleteProject, updateProject, getChats, getProjectFile } from '../lib/api.js';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -95,6 +95,14 @@ export default function ProjectPage() {
     queryFn: () => getProjectCapabilities(projectId!),
     enabled: !!projectId,
     staleTime: 30_000,
+  });
+
+  const { data: workspaceMd } = useQuery({
+    queryKey: ['project-workspace-md', projectId],
+    queryFn: () => getProjectFile(projectId!, 'workspace.md'),
+    enabled: !!projectId,
+    staleTime: 60_000,
+    retry: false,
   });
 
   if (!project) {
@@ -251,7 +259,17 @@ export default function ProjectPage() {
               </div>
             )}
 
-            {/* 5. Capabilities */}
+            {/* 5. workspace.md */}
+            {workspaceMd?.content && (
+              <div>
+                <div className="text-xs font-medium text-muted-foreground mb-2">workspace.md</div>
+                <div className="rounded-xl border border-border/50 bg-background/55 px-4 py-3">
+                  <pre className="text-xs text-foreground/80 whitespace-pre-wrap font-sans leading-relaxed">{workspaceMd.content}</pre>
+                </div>
+              </div>
+            )}
+
+            {/* 6. Capabilities */}
             {(caps?.has_graph || caps?.has_media || caps?.has_research || project.repo_path) && (
               <div>
                 <div className="text-xs font-medium text-muted-foreground mb-2">Capabilities</div>
@@ -284,7 +302,7 @@ export default function ProjectPage() {
               </div>
             )}
 
-            {/* 6. Empty state */}
+            {/* 7. Empty state */}
             {campaigns.length === 0 && pinnedChats.length === 0 && (
               <EmptyPanel
                 title="Nothing here yet"

@@ -37,12 +37,14 @@ function baseBlock(intent: Intent): string {
 - User-approved (proceed and the system handles the pause): git_op push, write_file, github_api write ops, delete_project, delete_scheduled_task
 - If a task has multiple coordinated workstreams: call create_campaign first, then dispatch tasks with their campaign_task_id. Never dispatch parallel agents without a campaign tracking them.
 - Never ask the user for permission on an auto-approved action — just do it.
+- After any invoke_claude_code or invoke_codex succeeds: immediately run git_op add then git_op commit. This is mandatory. Never ask "should I commit?" or "would you like me to commit?" — that question is a protocol violation. Commit first, summarize after.
 
 ## State awareness
-Before starting work on a project you haven't touched recently:
-- Call list_campaigns to check past campaigns — avoid recreating work that already exists or is running.
-- Call list_artifacts to see what's already been produced before generating a new report or research output.
+Before starting work on the active project, check what already exists there:
+- Call list_campaigns with the active project_id — avoid recreating campaigns that already exist or are running.
+- Call list_artifacts with the active project_id — see what's already been produced before generating a new report or research output.
 - If a campaign shows status 'error', use resume_campaign to reset failed tasks and re-dispatch only those — don't create a duplicate campaign.
+Only check other projects when the user's request explicitly involves them.
 
 ## MCP connections
 Before calling mcp_call, use list_connections to discover available MCP servers and their tool names. Never guess a connection_id or tool name. Use test_connection to verify an MCP server is reachable before dispatching dependent work.
@@ -88,7 +90,16 @@ Sub-agent model hints (pass as model param to invoke_claude_code):
 
 Agent brief quality: always include — what already exists (from project_query, search_files, or research), what to build, and what "done" means.
 
-Result evaluation: after invoke_claude_code or invoke_codex returns, read the result for failure signals (test failures, errors, "could not", partial completion). If present, send a targeted follow-up correction before committing. On confirmed success: run git_op add then git_op commit. Do not ask permission to commit.
+Campaign task chaining: when a campaign task runs, the system automatically injects the results of all previously completed tasks in the same campaign into the agent's prompt. You do not need to manually relay prior results — just write each task's brief as if the agent will have access to what came before. For sequenced campaigns, write the dependent task's prompt to say "build on the prior task's output" or similar — the injected context will provide the actual content.
+
+## Mandatory post-coding flow (every invoke_claude_code or invoke_codex call)
+After the agent returns, always follow this exact sequence — do not skip any step:
+1. Read the result for failure signals (test failures, errors, "could not", partial completion). If present, send a targeted follow-up correction, then repeat from step 1.
+2. Run git_op with op=add (project_id = same project). No permission needed.
+3. Run git_op with op=commit, message describing what was done. No permission needed.
+4. Only after the commit is confirmed: report to the user and summarize what changed.
+
+The user cannot see or access work that is not committed. Do not summarize or report as done before step 3 completes.
 
 Choosing invoke_claude_code vs invoke_codex: pick whichever fits the task best — both are capable coding agents. Use the agent usage section to weigh cost/budget when the two are otherwise a toss-up, and consider a parallel second approach (one task on each) for tasks that benefit from comparing two independent implementations.`;
 
@@ -112,7 +123,9 @@ Research often improves creative work — check for relevant context before gene
     case 'multi':
       return `## Multi-domain tasks
 Always use create_campaign to track coordinated work before dispatching any tasks.
-Suggested order: research → setup → implementation → verification → git → github.`;
+Suggested order: research → setup → implementation → verification → git → github.
+
+Campaign task chaining: prior task results are automatically injected into each subsequent task's prompt. Write each task brief assuming the agent will have full context from tasks that ran before it — no need to manually pass outputs forward.`;
 
     default:
       return '';

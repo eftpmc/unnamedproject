@@ -153,12 +153,20 @@ export function updateScheduledTask(id: string, body: { enabled?: boolean; inter
   return request(`/scheduled-tasks/${id}`, { method: 'PATCH', body: JSON.stringify(body) });
 }
 
+export function deleteScheduledTask(id: string): Promise<void> {
+  return request(`/scheduled-tasks/${id}`, { method: 'DELETE' });
+}
+
 export function runScheduledTask(id: string): Promise<void> {
   return request(`/scheduled-tasks/${id}/run`, { method: 'POST' });
 }
 
 export function getProjectCampaigns(projectId: string): Promise<Campaign[]> {
   return request(`/projects/${projectId}/campaigns`);
+}
+
+export function getAllCampaigns(): Promise<{ campaigns: (Campaign & { project_name: string })[] }> {
+  return request('/campaigns');
 }
 
 export function getCampaign(campaignId: string): Promise<{ campaign: Campaign; tasks: CampaignTask[] }> {

@@ -4,6 +4,7 @@ import remarkGfm from 'remark-gfm';
 import { Pencil } from 'lucide-react';
 import ExecutionCard from './ExecutionCard.js';
 import CampaignCard from './CampaignCard.js';
+import ArtifactPreviewCard from './ArtifactPreviewCard.js';
 import type { Message } from '../types.js';
 import { Card, CardContent } from '@/components/ui/card';
 
@@ -66,15 +67,27 @@ function stripEmoji(text: string): string {
 }
 
 function renderExecutionCard(exec: InlineExecution) {
-  if (exec.tool === 'create_campaign' && exec.status === 'done' && exec.result) {
+  if (exec.status === 'done' && exec.result) {
     try {
-      const parsed = JSON.parse(exec.result) as { campaign_id: string; project_id: string };
-      if (parsed.campaign_id && parsed.project_id) {
+      const parsed = JSON.parse(exec.result) as Record<string, unknown>;
+      if (exec.tool === 'create_campaign' && parsed.campaign_id && parsed.project_id) {
         return (
           <CampaignCard
             key={exec.executionId}
-            campaignId={parsed.campaign_id}
-            projectId={parsed.project_id}
+            campaignId={parsed.campaign_id as string}
+            projectId={parsed.project_id as string}
+          />
+        );
+      }
+      if ((exec.tool === 'create_artifact' || exec.tool === 'register_artifact') && parsed.artifact_id && parsed.project_id) {
+        return (
+          <ArtifactPreviewCard
+            key={exec.executionId}
+            artifactId={parsed.artifact_id as string}
+            projectId={parsed.project_id as string}
+            title={parsed.title as string}
+            kind={parsed.kind as string}
+            mimeType={parsed.mime_type as string | undefined}
           />
         );
       }
@@ -164,12 +177,12 @@ export default function MessageList({ messages, executions, streamingIds, sessio
             ) : (
               <div className="flex max-w-[94%] flex-col sm:max-w-[86%]">
                 {(msg.content.trim() || isStreaming) && (
-                  <div className="w-fit rounded-lg border border-border/35 bg-background/55 px-4 py-3 text-[15px] leading-7 text-foreground shadow-xs">
+                  <div className="text-[14px] leading-7 text-foreground/75">
                     <ReactMarkdown remarkPlugins={[remarkGfm]} components={markdownComponents}>
                       {stripEmoji(msg.content)}
                     </ReactMarkdown>
                     {isStreaming && (
-                      <span className="ml-1 inline-block h-4 w-1.5 animate-pulse align-middle rounded-full bg-foreground/35" />
+                      <span className="ml-1 inline-block h-3.5 w-1 animate-pulse align-middle rounded-full bg-foreground/30" />
                     )}
                   </div>
                 )}

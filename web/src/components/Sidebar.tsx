@@ -1,6 +1,6 @@
 import { useNavigate, useLocation } from 'react-router-dom';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
-import { Plus, MessagesSquare, LayoutGrid } from 'lucide-react';
+import { Plus, MessagesSquare, LayoutGrid, Activity } from 'lucide-react';
 import { getChats, createChat } from '../lib/api.js';
 import { timeAgo, cn } from '../lib/utils.js';
 import {
@@ -24,9 +24,10 @@ const RECENT_COUNT = 5;
 interface SidebarProps {
   className?: string;
   onNavigate?: () => void;
+  pendingApprovalCount?: number;
 }
 
-export default function Sidebar({ className, onNavigate }: SidebarProps) {
+export default function Sidebar({ className, onNavigate, pendingApprovalCount = 0 }: SidebarProps) {
   const navigate = useNavigate();
   const location = useLocation();
   const queryClient = useQueryClient();
@@ -89,6 +90,13 @@ export default function Sidebar({ className, onNavigate }: SidebarProps) {
           <SidebarGroupContent>
             <SidebarMenu>
               <NavItem
+                icon={<Activity size={15} strokeWidth={1.75} />}
+                label="Activity"
+                active={isActive('/activity')}
+                onClick={() => go('/activity')}
+                badge={pendingApprovalCount > 0 ? pendingApprovalCount : undefined}
+              />
+              <NavItem
                 icon={<MessagesSquare size={15} strokeWidth={1.75} />}
                 label="Chats"
                 active={isActive('/chats')}
@@ -142,11 +150,12 @@ export default function Sidebar({ className, onNavigate }: SidebarProps) {
   );
 }
 
-function NavItem({ icon, label, active, onClick }: {
+function NavItem({ icon, label, active, onClick, badge }: {
   icon: React.ReactNode;
   label: string;
   active: boolean;
   onClick: () => void;
+  badge?: number;
 }) {
   return (
     <SidebarMenuItem>
@@ -159,7 +168,12 @@ function NavItem({ icon, label, active, onClick }: {
         )}
       >
         {icon}
-        <span>{label}</span>
+        <span className="flex-1">{label}</span>
+        {badge != null && (
+          <span className="ml-auto flex h-4 min-w-4 items-center justify-center rounded-full bg-amber-500 px-1 text-[10px] font-semibold text-white">
+            {badge}
+          </span>
+        )}
       </SidebarMenuButton>
     </SidebarMenuItem>
   );

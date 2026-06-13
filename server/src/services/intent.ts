@@ -1,5 +1,3 @@
-import Anthropic from '@anthropic-ai/sdk';
-
 export interface Intent {
   domain: 'code' | 'writing' | 'research' | 'creative' | 'image' | 'multi' | 'general';
   complexity: 'low' | 'medium' | 'high';
@@ -20,120 +18,51 @@ export const DEFAULT_INTENT: Intent = {
   ambiguous: true,
 };
 
-const KNOWN_TOOLS = [
-  'invoke_claude_code',
-  'invoke_codex',
-  'github_api',
-  'mcp_call',
-  'git_op',
-  'project_query',
-  'rebuild_graph',
-  'remember',
-  'recall',
-  'forget',
-  'create_project',
-  'update_project',
-  'delete_project',
-  'read_file',
-  'search_files',
-  'list_dir',
-  'write_file',
-  'create_artifact',
-  'register_artifact',
-  'list_artifacts',
-  'read_artifact',
-  'list_connections',
-  'test_connection',
-  'list_chats',
-  'read_chat',
-  'create_campaign',
-  'resume_campaign',
-  'list_campaigns',
-  'get_campaign',
-  'get_execution_output',
-  'list_scheduled_tasks',
-  'create_scheduled_task',
-  'update_scheduled_task',
-  'delete_scheduled_task',
-  'generate_video',
-  'web_search',
-  'web_fetch',
-];
+const CODE_RE = /\b(debug|fix|implement|build|refactor|test|deploy|git|pull.?request|branch|api|function|class|component|module|repo|codebase|script|server|database|sql|typescript|javascript|python|rust|go|java|css|html|endpoint|bug|error|crash|feature|install|package|cli|ci|cd|lint|type.?check)\b/i;
+const RESEARCH_RE = /\b(what is|what are|how does|how do|explain|compare|find|research|look up|who is|when did|why does|summarize|overview|difference between)\b/i;
+const WRITING_RE = /\b(write|draft|email|document|spec|essay|blog|article|proposal|readme|changelog|release.?notes|cover.?letter|announcement)\b/i;
+const CREATIVE_RE = /\b(story|poem|creative|brainstorm|idea|fiction|imagine|design|concept|name|slogan|tagline)\b/i;
+const IMAGE_RE = /\b(generate.{0,10}image|draw|illustrate|render.{0,10}image|dalle|midjourney)\b/i;
+const HIGH_COMPLEXITY_RE = /\b(architecture|migrate|redesign|overhaul|comprehensive|entire|refactor.{0,20}(all|whole|entire)|multiple.{0,20}(file|system|service)|campaign|parallel|series|sequence)\b/i;
+const CAMPAIGN_RE = /\b(campaign|multiple.{0,20}task|parallel.{0,20}task|series.{0,20}(of|task)|batch|pipeline)\b/i;
 
-const INTENT_SYSTEM = `You are a routing classifier. Given a user message, output JSON only — no prose, no markdown.
+export function classifyIntent(userMessage: string): Intent {
+  const msg = userMessage;
+  const words = msg.trim().split(/\s+/).length;
 
-Return exactly this shape:
-{"domain":"code|writing|research|creative|image|multi|general","complexity":"low|medium|high","model":"haiku|sonnet|fable|opus","tools":[],"scope":"inline|delegate|campaign","needs_research":false,"ambiguous":false}
+  const isCode = CODE_RE.test(msg);
+  const isResearch = RESEARCH_RE.test(msg);
+  const isWriting = WRITING_RE.test(msg);
+  const isCreative = CREATIVE_RE.test(msg);
+  const isImage = IMAGE_RE.test(msg);
 
-Domain:
-- code: coding, debugging, refactoring, software projects
-- writing: drafts, docs, essays, emails, specs
-- research: questions, lookups, fact-finding, comparisons
-- creative: stories, poetry, brainstorming, creative content (non-image)
-- image: image generation requests
-- multi: clearly spans multiple domains
-- general: unclear, conversational, or greeting
+  const signalCount = [isCode, isResearch, isWriting, isCreative].filter(Boolean).length;
 
-Complexity:
-- low: quick answer, trivial edit, single file
-- medium: a feature, a few files, standard work
-- high: architecture, large refactor, multi-system coordination
+  const domain: Intent['domain'] = isImage ? 'image'
+    : signalCount > 1 ? 'multi'
+    : isCode ? 'code'
+    : isResearch ? 'research'
+    : isWriting ? 'writing'
+    : isCreative ? 'creative'
+    : 'general';
 
-Model:
-- haiku: any low complexity
-- sonnet: medium complexity anything
-- fable: high complexity creative or writing
-- opus: high complexity code, architecture, or deep analysis
+  const isHighComplexity = HIGH_COMPLEXITY_RE.test(msg) || words > 80;
+  const isLowComplexity = words < 15 && !isCode && !CAMPAIGN_RE.test(msg);
 
-Scope:
-- inline: respond directly with no tool delegation
-- delegate: one coding or creative agent call
-- campaign: multiple independent or sequenced tasks
+  const complexity: Intent['complexity'] = isHighComplexity ? 'high' : isLowComplexity ? 'low' : 'medium';
+  const model: Intent['model'] = isHighComplexity ? 'opus' : isLowComplexity ? 'haiku' : 'sonnet';
 
-tools: hint at likely tools from:
-- agents/code: invoke_claude_code, invoke_codex, git_op, github_api
-- project/code context: project_query, rebuild_graph, search_files, read_file, list_dir, write_file
-- campaigns: create_campaign, resume_campaign, list_campaigns, get_campaign, get_execution_output
-- MCP/connections: list_connections, test_connection, mcp_call
-- artifacts: create_artifact, register_artifact, list_artifacts, read_artifact
-- memory/chats: remember, recall, forget, list_chats, read_chat
-- scheduled work: list_scheduled_tasks, create_scheduled_task, update_scheduled_task, delete_scheduled_task
-- research/media: web_search, web_fetch, generate_video
+  const scope: Intent['scope'] = CAMPAIGN_RE.test(msg) ? 'campaign'
+    : (isCode && !isLowComplexity) ? 'delegate'
+    : 'inline';
 
-Set ambiguous=true and use general/medium/sonnet/inline defaults when the message is unclear.`;
-
-export async function extractIntentWithClient(userMessage: string, client: Anthropic): Promise<Intent> {
-  try {
-    const response = await client.messages.create({
-      model: 'claude-haiku-4-5-20251001',
-      max_tokens: 256,
-      system: INTENT_SYSTEM,
-      messages: [{ role: 'user', content: userMessage.slice(0, 1000) }],
-    });
-    const text = response.content[0].type === 'text' ? response.content[0].text.trim() : '';
-    const parsed = JSON.parse(text) as Partial<Intent>;
-    return {
-      domain: (['code','writing','research','creative','image','multi','general'] as const).includes(parsed.domain as never)
-        ? parsed.domain as Intent['domain']
-        : DEFAULT_INTENT.domain,
-      complexity: (['low','medium','high'] as const).includes(parsed.complexity as never)
-        ? parsed.complexity as Intent['complexity']
-        : DEFAULT_INTENT.complexity,
-      model: (['haiku','sonnet','fable','opus'] as const).includes(parsed.model as never)
-        ? parsed.model as Intent['model']
-        : DEFAULT_INTENT.model,
-      tools: Array.isArray(parsed.tools) ? parsed.tools.filter((t): t is string => typeof t === 'string' && KNOWN_TOOLS.includes(t)) : [],
-      scope: (['inline','delegate','campaign'] as const).includes(parsed.scope as never)
-        ? parsed.scope as Intent['scope']
-        : DEFAULT_INTENT.scope,
-      needs_research: typeof parsed.needs_research === 'boolean' ? parsed.needs_research : false,
-      ambiguous: typeof parsed.ambiguous === 'boolean' ? parsed.ambiguous : DEFAULT_INTENT.ambiguous,
-    };
-  } catch {
-    return { ...DEFAULT_INTENT };
-  }
-}
-
-export async function extractIntent(userMessage: string, apiKey: string): Promise<Intent> {
-  return extractIntentWithClient(userMessage, new Anthropic({ apiKey }));
+  return {
+    domain,
+    complexity,
+    model,
+    tools: [],
+    scope,
+    needs_research: isResearch,
+    ambiguous: signalCount === 0 && !isImage,
+  };
 }

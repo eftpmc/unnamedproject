@@ -15,6 +15,7 @@ import { ContentColumn, PageBody, PageHeader, PageSection, PageShell } from '@/c
 import {
   createConnection,
   deleteConnection,
+  deleteScheduledTask,
   getConnections,
   getMemory,
   getProjects,
@@ -221,6 +222,7 @@ export default function Settings() {
   const [claudeCodeBudget, setClaudeCodeBudget] = useState('');
   const [codexBudget, setCodexBudget] = useState('');
   const [agentBudgetsError, setAgentBudgetsError] = useState('');
+  const [taskIntervals, setTaskIntervals] = useState<Record<string, string>>({});
 
   const inputCls = 'text-sm';
   const textareaCls = 'text-sm font-mono resize-y';
@@ -332,6 +334,11 @@ export default function Settings() {
 
   const runTaskMutation = useMutation({
     mutationFn: runScheduledTask,
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['scheduledTasks'] }),
+  });
+
+  const deleteTaskMutation = useMutation({
+    mutationFn: deleteScheduledTask,
     onSuccess: () => qc.invalidateQueries({ queryKey: ['scheduledTasks'] }),
   });
 
@@ -714,32 +721,80 @@ export default function Settings() {
           <div className="text-muted-foreground/70 text-sm">No scheduled tasks.</div>
         ) : (
           <div className="grid gap-2">
-            {scheduledTasks.map(task => (
-              <div key={task.id} className={rowCls}>
-                <div className="flex-1">
-                  <div className="text-sm font-medium">
-                    {task.type === 'reorganize_memory' ? 'Memory reorganization' : task.type}
+            {scheduledTasks.map(task => {
+              const intervalVal = taskIntervals[task.id] ?? String(task.interval_hours);
+              const intervalDirty = intervalVal !== String(task.interval_hours);
+              const nextRun = task.enabled ? new Date(task.next_run_at * 1000).toLocaleString() : null;
+              return (
+                <div key={task.id} className="rounded-xl border border-border/50 bg-card px-4 py-3 flex flex-col gap-2">
+                  <div className="flex items-start gap-3">
+                    <div className="flex-1 min-w-0">
+                      <div className="text-sm font-medium">
+                        {task.type === 'reorganize_memory' ? 'Memory reorganization' : task.type}
+                      </div>
+                      <div className="text-muted-foreground/70 text-xs mt-0.5">
+                        {task.last_run_at
+                          ? `Last ran ${new Date(task.last_run_at * 1000).toLocaleString()}`
+                          : 'Never run'}
+                        {nextRun && ` · Next: ${nextRun}`}
+                      </div>
+                      {task.prompt && (
+                        <div className="text-xs text-muted-foreground/60 mt-1 truncate" title={task.prompt}>
+                          Prompt: {task.prompt}
+                        </div>
+                      )}
+                    </div>
+                    <div className="flex items-center gap-2 shrink-0">
+                      <Button variant="ghost" size="sm" onClick={() => runTaskMutation.mutate(task.id)}>
+                        Run now
+                      </Button>
+                      <label className="flex items-center gap-1.5 cursor-pointer">
+                        <input
+                          type="checkbox"
+                          checked={!!task.enabled}
+                          onChange={e => updateTaskMutation.mutate({ id: task.id, body: { enabled: e.target.checked } })}
+                          className="h-4 w-4 rounded border-border bg-background accent-primary"
+                        />
+                        <span className="text-sm text-foreground/70">On</span>
+                      </label>
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        className="text-destructive hover:text-destructive px-2"
+                        onClick={() => deleteTaskMutation.mutate(task.id)}
+                      >
+                        <Trash2 size={14} />
+                      </Button>
+                    </div>
                   </div>
-                  <div className="text-muted-foreground/70 text-xs mt-0.5">
-                    {task.last_run_at
-                      ? `Last ran ${new Date(task.last_run_at * 1000).toLocaleString()}`
-                      : 'Never run'}
+                  <div className="flex items-center gap-2">
+                    <span className="text-xs text-muted-foreground shrink-0">Every</span>
+                    <Input
+                      type="number"
+                      min="1"
+                      className="h-7 w-20 text-xs"
+                      value={intervalVal}
+                      onChange={e => setTaskIntervals(prev => ({ ...prev, [task.id]: e.target.value }))}
+                    />
+                    <span className="text-xs text-muted-foreground shrink-0">hours</span>
+                    {intervalDirty && (
+                      <Button
+                        size="sm"
+                        className="h-7 text-xs"
+                        onClick={() => {
+                          const hours = Number(intervalVal);
+                          if (!Number.isFinite(hours) || hours < 1) return;
+                          updateTaskMutation.mutate({ id: task.id, body: { interval_hours: hours } });
+                          setTaskIntervals(prev => { const n = { ...prev }; delete n[task.id]; return n; });
+                        }}
+                      >
+                        Save
+                      </Button>
+                    )}
                   </div>
                 </div>
-                <Button variant="ghost" size="sm" onClick={() => runTaskMutation.mutate(task.id)}>
-                  Run now
-                </Button>
-                <label className="flex items-center gap-2 cursor-pointer">
-                  <input
-                    type="checkbox"
-                    checked={!!task.enabled}
-                    onChange={e => updateTaskMutation.mutate({ id: task.id, body: { enabled: e.target.checked } })}
-                    className="h-4 w-4 rounded border-border bg-background accent-primary"
-                  />
-                  <span className="text-sm text-foreground/70">Enabled</span>
-                </label>
-              </div>
-            ))}
+              );
+            })}
           </div>
         )}
       </PageSection>

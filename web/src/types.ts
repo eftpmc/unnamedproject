@@ -178,6 +178,7 @@ export interface SessionWorktree {
 export interface ScheduledTask {
   id: string;
   type: string;
+  prompt: string | null;
   interval_hours: number;
   enabled: number;
   next_run_at: number;

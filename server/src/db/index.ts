@@ -637,6 +637,19 @@ export function getCampaignSummaries(projectId: string): Array<DbCampaign & { to
     .all(projectId) as Array<DbCampaign & { total_tasks: number; done_tasks: number; error_tasks: number }>;
 }
 
+export function getRecentCampaignsForUser(userId: string, limit = 30): Array<DbCampaign & { project_name: string }> {
+  return getDb()
+    .prepare(`
+      SELECT c.*, p.name AS project_name
+      FROM campaigns c
+      JOIN projects p ON p.id = c.project_id
+      WHERE p.user_id = ?
+      ORDER BY c.created_at DESC
+      LIMIT ?
+    `)
+    .all(userId, limit) as Array<DbCampaign & { project_name: string }>;
+}
+
 export function getCampaignsForProject(projectId: string): DbCampaign[] {
   return getDb()
     .prepare('SELECT * FROM campaigns WHERE project_id = ? ORDER BY created_at DESC')

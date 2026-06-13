@@ -333,7 +333,7 @@ export const toolDefinitions: Anthropic.Tool[] = [
   },
   {
     name: 'create_campaign',
-    description: 'Create a campaign to track a coordinated multi-task plan. Call this BEFORE dispatching the individual tasks. The response includes task IDs — pass each task\'s id as campaign_task_id when calling invoke_claude_code, invoke_codex, mcp_call, write_file, git_op, or github_api so the tasks are linked and their status tracked. Task agent types: claude_code/codex/mcp for delegated agent work, file_write for a write_file step, git for a git_op step (e.g. a commit after coding tasks), github for a github_api step (e.g. opening the final PR).',
+    description: 'Create a campaign to track a coordinated multi-task plan. Call this BEFORE dispatching the individual tasks. The response includes task IDs — pass each task\'s id as campaign_task_id when calling invoke_claude_code, invoke_codex, mcp_call, write_file, git_op, or github_api so the tasks are linked and their status tracked. Task agent types: claude_code/codex/mcp for delegated agent work, file_write for a write_file step, git for a git_op step (e.g. a commit after coding tasks), github for a github_api step (e.g. opening the final PR). Sequential chaining: when invoke_claude_code or invoke_codex is called with a campaign_task_id, the system automatically injects the results of all previously completed tasks in the same campaign into the agent\'s prompt — no manual forwarding needed.',
     input_schema: {
       type: 'object',
       properties: {

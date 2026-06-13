@@ -1,5 +1,5 @@
 import { Router } from 'express';
-import { getScheduledTasksForUser, getScheduledTaskForUser, updateScheduledTask } from '../db/index.js';
+import { getScheduledTasksForUser, getScheduledTaskForUser, updateScheduledTask, deleteScheduledTask } from '../db/index.js';
 import { runScheduledTask } from '../services/scheduled_tasks.js';
 import { requireAuth, type AuthedRequest } from '../middleware/auth.js';
 
@@ -19,6 +19,14 @@ router.patch('/:id', (req, res) => {
   if (!task) { res.status(404).json({ error: 'Scheduled task not found' }); return; }
 
   updateScheduledTask(req.params.id, userId, { enabled, interval_hours });
+  res.json({ ok: true });
+});
+
+router.delete('/:id', (req, res) => {
+  const { userId } = req as unknown as AuthedRequest;
+  const task = getScheduledTaskForUser(req.params.id, userId);
+  if (!task) { res.status(404).json({ error: 'Scheduled task not found' }); return; }
+  deleteScheduledTask(req.params.id, userId);
   res.json({ ok: true });
 });
 

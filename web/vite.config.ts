@@ -18,6 +18,8 @@ export default defineConfig({
     },
   },
   server: {
+    host: true,
+    allowedHosts: true,
     proxy: {
       '/auth': 'http://localhost:3000',
       '/sessions': 'http://localhost:3000',

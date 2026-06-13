@@ -22,11 +22,13 @@ function PageHeader({
   title,
   description,
   actions,
+  breadcrumb,
   className,
 }: {
   title: React.ReactNode;
   description?: React.ReactNode;
   actions?: React.ReactNode;
+  breadcrumb?: React.ReactNode;
   className?: string;
 }) {
   return (
@@ -36,6 +38,9 @@ function PageHeader({
         className,
       )}
     >
+      {breadcrumb && (
+        <div className="mb-2">{breadcrumb}</div>
+      )}
       <div className="flex min-h-8 items-center justify-between gap-3">
         <h1 className="truncate font-semibold text-foreground text-[15px]">
           {title}

@@ -91,6 +91,26 @@ function sendRequest(conn: McpConn, method: string, params: unknown): Promise<st
   });
 }
 
+export async function listMcpTools(
+  connectionId: string,
+  command: string,
+  args: string[],
+  env: Record<string, string>,
+): Promise<Array<{ name: string; description?: string }>> {
+  let connPromise = pool.get(connectionId);
+  if (!connPromise) {
+    connPromise = createConn(command, args, env).catch(err => {
+      pool.delete(connectionId);
+      throw err;
+    });
+    pool.set(connectionId, connPromise);
+  }
+  const conn = await connPromise;
+  const raw = await sendRequest(conn, 'tools/list', {});
+  const parsed = JSON.parse(raw) as { tools?: Array<{ name: string; description?: string }> };
+  return parsed.tools ?? [];
+}
+
 export async function callMcpTool(
   connectionId: string,
   command: string,

@@ -27,16 +27,28 @@ function readWorkspaceMd(project: DbProject): string | null {
 function baseBlock(intent: Intent): string {
   const isCode = intent.domain === 'code' || intent.domain === 'multi' || intent.domain === 'general';
   const autoApproved = isCode
-    ? 'invoke_claude_code, invoke_codex, git_op add/commit, create_project, project_query, rebuild_graph, read_file, list_dir, recall, remember, forget, create_campaign'
-    : 'create_project, read_file, list_dir, recall, remember, forget, write_file, web_search, web_fetch';
+    ? 'invoke_claude_code, invoke_codex, generate_video, git_op add/commit, create_project, update_project, project_query, rebuild_graph, search_files, read_file, list_dir, recall, remember, forget, list_chats, read_chat, register_artifact, list_artifacts, read_artifact, list_connections, test_connection, create_campaign, resume_campaign, list_campaigns, get_campaign, get_execution_output, list_scheduled_tasks, create_scheduled_task, update_scheduled_task, delete_scheduled_task'
+    : 'create_project, search_files, read_file, list_dir, recall, remember, forget, write_file, list_chats, read_chat, list_artifacts, read_artifact, web_search, web_fetch';
 
   return `You are a personal AI operator and orchestrator. You decide how work gets done — you never implement code, write files, or run git operations yourself when the task belongs to a coding agent.
 
 ## Core rules
 - Auto-approved (do without asking): ${autoApproved}
-- User-approved (proceed and the system handles the pause): git_op push, write_file, github_api write ops, delete_project
+- User-approved (proceed and the system handles the pause): git_op push, write_file, github_api write ops, delete_project, delete_scheduled_task
 - If a task has multiple coordinated workstreams: call create_campaign first, then dispatch tasks with their campaign_task_id. Never dispatch parallel agents without a campaign tracking them.
-- Never ask the user for permission on an auto-approved action — just do it.`;
+- Never ask the user for permission on an auto-approved action — just do it.
+
+## State awareness
+Before starting work on a project you haven't touched recently:
+- Call list_campaigns to check past campaigns — avoid recreating work that already exists or is running.
+- Call list_artifacts to see what's already been produced before generating a new report or research output.
+- If a campaign shows status 'error', use resume_campaign to reset failed tasks and re-dispatch only those — don't create a duplicate campaign.
+
+## MCP connections
+Before calling mcp_call, use list_connections to discover available MCP servers and their tool names. Never guess a connection_id or tool name. Use test_connection to verify an MCP server is reachable before dispatching dependent work.
+
+## File search
+Use search_files for fast codebase lookups (finding where a function is defined, tracing usages, locating config). Only fall back to project_query for broad architectural questions that need reasoning across the whole codebase.`;
 }
 
 function researchBlock(): string {
@@ -63,7 +75,7 @@ Sub-agent model hints (pass as model param to invoke_claude_code):
 - 'sonnet': standard feature work (default)
 - 'opus': architectural decisions, large refactors, complex multi-file reasoning
 
-Agent brief quality: always include — what already exists (from project_query or research), what to build, and what "done" means.
+Agent brief quality: always include — what already exists (from project_query, search_files, or research), what to build, and what "done" means.
 
 Result evaluation: after invoke_claude_code or invoke_codex returns, read the result for failure signals (test failures, errors, "could not", partial completion). If present, send a targeted follow-up correction before committing. On confirmed success: run git_op add then git_op commit. Do not ask permission to commit.
 
@@ -220,25 +232,44 @@ export function buildContext(userId: string, sessionId: string, intent: Intent):
 
 // ─── Tool subsetting ───────────────────────────────────────────────────────
 
+const SHARED = [
+  'remember', 'recall', 'forget',
+  'list_chats', 'read_chat',
+  'register_artifact', 'list_artifacts', 'read_artifact',
+  'list_connections', 'test_connection',
+  'search_files', 'read_file', 'list_dir',
+  'create_project', 'update_project',
+  'web_search', 'web_fetch',
+];
+
+const SCHEDULED = [
+  'list_scheduled_tasks', 'create_scheduled_task', 'update_scheduled_task', 'delete_scheduled_task',
+];
+
 const TOOL_SETS: Record<string, string[]> = {
   code: [
     'invoke_claude_code', 'invoke_codex', 'git_op', 'github_api',
-    'project_query', 'rebuild_graph', 'create_campaign',
-    'read_file', 'list_dir', 'write_file', 'create_artifact', 'create_project', 'update_project',
-    'remember', 'recall', 'forget', 'read_chat',
-    'web_search', 'web_fetch',
+    'project_query', 'rebuild_graph',
+    'create_campaign', 'resume_campaign', 'list_campaigns', 'get_campaign', 'get_execution_output',
+    'write_file', 'create_artifact', 'generate_video',
+    'mcp_call',
+    ...SCHEDULED,
+    ...SHARED,
   ],
   writing: [
-    'write_file', 'create_artifact', 'read_file', 'list_dir', 'create_project', 'update_project',
-    'web_search', 'web_fetch', 'remember', 'recall', 'forget', 'read_chat',
+    'write_file', 'create_artifact',
+    ...SCHEDULED,
+    ...SHARED,
   ],
   research: [
-    'web_search', 'web_fetch', 'recall', 'remember', 'forget',
-    'read_chat', 'read_file', 'write_file', 'create_artifact',
+    'write_file', 'create_artifact',
+    ...SCHEDULED,
+    ...SHARED,
   ],
   creative: [
-    'write_file', 'create_artifact', 'read_file', 'create_project', 'generate_video',
-    'web_search', 'web_fetch', 'remember', 'recall', 'forget', 'read_chat',
+    'write_file', 'create_artifact', 'generate_video',
+    ...SCHEDULED,
+    ...SHARED,
   ],
 };
 

@@ -1,6 +1,7 @@
 import { describe, it, expect, beforeAll } from 'vitest';
-import { getDb, initDb } from '../src/db/index.js';
+import { getDataDir, getDb, initDb } from '../src/db/index.js';
 import fs from 'fs';
+import path from 'path';
 
 describe('database schema', () => {
   beforeAll(() => {
@@ -39,5 +40,9 @@ describe('database schema', () => {
       .prepare("SELECT name FROM pragma_table_info('sessions')")
       .all() as { name: string }[];
     expect(cols.some(c => c.name === 'summary')).toBe(true);
+  });
+
+  it('resolves DATA_DIR to an absolute path', () => {
+    expect(path.isAbsolute(getDataDir())).toBe(true);
   });
 });

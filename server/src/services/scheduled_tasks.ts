@@ -21,6 +21,16 @@ async function runReorganizeMemory(userId: string): Promise<void> {
   await runAgentTurn(userId, sessionId, messageId);
 }
 
+async function runCustomPrompt(userId: string, prompt: string): Promise<void> {
+  const db = getDb();
+  const sessionId = newId();
+  const title = `Scheduled task — ${new Date().toISOString().slice(0, 10)}`;
+  db.prepare('INSERT INTO sessions (id, user_id, title) VALUES (?,?,?)').run(sessionId, userId, title);
+  const messageId = newId();
+  db.prepare('INSERT INTO messages (id, session_id, role, content) VALUES (?,?,?,?)').run(messageId, sessionId, 'user', prompt);
+  await runAgentTurn(userId, sessionId, messageId);
+}
+
 export async function runScheduledTask(userId: string, taskId: string): Promise<void> {
   const task = getScheduledTaskForUser(taskId, userId);
   if (!task) throw new Error(`Scheduled task ${taskId} not found`);
@@ -28,6 +38,10 @@ export async function runScheduledTask(userId: string, taskId: string): Promise<
   switch (task.type) {
     case 'reorganize_memory':
       await runReorganizeMemory(userId);
+      break;
+    case 'custom_prompt':
+      if (!task.prompt) throw new Error('custom_prompt task has no prompt set');
+      await runCustomPrompt(userId, task.prompt);
       break;
     default:
       throw new Error(`Unknown scheduled task type: ${task.type}`);

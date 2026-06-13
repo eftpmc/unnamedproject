@@ -1,6 +1,7 @@
 import { useEffect, useRef } from 'react';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
+import { Pencil } from 'lucide-react';
 import ExecutionCard from './ExecutionCard.js';
 import CampaignCard from './CampaignCard.js';
 import type { Message } from '../types.js';
@@ -28,6 +29,8 @@ interface MessageListProps {
   executions: Record<string, InlineExecution[]>;
   streamingIds?: Set<string>;
   sessionId?: string;
+  onEditMessage?: (messageId: string, content: string) => void;
+  canEdit?: boolean;
 }
 
 const markdownComponents: React.ComponentProps<typeof ReactMarkdown>['components'] = {
@@ -80,7 +83,8 @@ function renderExecutionCard(exec: InlineExecution) {
   return <ExecutionCard key={exec.executionId} {...exec} />;
 }
 
-export default function MessageList({ messages, executions, streamingIds, sessionId }: MessageListProps) {
+export default function MessageList({ messages, executions, streamingIds, sessionId, onEditMessage, canEdit }: MessageListProps) {
+  const lastUserMessageId = [...messages].reverse().find(m => m.role === 'user')?.id ?? null;
   const bottomRef = useRef<HTMLDivElement>(null);
   const initialScrollDone = useRef(false);
 
@@ -123,7 +127,7 @@ export default function MessageList({ messages, executions, streamingIds, sessio
         {timeline.map(item => {
           if (item.type === 'execution') {
             return (
-              <div key={`exec-${item.execution.executionId}`} className="flex max-w-[94%] flex-col sm:max-w-[86%]">
+              <div key={`exec-${item.execution.executionId}`} data-execution-id={item.execution.executionId} className="flex max-w-[94%] flex-col sm:max-w-[86%]">
                 {renderExecutionCard(item.execution)}
               </div>
             );
@@ -135,11 +139,21 @@ export default function MessageList({ messages, executions, streamingIds, sessio
             return null;
           }
 
+          const isLastUser = msg.role === 'user' && msg.id === lastUserMessageId;
           return (
           <div key={msg.id}>
             {msg.role === 'user' ? (
-              <div className="flex flex-col items-end">
-                <div className="flex justify-end">
+              <div className="group flex flex-col items-end">
+                <div className="flex items-end gap-2 justify-end">
+                  {isLastUser && canEdit && onEditMessage && (
+                    <button
+                      onClick={() => onEditMessage(msg.id, msg.content)}
+                      className="mb-1 shrink-0 text-muted-foreground/40 opacity-0 transition-opacity group-hover:opacity-100 hover:text-muted-foreground"
+                      title="Edit message"
+                    >
+                      <Pencil size={13} />
+                    </button>
+                  )}
                   <Card className="max-w-[88%] rounded-lg border-border/35 bg-muted/45 py-0 text-foreground shadow-none sm:max-w-[76%]">
                     <CardContent className="px-4 py-3 text-[15px] leading-relaxed whitespace-pre-wrap">
                       {msg.content}

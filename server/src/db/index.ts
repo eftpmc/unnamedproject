@@ -1,12 +1,15 @@
 import Database from 'better-sqlite3';
 import path from 'path';
 import fs from 'fs';
+import { fileURLToPath } from 'url';
 import { newId } from '../lib/ids.js';
 
 let db: Database.Database;
+const __dirname = path.dirname(fileURLToPath(import.meta.url));
+const defaultDataDir = path.resolve(__dirname, '../../../data');
 
 export function getDataDir(): string {
-  return process.env.DATA_DIR ?? './data';
+  return process.env.DATA_DIR ? path.resolve(process.env.DATA_DIR) : defaultDataDir;
 }
 
 export function initDb(): void {
@@ -267,6 +270,11 @@ function applySchema(): void {
     db.exec('DROP TABLE workspaces');
   }
 
+  const scheduledCols = db.prepare("SELECT name FROM pragma_table_info('scheduled_tasks')").all() as { name: string }[];
+  if (!scheduledCols.some(c => c.name === 'prompt')) {
+    db.exec("ALTER TABLE scheduled_tasks ADD COLUMN prompt TEXT");
+  }
+
   if (tableNames.some(t => t.name === 'user_memory')) {
     db.exec(`
       INSERT INTO memories (id, user_id, type, key, value, created_at, updated_at)
@@ -473,6 +481,7 @@ export function getMonthlyUsage(userId: string, tool: AgentUsageTool): number {
 export interface DbScheduledTask {
   id: string;
   type: string;
+  prompt: string | null;
   interval_hours: number;
   enabled: number;
   next_run_at: number;
@@ -481,13 +490,13 @@ export interface DbScheduledTask {
 
 export function getScheduledTasksForUser(userId: string): DbScheduledTask[] {
   return getDb()
-    .prepare('SELECT id, type, interval_hours, enabled, next_run_at, last_run_at FROM scheduled_tasks WHERE user_id = ?')
+    .prepare('SELECT id, type, prompt, interval_hours, enabled, next_run_at, last_run_at FROM scheduled_tasks WHERE user_id = ?')
     .all(userId) as DbScheduledTask[];
 }
 
 export function getScheduledTaskForUser(id: string, userId: string): DbScheduledTask | undefined {
   return getDb()
-    .prepare('SELECT id, type, interval_hours, enabled, next_run_at, last_run_at FROM scheduled_tasks WHERE id = ? AND user_id = ?')
+    .prepare('SELECT id, type, prompt, interval_hours, enabled, next_run_at, last_run_at FROM scheduled_tasks WHERE id = ? AND user_id = ?')
     .get(id, userId) as DbScheduledTask | undefined;
 }
 
@@ -500,13 +509,34 @@ export function updateScheduledTask(id: string, userId: string, updates: { enabl
   }
 }
 
-export function createScheduledTask(userId: string, type: string, intervalHours: number): string {
+export function createScheduledTask(userId: string, type: string, intervalHours: number, prompt?: string): string {
   const id = newId();
   const nextRunAt = Math.floor(Date.now() / 1000) + intervalHours * 3600;
   getDb()
-    .prepare('INSERT INTO scheduled_tasks (id, user_id, type, interval_hours, next_run_at) VALUES (?,?,?,?,?)')
-    .run(id, userId, type, intervalHours, nextRunAt);
+    .prepare('INSERT INTO scheduled_tasks (id, user_id, type, interval_hours, next_run_at, prompt) VALUES (?,?,?,?,?,?)')
+    .run(id, userId, type, intervalHours, nextRunAt, prompt ?? null);
   return id;
+}
+
+export function deleteScheduledTask(id: string, userId: string): boolean {
+  const result = getDb()
+    .prepare('DELETE FROM scheduled_tasks WHERE id = ? AND user_id = ?')
+    .run(id, userId);
+  return result.changes > 0;
+}
+
+export function resumeCampaign(campaignId: string): { campaign: DbCampaign; tasks: DbCampaignTask[] } | undefined {
+  const campaign = getCampaignById(campaignId);
+  if (!campaign) return undefined;
+  if (campaign.status === 'cancelled') return undefined;
+  const now = Math.floor(Date.now() / 1000);
+  getDb()
+    .prepare("UPDATE campaigns SET status = 'running', completed_at = NULL WHERE id = ? AND status IN ('error')")
+    .run(campaignId);
+  getDb()
+    .prepare("UPDATE campaign_tasks SET status = 'waiting', execution_id = NULL, completed_at = NULL WHERE campaign_id = ? AND status = 'error'")
+    .run(campaignId);
+  return { campaign: getCampaignById(campaignId)!, tasks: getCampaignTasks(campaignId) };
 }
 
 export function getDueScheduledTasks(now: number): (DbScheduledTask & { user_id: string })[] {
@@ -567,10 +597,76 @@ export function createCampaign(
   })();
 }
 
+export function getCampaignSummaries(projectId: string): Array<DbCampaign & { total_tasks: number; done_tasks: number; error_tasks: number }> {
+  return getDb()
+    .prepare(`
+      SELECT c.*,
+        COUNT(ct.id) AS total_tasks,
+        SUM(CASE WHEN ct.status = 'done' THEN 1 ELSE 0 END) AS done_tasks,
+        SUM(CASE WHEN ct.status = 'error' THEN 1 ELSE 0 END) AS error_tasks
+      FROM campaigns c
+      LEFT JOIN campaign_tasks ct ON ct.campaign_id = c.id
+      WHERE c.project_id = ?
+      GROUP BY c.id
+      ORDER BY c.created_at DESC
+    `)
+    .all(projectId) as Array<DbCampaign & { total_tasks: number; done_tasks: number; error_tasks: number }>;
+}
+
 export function getCampaignsForProject(projectId: string): DbCampaign[] {
   return getDb()
     .prepare('SELECT * FROM campaigns WHERE project_id = ? ORDER BY created_at DESC')
     .all(projectId) as DbCampaign[];
+}
+
+export function getCampaignsWithDetails(projectId: string, limit = 20): Array<DbCampaign & {
+  tasks: Array<DbCampaignTask & { output: string | null; result: string | null }>;
+}> {
+  type Row = {
+    c_id: string; c_project_id: string; c_session_id: string | null; c_title: string;
+    c_status: DbCampaign['status']; c_created_at: number; c_completed_at: number | null;
+    t_id: string | null; t_title: string | null; t_agent: DbCampaignTask['agent'] | null;
+    t_status: DbCampaignTask['status'] | null; t_execution_id: string | null;
+    t_position: number | null; t_created_at: number | null; t_completed_at: number | null;
+    output: string | null; task_result: string | null;
+  };
+  const rows = getDb()
+    .prepare(`
+      SELECT c.id AS c_id, c.project_id AS c_project_id, c.session_id AS c_session_id,
+             c.title AS c_title, c.status AS c_status,
+             c.created_at AS c_created_at, c.completed_at AS c_completed_at,
+             ct.id AS t_id, ct.title AS t_title, ct.agent AS t_agent,
+             ct.status AS t_status, ct.execution_id AS t_execution_id,
+             ct.position AS t_position, ct.created_at AS t_created_at,
+             ct.completed_at AS t_completed_at,
+             e.output_log AS output, e.result AS task_result
+      FROM (SELECT * FROM campaigns WHERE project_id = ? ORDER BY created_at DESC LIMIT ?) c
+      LEFT JOIN campaign_tasks ct ON ct.campaign_id = c.id
+      LEFT JOIN executions e ON e.id = ct.execution_id
+      ORDER BY c.created_at DESC, ct.position
+    `)
+    .all(projectId, limit) as Row[];
+
+  const campaignMap = new Map<string, DbCampaign & { tasks: Array<DbCampaignTask & { output: string | null; result: string | null }> }>();
+  for (const row of rows) {
+    if (!campaignMap.has(row.c_id)) {
+      campaignMap.set(row.c_id, {
+        id: row.c_id, project_id: row.c_project_id, session_id: row.c_session_id,
+        title: row.c_title, status: row.c_status,
+        created_at: row.c_created_at, completed_at: row.c_completed_at,
+        tasks: [],
+      });
+    }
+    if (row.t_id) {
+      campaignMap.get(row.c_id)!.tasks.push({
+        id: row.t_id, campaign_id: row.c_id, title: row.t_title!,
+        agent: row.t_agent!, status: row.t_status!, execution_id: row.t_execution_id,
+        position: row.t_position!, created_at: row.t_created_at!, completed_at: row.t_completed_at,
+        output: row.output, result: row.task_result,
+      });
+    }
+  }
+  return Array.from(campaignMap.values());
 }
 
 export function getCampaignById(id: string): DbCampaign | undefined {
@@ -641,4 +737,22 @@ export function getCampaignForTask(taskId: string): DbCampaign | undefined {
   return getDb()
     .prepare('SELECT c.* FROM campaigns c JOIN campaign_tasks t ON t.campaign_id = c.id WHERE t.id = ?')
     .get(taskId) as DbCampaign | undefined;
+}
+
+export interface DbExecution {
+  id: string;
+  message_id: string | null;
+  project_id: string | null;
+  tool: string;
+  status: 'running' | 'done' | 'error';
+  output_log: string;
+  result: string | null;
+  created_at: number;
+  completed_at: number | null;
+}
+
+export function getExecutionById(id: string): DbExecution | undefined {
+  return getDb()
+    .prepare('SELECT * FROM executions WHERE id = ?')
+    .get(id) as DbExecution | undefined;
 }

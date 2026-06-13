@@ -1,5 +1,5 @@
 import Anthropic from '@anthropic-ai/sdk';
-import { getDb, getProjectForUser, setAgentWorktreeSession, updateCampaignTaskStatus, maybeCompleteCampaign, getCampaignForTask } from '../db/index.js';
+import { getDb, getProjectForUser, setAgentWorktreeSession, updateCampaignTaskStatus, maybeCompleteCampaign, getCampaignForTask, getCampaignSummaries, getCampaignById, getCampaignTasks, getExecutionById, getScheduledTasksForUser, createScheduledTask, updateScheduledTask, deleteScheduledTask, resumeCampaign } from '../db/index.js';
 import { runAgentPipeline, type AgentPipelineCtx } from './agent_pipeline.js';
 import { ensureWorktree } from '../lib/worktree.js';
 import { getDecryptedConfig } from '../routes/connections.js';
@@ -12,7 +12,7 @@ import { callMcpTool } from '../tools/mcp_call.js';
 import { runProjectQuery } from '../tools/project_query.js';
 import { buildGraph } from './graphify.js';
 import { remember, recall, forget } from '../tools/memory_tools.js';
-import { readFile, listDir, writeFile } from '../tools/file_ops.js';
+import { readFile, listDir, writeFile, searchFiles } from '../tools/file_ops.js';
 import { readChat } from '../tools/read_chat.js';
 import { createProject, updateProject, deleteProject } from '../tools/project_ops.js';
 import { runCreateCampaign } from '../tools/create_campaign.js';
@@ -23,7 +23,8 @@ import { extractIntent, DEFAULT_INTENT } from './intent.js';
 import { buildContext, getToolSubset } from './context.js';
 import { extractAndRemember } from './extract-memory.js';
 import { renderVideo, type VideoScene } from './video.js';
-import { createTextArtifact } from './artifacts.js';
+import { createTextArtifact, listProjectArtifacts, getArtifactById, readArtifactContent, registerFileAsArtifact } from './artifacts.js';
+import { listMcpTools } from '../lib/mcp-pool.js';
 import { maybeDistill } from './distill.js';
 
 async function maybeGenerateSessionTitle(userId: string, sessionId: string): Promise<void> {
@@ -281,14 +282,108 @@ async function dispatchTool(
       case 'forget':
         result = forget(userId, toolInput.type as string, toolInput.key as string);
         break;
+      case 'list_chats': {
+        const limit = Math.min(100, (toolInput.limit as number | undefined) ?? 20);
+        const filterProject = toolInput.project_id as string | undefined;
+        const rows = filterProject
+          ? getDb().prepare('SELECT id, title, updated_at, pinned_project_id FROM sessions WHERE user_id = ? AND pinned_project_id = ? ORDER BY updated_at DESC LIMIT ?').all(userId, filterProject, limit)
+          : getDb().prepare('SELECT id, title, updated_at, pinned_project_id FROM sessions WHERE user_id = ? ORDER BY updated_at DESC LIMIT ?').all(userId, limit);
+        result = JSON.stringify(rows, null, 2);
+        break;
+      }
       case 'read_chat':
         result = readChat(userId, toolInput.chat_id as string);
         break;
+      case 'register_artifact': {
+        const regTaskId = toolInput.campaign_task_id as string | undefined;
+        if (regTaskId) startCampaignTask(userId, regTaskId, executionId);
+        const art = await registerFileAsArtifact({
+          project_id: toolInput.project_id as string,
+          source_path: toolInput.file_path as string,
+          title: toolInput.title as string | undefined,
+          kind: toolInput.kind as string | undefined,
+        });
+        result = JSON.stringify({ artifact_id: art.id, title: art.title, kind: art.kind, url: art.url });
+        if (regTaskId) finishCampaignTask(userId, regTaskId, result);
+        break;
+      }
+      case 'list_artifacts': {
+        const artifacts = listProjectArtifacts(toolInput.project_id as string);
+        result = JSON.stringify(artifacts.map(a => ({
+          id: a.id, kind: a.kind, title: a.title, description: a.description,
+          status: a.status, mime_type: a.mime_type, created_at: a.created_at,
+        })), null, 2);
+        break;
+      }
+      case 'read_artifact': {
+        const art = getArtifactById(toolInput.artifact_id as string);
+        if (!art && !(toolInput.artifact_id as string).includes(':')) {
+          result = `Error: artifact ${toolInput.artifact_id} not found`;
+          break;
+        }
+        const content = await readArtifactContent(toolInput.project_id as string, toolInput.artifact_id as string);
+        if (content === null) {
+          result = 'Error: artifact has no readable text content (binary or URL-only artifact)';
+          break;
+        }
+        result = content;
+        break;
+      }
+      case 'list_connections': {
+        const conns = getDb()
+          .prepare("SELECT id, name, type, purpose FROM connections WHERE user_id = ? ORDER BY created_at")
+          .all(userId) as Array<{ id: string; name: string; type: string; purpose: string }>;
+        const enriched = await Promise.all(conns.map(async c => {
+          if (c.type !== 'mcp') return c;
+          try {
+            const cfg = getDecryptedConfig(c.id);
+            const mcpArgs = cfg.args ? JSON.parse(cfg.args) : [];
+            const mcpEnv = cfg.env ? JSON.parse(cfg.env) : {};
+            const tools = await listMcpTools(c.id, cfg.command, mcpArgs, mcpEnv);
+            return { ...c, mcp_tools: tools.map(t => ({ name: t.name, description: t.description })) };
+          } catch {
+            return { ...c, mcp_tools: [] };
+          }
+        }));
+        result = JSON.stringify(enriched, null, 2);
+        break;
+      }
+      case 'test_connection': {
+        const connRow = getDb()
+          .prepare("SELECT id, name, type FROM connections WHERE id = ? AND user_id = ?")
+          .get(toolInput.connection_id as string, userId) as { id: string; name: string; type: string } | undefined;
+        if (!connRow) { result = `Error: connection ${toolInput.connection_id} not found`; break; }
+        if (connRow.type !== 'mcp') {
+          const cfg = getDecryptedConfig(connRow.id);
+          const hasKey = Object.values(cfg).some(v => v && String(v).length > 0);
+          result = JSON.stringify({ id: connRow.id, name: connRow.name, type: connRow.type, status: hasKey ? 'ok' : 'error', error: hasKey ? null : 'No credentials configured' });
+          break;
+        }
+        try {
+          const cfg = getDecryptedConfig(connRow.id);
+          const mcpArgs = cfg.args ? JSON.parse(cfg.args) : [];
+          const mcpEnv = cfg.env ? JSON.parse(cfg.env) : {};
+          const tools = await listMcpTools(connRow.id, cfg.command, mcpArgs, mcpEnv);
+          result = JSON.stringify({ id: connRow.id, name: connRow.name, type: 'mcp', status: 'ok', tools: tools.map(t => ({ name: t.name, description: t.description })) });
+        } catch (err) {
+          result = JSON.stringify({ id: connRow.id, name: connRow.name, type: 'mcp', status: 'error', error: err instanceof Error ? err.message : String(err) });
+        }
+        break;
+      }
       case 'read_file':
-        result = await readFile({ project_id: projectId, path: toolInput.path as string }, { userId, executionId, projectId, sessionId });
+        result = await readFile({ project_id: projectId, path: toolInput.path as string, offset: toolInput.offset as number | undefined, limit: toolInput.limit as number | undefined }, { userId, executionId, projectId, sessionId });
         break;
       case 'list_dir':
         result = await listDir({ project_id: projectId, path: toolInput.path as string | undefined }, { userId, executionId, projectId, sessionId });
+        break;
+      case 'search_files':
+        result = await searchFiles({
+          project_id: projectId,
+          pattern: toolInput.pattern as string,
+          path: toolInput.path as string | undefined,
+          file_glob: toolInput.file_glob as string | undefined,
+          ignore_case: toolInput.ignore_case as boolean | undefined,
+        }, { userId, executionId, projectId, sessionId });
         break;
       case 'write_file': {
         const writeTaskId = toolInput.campaign_task_id as string | undefined;
@@ -333,7 +428,9 @@ async function dispatchTool(
         result = await updateProject(
           {
             project_id: toolInput.project_id as string,
+            name: toolInput.name as string | undefined,
             description: toolInput.description as string | undefined,
+            repo_path: toolInput.repo_path as string | null | undefined,
           },
           userId
         );
@@ -341,6 +438,101 @@ async function dispatchTool(
       case 'delete_project':
         result = await deleteProject({ project_id: toolInput.project_id as string, delete_files: toolInput.delete_files as boolean }, userId, executionId);
         break;
+      case 'list_campaigns': {
+        const summaries = getCampaignSummaries(toolInput.project_id as string);
+        result = JSON.stringify(summaries.map(c => ({
+          id: c.id,
+          title: c.title,
+          status: c.status,
+          total_tasks: c.total_tasks,
+          done_tasks: c.done_tasks,
+          error_tasks: c.error_tasks,
+          created_at: c.created_at,
+          completed_at: c.completed_at,
+        })), null, 2);
+        break;
+      }
+      case 'get_campaign': {
+        const campaign = getCampaignById(toolInput.campaign_id as string);
+        if (!campaign) { result = `Error: campaign ${toolInput.campaign_id} not found`; break; }
+        const tasks = getCampaignTasks(campaign.id);
+        result = JSON.stringify({
+          id: campaign.id,
+          title: campaign.title,
+          status: campaign.status,
+          created_at: campaign.created_at,
+          completed_at: campaign.completed_at,
+          tasks: tasks.map(t => ({
+            id: t.id,
+            title: t.title,
+            agent: t.agent,
+            status: t.status,
+            execution_id: t.execution_id,
+            result: null as string | null,
+          })),
+        }, null, 2);
+        // attach result strings from executions
+        const parsed = JSON.parse(result) as { tasks: Array<{ execution_id: string | null; result: string | null }> };
+        for (const t of parsed.tasks) {
+          if (t.execution_id) {
+            const ex = getExecutionById(t.execution_id);
+            t.result = ex?.result ?? null;
+          }
+        }
+        result = JSON.stringify(parsed, null, 2);
+        break;
+      }
+      case 'get_execution_output': {
+        const ex = getExecutionById(toolInput.execution_id as string);
+        if (!ex) { result = `Error: execution ${toolInput.execution_id} not found`; break; }
+        const LOG_CAP = 8000;
+        const log = ex.output_log;
+        const truncated = log.length > LOG_CAP;
+        const output_log = truncated ? `[truncated — showing last ${LOG_CAP} of ${log.length} chars]\n${log.slice(-LOG_CAP)}` : log;
+        result = JSON.stringify({ id: ex.id, tool: ex.tool, status: ex.status, result: ex.result, output_log }, null, 2);
+        break;
+      }
+      case 'resume_campaign': {
+        const resumed = resumeCampaign(toolInput.campaign_id as string);
+        if (!resumed) { result = `Error: campaign ${toolInput.campaign_id} not found or cannot be resumed (cancelled campaigns cannot be resumed)`; break; }
+        result = JSON.stringify({
+          id: resumed.campaign.id,
+          title: resumed.campaign.title,
+          status: resumed.campaign.status,
+          tasks: resumed.tasks.map(t => ({ id: t.id, title: t.title, agent: t.agent, status: t.status, execution_id: t.execution_id })),
+        }, null, 2);
+        break;
+      }
+      case 'list_scheduled_tasks': {
+        const tasks = getScheduledTasksForUser(userId);
+        result = JSON.stringify(tasks.map(t => ({
+          id: t.id, type: t.type, prompt: t.prompt,
+          interval_hours: t.interval_hours, enabled: !!t.enabled,
+          next_run_at: t.next_run_at, last_run_at: t.last_run_at,
+        })), null, 2);
+        break;
+      }
+      case 'create_scheduled_task': {
+        const stType = toolInput.type as string;
+        const stPrompt = toolInput.prompt as string | undefined;
+        if (stType === 'custom_prompt' && !stPrompt) { result = 'Error: prompt is required for custom_prompt tasks'; break; }
+        const stId = createScheduledTask(userId, stType, toolInput.interval_hours as number, stPrompt);
+        result = JSON.stringify({ id: stId, type: stType, interval_hours: toolInput.interval_hours, enabled: true });
+        break;
+      }
+      case 'update_scheduled_task': {
+        updateScheduledTask(toolInput.task_id as string, userId, {
+          enabled: toolInput.enabled as boolean | undefined,
+          interval_hours: toolInput.interval_hours as number | undefined,
+        });
+        result = 'Scheduled task updated';
+        break;
+      }
+      case 'delete_scheduled_task': {
+        const deleted = deleteScheduledTask(toolInput.task_id as string, userId);
+        result = deleted ? 'Scheduled task deleted' : `Error: task ${toolInput.task_id} not found`;
+        break;
+      }
       case 'create_campaign': {
         result = runCreateCampaign(
           {

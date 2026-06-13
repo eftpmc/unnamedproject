@@ -90,4 +90,25 @@ router.post('/:sessionId/messages', async (req, res) => {
   });
 });
 
+router.delete('/:sessionId/messages/from/:messageId', (req, res) => {
+  const { userId } = req as unknown as AuthedRequest;
+  const { sessionId, messageId } = req.params;
+
+  const session = getDb()
+    .prepare('SELECT id FROM sessions WHERE id = ? AND user_id = ?')
+    .get(sessionId, userId);
+  if (!session) { res.status(404).json({ error: 'Session not found' }); return; }
+
+  const message = getDb()
+    .prepare('SELECT rowid FROM messages WHERE id = ? AND session_id = ?')
+    .get(messageId, sessionId) as { rowid: number } | undefined;
+  if (!message) { res.status(404).json({ error: 'Message not found' }); return; }
+
+  const result = getDb()
+    .prepare('DELETE FROM messages WHERE session_id = ? AND rowid >= ?')
+    .run(sessionId, message.rowid);
+
+  res.json({ deleted: result.changes });
+});
+
 export default router;

@@ -155,12 +155,14 @@ export const toolDefinitions: Anthropic.Tool[] = [
   },
   {
     name: 'update_project',
-    description: "Update a project's description.",
+    description: "Update a project's name, description, or repo path.",
     input_schema: {
       type: 'object',
       properties: {
         project_id: { type: 'string' },
-        description: { type: 'string' },
+        name: { type: 'string', description: 'New project name' },
+        description: { type: 'string', description: 'New description' },
+        repo_path: { type: 'string', description: 'New absolute path to the git repo, or null to unlink' },
       },
       required: ['project_id'],
     },
@@ -179,14 +181,31 @@ export const toolDefinitions: Anthropic.Tool[] = [
   },
   {
     name: 'read_file',
-    description: 'Read the contents of a file in a workspace repo.',
+    description: 'Read a file in a workspace repo. For large files, use offset and limit to page through — offset is the 1-based starting line number, limit is the number of lines to return.',
     input_schema: {
       type: 'object',
       properties: {
         project_id: { type: 'string' },
         path: { type: 'string', description: 'Path relative to the workspace root' },
+        offset: { type: 'number', description: 'First line to return (1-based). Omit to start from the beginning.' },
+        limit: { type: 'number', description: 'Number of lines to return. Omit to return to the end of file.' },
       },
       required: ['project_id', 'path'],
+    },
+  },
+  {
+    name: 'search_files',
+    description: 'Search for a pattern across files in a project. Returns matching lines with file path and line number. Pattern is a JavaScript regex. Use file_glob to filter by filename (e.g. "*.ts"). Faster than reading files one by one for locating symbols, usages, or strings.',
+    input_schema: {
+      type: 'object',
+      properties: {
+        project_id: { type: 'string' },
+        pattern: { type: 'string', description: 'Regex pattern to search for' },
+        path: { type: 'string', description: 'Subdirectory to search within (default: repo root)' },
+        file_glob: { type: 'string', description: 'Filename pattern to restrict search (e.g. "*.ts", "*.py"). Optional.' },
+        ignore_case: { type: 'boolean', description: 'Case-insensitive search (default false)' },
+      },
+      required: ['project_id', 'pattern'],
     },
   },
   {
@@ -234,12 +253,80 @@ export const toolDefinitions: Anthropic.Tool[] = [
     },
   },
   {
+    name: 'register_artifact',
+    description: 'Register an existing file from the project repo as a project artifact, making it visible in the Artifacts tab. Use this when a coding agent has produced a file (video, image, PDF, etc.) that should be surfaced as an artifact. Copies the file into the project media store.',
+    input_schema: {
+      type: 'object',
+      properties: {
+        project_id: { type: 'string', description: 'ID of the project' },
+        file_path: { type: 'string', description: 'Absolute path to the file to register' },
+        title: { type: 'string', description: 'Human-readable title (defaults to filename)' },
+        kind: { type: 'string', description: "Artifact kind, e.g. 'media', 'report'. Defaults based on file type." },
+        campaign_task_id: { type: 'string', description: 'Campaign task ID to mark done when this step is part of a campaign.' },
+      },
+      required: ['project_id', 'file_path'],
+    },
+  },
+  {
+    name: 'list_artifacts',
+    description: "List all artifacts for a project — id, kind, title, status, mime_type, and created_at. Use to discover what's been produced before calling read_artifact.",
+    input_schema: {
+      type: 'object',
+      properties: {
+        project_id: { type: 'string', description: 'ID of the project' },
+      },
+      required: ['project_id'],
+    },
+  },
+  {
+    name: 'read_artifact',
+    description: 'Read the text content of a project artifact. Works for text/markdown, text/plain, and application/json artifacts. Get artifact IDs from list_artifacts.',
+    input_schema: {
+      type: 'object',
+      properties: {
+        project_id: { type: 'string', description: 'ID of the project the artifact belongs to' },
+        artifact_id: { type: 'string', description: 'ID of the artifact to read' },
+      },
+      required: ['project_id', 'artifact_id'],
+    },
+  },
+  {
+    name: 'list_connections',
+    description: 'List configured connections (API keys, GitHub, MCP servers). For MCP connections, includes available tool names so you know what to pass to mcp_call.',
+    input_schema: {
+      type: 'object',
+      properties: {},
+    },
+  },
+  {
+    name: 'test_connection',
+    description: 'Test whether a connection is reachable and working. For MCP connections, pings the server and returns its available tools. For other connection types, verifies credentials are present. Use before dispatching work that depends on a connection.',
+    input_schema: {
+      type: 'object',
+      properties: {
+        connection_id: { type: 'string', description: 'ID of the connection to test' },
+      },
+      required: ['connection_id'],
+    },
+  },
+  {
+    name: 'list_chats',
+    description: 'List recent chats. Use to find a chat ID before calling read_chat, especially for chats older than the 5 shown in your context.',
+    input_schema: {
+      type: 'object',
+      properties: {
+        project_id: { type: 'string', description: 'Filter to chats pinned to this project (optional)' },
+        limit: { type: 'number', description: 'Max chats to return (default 20, max 100)' },
+      },
+    },
+  },
+  {
     name: 'read_chat',
     description: 'Retrieve messages from a previous chat. Use when the user references past work, asks to continue something, or you need context before responding.',
     input_schema: {
       type: 'object',
       properties: {
-        chat_id: { type: 'string', description: 'ID of the chat to read — get IDs from the recent chats list in your context' },
+        chat_id: { type: 'string', description: 'ID of the chat to read — get IDs from the recent chats list in your context or from list_chats' },
       },
       required: ['chat_id'],
     },
@@ -266,6 +353,92 @@ export const toolDefinitions: Anthropic.Tool[] = [
         },
       },
       required: ['project_id', 'title', 'tasks'],
+    },
+  },
+  {
+    name: 'resume_campaign',
+    description: 'Resume a failed campaign by resetting errored tasks back to waiting. Returns the full task list with updated statuses so you know which tasks need to be re-dispatched (done tasks are left alone). After calling this, re-dispatch only the waiting tasks with their existing task IDs.',
+    input_schema: {
+      type: 'object',
+      properties: {
+        campaign_id: { type: 'string', description: 'ID of the failed campaign to resume' },
+      },
+      required: ['campaign_id'],
+    },
+  },
+  {
+    name: 'list_campaigns',
+    description: 'List campaigns for a project — id, title, status, task counts, and timestamps. Use this to survey past campaigns before deciding whether to create a new one or investigate a failed one.',
+    input_schema: {
+      type: 'object',
+      properties: {
+        project_id: { type: 'string', description: 'ID of the project' },
+      },
+      required: ['project_id'],
+    },
+  },
+  {
+    name: 'get_campaign',
+    description: 'Get full detail for a single campaign — all tasks with their statuses, execution IDs, and final result strings. Use after list_campaigns to inspect a specific campaign. To read full output logs for a task, use get_execution_output with the task\'s execution_id.',
+    input_schema: {
+      type: 'object',
+      properties: {
+        campaign_id: { type: 'string', description: 'ID of the campaign' },
+      },
+      required: ['campaign_id'],
+    },
+  },
+  {
+    name: 'get_execution_output',
+    description: 'Get the full output log and result for a single execution (a task run). Use this to read error details or full agent output for a specific campaign task. Get the execution_id from get_campaign.',
+    input_schema: {
+      type: 'object',
+      properties: {
+        execution_id: { type: 'string', description: 'ID of the execution to inspect' },
+      },
+      required: ['execution_id'],
+    },
+  },
+  {
+    name: 'list_scheduled_tasks',
+    description: 'List all scheduled tasks for the user — their type, interval, enabled status, and next/last run times.',
+    input_schema: { type: 'object', properties: {} },
+  },
+  {
+    name: 'create_scheduled_task',
+    description: "Create a recurring scheduled task. Use type 'reorganize_memory' (no prompt needed) to auto-tidy memory on an interval. Use type 'custom_prompt' with a prompt to run any agent instruction on a schedule (e.g. daily standup, weekly report, regular codebase health check).",
+    input_schema: {
+      type: 'object',
+      properties: {
+        type: { type: 'string', enum: ['reorganize_memory', 'custom_prompt'], description: "Task type" },
+        interval_hours: { type: 'number', description: 'How often to run, in hours (e.g. 24 = daily, 168 = weekly)' },
+        prompt: { type: 'string', description: "Required for type 'custom_prompt' — the instruction to run each time" },
+      },
+      required: ['type', 'interval_hours'],
+    },
+  },
+  {
+    name: 'update_scheduled_task',
+    description: 'Enable/disable a scheduled task or change its interval.',
+    input_schema: {
+      type: 'object',
+      properties: {
+        task_id: { type: 'string' },
+        enabled: { type: 'boolean', description: 'Enable or disable the task' },
+        interval_hours: { type: 'number', description: 'New interval in hours' },
+      },
+      required: ['task_id'],
+    },
+  },
+  {
+    name: 'delete_scheduled_task',
+    description: 'Permanently delete a scheduled task.',
+    input_schema: {
+      type: 'object',
+      properties: {
+        task_id: { type: 'string' },
+      },
+      required: ['task_id'],
     },
   },
   {

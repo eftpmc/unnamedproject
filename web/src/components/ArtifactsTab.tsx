@@ -4,6 +4,7 @@ import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import { FileText, Image, Loader2, Package, Video } from 'lucide-react';
 import { getArtifactContent, getProjectArtifacts } from '../lib/api.js';
+import { getToken } from '../lib/auth.js';
 import { EmptyPanel, PageLoading, Surface } from '@/components/ui/app-layout';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -40,11 +41,15 @@ function ArtifactPreview({ artifact }: { artifact: ProjectArtifact }) {
   });
 
   if (artifact.mime_type.startsWith('video/') && artifact.url) {
-    return <video controls src={artifact.url} className="w-full rounded-lg border border-border/40 bg-black" />;
+    const token = getToken();
+    const src = token ? `${artifact.url}?token=${encodeURIComponent(token)}` : artifact.url;
+    return <video controls src={src} className="w-full rounded-lg border border-border/40 bg-black" />;
   }
 
   if (artifact.mime_type.startsWith('image/') && artifact.url) {
-    return <img src={artifact.url} alt={artifact.title} className="max-h-[420px] w-full rounded-lg border border-border/40 object-contain" />;
+    const token = getToken();
+    const src = token ? `${artifact.url}?token=${encodeURIComponent(token)}` : artifact.url;
+    return <img src={src} alt={artifact.title} className="max-h-[420px] w-full rounded-lg border border-border/40 object-contain" />;
   }
 
   if (isLoading) {

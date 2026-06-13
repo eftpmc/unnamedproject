@@ -16,6 +16,24 @@ router.get('/', (req, res) => {
   res.json(rows);
 });
 
+router.get('/search', (req, res) => {
+  const { userId } = req as AuthedRequest;
+  const q = (req.query.q as string | undefined)?.trim();
+  if (!q) { res.json([]); return; }
+  const pattern = `%${q}%`;
+  const rows = getDb()
+    .prepare(`
+      SELECT DISTINCT s.id, s.title, s.effort, s.model, s.pinned_project_id, s.created_at, s.updated_at
+      FROM sessions s
+      LEFT JOIN messages m ON m.session_id = s.id
+      WHERE s.user_id = ? AND (s.title LIKE ? OR m.content LIKE ?)
+      ORDER BY s.updated_at DESC
+      LIMIT 50
+    `)
+    .all(userId, pattern, pattern);
+  res.json(rows);
+});
+
 router.get('/models', async (req, res) => {
   const { userId } = req as AuthedRequest;
   const { effort } = req.query as { effort?: string };

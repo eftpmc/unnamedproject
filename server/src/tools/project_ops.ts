@@ -41,19 +41,25 @@ export async function createProject(
 }
 
 export async function updateProject(
-  input: { project_id: string; description?: string },
+  input: { project_id: string; name?: string; description?: string; repo_path?: string | null },
   userId: string
 ): Promise<string> {
   const project = getProjectForUser(input.project_id, userId);
   if (!project) return `Error: project ${input.project_id} not found`;
 
-  if (input.description !== undefined) {
+  const updates: string[] = [];
+  const values: unknown[] = [];
+  if (input.name !== undefined) { updates.push('name = ?'); values.push(input.name); }
+  if (input.description !== undefined) { updates.push('description = ?'); values.push(input.description); }
+  if (input.repo_path !== undefined) { updates.push('repo_path = ?'); values.push(input.repo_path); }
+
+  if (updates.length > 0) {
     getDb()
-      .prepare('UPDATE projects SET description = ? WHERE id = ? AND user_id = ?')
-      .run(input.description, input.project_id, userId);
+      .prepare(`UPDATE projects SET ${updates.join(', ')} WHERE id = ? AND user_id = ?`)
+      .run(...values, input.project_id, userId);
   }
 
-  return `Project '${project.name}' updated`;
+  return `Project '${input.name ?? project.name}' updated`;
 }
 
 export async function deleteProject(

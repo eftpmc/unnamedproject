@@ -6,6 +6,7 @@ import {
   getCampaignById,
   getCampaignTasks,
   getProjectForUser,
+  resumeCampaign,
   type DbCampaignTask,
 } from '../db/index.js';
 import { killProcess } from '../lib/process-registry.js';
@@ -67,6 +68,25 @@ router.post('/:id/cancel', (req, res) => {
   }
   broadcast(userId, { type: 'campaign_updated', campaignId: campaign.id, status: updated.status });
   res.json({ campaign: updated });
+});
+
+router.post('/:id/resume', (req, res) => {
+  const { userId } = req as unknown as AuthedRequest;
+  const campaign = getCampaignById(req.params.id);
+  if (!campaign) { res.status(404).json({ error: 'Campaign not found' }); return; }
+  const project = getProjectForUser(campaign.project_id, userId);
+  if (!project) { res.status(404).json({ error: 'Campaign not found' }); return; }
+  if (campaign.status === 'cancelled') { res.status(400).json({ error: 'Cancelled campaigns cannot be resumed' }); return; }
+  if (campaign.status !== 'error') { res.status(400).json({ error: 'Only failed campaigns can be resumed' }); return; }
+
+  const result = resumeCampaign(campaign.id);
+  if (!result) { res.status(500).json({ error: 'Resume failed' }); return; }
+
+  for (const task of result.tasks) {
+    broadcast(userId, { type: 'campaign_task_updated', taskId: task.id, status: task.status });
+  }
+  broadcast(userId, { type: 'campaign_updated', campaignId: campaign.id, status: result.campaign.status });
+  res.json({ campaign: result.campaign, tasks: result.tasks });
 });
 
 export default router;

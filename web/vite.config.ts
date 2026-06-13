@@ -4,9 +4,12 @@ import tailwindcss from '@tailwindcss/vite';
 
 // Some paths (e.g. /projects, /settings) are shared between the React router
 // and API routes. Only proxy when the request is an API call (JSON accept
-// header), otherwise fall through to the SPA so direct URL navigation works.
+// header or a known API sub-path like /media, /artifacts, /research),
+// otherwise fall through to the SPA so direct URL navigation works.
+const API_SUBPATHS = ['/media/', '/artifacts/', '/research/'];
 function apiOrSpaBypass(req) {
   if (req.headers.accept?.includes('application/json')) return undefined;
+  if (API_SUBPATHS.some(p => req.url?.includes(p))) return undefined;
   return '/index.html';
 }
 

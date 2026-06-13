@@ -1,10 +1,10 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useNavigate } from 'react-router-dom';
-import { ChevronDown, GitMerge, X } from 'lucide-react';
+import { Bell, ChevronDown, GitMerge, X } from 'lucide-react';
 import MessageList from './MessageList.js';
 import MessageInput from './MessageInput.js';
-import { getMessages, sendMessage, getChats, updateChatConfig, getModelsForEffort, getSessionWorktree, mergeSessionBranch, getProjects } from '../lib/api.js';
+import { getMessages, sendMessage, getChats, updateChatConfig, getModelsForEffort, getSessionWorktree, mergeSessionBranch, getProjects, truncateMessagesFrom } from '../lib/api.js';
 import { subscribe } from '../lib/ws.js';
 import { cn } from '../lib/utils.js';
 import type { EffortLevel, Message, MessageExecution, Session, WSEvent, WSMessageCreated, WSMessageStarted, WSMessageDelta, WSExecutionUpdate, WSApprovalRequested, WSAutoApproved, WSSessionTitleUpdated, WSAgentError, ClaudeModelInfo } from '../types.js';
@@ -94,11 +94,22 @@ export default function ChatView({ chatId }: ChatViewProps) {
     if (Object.keys(byMessage).length) setExecutions(prev => ({ ...byMessage, ...prev }));
   }, [messages]);
 
+  const [inputValue, setInputValue] = useState('');
+  const [editingMessageId, setEditingMessageId] = useState<string | null>(null);
   const [sending, setSending] = useState(false);
   const [agentError, setAgentError] = useState<string | null>(null);
   const agentActive = sending || streamingIds.size > 0 || Object.values(executions).some(list =>
     list.some(exec => exec.status === 'running' || exec.status === 'awaiting_approval')
   );
+
+  const pendingApproval = Object.values(executions).flat().find(
+    e => e.status === 'awaiting_approval' && e.needsApproval
+  ) ?? null;
+
+  function scrollToApproval(executionId: string) {
+    const el = document.querySelector(`[data-execution-id="${executionId}"]`);
+    el?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+  }
 
   const mutation = useMutation({
     mutationFn: (content: string) => sendMessage(chatId, content),
@@ -111,10 +122,30 @@ export default function ChatView({ chatId }: ChatViewProps) {
     },
   });
 
-  const sendPrompt = useCallback((content: string) => {
+  const handleEditMessage = useCallback((messageId: string, content: string) => {
+    setEditingMessageId(messageId);
+    setInputValue(content);
+  }, []);
+
+  const sendPrompt = useCallback(async (overrideContent?: string) => {
+    const content = (overrideContent ?? inputValue).trim();
+    if (!content) return;
     setAgentError(null);
+    setInputValue('');
+
+    if (editingMessageId) {
+      const eid = editingMessageId;
+      setEditingMessageId(null);
+      await truncateMessagesFrom(chatId, eid);
+      queryClient.setQueryData<Message[]>(['messages', chatId], prev => {
+        if (!prev) return prev;
+        const idx = prev.findIndex(x => x.id === eid);
+        return idx === -1 ? prev : prev.slice(0, idx);
+      });
+    }
+
     mutation.mutate(content);
-  }, [mutation]);
+  }, [inputValue, editingMessageId, chatId, queryClient, mutation]);
 
   const handleWsEvent = useCallback((event: WSEvent) => {
     if (event.type === 'agent_error') {
@@ -307,11 +338,18 @@ export default function ChatView({ chatId }: ChatViewProps) {
       {messages.length === 0 ? (
         <EmptyChatState
           projectName={pinnedProject?.name}
-          disabled={sending}
-          onSelect={sendPrompt}
+          disabled={agentActive}
+          onSelect={(content) => sendPrompt(content)}
         />
       ) : (
-        <MessageList messages={messages} executions={executions} streamingIds={streamingIds} sessionId={chatId} />
+        <MessageList
+          messages={messages}
+          executions={executions}
+          streamingIds={streamingIds}
+          sessionId={chatId}
+          onEditMessage={handleEditMessage}
+          canEdit={!agentActive}
+        />
       )}
 
       {agentError && (
@@ -323,9 +361,26 @@ export default function ChatView({ chatId }: ChatViewProps) {
         </div>
       )}
 
+      {pendingApproval && (
+        <div className="shrink-0 flex items-center justify-between gap-3 border-t border-warning/30 bg-warning/8 px-5 py-2.5">
+          <div className="flex items-center gap-2 text-xs text-foreground/80">
+            <Bell size={13} className="shrink-0 text-warning" />
+            <span>Approval needed{pendingApproval.action ? <> for <span className="font-medium text-foreground">{pendingApproval.action}</span></> : ''}</span>
+          </div>
+          <button
+            onClick={() => scrollToApproval(pendingApproval.executionId)}
+            className="shrink-0 text-xs font-medium text-warning hover:text-warning/80 transition-colors"
+          >
+            Review
+          </button>
+        </div>
+      )}
+
       <MessageInput
+        value={inputValue}
+        onChange={setInputValue}
         onSend={sendPrompt}
-        disabled={sending}
+        disabled={agentActive}
       />
     </div>
   );
@@ -361,7 +416,7 @@ function EmptyChatState({
         <p className="mx-auto mt-2 max-w-md text-sm leading-relaxed text-muted-foreground">
           Ask for a plan, a review, or a concrete change. The agent will keep tool work and project context attached to this conversation.
         </p>
-        <div className="mt-5 flex flex-col gap-2 sm:flex-row sm:flex-wrap sm:justify-center">
+        <div className="mt-5 grid grid-cols-1 gap-2 sm:grid-cols-3">
           {prompts.map(prompt => (
             <Button
               key={prompt}
@@ -369,7 +424,7 @@ function EmptyChatState({
               size="sm"
               disabled={disabled}
               onClick={() => onSelect(prompt)}
-              className="h-auto whitespace-normal justify-start rounded-xl px-3 py-2 text-left text-xs font-normal sm:max-w-64"
+              className="h-auto whitespace-normal justify-start rounded-xl px-3 py-2 text-left text-xs font-normal"
             >
               {prompt}
             </Button>
@@ -400,10 +455,10 @@ function ChatConfigPopover({
         <Button
           variant="ghost"
           size="sm"
-          className="h-7 gap-1.5 rounded-lg border border-border/50 bg-muted/70 px-3 text-xs font-normal"
+          className="h-7 max-w-36 gap-1.5 rounded-lg border border-border/50 bg-muted/70 px-3 text-xs font-normal sm:max-w-none"
         >
-          {label}
-          <ChevronDown size={11} className="text-muted-foreground" />
+          <span className="truncate">{label}</span>
+          <ChevronDown size={11} className="shrink-0 text-muted-foreground" />
         </Button>
       </PopoverTrigger>
       <PopoverContent align="end" className="w-52 p-3">

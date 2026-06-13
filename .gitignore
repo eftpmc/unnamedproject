@@ -5,3 +5,7 @@ dist/
 data/
 .superpowers/
 .playwright-mcp/
+*.png
+*.jpg
+*.jpeg
+.vite/

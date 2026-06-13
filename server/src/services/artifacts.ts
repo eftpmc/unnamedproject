@@ -266,6 +266,59 @@ function filesystemArtifacts(projectId: string): ProjectArtifact[] {
   return artifacts;
 }
 
+export async function registerFileAsArtifact(input: {
+  project_id: string;
+  source_path: string;
+  title?: string;
+  kind?: string;
+}): Promise<ProjectArtifact> {
+  const { readFile, copyFile, mkdir } = await import('fs/promises');
+  const filename = path.basename(input.source_path);
+  const mime = mimeFor(filename);
+  const mediaDir = path.join(getDataDir(), 'projects', input.project_id, 'media');
+  await mkdir(mediaDir, { recursive: true });
+  const dest = path.join(mediaDir, filename);
+  await copyFile(input.source_path, dest);
+  return createArtifact({
+    project_id: input.project_id,
+    kind: input.kind ?? (mime.startsWith('video/') ? 'media' : mime.startsWith('image/') ? 'media' : 'file'),
+    title: input.title ?? titleFromFilename(filename),
+    status: 'ready',
+    mime_type: mime,
+    url: `/projects/${input.project_id}/media/${encodeURIComponent(filename)}`,
+    path: `media/${filename}`,
+    metadata: { source: input.source_path },
+  });
+}
+
+export function getArtifactById(artifactId: string): ProjectArtifact | undefined {
+  const row = getDb()
+    .prepare('SELECT id, project_id, kind, title, description, status, mime_type, path, url, metadata, source_campaign_id, source_task_id, created_at FROM artifacts WHERE id = ?')
+    .get(artifactId) as DbArtifactRow | undefined;
+  return row ? artifactFromRow(row) : undefined;
+}
+
+export async function readArtifactContent(projectId: string, artifactId: string): Promise<string | null> {
+  // DB-backed artifact
+  const resolved = resolveArtifactContentPath(projectId, artifactId);
+  if (resolved) {
+    const { readFile } = await import('fs/promises');
+    return readFile(resolved.filePath, 'utf-8');
+  }
+  // Filesystem artifact with synthetic id like "research:filename.md"
+  if (artifactId.includes(':')) {
+    const [dir, filename] = artifactId.split(':', 2);
+    const filePath = path.join(getDataDir(), 'projects', projectId, dir, filename);
+    const { readFile } = await import('fs/promises');
+    try {
+      return readFile(filePath, 'utf-8');
+    } catch {
+      return null;
+    }
+  }
+  return null;
+}
+
 export function listProjectArtifacts(projectId: string): ProjectArtifact[] {
   const rows = dbArtifacts(projectId);
   const rowPaths = new Set(rows.map(a => a.path).filter(Boolean));

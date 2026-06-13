@@ -37,6 +37,14 @@ export function getChats(): Promise<Session[]> {
   return request('/sessions');
 }
 
+export function searchChats(q: string): Promise<Session[]> {
+  return request(`/sessions/search?q=${encodeURIComponent(q)}`);
+}
+
+export function truncateMessagesFrom(sessionId: string, messageId: string): Promise<{ deleted: number }> {
+  return request(`/sessions/${sessionId}/messages/from/${messageId}`, { method: 'DELETE' });
+}
+
 export function createChat(title?: string): Promise<{ id: string }> {
   return request('/sessions', { method: 'POST', body: JSON.stringify({ title }) });
 }
@@ -159,6 +167,10 @@ export function getCampaign(campaignId: string): Promise<{ campaign: Campaign; t
 
 export function cancelCampaign(campaignId: string): Promise<{ campaign: Campaign }> {
   return request(`/campaigns/${campaignId}/cancel`, { method: 'POST' });
+}
+
+export function resumeCampaign(campaignId: string): Promise<{ campaign: Campaign; tasks: CampaignTask[] }> {
+  return request(`/campaigns/${campaignId}/resume`, { method: 'POST' });
 }
 
 export function updateProject(projectId: string, body: { description?: string }): Promise<void> {

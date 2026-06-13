@@ -192,7 +192,7 @@ router.get('/:id/media', (req, res) => {
       const stat = fsSync.statSync(path.join(mediaDir, e.name));
       return {
         name: e.name,
-        url: `/projects/${project.id}/media/${e.name}`,
+        url: `/projects/${project.id}/media/${encodeURIComponent(e.name)}`,
         createdAt: stat.birthtimeMs,
       };
     });

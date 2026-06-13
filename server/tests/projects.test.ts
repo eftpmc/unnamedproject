@@ -175,6 +175,19 @@ describe('project media', () => {
     expect(typeof res.body.files[0].createdAt).toBe('number');
   });
 
+  it('URL-encodes filenames in the media list', async () => {
+    const mediaDir = path.join(process.env.DATA_DIR!, 'projects', mediaProjectId, 'media');
+    fs.mkdirSync(mediaDir, { recursive: true });
+    fs.writeFileSync(path.join(mediaDir, 'clip with space.mp4'), 'fake video data');
+
+    const res = await request(app)
+      .get(`/projects/${mediaProjectId}/media`)
+      .set('Authorization', `Bearer ${token}`);
+    expect(res.status).toBe(200);
+    const file = res.body.files.find((f: { name: string }) => f.name === 'clip with space.mp4');
+    expect(file.url).toBe(`/projects/${mediaProjectId}/media/clip%20with%20space.mp4`);
+  });
+
   it('exposes media files through the generic artifacts endpoint', async () => {
     const res = await request(app)
       .get(`/projects/${mediaProjectId}/artifacts`)

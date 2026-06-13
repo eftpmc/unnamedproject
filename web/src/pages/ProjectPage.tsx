@@ -26,8 +26,8 @@ import type { Project, Campaign, Session } from '../types.js';
 type Tab = string;
 
 const STATUS_BADGE: Record<Campaign['status'], string> = {
-  running: 'bg-blue-500/10 text-blue-700 dark:text-blue-300 border-blue-200 dark:border-blue-900',
-  done: 'bg-green-500/10 text-green-700 dark:text-green-300 border-green-200 dark:border-green-900',
+  running: 'bg-foreground/8 text-foreground/70 border-transparent',
+  done: 'bg-success/10 text-success border-transparent',
   error: 'bg-destructive/10 text-destructive border-destructive/20',
   cancelled: 'bg-muted text-muted-foreground border-transparent',
 };
@@ -123,6 +123,7 @@ export default function ProjectPage() {
       <PageHeader
         title={project.name}
         description={project.description || undefined}
+        className="border-b-0 pb-0"
         actions={
           <Button
             size="sm"
@@ -135,7 +136,7 @@ export default function ProjectPage() {
         }
       />
       {/* Tab strip */}
-      <div className="shrink-0 overflow-x-auto border-b border-border/40 px-4 sm:px-6">
+      <div className="shrink-0 overflow-x-auto overflow-y-hidden border-b border-border/40 px-4 sm:px-6 [&::-webkit-scrollbar]:hidden [scrollbar-width:none]">
         <Tabs value={tab} onValueChange={value => navigate(tabHref(project.id, value as Tab))}>
           <TabsList variant="line" className="-mx-1 px-1 self-start">
             {TABS.map(t => (
@@ -156,7 +157,7 @@ export default function ProjectPage() {
                 <div className="text-xs font-medium text-muted-foreground mb-2">Active Campaign</div>
                 <Link
                   to={`/projects/${projectId}/campaigns/${activeCampaign.id}`}
-                  className="block rounded-xl border border-border/50 border-l-2 border-l-blue-500 bg-background/55 p-4 transition-colors hover:bg-background/85"
+                  className="block rounded-xl border border-border/50 bg-background/55 p-4 transition-colors hover:bg-background/85"
                 >
                   <div className="flex items-center justify-between">
                     <span className="text-sm font-semibold">{activeCampaign.title}</span>
@@ -172,21 +173,21 @@ export default function ProjectPage() {
             )}
 
             {/* 2. Stats row */}
-            <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
-              <Surface className="p-4">
+            <div className="grid grid-cols-3 gap-2 sm:gap-3">
+              <Surface className="p-3 sm:p-4">
                 <div className="text-xs text-muted-foreground mb-1">Campaigns</div>
-                <div className="text-2xl font-semibold">{campaigns.length}</div>
+                <div className="text-xl sm:text-2xl font-semibold">{campaigns.length}</div>
                 {runningCampaigns.length > 0 && (
-                  <div className="text-xs text-blue-600 font-medium mt-0.5">{runningCampaigns.length} running</div>
+                  <div className="text-xs text-muted-foreground mt-0.5">{runningCampaigns.length} running</div>
                 )}
               </Surface>
-              <Surface className="p-4">
+              <Surface className="p-3 sm:p-4">
                 <div className="text-xs text-muted-foreground mb-1">Chats</div>
-                <div className="text-2xl font-semibold">{pinnedChats.length}</div>
+                <div className="text-xl sm:text-2xl font-semibold">{pinnedChats.length}</div>
               </Surface>
-              <Surface className="p-4">
+              <Surface className="p-3 sm:p-4">
                 <div className="text-xs text-muted-foreground mb-1">MCP Tools</div>
-                <div className="text-2xl font-semibold">{project.enabled_connection_ids.length}</div>
+                <div className="text-xl sm:text-2xl font-semibold">{project.enabled_connection_ids.length}</div>
               </Surface>
             </div>
 
@@ -287,7 +288,17 @@ export default function ProjectPage() {
             {campaigns.length === 0 && pinnedChats.length === 0 && (
               <EmptyPanel
                 title="Nothing here yet"
-                description="Start a chat and ask the orchestrator to get to work. Campaigns and activity will appear here."
+                description="Start a chat and ask the agent to get to work. Campaigns and activity will appear here."
+                action={
+                  <Button
+                    size="sm"
+                    className="h-7 text-xs"
+                    onClick={() => startChatMutation.mutate()}
+                    disabled={startChatMutation.isPending}
+                  >
+                    Start chat
+                  </Button>
+                }
               />
             )}
           </div>
@@ -298,7 +309,17 @@ export default function ProjectPage() {
             {campaigns.length === 0 ? (
               <EmptyPanel
                 title="No campaigns yet"
-                description="Campaigns are created when the agent coordinates multi-step work for this project."
+                description="Start a chat and ask the agent to plan or execute work — it will create a campaign to track progress."
+                action={
+                  <Button
+                    size="sm"
+                    className="h-7 text-xs"
+                    onClick={() => startChatMutation.mutate()}
+                    disabled={startChatMutation.isPending}
+                  >
+                    Start chat
+                  </Button>
+                }
               />
             ) : (
               <div className="overflow-hidden rounded-xl border border-border/50 bg-background/60">
@@ -344,7 +365,17 @@ export default function ProjectPage() {
             {pinnedChats.length === 0 ? (
               <EmptyPanel
                 title="No chats yet"
-                description="Start a chat from this project and it will appear here."
+                description="Chats started from this project are pinned here for easy access."
+                action={
+                  <Button
+                    size="sm"
+                    className="h-7 text-xs"
+                    onClick={() => startChatMutation.mutate()}
+                    disabled={startChatMutation.isPending}
+                  >
+                    Start chat
+                  </Button>
+                }
               />
             ) : (
               <div className="overflow-hidden rounded-xl border border-border/50 bg-background/60 divide-y divide-border/50">

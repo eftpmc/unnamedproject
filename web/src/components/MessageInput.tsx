@@ -1,16 +1,17 @@
-import { useEffect, useRef, useState, type KeyboardEvent } from 'react';
+import { useEffect, useRef, type KeyboardEvent } from 'react';
 import { ArrowUp } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Textarea } from '@/components/ui/textarea';
 import { cn } from '@/lib/utils';
 
 interface MessageInputProps {
-  onSend: (content: string) => void;
+  value: string;
+  onChange: (value: string) => void;
+  onSend: () => void;
   disabled?: boolean;
 }
 
-export default function MessageInput({ onSend, disabled }: MessageInputProps) {
-  const [value, setValue] = useState('');
+export default function MessageInput({ value, onChange, onSend, disabled }: MessageInputProps) {
   const textareaRef = useRef<HTMLTextAreaElement>(null);
 
   useEffect(() => {
@@ -28,10 +29,8 @@ export default function MessageInput({ onSend, disabled }: MessageInputProps) {
   }
 
   function submit() {
-    const trimmed = value.trim();
-    if (!trimmed || disabled) return;
-    onSend(trimmed);
-    setValue('');
+    if (!value.trim() || disabled) return;
+    onSend();
   }
 
   return (
@@ -40,7 +39,7 @@ export default function MessageInput({ onSend, disabled }: MessageInputProps) {
         <Textarea
           ref={textareaRef}
           value={value}
-          onChange={e => setValue(e.target.value)}
+          onChange={e => onChange(e.target.value)}
           onKeyDown={handleKeyDown}
           placeholder={disabled ? 'Agent is responding…' : 'Message…'}
           disabled={disabled}

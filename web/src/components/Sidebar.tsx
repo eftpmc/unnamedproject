@@ -121,7 +121,7 @@ export default function Sidebar({ className, onNavigate }: SidebarProps) {
                       activeChatId === chat.id && 'bg-background/80 shadow-xs ring-1 ring-border/50',
                     )}
                   >
-                    <span className="block w-full truncate text-xs font-medium">{chat.title ?? 'Untitled chat'}</span>
+                    <span className="block w-full truncate text-xs font-medium" title={chat.title ?? 'Untitled chat'}>{chat.title ?? 'Untitled chat'}</span>
                     <span className="mt-0.5 block text-xs text-muted-foreground">{timeAgo(chat.updated_at)}</span>
                   </button>
                 </li>

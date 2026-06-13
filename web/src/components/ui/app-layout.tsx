@@ -155,7 +155,7 @@ function CenteredEmptyState({
   className?: string;
 }) {
   return (
-    <div className={cn('flex flex-1 items-center justify-center px-6 pb-24', className)}>
+    <div className={cn('flex flex-1 items-center justify-center px-6', className)}>
       <Surface className="w-full max-w-md px-6 py-5 text-center shadow-sm">
         <div className="text-base font-semibold text-foreground">{title}</div>
         {description && (

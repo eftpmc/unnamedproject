@@ -24,8 +24,8 @@ function ProjectCard({ project }: { project: Project }) {
   const runningCount = campaigns.filter(c => c.status === 'running').length;
 
   return (
-    <button className="block w-full rounded-xl text-left" onClick={() => navigate(`/projects/${project.id}`)}>
-      <Surface interactive className="flex flex-col gap-2.5 p-4">
+    <button className="block h-full w-full rounded-xl text-left" onClick={() => navigate(`/projects/${project.id}`)}>
+      <Surface interactive className="flex h-full flex-col gap-2.5 p-4">
         <div className="flex items-start justify-between gap-2">
           <div className="flex items-center gap-2.5">
             {project.repo_path

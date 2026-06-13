@@ -20,7 +20,45 @@ export const DEFAULT_INTENT: Intent = {
   ambiguous: true,
 };
 
-const KNOWN_TOOLS = ['invoke_claude_code','invoke_codex','git_op','github_api','web_search','web_fetch','write_file','read_file','image_gen'];
+const KNOWN_TOOLS = [
+  'invoke_claude_code',
+  'invoke_codex',
+  'github_api',
+  'mcp_call',
+  'git_op',
+  'project_query',
+  'rebuild_graph',
+  'remember',
+  'recall',
+  'forget',
+  'create_project',
+  'update_project',
+  'delete_project',
+  'read_file',
+  'search_files',
+  'list_dir',
+  'write_file',
+  'create_artifact',
+  'register_artifact',
+  'list_artifacts',
+  'read_artifact',
+  'list_connections',
+  'test_connection',
+  'list_chats',
+  'read_chat',
+  'create_campaign',
+  'resume_campaign',
+  'list_campaigns',
+  'get_campaign',
+  'get_execution_output',
+  'list_scheduled_tasks',
+  'create_scheduled_task',
+  'update_scheduled_task',
+  'delete_scheduled_task',
+  'generate_video',
+  'web_search',
+  'web_fetch',
+];
 
 const INTENT_SYSTEM = `You are a routing classifier. Given a user message, output JSON only — no prose, no markdown.
 
@@ -52,7 +90,15 @@ Scope:
 - delegate: one coding or creative agent call
 - campaign: multiple independent or sequenced tasks
 
-tools: hint at likely tools from: invoke_claude_code, invoke_codex, git_op, github_api, web_search, web_fetch, write_file, read_file, image_gen
+tools: hint at likely tools from:
+- agents/code: invoke_claude_code, invoke_codex, git_op, github_api
+- project/code context: project_query, rebuild_graph, search_files, read_file, list_dir, write_file
+- campaigns: create_campaign, resume_campaign, list_campaigns, get_campaign, get_execution_output
+- MCP/connections: list_connections, test_connection, mcp_call
+- artifacts: create_artifact, register_artifact, list_artifacts, read_artifact
+- memory/chats: remember, recall, forget, list_chats, read_chat
+- scheduled work: list_scheduled_tasks, create_scheduled_task, update_scheduled_task, delete_scheduled_task
+- research/media: web_search, web_fetch, generate_video
 
 Set ambiguous=true and use general/medium/sonnet/inline defaults when the message is unclear.`;
 

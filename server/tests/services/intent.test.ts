@@ -30,6 +30,41 @@ describe('extractIntentWithClient', () => {
     expect(result.tools).toContain('invoke_claude_code');
   });
 
+  it('accepts the full real tool surface in tool hints', async () => {
+    const json = JSON.stringify({
+      domain: 'multi',
+      complexity: 'high',
+      model: 'opus',
+      tools: ['create_campaign', 'mcp_call', 'create_artifact', 'project_query', 'rebuild_graph', 'create_scheduled_task'],
+      scope: 'campaign',
+      needs_research: true,
+      ambiguous: false,
+    });
+    const result = await extractIntentWithClient('coordinate this work', mockClient(json));
+    expect(result.tools).toEqual([
+      'create_campaign',
+      'mcp_call',
+      'create_artifact',
+      'project_query',
+      'rebuild_graph',
+      'create_scheduled_task',
+    ]);
+  });
+
+  it('filters nonexistent tool names such as image_gen', async () => {
+    const json = JSON.stringify({
+      domain: 'image',
+      complexity: 'medium',
+      model: 'sonnet',
+      tools: ['image_gen', 'web_search'],
+      scope: 'inline',
+      needs_research: false,
+      ambiguous: false,
+    });
+    const result = await extractIntentWithClient('make an image', mockClient(json));
+    expect(result.tools).toEqual(['web_search']);
+  });
+
   it('returns DEFAULT_INTENT when the response is not valid JSON', async () => {
     const result = await extractIntentWithClient('hello', mockClient('not json at all'));
     expect(result).toEqual(DEFAULT_INTENT);

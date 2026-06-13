@@ -38,14 +38,30 @@ vi.mock('../../src/services/executor.js', () => ({
   requestApproval: vi.fn().mockResolvedValue('approved'),
 }));
 
-const { runGitOpMock, invokeClaudeCodeMock, invokeCodexMock } = vi.hoisted(() => ({
+const { runGitOpMock, invokeClaudeCodeMock, invokeCodexMock, ensureWorktreeMock, readFileMock } = vi.hoisted(() => ({
   runGitOpMock: vi.fn().mockResolvedValue('git op result'),
   invokeClaudeCodeMock: vi.fn().mockResolvedValue('claude code result'),
   invokeCodexMock: vi.fn().mockResolvedValue('codex result'),
+  readFileMock: vi.fn().mockResolvedValue('file contents'),
+  ensureWorktreeMock: vi.fn().mockResolvedValue({
+    id: 'worktree-1',
+    project_id: 'project-1',
+    session_id: 'session-1',
+    branch: 'agent/session-1',
+    worktree_path: '/tmp/agent-worktree',
+    claude_session_id: null,
+    codex_session_id: null,
+    created_at: 0,
+  }),
 }));
 vi.mock('../../src/tools/git_op.js', () => ({ runGitOp: runGitOpMock }));
 vi.mock('../../src/tools/invoke_claude_code.js', () => ({ invokeClaudeCode: invokeClaudeCodeMock }));
 vi.mock('../../src/tools/invoke_codex.js', () => ({ invokeCodex: invokeCodexMock }));
+vi.mock('../../src/lib/worktree.js', () => ({ ensureWorktree: ensureWorktreeMock }));
+vi.mock('../../src/tools/file_ops.js', async () => {
+  const actual = await vi.importActual<typeof import('../../src/tools/file_ops.js')>('../../src/tools/file_ops.js');
+  return { ...actual, readFile: readFileMock };
+});
 
 const userId = newId();
 let sessionId: string;
@@ -339,6 +355,113 @@ describe('agent', () => {
       mime_type: 'text/markdown',
     });
     expect(artifact.path).toMatch(/^artifacts\/.+\.md$/);
+  });
+
+  it('runs side-effecting tool calls sequentially in model order', async () => {
+    const db = getDb();
+    const projectId = newId();
+    db.prepare('INSERT INTO projects (id, user_id, name, description, repo_path, enabled_connection_ids) VALUES (?,?,?,?,?,?)')
+      .run(projectId, userId, 'ordered-git', 'Ordered git project', '/tmp/repo', '[]');
+
+    const events: string[] = [];
+    runGitOpMock.mockReset();
+    runGitOpMock.mockImplementationOnce(async () => {
+      events.push('add:start');
+      await new Promise(resolve => setTimeout(resolve, 25));
+      events.push('add:end');
+      return 'staged 1 file(s)';
+    });
+    runGitOpMock.mockImplementationOnce(async () => {
+      events.push('commit:start');
+      events.push('commit:end');
+      return 'committed: test';
+    });
+
+    streamMock.mockImplementationOnce(() => ({
+      on: () => ({ on: () => ({ finalMessage: async () => ({}) }) }),
+      finalMessage: async () => ({
+        stop_reason: 'tool_use',
+        content: [
+          { type: 'tool_use', id: 'tool-add', name: 'git_op', input: { project_id: projectId, op: 'add' } },
+          { type: 'tool_use', id: 'tool-commit', name: 'git_op', input: { project_id: projectId, op: 'commit', message: 'test' } },
+        ],
+      }),
+    }));
+    streamMock.mockImplementationOnce(() => {
+      const listeners: Record<string, ((...args: unknown[]) => void)[]> = {};
+      return {
+        on: (event: string, cb: (...args: unknown[]) => void) => {
+          (listeners[event] ??= []).push(cb);
+          return { on: () => ({ finalMessage: async () => ({}) }) };
+        },
+        finalMessage: async () => {
+          for (const cb of listeners.text ?? []) cb('done');
+          return { stop_reason: 'end_turn', content: [{ type: 'text', text: 'done' }] };
+        },
+      };
+    });
+
+    const msgId = newId();
+    db.prepare('INSERT INTO messages (id, session_id, role, content) VALUES (?,?,?,?)')
+      .run(msgId, sessionId, 'user', 'commit the changes');
+
+    await runAgentTurn(userId, sessionId, msgId);
+
+    expect(events).toEqual(['add:start', 'add:end', 'commit:start', 'commit:end']);
+    expect(runGitOpMock).toHaveBeenCalledTimes(2);
+  });
+
+  it('runs read-only tool calls in parallel', async () => {
+    const events: string[] = [];
+    const db = getDb();
+    const projectId = newId();
+    db.prepare('INSERT INTO projects (id, user_id, name, description, repo_path, enabled_connection_ids) VALUES (?,?,?,?,?,?)')
+      .run(projectId, userId, 'parallel-reads', 'Parallel reads project', '/tmp/repo', '[]');
+
+    readFileMock.mockReset();
+    readFileMock.mockImplementationOnce(async () => {
+      events.push('a:start');
+      await new Promise(resolve => setTimeout(resolve, 25));
+      events.push('a:end');
+      return 'a';
+    });
+    readFileMock.mockImplementationOnce(async () => {
+      events.push('b:start');
+      events.push('b:end');
+      return 'b';
+    });
+
+    streamMock.mockImplementationOnce(() => ({
+      on: () => ({ on: () => ({ finalMessage: async () => ({}) }) }),
+      finalMessage: async () => ({
+        stop_reason: 'tool_use',
+        content: [
+          { type: 'tool_use', id: 'tool-read-a', name: 'read_file', input: { project_id: projectId, path: 'a.txt' } },
+          { type: 'tool_use', id: 'tool-read-b', name: 'read_file', input: { project_id: projectId, path: 'b.txt' } },
+        ],
+      }),
+    }));
+    streamMock.mockImplementationOnce(() => {
+      const listeners: Record<string, ((...args: unknown[]) => void)[]> = {};
+      return {
+        on: (event: string, cb: (...args: unknown[]) => void) => {
+          (listeners[event] ??= []).push(cb);
+          return { on: () => ({ finalMessage: async () => ({}) }) };
+        },
+        finalMessage: async () => {
+          for (const cb of listeners.text ?? []) cb('done');
+          return { stop_reason: 'end_turn', content: [{ type: 'text', text: 'done' }] };
+        },
+      };
+    });
+
+    const msgId = newId();
+    getDb().prepare('INSERT INTO messages (id, session_id, role, content) VALUES (?,?,?,?)')
+      .run(msgId, sessionId, 'user', 'read two files');
+
+    await runAgentTurn(userId, sessionId, msgId);
+
+    expect(events).toEqual(['a:start', 'b:start', 'b:end', 'a:end']);
   });
 
   it('dispatches the forget tool', async () => {

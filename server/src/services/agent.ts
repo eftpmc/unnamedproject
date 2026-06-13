@@ -107,6 +107,50 @@ function finishCampaignTask(userId: string, taskId: string, result: string): voi
   broadcast(userId, { type: 'campaign_task_updated', taskId, status });
 }
 
+const PARALLEL_SAFE_TOOLS = new Set([
+  'recall',
+  'list_chats',
+  'read_chat',
+  'list_artifacts',
+  'read_artifact',
+  'list_connections',
+  'test_connection',
+  'search_files',
+  'read_file',
+  'list_dir',
+  'project_query',
+  'list_campaigns',
+  'get_campaign',
+  'get_execution_output',
+  'list_scheduled_tasks',
+]);
+
+async function dispatchToolBlocks(
+  toolUseBlocks: Anthropic.ToolUseBlock[],
+  userId: string,
+  userMessageId: string,
+  sessionId: string,
+): Promise<Anthropic.ToolResultBlockParam[]> {
+  const runBlock = async (block: Anthropic.ToolUseBlock): Promise<Anthropic.ToolResultBlockParam> => {
+    const result = await dispatchTool(block.name, block.input as Record<string, unknown>, userId, userMessageId, sessionId);
+    return {
+      type: 'tool_result',
+      tool_use_id: block.id,
+      content: result,
+    };
+  };
+
+  if (toolUseBlocks.every(block => PARALLEL_SAFE_TOOLS.has(block.name))) {
+    return Promise.all(toolUseBlocks.map(runBlock));
+  }
+
+  const results: Anthropic.ToolResultBlockParam[] = [];
+  for (const block of toolUseBlocks) {
+    results.push(await runBlock(block));
+  }
+  return results;
+}
+
 async function dispatchTool(
   toolName: string,
   toolInput: Record<string, unknown>,
@@ -676,17 +720,7 @@ export async function runAgentTurn(userId: string, sessionId: string, userMessag
 
         currentMessages.push({ role: 'assistant', content: response.content });
 
-        // Dispatch all tool calls (potentially parallel for independent tools)
-        const toolResults = await Promise.all(
-          toolUseBlocks.map(async block => {
-            const result = await dispatchTool(block.name, block.input as Record<string, unknown>, userId, userMessageId, sessionId);
-            return {
-              type: 'tool_result' as const,
-              tool_use_id: block.id,
-              content: result,
-            };
-          })
-        );
+        const toolResults = await dispatchToolBlocks(toolUseBlocks, userId, userMessageId, sessionId);
 
         currentMessages.push({ role: 'user', content: toolResults });
         continue;

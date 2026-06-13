@@ -35,7 +35,7 @@ export function getAnthropicKey(userId: string): string {
     `)
     .get(userId) as { id: string } | undefined;
   if (!conn) throw new Error('No Anthropic connection configured');
-  const config = getDecryptedConfig(conn.id);
+  const config = getDecryptedConfig(conn.id, userId);
   return config.apiKey;
 }
 

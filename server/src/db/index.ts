@@ -67,7 +67,9 @@ function applySchema(): void {
       user_id TEXT PRIMARY KEY REFERENCES users(id) ON DELETE CASCADE,
       projects_root TEXT,
       claude_code_budget_usd REAL,
-      codex_budget_usd REAL
+      codex_budget_usd REAL,
+      permission_profile TEXT NOT NULL DEFAULT 'fast'
+        CHECK(permission_profile IN ('fast','trusted','strict'))
     );
 
     CREATE TABLE IF NOT EXISTS agent_usage (
@@ -229,6 +231,9 @@ function applySchema(): void {
   }
   if (!userSettingsCols.some(c => c.name === 'codex_budget_usd')) {
     db.exec('ALTER TABLE user_settings ADD COLUMN codex_budget_usd REAL');
+  }
+  if (!userSettingsCols.some(c => c.name === 'permission_profile')) {
+    db.exec("ALTER TABLE user_settings ADD COLUMN permission_profile TEXT NOT NULL DEFAULT 'fast' CHECK(permission_profile IN ('fast','trusted','strict'))");
   }
 
   const sessionCols = db.prepare("SELECT name FROM pragma_table_info('sessions')").all() as { name: string }[];
@@ -461,6 +466,25 @@ export function setAgentBudget(userId: string, tool: AgentUsageTool, budgetUsd: 
       ON CONFLICT(user_id) DO UPDATE SET ${column} = excluded.${column}
     `)
     .run(userId, budgetUsd);
+}
+
+export type PermissionProfile = 'fast' | 'trusted' | 'strict';
+
+export function getPermissionProfile(userId: string): PermissionProfile {
+  const row = getDb()
+    .prepare('SELECT permission_profile FROM user_settings WHERE user_id = ?')
+    .get(userId) as { permission_profile: string } | undefined;
+  const profile = row?.permission_profile;
+  return profile === 'trusted' || profile === 'strict' ? profile : 'fast';
+}
+
+export function setPermissionProfile(userId: string, profile: PermissionProfile): void {
+  getDb()
+    .prepare(`
+      INSERT INTO user_settings (user_id, permission_profile) VALUES (?, ?)
+      ON CONFLICT(user_id) DO UPDATE SET permission_profile = excluded.permission_profile
+    `)
+    .run(userId, profile);
 }
 
 export function recordAgentUsage(userId: string, tool: AgentUsageTool, costUsd: number): void {

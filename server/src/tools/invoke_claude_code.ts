@@ -5,6 +5,7 @@ import path from 'path';
 import { appendOutput, requestApproval } from '../services/executor.js';
 import { registerProcess, unregisterProcess } from '../lib/process-registry.js';
 import { DELEGATE_FRAMING, DELEGATE_TIMEOUT_MS } from './agent_framing.js';
+import { claudePermissionArgs, getDelegateEnv, normalizePermissionProfile, type PermissionProfile } from '../services/permissions.js';
 
 interface ClaudeCodeInput {
   prompt: string;
@@ -20,6 +21,7 @@ interface ToolContext {
   apiKey: string | null;
   resumeSessionId?: string | null;
   mcpServers?: Record<string, McpServerConfig>;
+  permissionProfile?: PermissionProfile;
 }
 
 export interface ClaudeCodeResult {
@@ -46,7 +48,8 @@ function summarizeToolUse(name: string, input: Record<string, unknown>): string 
 export async function invokeClaudeCode(input: ClaudeCodeInput, ctx: ToolContext): Promise<ClaudeCodeResult> {
   await requestApproval(ctx.executionId, ctx.userId, 'invoke_claude_code', { prompt: input.prompt }, 'agent');
 
-  const args = ['--print', '--permission-mode', 'bypassPermissions', '--output-format', 'stream-json', '--verbose'];
+  const profile = normalizePermissionProfile(ctx.permissionProfile);
+  const args = ['--print', ...claudePermissionArgs(profile), '--output-format', 'stream-json', '--verbose'];
   let mcpConfigDir: string | null = null;
   if (input.model) args.push('--model', input.model);
   if (!ctx.resumeSessionId) args.push('--append-system-prompt', DELEGATE_FRAMING);
@@ -63,7 +66,7 @@ export async function invokeClaudeCode(input: ClaudeCodeInput, ctx: ToolContext)
   return new Promise((resolve, reject) => {
     const proc = spawn('claude', args, {
       cwd: ctx.repoPath,
-      env: ctx.apiKey ? { ...process.env, ANTHROPIC_API_KEY: ctx.apiKey } : process.env,
+      env: getDelegateEnv('claude_code', ctx.apiKey, profile),
     });
 
     registerProcess(ctx.executionId, proc);

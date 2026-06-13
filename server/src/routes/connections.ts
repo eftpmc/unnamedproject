@@ -70,10 +70,10 @@ router.delete('/:id', (req, res) => {
   res.status(204).send();
 });
 
-export function getDecryptedConfig(connectionId: string): Record<string, string> {
+export function getDecryptedConfig(connectionId: string, userId: string): Record<string, string> {
   const row = getDb()
-    .prepare('SELECT encrypted_config FROM connections WHERE id = ?')
-    .get(connectionId) as { encrypted_config: string } | undefined;
+    .prepare('SELECT encrypted_config FROM connections WHERE id = ? AND user_id = ?')
+    .get(connectionId, userId) as { encrypted_config: string } | undefined;
   if (!row) throw new Error(`Connection ${connectionId} not found`);
   return JSON.parse(decrypt(row.encrypted_config, deriveKey()));
 }

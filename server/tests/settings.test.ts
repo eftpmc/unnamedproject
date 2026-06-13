@@ -22,6 +22,7 @@ describe('settings', () => {
       .set('Authorization', `Bearer ${token}`);
     expect(res.status).toBe(200);
     expect(res.body.projects_root).toMatch(/projects$/);
+    expect(res.body.permission_profile).toBe('fast');
   });
 
   it('updates projects_root', async () => {
@@ -35,5 +36,22 @@ describe('settings', () => {
       .get('/settings')
       .set('Authorization', `Bearer ${token}`);
     expect(get.body.projects_root).toBe('/tmp/projects');
+  });
+
+  it('updates permission_profile', async () => {
+    const put = await request(app)
+      .put('/settings')
+      .set('Authorization', `Bearer ${token}`)
+      .send({ projects_root: '/tmp/projects', permission_profile: 'strict' });
+    expect(put.status).toBe(200);
+    expect(put.body.permission_profile).toBe('strict');
+  });
+
+  it('rejects invalid permission_profile values', async () => {
+    const put = await request(app)
+      .put('/settings')
+      .set('Authorization', `Bearer ${token}`)
+      .send({ projects_root: '/tmp/projects', permission_profile: 'loose' });
+    expect(put.status).toBe(400);
   });
 });

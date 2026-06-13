@@ -2,6 +2,7 @@ import { spawn } from 'child_process';
 import { appendOutput, requestApproval } from '../services/executor.js';
 import { registerProcess, unregisterProcess } from '../lib/process-registry.js';
 import { DELEGATE_FRAMING, DELEGATE_TIMEOUT_MS } from './agent_framing.js';
+import { codexPermissionArgs, getDelegateEnv, normalizePermissionProfile, type PermissionProfile } from '../services/permissions.js';
 
 interface CodexInput {
   prompt: string;
@@ -17,6 +18,7 @@ interface ToolContext {
   apiKey: string | null;
   resumeSessionId?: string | null;
   mcpServers?: Record<string, McpServerConfig>;
+  permissionProfile?: PermissionProfile;
 }
 
 export interface CodexResult {
@@ -67,12 +69,13 @@ function mcpServerConfigOverrides(servers: Record<string, McpServerConfig>): str
 export async function invokeCodex(input: CodexInput, ctx: ToolContext): Promise<CodexResult> {
   await requestApproval(ctx.executionId, ctx.userId, 'invoke_codex', { prompt: input.prompt }, 'agent');
 
+  const profile = normalizePermissionProfile(ctx.permissionProfile);
   // codex exec [resume <sessionId>] --dangerously-bypass-approvals-and-sandbox --json [--skip-git-repo-check] "<prompt>"
   const args = ['exec'];
   if (ctx.resumeSessionId) {
     args.push('resume', ctx.resumeSessionId);
   }
-  args.push('--dangerously-bypass-approvals-and-sandbox', '--json');
+  args.push(...codexPermissionArgs(profile), '--json');
   if (!ctx.resumeSessionId) args.push('--skip-git-repo-check');
   if (input.model) args.push('-m', input.model);
   if (ctx.mcpServers && Object.keys(ctx.mcpServers).length > 0) {
@@ -86,7 +89,7 @@ export async function invokeCodex(input: CodexInput, ctx: ToolContext): Promise<
     const proc = spawn('codex', args, {
       cwd: ctx.repoPath,
       stdio: ['ignore', 'pipe', 'pipe'],
-      env: ctx.apiKey ? { ...process.env, OPENAI_API_KEY: ctx.apiKey } : process.env,
+      env: getDelegateEnv('codex', ctx.apiKey, profile),
     });
 
     registerProcess(ctx.executionId, proc);

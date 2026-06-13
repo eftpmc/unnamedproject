@@ -1,0 +1,46 @@
+import { describe, it, expect, vi } from 'vitest';
+import { render, screen } from '@testing-library/react';
+import { MemoryRouter } from 'react-router-dom';
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
+import Settings from './Settings.js';
+
+vi.mock('../lib/api.js', () => ({
+  getConnections: vi.fn().mockResolvedValue([]),
+  getProjects: vi.fn().mockResolvedValue([]),
+  getMemory: vi.fn().mockResolvedValue([]),
+  getScheduledTasks: vi.fn().mockResolvedValue([]),
+  getSettings: vi.fn().mockResolvedValue({
+    projects_root: '/tmp/projects',
+    agent_budgets: { claude_code: null, codex: null },
+    permission_profile: 'fast',
+  }),
+  createConnection: vi.fn(),
+  deleteConnection: vi.fn(),
+  updateSettings: vi.fn(),
+  updateAgentBudgets: vi.fn(),
+  updateScheduledTask: vi.fn(),
+  runScheduledTask: vi.fn(),
+}));
+
+vi.mock('../lib/auth.js', () => ({ clearToken: vi.fn() }));
+
+function renderSettings() {
+  const queryClient = new QueryClient();
+  return render(
+    <QueryClientProvider client={queryClient}>
+      <MemoryRouter>
+        <Settings />
+      </MemoryRouter>
+    </QueryClientProvider>
+  );
+}
+
+describe('Settings', () => {
+  it('renders the permission profile control', async () => {
+    renderSettings();
+
+    expect(await screen.findByText('Agent permissions')).toBeInTheDocument();
+    expect(screen.getByText('Permission profile')).toBeInTheDocument();
+    expect(screen.getByText('Fast')).toBeInTheDocument();
+  });
+});

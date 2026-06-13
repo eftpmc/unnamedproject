@@ -55,6 +55,41 @@ describe('invoke_codex', () => {
     expect(args[idx + 1]).toBe('gpt-5');
   });
 
+  it('uses a minimal env by default while preserving the OpenAI key', async () => {
+    process.env.UNRELATED_SECRET = 'do-not-leak';
+    const proc = makeProc();
+    vi.mocked(spawn).mockReturnValue(proc as any);
+
+    const promise = invokeCodex(
+      { prompt: 'do the thing' },
+      { userId: 'u1', executionId: 'e1', repoPath: '/tmp/repo', apiKey: 'sk-test' }
+    );
+    await new Promise(setImmediate);
+    proc.emit('close', 0);
+    await promise;
+
+    const options = vi.mocked(spawn).mock.calls[0][2] as { env: NodeJS.ProcessEnv };
+    expect(options.env.OPENAI_API_KEY).toBe('sk-test');
+    expect(options.env.UNRELATED_SECRET).toBeUndefined();
+    delete process.env.UNRELATED_SECRET;
+  });
+
+  it('omits the bypass permission flag in strict profile', async () => {
+    const proc = makeProc();
+    vi.mocked(spawn).mockReturnValue(proc as any);
+
+    const promise = invokeCodex(
+      { prompt: 'do the thing' },
+      { userId: 'u1', executionId: 'e1', repoPath: '/tmp/repo', apiKey: 'sk-test', permissionProfile: 'strict' }
+    );
+    await new Promise(setImmediate);
+    proc.emit('close', 0);
+    await promise;
+
+    const args = vi.mocked(spawn).mock.calls[0][1] as string[];
+    expect(args).not.toContain('--dangerously-bypass-approvals-and-sandbox');
+  });
+
   it('passes mcp servers as -c overrides, not the unsupported --mcp-config flag', async () => {
     const proc = makeProc();
     vi.mocked(spawn).mockReturnValue(proc as any);

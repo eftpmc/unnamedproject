@@ -86,9 +86,12 @@ export interface AgentBudgets {
   codex: number | null;
 }
 
+export type PermissionProfile = 'fast' | 'trusted' | 'strict';
+
 export interface UserSettings {
   projects_root: string;
   agent_budgets: AgentBudgets;
+  permission_profile: PermissionProfile;
 }
 
 export interface Connection {

@@ -1,5 +1,5 @@
 import { getToken, setToken, clearToken } from './auth.js';
-import type { Session, Message, Project, ProjectArtifact, Connection, EffortLevel, ClaudeModelInfo, UserSettings, AgentBudgets, Memory, ScheduledTask, SessionWorktree, Campaign, CampaignTask } from '../types.js';
+import type { Session, Message, Project, ProjectArtifact, Connection, EffortLevel, ClaudeModelInfo, UserSettings, AgentBudgets, Memory, ScheduledTask, SessionWorktree, Campaign, CampaignTask, PermissionProfile } from '../types.js';
 
 async function request<T>(path: string, init: RequestInit = {}): Promise<T> {
   const token = getToken();
@@ -121,11 +121,11 @@ export function getSettings(): Promise<UserSettings> {
   return request('/settings');
 }
 
-export function updateSettings(body: { projects_root: string }): Promise<UserSettings> {
+export function updateSettings(body: { projects_root: string; permission_profile?: PermissionProfile }): Promise<UserSettings> {
   return request('/settings', { method: 'PUT', body: JSON.stringify(body) });
 }
 
-export function updateAgentBudgets(body: { claude_code?: number | null; codex?: number | null }): Promise<{ agent_budgets: AgentBudgets }> {
+export function updateAgentBudgets(body: { claude_code?: number | null; codex?: number | null }): Promise<{ agent_budgets: AgentBudgets; permission_profile: PermissionProfile }> {
   return request('/settings/agent-budgets', { method: 'PUT', body: JSON.stringify(body) });
 }
 

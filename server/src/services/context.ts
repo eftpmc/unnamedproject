@@ -1,7 +1,7 @@
 import type Anthropic from '@anthropic-ai/sdk';
 import fs from 'fs';
 import path from 'path';
-import { getDb, getAgentBudgets, getMonthlyUsage, getDataDir, type DbProject } from '../db/index.js';
+import { getDb, getAgentBudgets, getMonthlyUsage, getDataDir, getPermissionProfile, type DbProject } from '../db/index.js';
 import { recallRelevant } from './memory.js';
 import { formatEntry } from '../tools/memory_tools.js';
 import { toolDefinitions } from '../tools/definitions.js';
@@ -27,7 +27,7 @@ function readWorkspaceMd(project: DbProject): string | null {
 function baseBlock(intent: Intent): string {
   const isCode = intent.domain === 'code' || intent.domain === 'multi' || intent.domain === 'general';
   const autoApproved = isCode
-    ? 'invoke_claude_code, invoke_codex, generate_video, git_op add/commit, create_project, update_project, project_query, rebuild_graph, search_files, read_file, list_dir, recall, remember, forget, list_chats, read_chat, register_artifact, list_artifacts, read_artifact, list_connections, test_connection, create_campaign, resume_campaign, list_campaigns, get_campaign, get_execution_output, list_scheduled_tasks, create_scheduled_task, update_scheduled_task, delete_scheduled_task'
+    ? 'invoke_claude_code, invoke_codex, generate_video, git_op add/commit, create_project, update_project, project_query, rebuild_graph, search_files, read_file, list_dir, recall, remember, forget, list_chats, read_chat, register_artifact, list_artifacts, read_artifact, list_connections, test_connection, create_campaign, resume_campaign, list_campaigns, get_campaign, get_execution_output, list_scheduled_tasks, create_scheduled_task, update_scheduled_task'
     : 'create_project, search_files, read_file, list_dir, recall, remember, forget, write_file, list_chats, read_chat, list_artifacts, read_artifact, web_search, web_fetch';
 
   return `You are a personal AI operator and orchestrator. You decide how work gets done — you never implement code, write files, or run git operations yourself when the task belongs to a coding agent.
@@ -49,6 +49,17 @@ Before calling mcp_call, use list_connections to discover available MCP servers 
 
 ## File search
 Use search_files for fast codebase lookups (finding where a function is defined, tracing usages, locating config). Only fall back to project_query for broad architectural questions that need reasoning across the whole codebase.`;
+}
+
+function permissionBlock(userId: string): string {
+  const profile = getPermissionProfile(userId);
+  const description = {
+    fast: 'delegated agents run non-interactively in isolated worktrees with a minimal environment; this is the default speed/safety balance.',
+    trusted: 'delegated agents run non-interactively and inherit the server environment; use only for fully trusted local work.',
+    strict: 'delegated agents avoid bypass permission flags and may fail or pause if their CLI requires interactive approval.',
+  }[profile];
+  return `## Permission profile
+Active profile: ${profile}. ${description}`;
 }
 
 function researchBlock(): string {
@@ -208,6 +219,7 @@ export function buildContext(userId: string, sessionId: string, intent: Intent):
 
   const blocks: string[] = [
     baseBlock(intent),
+    permissionBlock(userId),
     researchBlock(),
   ];
 

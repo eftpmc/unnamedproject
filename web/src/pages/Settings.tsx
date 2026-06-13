@@ -9,6 +9,7 @@ import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, D
 import { ConfirmDialog } from '@/components/ui/confirm-dialog';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Textarea } from '@/components/ui/textarea';
 import { ContentColumn, PageBody, PageHeader, PageSection, PageShell } from '@/components/ui/app-layout';
 import {
@@ -25,7 +26,7 @@ import {
   updateSettings,
 } from '../lib/api.js';
 import { clearToken } from '../lib/auth.js';
-import type { Connection, Memory, Project, ScheduledTask, UserSettings } from '../types.js';
+import type { Connection, Memory, PermissionProfile, Project, ScheduledTask, UserSettings } from '../types.js';
 
 type SetupKind = 'lead_agent' | 'claude_code' | 'codex' | 'github' | 'mcp';
 
@@ -213,6 +214,7 @@ export default function Settings() {
   const [setupError, setSetupError] = useState('');
 
   const [projectsRoot, setProjectsRoot] = useState('');
+  const [permissionProfile, setPermissionProfile] = useState<PermissionProfile>('fast');
   const [pendingDelete, setPendingDelete] = useState<{ id: string } | null>(null);
   const [projectsRootError, setProjectsRootError] = useState('');
 
@@ -231,6 +233,7 @@ export default function Settings() {
 
   useEffect(() => {
     if (settings?.projects_root) setProjectsRoot(settings.projects_root);
+    if (settings?.permission_profile) setPermissionProfile(settings.permission_profile);
   }, [settings]);
 
   useEffect(() => {
@@ -294,7 +297,7 @@ export default function Settings() {
   });
 
   const updateSettingsMutation = useMutation({
-    mutationFn: (root: string) => updateSettings({ projects_root: root }),
+    mutationFn: (body: { projects_root: string; permission_profile?: PermissionProfile }) => updateSettings(body),
     onSuccess: () => qc.invalidateQueries({ queryKey: ['settings'] }),
     onError: (e: Error) => setProjectsRootError(e.message),
   });
@@ -585,14 +588,14 @@ export default function Settings() {
               className={inputCls}
             />
           </div>
-          <Button variant="ghost" onClick={() => updateSettingsMutation.mutate(projectsRoot)}>
+          <Button variant="ghost" onClick={() => updateSettingsMutation.mutate({ projects_root: projectsRoot })}>
             Save
           </Button>
           <Button
             variant="ghost"
             onClick={() => {
               setProjectsRoot('');
-              updateSettingsMutation.mutate('');
+              updateSettingsMutation.mutate({ projects_root: '' });
             }}
           >
             Reset to default
@@ -602,6 +605,37 @@ export default function Settings() {
         <p className="mb-3 max-w-3xl text-xs leading-relaxed text-muted-foreground/70">
           New repo-backed projects are created here. Keep the default app data folder, or point it at a workspace
           location such as <code>~/code</code>.
+        </p>
+      </PageSection>
+
+      <PageSection title="Agent permissions">
+        <div className="mb-3 flex flex-col gap-3 sm:flex-row sm:items-end">
+          <div className="flex-1">
+            <Label>Permission profile</Label>
+            <Select value={permissionProfile} onValueChange={value => setPermissionProfile(value as PermissionProfile)}>
+              <SelectTrigger className="w-full">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="fast">Fast</SelectItem>
+                <SelectItem value="trusted">Trusted</SelectItem>
+                <SelectItem value="strict">Strict</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
+          <Button
+            variant="ghost"
+            onClick={() => updateSettingsMutation.mutate({
+              projects_root: projectsRoot,
+              permission_profile: permissionProfile,
+            })}
+          >
+            Save
+          </Button>
+        </div>
+        <p className="mb-3 max-w-3xl text-xs leading-relaxed text-muted-foreground/70">
+          Fast keeps delegated agents non-interactive while using a minimal environment. Trusted restores full
+          environment inheritance for local-only work. Strict removes bypass flags and may require manual CLI approval.
         </p>
       </PageSection>
 

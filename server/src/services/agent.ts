@@ -1,9 +1,9 @@
 import Anthropic from '@anthropic-ai/sdk';
-import { getDb, getProjectForUser, setAgentWorktreeSession, updateCampaignTaskStatus, maybeCompleteCampaign, getCampaignForTask, getCampaignSummaries, getCampaignById, getCampaignTasks, getExecutionById, getScheduledTasksForUser, createScheduledTask, updateScheduledTask, deleteScheduledTask, resumeCampaign } from '../db/index.js';
+import { getDb, getProjectForUser, setAgentWorktreeSession, updateCampaignTaskStatus, maybeCompleteCampaign, getCampaignForTask, getCampaignSummaries, getCampaignById, getCampaignTasks, getExecutionById, getScheduledTasksForUser, createScheduledTask, updateScheduledTask, deleteScheduledTask, resumeCampaign, getPermissionProfile } from '../db/index.js';
 import { runAgentPipeline, type AgentPipelineCtx } from './agent_pipeline.js';
 import { ensureWorktree } from '../lib/worktree.js';
 import { getDecryptedConfig } from '../routes/connections.js';
-import { createExecution, completeExecution, appendOutput } from './executor.js';
+import { createExecution, completeExecution, appendOutput, requestApproval } from './executor.js';
 import { runGitOp } from '../tools/git_op.js';
 import { runGithubApi } from '../tools/github_api.js';
 import { invokeClaudeCode } from '../tools/invoke_claude_code.js';
@@ -79,7 +79,7 @@ function getMcpServersForUser(userId: string): Record<string, McpServerConfig> {
   const servers: Record<string, McpServerConfig> = {};
   for (const conn of conns) {
     try {
-      const cfg = getDecryptedConfig(conn.id);
+      const cfg = getDecryptedConfig(conn.id, userId);
       if (cfg.command) {
         servers[conn.id] = {
           command: cfg.command,
@@ -148,7 +148,7 @@ async function dispatchTool(
           const anthropicConn = getDb()
             .prepare(`SELECT id FROM connections WHERE id IN (${connectionIds.map(() => '?').join(',')}) AND type = 'anthropic' LIMIT 1`)
             .get(...connectionIds) as { id: string } | undefined;
-          if (anthropicConn) ccApiKey = getDecryptedConfig(anthropicConn.id).apiKey;
+          if (anthropicConn) ccApiKey = getDecryptedConfig(anthropicConn.id, userId).apiKey;
         }
         const ccWorktree = await ensureWorktree(project, sessionId);
         const ccTaskId = toolInput.campaign_task_id as string | undefined;
@@ -159,7 +159,7 @@ async function dispatchTool(
         await runAgentPipeline(ccCtx, async () => {
           const ccResult = await invokeClaudeCode(
             { prompt: toolInput.prompt as string, model: toolInput.model as string | undefined },
-            { userId, executionId, repoPath: ccWorktree.worktree_path, apiKey: ccApiKey, resumeSessionId: ccWorktree.claude_session_id, mcpServers: getMcpServersForUser(userId) }
+            { userId, executionId, repoPath: ccWorktree.worktree_path, apiKey: ccApiKey, resumeSessionId: ccWorktree.claude_session_id, mcpServers: getMcpServersForUser(userId), permissionProfile: getPermissionProfile(userId) }
           );
           if (ccResult.sessionId) setAgentWorktreeSession(ccWorktree.id, 'claude', ccResult.sessionId);
           ccCtx.result = ccResult.result;
@@ -184,7 +184,7 @@ async function dispatchTool(
           const openaiConn = getDb()
             .prepare(`SELECT id FROM connections WHERE id IN (${connectionIds.map(() => '?').join(',')}) AND type = 'openai' LIMIT 1`)
             .get(...connectionIds) as { id: string } | undefined;
-          if (openaiConn) codexApiKey = getDecryptedConfig(openaiConn.id).apiKey;
+          if (openaiConn) codexApiKey = getDecryptedConfig(openaiConn.id, userId).apiKey;
         }
         const codexWorktree = await ensureWorktree(project, sessionId);
         const codexTaskId = toolInput.campaign_task_id as string | undefined;
@@ -195,7 +195,7 @@ async function dispatchTool(
         await runAgentPipeline(codexCtx, async () => {
           const codexResult = await invokeCodex(
             { prompt: toolInput.prompt as string, model: toolInput.model as string | undefined },
-            { userId, executionId, repoPath: codexWorktree.worktree_path, apiKey: codexApiKey, resumeSessionId: codexWorktree.codex_session_id, mcpServers: getMcpServersForUser(userId) }
+            { userId, executionId, repoPath: codexWorktree.worktree_path, apiKey: codexApiKey, resumeSessionId: codexWorktree.codex_session_id, mcpServers: getMcpServersForUser(userId), permissionProfile: getPermissionProfile(userId) }
           );
           if (codexResult.sessionId) setAgentWorktreeSession(codexWorktree.id, 'codex', codexResult.sessionId);
           codexCtx.result = codexResult.result;
@@ -209,7 +209,7 @@ async function dispatchTool(
         const ghConn = getDb()
           .prepare("SELECT id FROM connections WHERE user_id = ? AND type = 'github' LIMIT 1")
           .get(userId) as { id: string } | undefined;
-        const token = ghConn ? getDecryptedConfig(ghConn.id).token ?? '' : '';
+        const token = ghConn ? getDecryptedConfig(ghConn.id, userId).token ?? '' : '';
         const ghTaskId = toolInput.campaign_task_id as string | undefined;
         if (ghTaskId) startCampaignTask(userId, ghTaskId, executionId);
         result = await runGithubApi(toolInput as unknown as Parameters<typeof runGithubApi>[0], { userId, executionId, token });
@@ -217,7 +217,14 @@ async function dispatchTool(
         break;
       }
       case 'mcp_call': {
-        const mcpConfig = getDecryptedConfig(toolInput.connection_id as string);
+        const mcpConn = getDb()
+          .prepare("SELECT id FROM connections WHERE id = ? AND user_id = ? AND type = 'mcp'")
+          .get(toolInput.connection_id as string, userId) as { id: string } | undefined;
+        if (!mcpConn) {
+          result = `Error: MCP connection ${toolInput.connection_id as string} not found`;
+          break;
+        }
+        const mcpConfig = getDecryptedConfig(mcpConn.id, userId);
         const mcpTaskId = toolInput.campaign_task_id as string | undefined;
         if (mcpTaskId) startCampaignTask(userId, mcpTaskId, executionId);
         result = await callMcpTool(
@@ -336,7 +343,7 @@ async function dispatchTool(
         const enriched = await Promise.all(conns.map(async c => {
           if (c.type !== 'mcp') return c;
           try {
-            const cfg = getDecryptedConfig(c.id);
+            const cfg = getDecryptedConfig(c.id, userId);
             const mcpArgs = cfg.args ? JSON.parse(cfg.args) : [];
             const mcpEnv = cfg.env ? JSON.parse(cfg.env) : {};
             const tools = await listMcpTools(c.id, cfg.command, mcpArgs, mcpEnv);
@@ -354,13 +361,13 @@ async function dispatchTool(
           .get(toolInput.connection_id as string, userId) as { id: string; name: string; type: string } | undefined;
         if (!connRow) { result = `Error: connection ${toolInput.connection_id} not found`; break; }
         if (connRow.type !== 'mcp') {
-          const cfg = getDecryptedConfig(connRow.id);
+          const cfg = getDecryptedConfig(connRow.id, userId);
           const hasKey = Object.values(cfg).some(v => v && String(v).length > 0);
           result = JSON.stringify({ id: connRow.id, name: connRow.name, type: connRow.type, status: hasKey ? 'ok' : 'error', error: hasKey ? null : 'No credentials configured' });
           break;
         }
         try {
-          const cfg = getDecryptedConfig(connRow.id);
+          const cfg = getDecryptedConfig(connRow.id, userId);
           const mcpArgs = cfg.args ? JSON.parse(cfg.args) : [];
           const mcpEnv = cfg.env ? JSON.parse(cfg.env) : {};
           const tools = await listMcpTools(connRow.id, cfg.command, mcpArgs, mcpEnv);
@@ -529,6 +536,11 @@ async function dispatchTool(
         break;
       }
       case 'delete_scheduled_task': {
+        const decision = await requestApproval(executionId, userId, 'delete_scheduled_task', { task_id: toolInput.task_id }, 'user');
+        if (decision === 'rejected') {
+          result = 'User rejected delete_scheduled_task';
+          break;
+        }
         const deleted = deleteScheduledTask(toolInput.task_id as string, userId);
         result = deleted ? 'Scheduled task deleted' : `Error: task ${toolInput.task_id} not found`;
         break;

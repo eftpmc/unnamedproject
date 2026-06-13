@@ -86,7 +86,7 @@ function detectLanguage(filePath: string): string {
   return map[ext] ?? 'text';
 }
 
-// Currently unused by FileBrowser itself — provided for use by StudioTab/media-aware
+// Currently unused by FileBrowser itself — provided for media-aware callers.
 // viewers operating on the dedicated `/media` routes. getProjectFile returns repo-tree
 // files as UTF-8 text, which would corrupt binary media; this distinction is why
 // FileBrowser doesn't use this for repo-tree files.

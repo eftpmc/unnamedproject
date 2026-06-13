@@ -23,6 +23,7 @@ import { extractIntent, DEFAULT_INTENT } from './intent.js';
 import { buildContext, getToolSubset } from './context.js';
 import { extractAndRemember } from './extract-memory.js';
 import { renderVideo, type VideoScene } from './video.js';
+import { createTextArtifact } from './artifacts.js';
 import { maybeDistill } from './distill.js';
 
 async function maybeGenerateSessionTitle(userId: string, sessionId: string): Promise<void> {
@@ -299,6 +300,24 @@ async function dispatchTool(
         if (writeTaskId) finishCampaignTask(userId, writeTaskId, result);
         break;
       }
+      case 'create_artifact': {
+        const artifactTaskId = toolInput.campaign_task_id as string | undefined;
+        if (artifactTaskId) startCampaignTask(userId, artifactTaskId, executionId);
+        const artifact = await createTextArtifact({
+          project_id: projectId,
+          kind: toolInput.kind as string,
+          title: toolInput.title as string,
+          description: toolInput.description as string | undefined,
+          content: toolInput.content as string,
+          mime_type: toolInput.mime_type as 'text/markdown' | 'text/plain' | 'application/json' | undefined,
+          status: toolInput.status as 'ready' | 'review' | 'running' | 'error' | undefined,
+          source_task_id: artifactTaskId ?? null,
+          metadata: { producer: 'create_artifact', execution_id: executionId },
+        });
+        result = JSON.stringify({ artifact_id: artifact.id, title: artifact.title, kind: artifact.kind });
+        if (artifactTaskId) finishCampaignTask(userId, artifactTaskId, result);
+        break;
+      }
       case 'create_project':
         result = await createProject(
           {
@@ -343,7 +362,7 @@ async function dispatchTool(
           .then((fileName) => completeExecution(executionId, userId, 'done', `Rendered ${fileName}`))
           .catch((err) => completeExecution(executionId, userId, 'error', err instanceof Error ? err.message : String(err)));
 
-        result = `Video render started (execution ${executionId}). It will appear in the project's Studio tab when done.`;
+        result = `Video render started (execution ${executionId}). It will appear in the project's Artifacts tab when done.`;
         asyncExecution = true;
         break;
       }

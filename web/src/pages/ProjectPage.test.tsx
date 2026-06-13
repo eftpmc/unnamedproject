@@ -15,7 +15,8 @@ vi.mock('../lib/api.js', () => ({
     },
   ]),
   getProjectCampaigns: vi.fn().mockResolvedValue([]),
-  getProjectCapabilities: vi.fn().mockResolvedValue({ has_remotion: false, has_media: false }),
+  getProjectCapabilities: vi.fn().mockResolvedValue({ has_remotion: false, has_media: false, has_graph: false, has_research: false }),
+  getProjectArtifacts: vi.fn().mockResolvedValue({ artifacts: [] }),
   getChats: vi.fn().mockResolvedValue([
     {
       id: 'chat-1',
@@ -63,9 +64,16 @@ describe('ProjectPage', () => {
     expect(await screen.findByRole('tab', { name: 'Overview' })).toBeInTheDocument();
   });
 
-  it('does not show studio tab when capabilities are false', async () => {
+  it('does not show dynamic studio tab when capabilities are false', async () => {
     renderPage('/projects/proj-1');
     await screen.findByRole('tab', { name: 'Overview' });
+    expect(screen.queryByRole('tab', { name: 'Studio' })).not.toBeInTheDocument();
+  });
+
+  it('shows the Artifacts tab without capability-specific tabs', async () => {
+    renderPage('/projects/proj-1');
+    expect(await screen.findByRole('tab', { name: 'Artifacts' })).toBeInTheDocument();
+    expect(screen.queryByRole('tab', { name: 'Research' })).not.toBeInTheDocument();
     expect(screen.queryByRole('tab', { name: 'Studio' })).not.toBeInTheDocument();
   });
 

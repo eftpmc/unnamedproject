@@ -175,6 +175,23 @@ describe('project media', () => {
     expect(typeof res.body.files[0].createdAt).toBe('number');
   });
 
+  it('exposes media files through the generic artifacts endpoint', async () => {
+    const res = await request(app)
+      .get(`/projects/${mediaProjectId}/artifacts`)
+      .set('Authorization', `Bearer ${token}`);
+    expect(res.status).toBe(200);
+    expect(res.body.artifacts).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          kind: 'media',
+          title: 'Clip',
+          mime_type: 'video/mp4',
+          url: `/projects/${mediaProjectId}/media/clip.mp4`,
+        }),
+      ]),
+    );
+  });
+
   it('serves a media file with correct Content-Type', async () => {
     const res = await request(app)
       .get(`/projects/${mediaProjectId}/media/clip.mp4`)
@@ -265,6 +282,23 @@ describe('project research', () => {
     // Should have title and createdAt
     expect(res.body.files[0]).toHaveProperty('title');
     expect(res.body.files[0]).toHaveProperty('createdAt');
+  });
+
+  it('exposes research files through the generic artifacts endpoint', async () => {
+    const res = await request(app)
+      .get(`/projects/${researchProjectId}/artifacts`)
+      .set('Authorization', `Bearer ${researchToken}`);
+    expect(res.status).toBe(200);
+    expect(res.body.artifacts).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          kind: 'research',
+          title: 'Ai Landscape',
+          mime_type: 'text/markdown',
+          status: 'review',
+        }),
+      ]),
+    );
   });
 
   it('returns 200 with empty files array when no research dir exists', async () => {

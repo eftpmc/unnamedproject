@@ -58,6 +58,23 @@ export interface Project {
   enabled_connection_ids: string[];
 }
 
+export interface ProjectArtifact {
+  id: string;
+  project_id: string;
+  kind: string;
+  title: string;
+  description: string | null;
+  status: 'ready' | 'review' | 'running' | 'error';
+  mime_type: string;
+  path: string | null;
+  url: string | null;
+  content_url: string | null;
+  metadata: Record<string, unknown>;
+  source_campaign_id: string | null;
+  source_task_id: string | null;
+  created_at: number;
+}
+
 export interface FileEntry {
   name: string;
   type: 'file' | 'dir';

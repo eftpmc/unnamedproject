@@ -1,5 +1,5 @@
 import { getToken, setToken, clearToken } from './auth.js';
-import type { Session, Message, Project, Connection, EffortLevel, ClaudeModelInfo, UserSettings, AgentBudgets, Memory, ScheduledTask, SessionWorktree, Campaign, CampaignTask } from '../types.js';
+import type { Session, Message, Project, ProjectArtifact, Connection, EffortLevel, ClaudeModelInfo, UserSettings, AgentBudgets, Memory, ScheduledTask, SessionWorktree, Campaign, CampaignTask } from '../types.js';
 
 async function request<T>(path: string, init: RequestInit = {}): Promise<T> {
   const token = getToken();
@@ -168,22 +168,6 @@ export function updateProject(projectId: string, body: { description?: string })
   });
 }
 
-export interface ProjectMediaFile {
-  name: string;
-  url: string;
-  createdAt: number;
-}
-
-export function getProjectMedia(projectId: string): Promise<{ files: ProjectMediaFile[] }> {
-  return request(`/projects/${projectId}/media`);
-}
-
-export function mediaFileUrl(projectId: string, filename: string): string {
-  const base = `/projects/${projectId}/media/${encodeURIComponent(filename)}`;
-  const token = getToken();
-  return token ? `${base}?token=${encodeURIComponent(token)}` : base;
-}
-
 export interface ProjectCapabilities {
   has_remotion: boolean;
   has_media: boolean;
@@ -195,19 +179,13 @@ export function getProjectCapabilities(projectId: string): Promise<ProjectCapabi
   return request(`/projects/${projectId}/capabilities`);
 }
 
-export interface ResearchFile {
-  name: string;
-  title: string;
-  createdAt: number;
+export function getProjectArtifacts(projectId: string): Promise<{ artifacts: ProjectArtifact[] }> {
+  return request(`/projects/${projectId}/artifacts`);
 }
 
-export function getResearchFiles(projectId: string): Promise<{ files: ResearchFile[] }> {
-  return request(`/projects/${projectId}/research`);
-}
-
-export async function getResearchFile(projectId: string, filename: string): Promise<string> {
+export async function getArtifactContent(contentUrl: string): Promise<string> {
   const token = getToken();
-  const res = await fetch(`/projects/${projectId}/research/${encodeURIComponent(filename)}`, {
+  const res = await fetch(contentUrl, {
     headers: {
       ...(token ? { Authorization: `Bearer ${token}` } : {}),
     },

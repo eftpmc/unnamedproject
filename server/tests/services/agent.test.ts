@@ -277,6 +277,70 @@ describe('agent', () => {
     expect(call.system).toContain(recentSessionId);
   });
 
+  it('creates a project artifact from the create_artifact tool', async () => {
+    const db = getDb();
+    const projectId = newId();
+    db.prepare('INSERT INTO projects (id, user_id, name, description, repo_path, enabled_connection_ids) VALUES (?,?,?,?,?,?)')
+      .run(projectId, userId, 'artifactdemo', 'Artifact demo', null, '[]');
+
+    streamMock.mockImplementationOnce(() => {
+      const listeners: Record<string, ((...args: unknown[]) => void)[]> = {};
+      return {
+        on: (event: string, cb: (...args: unknown[]) => void) => {
+          (listeners[event] ??= []).push(cb);
+          return { on: () => ({ finalMessage: async () => ({}) }) };
+        },
+        finalMessage: async () => ({
+          stop_reason: 'tool_use',
+          content: [{
+            type: 'tool_use',
+            id: 'tool-artifact',
+            name: 'create_artifact',
+            input: {
+              project_id: projectId,
+              kind: 'research',
+              title: 'Research Summary',
+              content: '# Findings\n\nUseful details.',
+              status: 'review',
+            },
+          }],
+        }),
+      };
+    });
+    streamMock.mockImplementationOnce(() => {
+      const listeners: Record<string, ((...args: unknown[]) => void)[]> = {};
+      return {
+        on: (event: string, cb: (...args: unknown[]) => void) => {
+          (listeners[event] ??= []).push(cb);
+          return { on: () => ({ finalMessage: async () => ({}) }) };
+        },
+        finalMessage: async () => {
+          for (const cb of listeners.text ?? []) cb('created');
+          return {
+            stop_reason: 'end_turn',
+            content: [{ type: 'text', text: 'created' }],
+          };
+        },
+      };
+    });
+
+    const msgId = newId();
+    db.prepare('INSERT INTO messages (id, session_id, role, content) VALUES (?,?,?,?)')
+      .run(msgId, sessionId, 'user', 'save this research');
+
+    await runAgentTurn(userId, sessionId, msgId);
+
+    const artifact = db.prepare('SELECT kind, title, status, mime_type, path FROM artifacts WHERE project_id = ?')
+      .get(projectId) as { kind: string; title: string; status: string; mime_type: string; path: string };
+    expect(artifact).toMatchObject({
+      kind: 'research',
+      title: 'Research Summary',
+      status: 'review',
+      mime_type: 'text/markdown',
+    });
+    expect(artifact.path).toMatch(/^artifacts\/.+\.md$/);
+  });
+
   it('dispatches the forget tool', async () => {
     const db = getDb();
     const { rememberFact, recallFact } = await import('../../src/services/memory.js');

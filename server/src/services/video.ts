@@ -4,6 +4,7 @@ import path from 'path';
 import fs from 'fs';
 import { fileURLToPath } from 'url';
 import { getDataDir } from '../db/index.js';
+import { createArtifact } from './artifacts.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
@@ -71,6 +72,17 @@ export async function renderVideo(
     outputLocation,
     inputProps,
     onProgress: ({ progress }: { progress: number }) => onProgress?.(progress),
+  });
+
+  createArtifact({
+    project_id: projectId,
+    kind: 'media',
+    title,
+    status: 'ready',
+    mime_type: 'video/mp4',
+    path: `media/${fileName}`,
+    url: `/projects/${projectId}/media/${encodeURIComponent(fileName)}`,
+    metadata: { filename: fileName, producer: 'generate_video' },
   });
 
   return fileName;

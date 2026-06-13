@@ -173,6 +173,23 @@ function applySchema(): void {
       created_at INTEGER NOT NULL DEFAULT (unixepoch()),
       completed_at INTEGER
     );
+
+    CREATE TABLE IF NOT EXISTS artifacts (
+      id TEXT PRIMARY KEY,
+      project_id TEXT NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
+      kind TEXT NOT NULL,
+      title TEXT NOT NULL,
+      description TEXT,
+      status TEXT NOT NULL DEFAULT 'ready'
+        CHECK(status IN ('ready','review','running','error')),
+      mime_type TEXT NOT NULL DEFAULT 'application/octet-stream',
+      path TEXT,
+      url TEXT,
+      metadata TEXT NOT NULL DEFAULT '{}',
+      source_campaign_id TEXT REFERENCES campaigns(id) ON DELETE SET NULL,
+      source_task_id TEXT REFERENCES campaign_tasks(id) ON DELETE SET NULL,
+      created_at INTEGER NOT NULL DEFAULT (unixepoch())
+    );
   `);
 
   const connectionCols = db.prepare("SELECT name FROM pragma_table_info('connections')").all() as { name: string }[];

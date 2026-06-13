@@ -6,6 +6,7 @@ import { getDb, getDataDir, getCampaignsForProject, getProjectForUser } from '..
 import { newId } from '../lib/ids.js';
 import { requireAuthHeaderOrQuery, type AuthedRequest } from '../middleware/auth.js';
 import { detectCapabilities } from '../services/projectCapabilities.js';
+import { listProjectArtifacts, resolveArtifactContentPath } from '../services/artifacts.js';
 
 const router = Router();
 router.use(requireAuthHeaderOrQuery);
@@ -139,6 +140,28 @@ router.get('/:id/capabilities', requireAuthHeaderOrQuery, (req, res) => {
   }
 
   res.json(detectCapabilities(project.id, project.repo_path));
+});
+
+router.get('/:id/artifacts', (req, res) => {
+  const { userId } = req as unknown as AuthedRequest;
+  const project = getProjectForUser(req.params.id, userId);
+  if (!project) { res.status(404).json({ error: 'Not found' }); return; }
+
+  res.json({ artifacts: listProjectArtifacts(project.id) });
+});
+
+router.get('/:id/artifacts/:artifactId/content', (req, res) => {
+  const { userId } = req as unknown as AuthedRequest;
+  const project = getProjectForUser(req.params.id, userId);
+  if (!project) { res.status(404).json({ error: 'Not found' }); return; }
+
+  const resolved = resolveArtifactContentPath(project.id, req.params.artifactId);
+  if (!resolved || !fsSync.existsSync(resolved.filePath)) {
+    res.status(404).json({ error: 'Not found' });
+    return;
+  }
+
+  res.type(resolved.mimeType).send(fsSync.readFileSync(resolved.filePath));
 });
 
 router.patch('/:id', (req, res) => {

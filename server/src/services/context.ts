@@ -100,7 +100,7 @@ function projectContextBlock(project: DbProject): string {
   const caps = detectCapabilities(project.id, project.repo_path);
   const capLabels: string[] = [];
   if (caps.has_remotion) capLabels.push('remotion (can call generate_video)');
-  if (caps.has_media) capLabels.push('rendered media available in Studio tab');
+  if (caps.has_media) capLabels.push('rendered media available in Artifacts tab');
   if (caps.has_graph) capLabels.push('code graph indexed — use project_query for broad codebase questions before reading individual files');
   if (caps.has_research) capLabels.push(`research notes exist — read them with read_file/list_dir from ${path.join(getDataDir(), 'projects', project.id, 'research')} before starting new research`);
 
@@ -224,20 +224,20 @@ const TOOL_SETS: Record<string, string[]> = {
   code: [
     'invoke_claude_code', 'invoke_codex', 'git_op', 'github_api',
     'project_query', 'rebuild_graph', 'create_campaign',
-    'read_file', 'list_dir', 'write_file', 'create_project', 'update_project',
+    'read_file', 'list_dir', 'write_file', 'create_artifact', 'create_project', 'update_project',
     'remember', 'recall', 'forget', 'read_chat',
     'web_search', 'web_fetch',
   ],
   writing: [
-    'write_file', 'read_file', 'list_dir', 'create_project', 'update_project',
+    'write_file', 'create_artifact', 'read_file', 'list_dir', 'create_project', 'update_project',
     'web_search', 'web_fetch', 'remember', 'recall', 'forget', 'read_chat',
   ],
   research: [
     'web_search', 'web_fetch', 'recall', 'remember', 'forget',
-    'read_chat', 'read_file', 'write_file',
+    'read_chat', 'read_file', 'write_file', 'create_artifact',
   ],
   creative: [
-    'write_file', 'read_file', 'create_project', 'generate_video',
+    'write_file', 'create_artifact', 'read_file', 'create_project', 'generate_video',
     'web_search', 'web_fetch', 'remember', 'recall', 'forget', 'read_chat',
   ],
 };

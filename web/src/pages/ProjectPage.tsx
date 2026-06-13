@@ -19,8 +19,8 @@ import {
 import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { cn } from '@/lib/utils';
 import FileBrowser from '../components/FileBrowser.js';
+import ArtifactsTab from '../components/ArtifactsTab.js';
 import { timeAgo } from '../lib/utils.js';
-import { useProjectCapabilities } from '../hooks/useProjectCapabilities.js';
 import type { Project, Campaign, Session } from '../types.js';
 
 type Tab = string;
@@ -90,8 +90,6 @@ export default function ProjectPage() {
     },
   });
 
-  const { tabs: extraTabs } = useProjectCapabilities(projectId ?? '');
-
   const { data: caps } = useQuery({
     queryKey: ['project-capabilities', projectId],
     queryFn: () => getProjectCapabilities(projectId!),
@@ -115,8 +113,8 @@ export default function ProjectPage() {
     { id: 'overview', label: 'Overview' },
     { id: 'campaigns', label: `Campaigns${campaigns.length > 0 ? ` (${campaigns.length})` : ''}` },
     { id: 'chats', label: `Chats${pinnedChats.length > 0 ? ` (${pinnedChats.length})` : ''}` },
+    { id: 'artifacts', label: 'Artifacts' },
     { id: 'files', label: 'Files' },
-    ...extraTabs.map(t => ({ id: t.id, label: t.label })),
     { id: 'settings', label: 'Settings' },
   ];
 
@@ -376,13 +374,11 @@ export default function ProjectPage() {
           </div>
         )}
 
-        {extraTabs.map(t => (
-          tab === t.id && (
-            <div key={t.id} className="p-4 sm:p-6">
-              <t.component project={project} />
-            </div>
-          )
-        ))}
+        {tab === 'artifacts' && (
+          <div className="p-4 sm:p-6">
+            <ArtifactsTab project={project} />
+          </div>
+        )}
 
         {tab === 'settings' && (
           <div className="p-4 sm:p-6 max-w-lg">

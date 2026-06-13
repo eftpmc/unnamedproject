@@ -216,6 +216,24 @@ export const toolDefinitions: Anthropic.Tool[] = [
     },
   },
   {
+    name: 'create_artifact',
+    description: 'Create a durable project artifact for an inspectable output such as research, reports, summaries, drafts, test results, screenshots metadata, or other deliverables. Use this when the orchestrator produces an output the user may want to review later in the project Artifacts tab.',
+    input_schema: {
+      type: 'object',
+      properties: {
+        project_id: { type: 'string', description: 'Project this artifact belongs to' },
+        kind: { type: 'string', description: "Artifact category, e.g. 'research', 'report', 'summary', 'design', 'test_report'." },
+        title: { type: 'string', description: 'Human-readable artifact title' },
+        description: { type: 'string', description: 'Optional short description' },
+        content: { type: 'string', description: 'Text content to store for this artifact' },
+        mime_type: { type: 'string', enum: ['text/markdown', 'text/plain', 'application/json'], description: 'Text MIME type for the artifact content. Defaults to text/markdown.' },
+        status: { type: 'string', enum: ['ready', 'review', 'running', 'error'], description: "Artifact status. Use 'review' when user review is expected." },
+        campaign_task_id: { type: 'string', description: 'Campaign task ID to link this artifact to, when applicable' },
+      },
+      required: ['project_id', 'kind', 'title', 'content'],
+    },
+  },
+  {
     name: 'read_chat',
     description: 'Retrieve messages from a previous chat. Use when the user references past work, asks to continue something, or you need context before responding.',
     input_schema: {
@@ -252,7 +270,7 @@ export const toolDefinitions: Anthropic.Tool[] = [
   },
   {
     name: 'generate_video',
-    description: 'Render an MP4 video for a project from structured scene data. Runs asynchronously; returns immediately with the execution id, and the project\'s Studio tab will show the finished video once rendering completes.',
+    description: 'Render an MP4 video for a project from structured scene data. Runs asynchronously; returns immediately with the execution id, and the finished video is registered in the project Artifacts tab.',
     input_schema: {
       type: 'object',
       properties: {

@@ -10,7 +10,7 @@ vi.mock('./auth', () => ({
 const mockFetch = vi.fn();
 globalThis.fetch = mockFetch;
 
-const { login, getChats, createChat, getProjectMedia, mediaFileUrl } = await import('./api');
+const { login, getChats, createChat, getProjectArtifacts, getArtifactContent } = await import('./api');
 
 beforeEach(() => {
   mockFetch.mockReset();
@@ -44,21 +44,18 @@ describe('api', () => {
     expect(result.id).toBe('sess-1');
   });
 
-  it('getProjectMedia fetches the project media list', async () => {
-    mockFetch.mockResolvedValueOnce({ ok: true, json: async () => ({ files: [] }) });
-    await getProjectMedia('proj-1');
-    expect(mockFetch).toHaveBeenCalledWith('/projects/proj-1/media', expect.any(Object));
+  it('getProjectArtifacts fetches the project artifact list', async () => {
+    mockFetch.mockResolvedValueOnce({ ok: true, json: async () => ({ artifacts: [] }) });
+    await getProjectArtifacts('proj-1');
+    expect(mockFetch).toHaveBeenCalledWith('/projects/proj-1/artifacts', expect.any(Object));
   });
 
-  it('mediaFileUrl builds an encoded url with token', () => {
-    const url = mediaFileUrl('proj-1', 'my clip.mp4');
-    expect(url).toBe('/projects/proj-1/media/my%20clip.mp4?token=test-token');
-  });
-
-  it('mediaFileUrl omits the token query string when unauthenticated', () => {
-    vi.mocked(getToken).mockReturnValue(null);
-    const url = mediaFileUrl('proj-1', 'my clip.mp4');
-    expect(url).toBe('/projects/proj-1/media/my%20clip.mp4');
-    expect(url).not.toContain('?token=');
+  it('getArtifactContent fetches a generic artifact content url', async () => {
+    mockFetch.mockResolvedValueOnce({ ok: true, text: async () => '# Artifact' });
+    const content = await getArtifactContent('/projects/proj-1/research/example.md');
+    expect(content).toBe('# Artifact');
+    expect(mockFetch).toHaveBeenCalledWith('/projects/proj-1/research/example.md', expect.objectContaining({
+      headers: expect.objectContaining({ Authorization: 'Bearer test-token' }),
+    }));
   });
 });

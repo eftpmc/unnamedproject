@@ -1,10 +1,11 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useNavigate } from 'react-router-dom';
-import { Bell, ChevronDown, GitMerge, X } from 'lucide-react';
+import { Bell, ChevronDown, PanelRight, X } from 'lucide-react';
+import ContextPanel from './ContextPanel.js';
 import MessageList from './MessageList.js';
 import MessageInput from './MessageInput.js';
-import { getMessages, sendMessage, getChats, updateChatConfig, getModelsForEffort, getSessionWorktree, mergeSessionBranch, getProjects, truncateMessagesFrom } from '../lib/api.js';
+import { getMessages, sendMessage, getChats, updateChatConfig, getModelsForEffort, getSessionWorktree, mergeSessionBranch, getProjects, truncateMessagesFrom, approveExecution, rejectExecution } from '../lib/api.js';
 import { subscribe } from '../lib/ws.js';
 import { cn } from '../lib/utils.js';
 import type { EffortLevel, Message, MessageExecution, Session, WSEvent, WSMessageCreated, WSMessageStarted, WSMessageDelta, WSExecutionUpdate, WSApprovalRequested, WSAutoApproved, WSSessionTitleUpdated, WSAgentError, ClaudeModelInfo } from '../types.js';
@@ -59,17 +60,16 @@ export default function ChatView({ chatId }: ChatViewProps) {
   });
 
   const [mergeState, setMergeState] = useState<'idle' | 'merging' | 'done' | 'error'>('idle');
-  const [mergeError, setMergeError] = useState('');
 
   const mergeMutation = useMutation({
     mutationFn: () => mergeSessionBranch(chatId),
-    onMutate: () => { setMergeState('merging'); setMergeError(''); },
+    onMutate: () => { setMergeState('merging'); },
     onSuccess: () => {
       setMergeState('done');
       refetchWorktree();
       setTimeout(() => setMergeState('idle'), 4000);
     },
-    onError: (e: Error) => { setMergeState('error'); setMergeError(e.message); },
+    onError: () => { setMergeState('error'); },
   });
 
   // executions: messageId -> list of execution cards
@@ -106,9 +106,24 @@ export default function ChatView({ chatId }: ChatViewProps) {
     e => e.status === 'awaiting_approval' && e.needsApproval
   ) ?? null;
 
-  function scrollToApproval(executionId: string) {
-    const el = document.querySelector(`[data-execution-id="${executionId}"]`);
-    el?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+  const [ctxOpen, setCtxOpen] = useState<boolean>(() => {
+    if (window.innerWidth <= 768) return false;
+    return localStorage.getItem('ctx_panel') !== 'closed';
+  });
+
+  function toggleCtx() {
+    setCtxOpen(prev => {
+      const next = !prev;
+      localStorage.setItem('ctx_panel', next ? 'open' : 'closed');
+      return next;
+    });
+  }
+
+  async function handleApprove(approvalId: string) {
+    await approveExecution(approvalId);
+  }
+  async function handleDeny(approvalId: string) {
+    await rejectExecution(approvalId);
   }
 
   const mutation = useMutation({
@@ -285,7 +300,8 @@ export default function ChatView({ chatId }: ChatViewProps) {
   }
 
   return (
-    <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
+    <div className="flex min-h-0 flex-1 overflow-hidden">
+      <div className="flex min-w-0 flex-1 flex-col">
       <PageHeader
         title={chat?.title ?? 'Untitled chat'}
         description={pinnedProject ? (
@@ -302,38 +318,34 @@ export default function ChatView({ chatId }: ChatViewProps) {
           </button>
         ) : undefined}
         actions={
-          <ChatConfigPopover
-            effort={effort}
-            model={chat?.model ?? null}
-            models={models}
-            onConfigChange={(config) => configMutation.mutate(config)}
-          />
+          <div className="flex items-center gap-2">
+            <ChatConfigPopover
+              effort={effort}
+              model={chat?.model ?? null}
+              models={models}
+              onConfigChange={(config) => configMutation.mutate(config)}
+            />
+            <button
+              type="button"
+              onClick={toggleCtx}
+              aria-pressed={ctxOpen}
+              title={ctxOpen ? 'Hide context' : 'Show context'}
+              className={cn(
+                'flex items-center gap-1.5 rounded-lg border px-2.5 py-1.5 text-xs font-medium transition-colors',
+                ctxOpen
+                  ? 'border-transparent bg-accent-tint text-on-accent-soft'
+                  : 'border-border-soft bg-muted text-muted-foreground hover:border-muted-foreground',
+              )}
+            >
+              <PanelRight size={14} strokeWidth={1.75} />
+              Context
+              {!ctxOpen && pendingApproval && (
+                <span className="size-1.5 rounded-full bg-warning" />
+              )}
+            </button>
+          </div>
         }
       />
-
-      {worktree && (worktree.ahead > 0 || worktree.has_uncommitted) && (
-        <div className="shrink-0 flex items-center gap-3 border-b px-6 py-2 text-xs text-muted-foreground bg-muted/30">
-          <GitMerge size={13} className="shrink-0 text-muted-foreground/60" />
-          <code className="font-mono text-foreground/70">{worktree.branch}</code>
-          <span className="text-muted-foreground/50">·</span>
-          {worktree.ahead > 0 && <span>{worktree.ahead} commit{worktree.ahead !== 1 ? 's' : ''}</span>}
-          {worktree.ahead > 0 && worktree.has_uncommitted && <span className="text-muted-foreground/50">·</span>}
-          {worktree.has_uncommitted && worktree.ahead === 0 && <span>{worktree.files_changed} file{worktree.files_changed !== 1 ? 's' : ''} changed (uncommitted)</span>}
-          <div className="ml-auto flex items-center gap-2">
-            {mergeState === 'done' && <span className="text-success text-xs">Merged</span>}
-            {mergeState === 'error' && <span className="text-destructive text-xs truncate max-w-48" title={mergeError}>Merge failed</span>}
-            {worktree.ahead > 0 && (
-              <Button
-                size="sm"
-                onClick={() => mergeMutation.mutate()}
-                disabled={mergeState === 'merging'}
-              >
-                {mergeState === 'merging' ? 'Merging…' : 'Merge to main'}
-              </Button>
-            )}
-          </div>
-        </div>
-      )}
 
       {messages.length === 0 ? (
         <EmptyChatState
@@ -361,15 +373,16 @@ export default function ChatView({ chatId }: ChatViewProps) {
         </div>
       )}
 
-      {pendingApproval && (
-        <div className="shrink-0 flex items-center justify-between gap-3 border-t border-warning/30 bg-warning/8 px-5 py-2.5">
-          <div className="flex items-center gap-2 text-xs text-foreground/80">
-            <Bell size={13} className="shrink-0 text-warning" />
-            <span>Approval needed{pendingApproval.action ? <> for <span className="font-medium text-foreground">{pendingApproval.action}</span></> : ''}</span>
+      {pendingApproval && !ctxOpen && (
+        <div className="flex shrink-0 items-center justify-between gap-3 border-t border-warning/25 bg-warning/8 px-5 py-2.5 text-sm">
+          <div className="flex items-center gap-2 text-fg-soft">
+            <Bell size={14} className="text-warning" />
+            <span>Approval needed for <strong className="font-semibold text-foreground">{pendingApproval.action ?? 'Tool execution'}</strong></span>
           </div>
           <button
-            onClick={() => scrollToApproval(pendingApproval.executionId)}
-            className="shrink-0 text-xs font-medium text-warning hover:text-warning/80 transition-colors"
+            type="button"
+            onClick={toggleCtx}
+            className="text-xs font-medium text-on-accent-soft hover:underline"
           >
             Review
           </button>
@@ -381,6 +394,22 @@ export default function ChatView({ chatId }: ChatViewProps) {
         onChange={setInputValue}
         onSend={sendPrompt}
         disabled={agentActive}
+      />
+      </div>
+      <ContextPanel
+        open={ctxOpen}
+        onClose={() => { setCtxOpen(false); localStorage.setItem('ctx_panel', 'closed'); }}
+        project={pinnedProject}
+        worktree={worktree ? { branch: worktree.branch, commits_ahead: worktree.ahead } : null}
+        pendingApproval={pendingApproval ? {
+          executionId: pendingApproval.executionId,
+          approvalId: pendingApproval.approvalId ?? '',
+          action: pendingApproval.action ?? 'Tool execution',
+        } : null}
+        onApprove={handleApprove}
+        onDeny={handleDeny}
+        onMerge={() => mergeMutation.mutate()}
+        mergeState={mergeState}
       />
     </div>
   );

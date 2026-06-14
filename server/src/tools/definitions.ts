@@ -333,7 +333,7 @@ export const toolDefinitions: Anthropic.Tool[] = [
   },
   {
     name: 'create_campaign',
-    description: 'Create a campaign to track a coordinated multi-task plan. Call this BEFORE dispatching the individual tasks. The response includes task IDs — pass each task\'s id as campaign_task_id when calling invoke_claude_code, invoke_codex, mcp_call, write_file, git_op, or github_api so the tasks are linked and their status tracked. Task agent types: claude_code/codex/mcp for delegated agent work, file_write for a write_file step, git for a git_op step (e.g. a commit after coding tasks), github for a github_api step (e.g. opening the final PR). Sequential chaining: when invoke_claude_code or invoke_codex is called with a campaign_task_id, the system automatically injects the results of all previously completed tasks in the same campaign into the agent\'s prompt — no manual forwarding needed.',
+    description: 'Create a campaign to track a coordinated multi-task plan. Supports two execution modes:\n\n**Manual dispatch** (existing): Call create_campaign to get task IDs, then call invoke_claude_code / invoke_codex / etc. with campaign_task_id to execute tasks manually — useful when you need to inspect results between steps.\n\n**Auto-dispatch** (recommended for parallel work): Add a `prompt` to each task and `depends_on` (array of 0-based task indices) to declare dependencies, then call run_campaign with the campaign_id. Tasks without dependencies run immediately in parallel; tasks with dependencies wait for their deps to complete.\n\nTask agent types: claude_code/codex = AI coding agents, mcp = MCP tool call, file_write = write a file, git = git operation, github = GitHub API, eval = run a shell command (prompt = the command, e.g. "npm test"), subagent = spawn a focused sub-agent with its own context window.',
     input_schema: {
       type: 'object',
       properties: {
@@ -345,14 +345,82 @@ export const toolDefinitions: Anthropic.Tool[] = [
           items: {
             type: 'object',
             properties: {
-              title: { type: 'string' },
-              agent: { type: 'string', enum: ['claude_code', 'codex', 'mcp', 'file_write', 'git', 'github'] },
+              title: { type: 'string', description: 'Short label for this task' },
+              agent: { type: 'string', enum: ['claude_code', 'codex', 'mcp', 'file_write', 'git', 'github', 'eval', 'subagent'], description: 'Which executor to use' },
+              prompt: { type: 'string', description: 'Instruction for the agent / command for eval / message for git commit. Required when using run_campaign auto-dispatch.' },
+              depends_on: { type: 'array', items: { type: 'number' }, description: 'Zero-based indices of tasks this task depends on. Tasks with no depends_on run immediately in parallel when using run_campaign.' },
+              tool_args: { type: 'object', description: 'Additional tool-specific arguments (e.g. {"op":"commit","branch":"main"} for git, {"path":"src/foo.ts","content":"..."} for file_write, {"connection_id":"...","tool_name":"...","tool_input":{}} for mcp)' },
             },
             required: ['title', 'agent'],
           },
         },
       },
       required: ['project_id', 'title', 'tasks'],
+    },
+  },
+  {
+    name: 'run_campaign',
+    description: 'Auto-dispatch all tasks in a campaign, running dependency-free tasks in parallel and waiting for dependencies before starting dependent tasks. Tasks with no depends_on run immediately in parallel; tasks only start once all their depends_on tasks are done. Stops on first error by default. Use after create_campaign when tasks have prompts set.',
+    input_schema: {
+      type: 'object',
+      properties: {
+        campaign_id: { type: 'string', description: 'ID of the campaign to execute (returned by create_campaign)' },
+        on_error: { type: 'string', enum: ['stop', 'continue'], description: 'Whether to stop the entire campaign on first task error (default: stop) or continue with independent tasks.' },
+      },
+      required: ['campaign_id'],
+    },
+  },
+  {
+    name: 'create_pipeline',
+    description: 'Create a reusable workflow template (pipeline) with named tasks and dependency declarations. Pipelines can be run multiple times via run_pipeline, which instantiates them as campaigns. Useful for recurring multi-step workflows like "test → build → deploy".',
+    input_schema: {
+      type: 'object',
+      properties: {
+        title: { type: 'string', description: 'Name of the pipeline, e.g. "CI: test and deploy"' },
+        description: { type: 'string', description: 'What this pipeline does' },
+        tasks: {
+          type: 'array',
+          description: 'Ordered list of task templates',
+          items: {
+            type: 'object',
+            properties: {
+              title: { type: 'string' },
+              agent: { type: 'string', enum: ['claude_code', 'codex', 'mcp', 'file_write', 'git', 'github', 'eval', 'subagent'] },
+              prompt: { type: 'string', description: 'Default instruction/command for this task step' },
+              depends_on: { type: 'array', items: { type: 'number' }, description: 'Zero-based indices of tasks this step depends on' },
+              tool_args: { type: 'object', description: 'Default tool-specific arguments for this step' },
+            },
+            required: ['title', 'agent'],
+          },
+        },
+      },
+      required: ['title', 'tasks'],
+    },
+  },
+  {
+    name: 'run_pipeline',
+    description: 'Instantiate a pipeline template as a campaign and auto-dispatch all its tasks. Equivalent to create_campaign + run_campaign for a saved pipeline template.',
+    input_schema: {
+      type: 'object',
+      properties: {
+        pipeline_id: { type: 'string', description: 'ID of the pipeline to run (from create_pipeline)' },
+        project_id: { type: 'string', description: 'Project to run the pipeline against' },
+        title: { type: 'string', description: 'Optional campaign title override. Defaults to the pipeline title.' },
+        on_error: { type: 'string', enum: ['stop', 'continue'], description: 'Whether to stop on first task error (default: stop)' },
+      },
+      required: ['pipeline_id', 'project_id'],
+    },
+  },
+  {
+    name: 'delegate_to_agent',
+    description: 'Spawn a focused sub-agent with its own context window to complete a specific task. The sub-agent can read files, search code, write files, and create artifacts, but cannot spawn further agents or create campaigns. Returns when the sub-agent finishes. Use for self-contained tasks that benefit from a fresh context (e.g. "analyze all API endpoints and write a summary doc").',
+    input_schema: {
+      type: 'object',
+      properties: {
+        instructions: { type: 'string', description: 'Clear instructions for what the sub-agent should do and return' },
+        project_id: { type: 'string', description: 'Optional project context for the sub-agent' },
+      },
+      required: ['instructions'],
     },
   },
   {

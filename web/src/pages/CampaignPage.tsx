@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react';
 import type { ReactNode } from 'react';
 import { useParams, Link, useNavigate } from 'react-router-dom';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { Bot, Check, ChevronRight, FileEdit, FileText, GitBranch, GitPullRequest, MessageSquare, Plus, Sparkles, X } from 'lucide-react';
+import { Bot, Check, ChevronRight, Cpu, FileEdit, FileText, GitBranch, GitPullRequest, MessageSquare, Plus, Sparkles, Terminal, X } from 'lucide-react';
 import { getCampaign, cancelCampaign, createChat, updateChatConfig, getChats, getProjectArtifacts, getSessionWorktree, getProjects } from '../lib/api.js';
 import { subscribe } from '../lib/ws.js';
 import { cn } from '@/lib/utils';
@@ -20,9 +20,10 @@ const AGENT_LABEL: Record<CampaignTask['agent'], string> = {
   file_write: 'Write File',
   git: 'Git',
   github: 'GitHub',
+  eval: 'Eval',
+  subagent: 'Sub-agent',
 };
 
-// file_write/git/github steps run synchronously inline; claude_code/codex/mcp delegate to a long-running agent.
 const AGENT_ICON: Record<CampaignTask['agent'], typeof Bot> = {
   claude_code: Bot,
   codex: Bot,
@@ -30,6 +31,8 @@ const AGENT_ICON: Record<CampaignTask['agent'], typeof Bot> = {
   file_write: FileEdit,
   git: GitBranch,
   github: GitPullRequest,
+  eval: Terminal,
+  subagent: Cpu,
 };
 
 function StatusDot({ status }: { status: CampaignTask['status'] }) {

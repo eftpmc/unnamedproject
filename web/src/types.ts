@@ -223,10 +223,12 @@ export interface CampaignTask {
   id: string;
   campaign_id: string;
   title: string;
-  agent: 'claude_code' | 'codex' | 'mcp' | 'file_write' | 'git' | 'github';
+  agent: 'claude_code' | 'codex' | 'mcp' | 'file_write' | 'git' | 'github' | 'eval' | 'subagent';
   status: 'waiting' | 'running' | 'done' | 'error';
   execution_id: string | null;
   position: number;
+  prompt: string | null;
+  depends_on: string | null;
   created_at: number;
   completed_at: number | null;
 }

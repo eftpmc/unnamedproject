@@ -192,13 +192,36 @@ function applySchema(): void {
       id TEXT PRIMARY KEY,
       campaign_id TEXT NOT NULL REFERENCES campaigns(id) ON DELETE CASCADE,
       title TEXT NOT NULL,
-      agent TEXT NOT NULL CHECK(agent IN ('claude_code','codex','mcp','file_write','git','github')),
+      agent TEXT NOT NULL CHECK(agent IN ('claude_code','codex','mcp','file_write','git','github','eval','subagent')),
       status TEXT NOT NULL DEFAULT 'waiting'
         CHECK(status IN ('waiting','running','done','error')),
       execution_id TEXT REFERENCES executions(id) ON DELETE SET NULL,
       position INTEGER NOT NULL,
+      prompt TEXT,
+      depends_on TEXT,
+      tool_args TEXT,
       created_at INTEGER NOT NULL DEFAULT (unixepoch()),
       completed_at INTEGER
+    );
+
+    CREATE TABLE IF NOT EXISTS pipelines (
+      id TEXT PRIMARY KEY,
+      user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+      title TEXT NOT NULL,
+      description TEXT,
+      created_at INTEGER NOT NULL DEFAULT (unixepoch())
+    );
+
+    CREATE TABLE IF NOT EXISTS pipeline_tasks (
+      id TEXT PRIMARY KEY,
+      pipeline_id TEXT NOT NULL REFERENCES pipelines(id) ON DELETE CASCADE,
+      title TEXT NOT NULL,
+      agent TEXT NOT NULL CHECK(agent IN ('claude_code','codex','mcp','file_write','git','github','eval','subagent')),
+      prompt TEXT,
+      tool_args TEXT,
+      depends_on TEXT,
+      position INTEGER NOT NULL,
+      created_at INTEGER NOT NULL DEFAULT (unixepoch())
     );
 
     CREATE TABLE IF NOT EXISTS artifacts (
@@ -363,6 +386,60 @@ function applySchema(): void {
         FROM campaign_tasks_old;
       DROP TABLE campaign_tasks_old;
       PRAGMA foreign_keys = ON;
+    `);
+  }
+
+  // Widen campaign_tasks to add eval/subagent agent types + new columns (prompt, depends_on, tool_args).
+  const campaignTasksSql2 = (db.prepare("SELECT sql FROM sqlite_master WHERE type='table' AND name='campaign_tasks'").get() as { sql: string } | undefined)?.sql;
+  if (campaignTasksSql2 && !campaignTasksSql2.includes("'eval'")) {
+    db.exec(`
+      PRAGMA foreign_keys = OFF;
+      ALTER TABLE campaign_tasks RENAME TO campaign_tasks_old2;
+      CREATE TABLE campaign_tasks (
+        id TEXT PRIMARY KEY,
+        campaign_id TEXT NOT NULL REFERENCES campaigns(id) ON DELETE CASCADE,
+        title TEXT NOT NULL,
+        agent TEXT NOT NULL CHECK(agent IN ('claude_code','codex','mcp','file_write','git','github','eval','subagent')),
+        status TEXT NOT NULL DEFAULT 'waiting'
+          CHECK(status IN ('waiting','running','done','error')),
+        execution_id TEXT REFERENCES executions(id) ON DELETE SET NULL,
+        position INTEGER NOT NULL,
+        prompt TEXT,
+        depends_on TEXT,
+        tool_args TEXT,
+        created_at INTEGER NOT NULL DEFAULT (unixepoch()),
+        completed_at INTEGER
+      );
+      INSERT INTO campaign_tasks (id, campaign_id, title, agent, status, execution_id, position, created_at, completed_at)
+        SELECT id, campaign_id, title, agent, status, execution_id, position, created_at, completed_at
+        FROM campaign_tasks_old2;
+      DROP TABLE campaign_tasks_old2;
+      PRAGMA foreign_keys = ON;
+    `);
+  }
+
+  // Create pipelines and pipeline_tasks tables for existing DBs (already in CREATE TABLE for new DBs).
+  const tableNames2 = db.prepare("SELECT name FROM sqlite_master WHERE type='table'").all() as { name: string }[];
+  if (!tableNames2.some(t => t.name === 'pipelines')) {
+    db.exec(`
+      CREATE TABLE pipelines (
+        id TEXT PRIMARY KEY,
+        user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+        title TEXT NOT NULL,
+        description TEXT,
+        created_at INTEGER NOT NULL DEFAULT (unixepoch())
+      );
+      CREATE TABLE pipeline_tasks (
+        id TEXT PRIMARY KEY,
+        pipeline_id TEXT NOT NULL REFERENCES pipelines(id) ON DELETE CASCADE,
+        title TEXT NOT NULL,
+        agent TEXT NOT NULL CHECK(agent IN ('claude_code','codex','mcp','file_write','git','github','eval','subagent')),
+        prompt TEXT,
+        tool_args TEXT,
+        depends_on TEXT,
+        position INTEGER NOT NULL,
+        created_at INTEGER NOT NULL DEFAULT (unixepoch())
+      );
     `);
   }
 }
@@ -701,36 +778,125 @@ export interface DbCampaignTask {
   id: string;
   campaign_id: string;
   title: string;
-  agent: 'claude_code' | 'codex' | 'mcp' | 'file_write' | 'git' | 'github';
+  agent: 'claude_code' | 'codex' | 'mcp' | 'file_write' | 'git' | 'github' | 'eval' | 'subagent';
   status: 'waiting' | 'running' | 'done' | 'error';
   execution_id: string | null;
   position: number;
+  prompt: string | null;
+  depends_on: string | null;
+  tool_args: string | null;
   created_at: number;
   completed_at: number | null;
+}
+
+export interface DbPipeline {
+  id: string;
+  user_id: string;
+  title: string;
+  description: string | null;
+  created_at: number;
+}
+
+export interface DbPipelineTask {
+  id: string;
+  pipeline_id: string;
+  title: string;
+  agent: DbCampaignTask['agent'];
+  prompt: string | null;
+  tool_args: string | null;
+  depends_on: string | null;
+  position: number;
+  created_at: number;
 }
 
 export function createCampaign(
   projectId: string,
   sessionId: string | null,
   title: string,
-  tasks: Array<{ title: string; agent: DbCampaignTask['agent'] }>
+  tasks: Array<{
+    title: string;
+    agent: DbCampaignTask['agent'];
+    prompt?: string | null;
+    depends_on?: number[];
+    tool_args?: Record<string, unknown> | null;
+  }>
 ): { campaign: DbCampaign; tasks: DbCampaignTask[] } {
   return getDb().transaction(() => {
     const id = newId();
     getDb()
       .prepare('INSERT INTO campaigns (id, project_id, session_id, title) VALUES (?,?,?,?)')
       .run(id, projectId, sessionId, title);
+    // Pre-assign task IDs so depends_on indices can be resolved to IDs
+    const taskIds = tasks.map(() => newId());
     const insertTask = getDb().prepare(
-      'INSERT INTO campaign_tasks (id, campaign_id, title, agent, position) VALUES (?,?,?,?,?)'
+      'INSERT INTO campaign_tasks (id, campaign_id, title, agent, position, prompt, depends_on, tool_args) VALUES (?,?,?,?,?,?,?,?)'
     );
     tasks.forEach((t, i) => {
-      insertTask.run(newId(), id, t.title, t.agent, i);
+      const depIds = (t.depends_on ?? []).map(idx => taskIds[idx]).filter(Boolean);
+      insertTask.run(
+        taskIds[i], id, t.title, t.agent, i,
+        t.prompt ?? null,
+        depIds.length > 0 ? JSON.stringify(depIds) : null,
+        t.tool_args ? JSON.stringify(t.tool_args) : null,
+      );
     });
     const campaign = getDb()
       .prepare('SELECT * FROM campaigns WHERE id = ?')
       .get(id) as DbCampaign;
     return { campaign, tasks: getCampaignTasks(id) };
   })();
+}
+
+export function createPipeline(
+  userId: string,
+  title: string,
+  description: string | null,
+  tasks: Array<{
+    title: string;
+    agent: DbCampaignTask['agent'];
+    prompt?: string | null;
+    depends_on?: number[];
+    tool_args?: Record<string, unknown> | null;
+  }>
+): { pipeline: DbPipeline; tasks: DbPipelineTask[] } {
+  return getDb().transaction(() => {
+    const id = newId();
+    getDb()
+      .prepare('INSERT INTO pipelines (id, user_id, title, description) VALUES (?,?,?,?)')
+      .run(id, userId, title, description);
+    const insertTask = getDb().prepare(
+      'INSERT INTO pipeline_tasks (id, pipeline_id, title, agent, position, prompt, depends_on, tool_args) VALUES (?,?,?,?,?,?,?,?)'
+    );
+    tasks.forEach((t, i) => {
+      const depPositions = t.depends_on ?? [];
+      insertTask.run(
+        newId(), id, t.title, t.agent, i,
+        t.prompt ?? null,
+        depPositions.length > 0 ? JSON.stringify(depPositions) : null,
+        t.tool_args ? JSON.stringify(t.tool_args) : null,
+      );
+    });
+    const pipeline = getDb().prepare('SELECT * FROM pipelines WHERE id = ?').get(id) as DbPipeline;
+    const pipelineTasks = getDb().prepare('SELECT * FROM pipeline_tasks WHERE pipeline_id = ? ORDER BY position').all(id) as DbPipelineTask[];
+    return { pipeline, tasks: pipelineTasks };
+  })();
+}
+
+export function getPipelineById(id: string, userId: string): DbPipeline | undefined {
+  return getDb().prepare('SELECT * FROM pipelines WHERE id = ? AND user_id = ?').get(id, userId) as DbPipeline | undefined;
+}
+
+export function getPipelineTasks(pipelineId: string): DbPipelineTask[] {
+  return getDb().prepare('SELECT * FROM pipeline_tasks WHERE pipeline_id = ? ORDER BY position').all(pipelineId) as DbPipelineTask[];
+}
+
+export function listPipelinesForUser(userId: string): DbPipeline[] {
+  return getDb().prepare('SELECT * FROM pipelines WHERE user_id = ? ORDER BY created_at DESC').all(userId) as DbPipeline[];
+}
+
+export function deletePipeline(id: string, userId: string): boolean {
+  const result = getDb().prepare('DELETE FROM pipelines WHERE id = ? AND user_id = ?').run(id, userId);
+  return result.changes > 0;
 }
 
 export function getCampaignSummaries(projectId: string): Array<DbCampaign & { total_tasks: number; done_tasks: number; error_tasks: number }> {
@@ -811,6 +977,7 @@ export function getCampaignsWithDetails(projectId: string, limit = 20): Array<Db
         id: row.t_id, campaign_id: row.c_id, title: row.t_title!,
         agent: row.t_agent!, status: row.t_status!, execution_id: row.t_execution_id,
         position: row.t_position!, created_at: row.t_created_at!, completed_at: row.t_completed_at,
+        prompt: null, depends_on: null, tool_args: null,
         output: row.output, result: row.task_result,
       });
     }

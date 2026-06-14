@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { Link } from 'react-router-dom';
-import { AlertCircle, ArrowRight, Bot, CheckCircle2, Circle, FileEdit, GitBranch, GitPullRequest, LoaderCircle } from 'lucide-react';
+import { AlertCircle, ArrowRight, Bot, CheckCircle2, Circle, FileEdit, GitBranch, GitPullRequest, LoaderCircle, Terminal, Cpu } from 'lucide-react';
 import { getCampaign } from '../lib/api.js';
 import { subscribe } from '../lib/ws.js';
 import { cn } from '@/lib/utils';
@@ -36,9 +36,10 @@ const AGENT_LABEL: Record<CampaignTask['agent'], string> = {
   file_write: 'Write File',
   git: 'Git',
   github: 'GitHub',
+  eval: 'Eval',
+  subagent: 'Sub-agent',
 };
 
-// file_write/git/github steps run synchronously inline; claude_code/codex/mcp delegate to a long-running agent.
 const AGENT_ICON: Record<CampaignTask['agent'], typeof Bot> = {
   claude_code: Bot,
   codex: Bot,
@@ -46,6 +47,8 @@ const AGENT_ICON: Record<CampaignTask['agent'], typeof Bot> = {
   file_write: FileEdit,
   git: GitBranch,
   github: GitPullRequest,
+  eval: Terminal,
+  subagent: Cpu,
 };
 
 export default function CampaignCard({ campaignId, projectId }: CampaignCardProps) {

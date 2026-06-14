@@ -1,5 +1,9 @@
 import Anthropic from '@anthropic-ai/sdk';
-import { createSessionEvent, getDb, getProjectForUser, linkSessionProject, setAgentWorktreeSession, updateCampaignTaskStatus, maybeCompleteCampaign, getCampaignForTask, getCampaignSummaries, getCampaignById, getCampaignTasks, getExecutionById, getScheduledTasksForUser, createScheduledTask, updateScheduledTask, deleteScheduledTask, resumeCampaign, getPermissionProfile } from '../db/index.js';
+import { exec as execCallback } from 'child_process';
+import { promisify } from 'util';
+import { createSessionEvent, getDb, getProjectForUser, linkSessionProject, setAgentWorktreeSession, updateCampaignTaskStatus, maybeCompleteCampaign, getCampaignForTask, getCampaignSummaries, getCampaignById, getCampaignTasks, getExecutionById, getScheduledTasksForUser, createScheduledTask, updateScheduledTask, deleteScheduledTask, resumeCampaign, getPermissionProfile, createPipeline, getPipelineById, getPipelineTasks, listPipelinesForUser, createCampaign, type DbCampaign, type DbCampaignTask } from '../db/index.js';
+
+const execAsync = promisify(execCallback);
 import { runAgentPipeline, type AgentPipelineCtx } from './agent_pipeline.js';
 import { ensureWorktree } from '../lib/worktree.js';
 import { getDecryptedConfig } from '../routes/connections.js';
@@ -194,6 +198,248 @@ function noteProjectUse(userId: string, sessionId: string, project: { id: string
     executionId: executionId ?? null,
     metadata: { source: 'agent' },
   });
+}
+
+async function runSubAgent(
+  instructions: string,
+  projectId: string | null,
+  userId: string,
+  parentExecutionId: string,
+  parentMessageId: string,
+  parentSessionId: string,
+): Promise<string> {
+  let apiKey: string;
+  try { apiKey = getAnthropicKey(userId); }
+  catch { throw new Error('No Anthropic API key configured for sub-agent'); }
+
+  const client = new Anthropic({ apiKey });
+
+  const SUB_TOOLS = new Set(['read_file', 'list_dir', 'search_files', 'project_query', 'recall', 'remember', 'write_file', 'create_artifact', 'git_op', 'list_artifacts', 'read_artifact']);
+  const subtools = toolDefinitions.filter(t => 'name' in t && SUB_TOOLS.has(t.name as string));
+
+  const systemPrompt = `You are a focused sub-agent completing a specific task.${projectId ? ` Use project_id "${projectId}" when calling project tools.` : ''} Complete the task fully, then respond with a clear summary of what you accomplished.`;
+
+  const messages: Anthropic.MessageParam[] = [{ role: 'user', content: instructions }];
+  const MAX_TURNS = 15;
+
+  for (let turn = 0; turn < MAX_TURNS; turn++) {
+    const response = await client.messages.create({
+      model: 'claude-sonnet-4-6',
+      max_tokens: 8192,
+      system: systemPrompt,
+      tools: subtools as Anthropic.Tool[],
+      messages,
+    });
+
+    messages.push({ role: 'assistant', content: response.content });
+    appendOutput(parentExecutionId, userId, `[sub-agent turn ${turn + 1}]\n`);
+
+    if (response.stop_reason === 'end_turn') {
+      return response.content
+        .filter((b): b is Anthropic.TextBlock => b.type === 'text')
+        .map(b => b.text)
+        .join('');
+    }
+
+    if (response.stop_reason === 'tool_use') {
+      const toolUseBlocks = response.content.filter((b): b is Anthropic.ToolUseBlock => b.type === 'tool_use');
+      const toolResults = await dispatchToolBlocks(toolUseBlocks, userId, parentMessageId, parentSessionId);
+      messages.push({ role: 'user', content: toolResults });
+    }
+  }
+
+  return 'Sub-agent reached max turns limit without producing a final response.';
+}
+
+async function executeCampaignTask(
+  task: DbCampaignTask,
+  campaign: DbCampaign,
+  userId: string,
+  messageId: string,
+  sessionId: string,
+): Promise<void> {
+  const project = getProjectForUser(campaign.project_id, userId);
+  if (!project) throw new Error(`Project ${campaign.project_id} not found`);
+
+  const executionId = createExecution(userId, messageId, project.id, task.agent);
+  startCampaignTask(userId, task.id, executionId);
+
+  const toolArgs: Record<string, unknown> = task.tool_args ? JSON.parse(task.tool_args) : {};
+  const prompt = task.prompt ?? '';
+  const priorCtx = buildCampaignPriorContext(task.id);
+  const fullPrompt = priorCtx ? `${prompt}\n\n${priorCtx}` : prompt;
+
+  try {
+    let result: string;
+
+    switch (task.agent) {
+      case 'claude_code': {
+        if (!project.repo_path) throw new Error(`Project '${project.name}' has no repo`);
+        let apiKey: string | null = null;
+        try { apiKey = getAnthropicKey(userId); } catch { /* use CLI auth */ }
+        const worktree = await ensureWorktree(project, sessionId);
+        let graphKey: string | null = null;
+        try { graphKey = getAnthropicKey(userId); } catch {}
+        const ctx: AgentPipelineCtx = { userId, tool: 'claude_code', repoPath: project.repo_path, projectId: project.id, graphKey };
+        await runAgentPipeline(ctx, async () => {
+          const r = await invokeClaudeCode(
+            { prompt: fullPrompt },
+            { userId, executionId, repoPath: worktree.worktree_path, apiKey, resumeSessionId: worktree.claude_session_id, mcpServers: getMcpServersForUser(userId), permissionProfile: getPermissionProfile(userId) },
+          );
+          if (r.sessionId) setAgentWorktreeSession(worktree.id, 'claude', r.sessionId);
+          ctx.result = r.result;
+          ctx.costUsd = r.costUsd;
+        });
+        result = ctx.result!;
+        break;
+      }
+      case 'codex': {
+        if (!project.repo_path) throw new Error(`Project '${project.name}' has no repo`);
+        const connIds: string[] = JSON.parse(project.enabled_connection_ids ?? '[]');
+        let codexKey: string | null = null;
+        if (connIds.length > 0) {
+          const openaiConn = getDb()
+            .prepare(`SELECT id FROM connections WHERE id IN (${connIds.map(() => '?').join(',')}) AND type = 'openai' LIMIT 1`)
+            .get(...connIds) as { id: string } | undefined;
+          if (openaiConn) {
+            codexKey = getDecryptedConfig(openaiConn.id, userId).apiKey;
+          }
+        }
+        const cWorktree = await ensureWorktree(project, sessionId);
+        let cGraphKey: string | null = null;
+        try { cGraphKey = getAnthropicKey(userId); } catch {}
+        const cCtx: AgentPipelineCtx = { userId, tool: 'codex', repoPath: project.repo_path, projectId: project.id, graphKey: cGraphKey };
+        await runAgentPipeline(cCtx, async () => {
+          const cr = await invokeCodex(
+            { prompt: fullPrompt },
+            { userId, executionId, repoPath: cWorktree.worktree_path, apiKey: codexKey, resumeSessionId: cWorktree.codex_session_id, mcpServers: getMcpServersForUser(userId), permissionProfile: getPermissionProfile(userId) },
+          );
+          if (cr.sessionId) setAgentWorktreeSession(cWorktree.id, 'codex', cr.sessionId);
+          cCtx.result = cr.result;
+          cCtx.costUsd = cr.costUsd;
+        });
+        result = cCtx.result!;
+        break;
+      }
+      case 'eval': {
+        if (!project.repo_path) throw new Error(`Project '${project.name}' has no repo for eval`);
+        try {
+          const { stdout, stderr } = await execAsync(prompt, { cwd: project.repo_path, timeout: 120_000 });
+          result = [stdout, stderr].filter(Boolean).join('\n') || 'Command completed successfully';
+          appendOutput(executionId, userId, result);
+        } catch (err: unknown) {
+          const e = err as { code?: number; stdout?: string; stderr?: string; message?: string };
+          const output = [e.stdout, e.stderr].filter(Boolean).join('\n');
+          appendOutput(executionId, userId, output);
+          throw new Error(`Exit ${e.code ?? 1}: ${output || e.message}`);
+        }
+        break;
+      }
+      case 'subagent': {
+        result = await runSubAgent(fullPrompt, campaign.project_id, userId, executionId, messageId, sessionId);
+        break;
+      }
+      case 'git': {
+        if (!project.repo_path) throw new Error(`Project '${project.name}' has no repo`);
+        const gitWorktree = await ensureWorktree(project, sessionId);
+        result = await runGitOp(
+          {
+            op: (toolArgs.op as 'log' | 'diff' | 'status' | 'commit' | 'push') ?? 'commit',
+            message: (toolArgs.message as string | undefined) ?? prompt,
+            branch: (toolArgs.branch as string | undefined) ?? gitWorktree.branch,
+          },
+          { userId, executionId, projectId: project.id, repoPath: gitWorktree.worktree_path },
+        );
+        break;
+      }
+      case 'github': {
+        const ghConn = getDb()
+          .prepare("SELECT id FROM connections WHERE user_id = ? AND type = 'github' LIMIT 1")
+          .get(userId) as { id: string } | undefined;
+        const token = ghConn ? getDecryptedConfig(ghConn.id, userId).token ?? '' : '';
+        result = await runGithubApi(toolArgs as unknown as Parameters<typeof runGithubApi>[0], { userId, executionId, token });
+        break;
+      }
+      case 'file_write': {
+        result = await writeFile(
+          { project_id: project.id, path: toolArgs.path as string, content: (toolArgs.content as string) ?? prompt },
+          { userId, executionId, projectId: project.id, sessionId },
+        );
+        break;
+      }
+      case 'mcp': {
+        const mcpConnId = toolArgs.connection_id as string;
+        const mcpConn = getDb()
+          .prepare("SELECT id FROM connections WHERE id = ? AND user_id = ? AND type = 'mcp'")
+          .get(mcpConnId, userId) as { id: string } | undefined;
+        if (!mcpConn) throw new Error(`MCP connection ${mcpConnId} not found`);
+        const mcpConfig = getDecryptedConfig(mcpConn.id, userId);
+        result = await callMcpTool(
+          mcpConnId,
+          mcpConfig.command,
+          mcpConfig.args ? JSON.parse(mcpConfig.args) : [],
+          mcpConfig.env ? JSON.parse(mcpConfig.env) : {},
+          toolArgs.tool_name as string,
+          toolArgs.tool_input as Record<string, unknown>,
+        );
+        break;
+      }
+      default:
+        throw new Error(`Unknown task agent type: ${task.agent}`);
+    }
+
+    completeExecution(executionId, userId, 'done', result);
+    finishCampaignTask(userId, task.id, result);
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err);
+    completeExecution(executionId, userId, 'error', msg);
+    finishCampaignTask(userId, task.id, `Error: ${msg}`);
+    throw err;
+  }
+}
+
+async function runCampaignAutoDispatch(
+  campaignId: string,
+  userId: string,
+  messageId: string,
+  sessionId: string,
+  onError: 'stop' | 'continue' = 'stop',
+): Promise<{ done: number; error: number; total: number }> {
+  const campaign = getCampaignById(campaignId);
+  if (!campaign) throw new Error(`Campaign ${campaignId} not found`);
+
+  while (true) {
+    const fresh = getCampaignById(campaignId)!;
+    if (fresh.status === 'cancelled') break;
+
+    const allTasks = getCampaignTasks(campaignId);
+    const doneIds = new Set(allTasks.filter(t => t.status === 'done').map(t => t.id));
+    const hasError = allTasks.some(t => t.status === 'error');
+
+    if (hasError && onError === 'stop') break;
+    if (allTasks.every(t => t.status === 'done' || t.status === 'error')) break;
+
+    const ready = allTasks.filter(t => {
+      if (t.status !== 'waiting') return false;
+      const deps: string[] = t.depends_on ? JSON.parse(t.depends_on) : [];
+      return deps.every(depId => doneIds.has(depId));
+    });
+
+    if (ready.length === 0) break;
+
+    const results = await Promise.allSettled(
+      ready.map(task => executeCampaignTask(task, campaign, userId, messageId, sessionId))
+    );
+
+    if (onError === 'stop' && results.some(r => r.status === 'rejected')) break;
+  }
+
+  const finalTasks = getCampaignTasks(campaignId);
+  return {
+    done: finalTasks.filter(t => t.status === 'done').length,
+    error: finalTasks.filter(t => t.status === 'error').length,
+    total: finalTasks.length,
+  };
 }
 
 async function dispatchToolBlocks(
@@ -720,6 +966,65 @@ async function dispatchTool(
             });
           }
         } catch { /* ignore malformed tool result */ }
+        break;
+      }
+      case 'run_campaign': {
+        const runCampaignId = toolInput.campaign_id as string;
+        const onError = (toolInput.on_error as 'stop' | 'continue' | undefined) ?? 'stop';
+        const campaignCheck = getCampaignById(runCampaignId);
+        if (!campaignCheck) { result = `Error: campaign ${runCampaignId} not found`; break; }
+        const summary = await runCampaignAutoDispatch(runCampaignId, userId, messageId, sessionId, onError);
+        const finalCampaign = getCampaignById(runCampaignId)!;
+        result = JSON.stringify({ campaign_id: runCampaignId, status: finalCampaign.status, ...summary });
+        break;
+      }
+      case 'create_pipeline': {
+        const pTitle = toolInput.title as string;
+        const pDesc = toolInput.description as string | undefined ?? null;
+        const pTasks = toolInput.tasks as Array<{ title: string; agent: DbCampaignTask['agent']; prompt?: string; depends_on?: number[]; tool_args?: Record<string, unknown> }>;
+        const { pipeline, tasks: pipelineTasks } = createPipeline(userId, pTitle, pDesc, pTasks);
+        result = JSON.stringify({
+          pipeline_id: pipeline.id,
+          title: pipeline.title,
+          tasks: pipelineTasks.map(t => ({ id: t.id, title: t.title, agent: t.agent, position: t.position })),
+        });
+        break;
+      }
+      case 'run_pipeline': {
+        const pipelineId = toolInput.pipeline_id as string;
+        const pProjectId = toolInput.project_id as string;
+        const pTitleOverride = toolInput.title as string | undefined;
+        const pOnError = (toolInput.on_error as 'stop' | 'continue' | undefined) ?? 'stop';
+
+        const pipeline = getPipelineById(pipelineId, userId);
+        if (!pipeline) { result = `Error: pipeline ${pipelineId} not found`; break; }
+        const ptasks = getPipelineTasks(pipelineId);
+
+        // Instantiate pipeline as a campaign — resolve position-based depends_on to task IDs
+        const { campaign: pCampaign, tasks: cTasks } = createCampaign(
+          pProjectId,
+          sessionId,
+          pTitleOverride ?? pipeline.title,
+          ptasks.map((pt, i) => ({
+            title: pt.title,
+            agent: pt.agent,
+            prompt: pt.prompt,
+            depends_on: pt.depends_on ? (JSON.parse(pt.depends_on) as number[]) : [],
+            tool_args: pt.tool_args ? JSON.parse(pt.tool_args) : undefined,
+          })),
+        );
+
+        broadcast(userId, { type: 'campaign_created', campaignId: pCampaign.id });
+
+        const pSummary = await runCampaignAutoDispatch(pCampaign.id, userId, messageId, sessionId, pOnError);
+        const pFinalCampaign = getCampaignById(pCampaign.id)!;
+        result = JSON.stringify({ campaign_id: pCampaign.id, pipeline_id: pipelineId, status: pFinalCampaign.status, ...pSummary });
+        break;
+      }
+      case 'delegate_to_agent': {
+        const daInstructions = toolInput.instructions as string;
+        const daProjectId = toolInput.project_id as string | undefined ?? null;
+        result = await runSubAgent(daInstructions, daProjectId, userId, executionId, messageId, sessionId);
         break;
       }
       case 'generate_video': {

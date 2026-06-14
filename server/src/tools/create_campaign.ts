@@ -1,9 +1,17 @@
 import { createCampaign, type DbCampaignTask } from '../db/index.js';
 
+interface CreateCampaignTaskInput {
+  title: string;
+  agent: DbCampaignTask['agent'];
+  prompt?: string | null;
+  depends_on?: number[];
+  tool_args?: Record<string, unknown> | null;
+}
+
 interface CreateCampaignInput {
   project_id: string;
   title: string;
-  tasks: Array<{ title: string; agent: 'claude_code' | 'codex' | 'mcp' | 'file_write' | 'git' | 'github' }>;
+  tasks: CreateCampaignTaskInput[];
   session_id?: string;
 }
 
@@ -15,11 +23,16 @@ export function runCreateCampaign(
     input.project_id,
     input.session_id ?? null,
     input.title,
-    input.tasks
+    input.tasks,
   );
   return JSON.stringify({
     campaign_id: campaign.id,
     project_id: campaign.project_id,
-    tasks: tasks.map((t: DbCampaignTask) => ({ id: t.id, title: t.title, agent: t.agent })),
+    tasks: tasks.map((t: DbCampaignTask) => ({
+      id: t.id,
+      title: t.title,
+      agent: t.agent,
+      depends_on: t.depends_on ? JSON.parse(t.depends_on) : [],
+    })),
   });
 }

@@ -29,43 +29,39 @@ function ProjectCard({ project }: { project: Project }) {
         <div className="flex items-start justify-between gap-2">
           <div className="flex items-center gap-2.5">
             {project.repo_path
-              ? <FolderGit2 size={16} className="shrink-0 text-muted-foreground" />
-              : <FileText size={16} className="shrink-0 text-muted-foreground" />
+              ? <FolderGit2 size={15} className="shrink-0 text-muted-foreground" />
+              : <FileText size={15} className="shrink-0 text-muted-foreground" />
             }
-            <span className="font-semibold text-sm text-foreground">{project.name}</span>
+            <span className="truncate text-sm font-semibold text-foreground">{project.name}</span>
           </div>
           {runningCount > 0 && (
-            <div className="flex items-center gap-1 shrink-0">
-              <span className="size-2 rounded-full bg-blue-500 animate-pulse" />
-              <span className="text-[10px] text-blue-600 font-medium">{runningCount} running</span>
-            </div>
+            <span className="flex shrink-0 items-center gap-1.5 text-[11px] font-medium text-on-accent-soft">
+              <span className="size-1.5 animate-pulse rounded-full bg-primary" />
+              {runningCount} running
+            </span>
           )}
         </div>
         {project.description && (
-          <p className="text-xs text-muted-foreground line-clamp-2">{project.description}</p>
+          <p className="line-clamp-2 text-xs leading-relaxed text-muted-foreground">{project.description}</p>
         )}
-        <div className="flex items-center gap-2 text-[11px] text-muted-foreground/60">
+        <div className="flex flex-wrap items-center gap-x-2 gap-y-1 text-[11px] text-faint-fg">
           <span>{project.repo_path ? 'code repo' : 'doc project'}</span>
           {caps?.has_graph && (
             <span className="flex items-center gap-1">
-              <span className="text-muted-foreground/30">·</span>
+              <span className="text-border">·</span>
               <GitGraph size={10} className="shrink-0" />
               graph
             </span>
           )}
           {caps?.has_media && (
             <span className="flex items-center gap-1">
-              <span className="text-muted-foreground/30">·</span>
+              <span className="text-border">·</span>
               <Video size={10} className="shrink-0" />
               videos
             </span>
           )}
-          {campaigns.length > 0 && (
-            <span>
-              <span className="text-muted-foreground/30">·</span>
-              {' '}{campaigns.length} campaign{campaigns.length !== 1 ? 's' : ''}
-            </span>
-          )}
+          <span className="text-border">·</span>
+          <span>{campaigns.length} campaign{campaigns.length !== 1 ? 's' : ''}</span>
         </div>
       </Surface>
     </button>
@@ -103,10 +99,13 @@ export default function ProjectsPage() {
       <PageHeader
         title="Projects"
         actions={(
-          <Button size="sm" variant="outline" className="h-7 gap-1.5 text-xs" onClick={() => setOpen(true)}>
+          <button
+            className="flex items-center gap-1.5 rounded-lg border border-border bg-card px-3 py-1.5 text-sm font-medium text-fg-soft shadow-xs transition-colors hover:border-muted-foreground hover:text-foreground"
+            onClick={() => setOpen(true)}
+          >
             <Plus size={13} />
             New project
-          </Button>
+          </button>
         )}
       />
 
@@ -121,7 +120,7 @@ export default function ProjectsPage() {
         />
       ) : (
         <PageBody>
-          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3 max-w-5xl">
+          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
             {projects.map(p => <ProjectCard key={p.id} project={p} />)}
           </div>
         </PageBody>

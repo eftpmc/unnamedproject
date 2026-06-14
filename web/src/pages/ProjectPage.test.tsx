@@ -41,6 +41,7 @@ vi.mock('../lib/api.js', () => ({
   updateChatConfig: vi.fn(),
   deleteProject: vi.fn(),
   updateProject: vi.fn(),
+  getProjectFile: vi.fn().mockResolvedValue(null),
 }));
 
 vi.mock('../components/FileBrowser.js', () => ({ default: () => <div>FileBrowser</div> }));
@@ -61,25 +62,20 @@ function renderPage(path: string) {
 describe('ProjectPage', () => {
   it('renders the project overview tab', async () => {
     renderPage('/projects/proj-1');
-    expect(await screen.findByRole('tab', { name: 'Overview' })).toBeInTheDocument();
+    expect(await screen.findByRole('link', { name: 'Overview' })).toBeInTheDocument();
   });
 
   it('does not show dynamic studio tab when capabilities are false', async () => {
     renderPage('/projects/proj-1');
-    await screen.findByRole('tab', { name: 'Overview' });
-    expect(screen.queryByRole('tab', { name: 'Studio' })).not.toBeInTheDocument();
+    await screen.findByRole('link', { name: 'Overview' });
+    expect(screen.queryByRole('link', { name: 'Studio' })).not.toBeInTheDocument();
   });
 
   it('shows the Artifacts tab without capability-specific tabs', async () => {
     renderPage('/projects/proj-1');
-    expect(await screen.findByRole('tab', { name: 'Artifacts' })).toBeInTheDocument();
-    expect(screen.queryByRole('tab', { name: 'Research' })).not.toBeInTheDocument();
-    expect(screen.queryByRole('tab', { name: 'Studio' })).not.toBeInTheDocument();
-  });
-
-  it('shows the Chats tab', async () => {
-    renderPage('/projects/proj-1');
-    expect(await screen.findByRole('tab', { name: /Chats/ })).toBeInTheDocument();
+    expect(await screen.findByRole('link', { name: 'Artifacts' })).toBeInTheDocument();
+    expect(screen.queryByRole('link', { name: 'Research' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('link', { name: 'Studio' })).not.toBeInTheDocument();
   });
 
   it('shows only chats pinned to this project in the Chats tab', async () => {

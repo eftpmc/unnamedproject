@@ -1,22 +1,11 @@
 import { useState } from 'react';
 import { useParams, useNavigate, Link, useLocation } from 'react-router-dom';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { FileText, GitBranch, GitGraph, Video } from 'lucide-react';
+import { ChevronRight, FileText, GitBranch, GitGraph, Video } from 'lucide-react';
 import { getProjects, getProjectCampaigns, getProjectCapabilities, createChat, updateChatConfig, deleteProject, updateProject, getChats, getProjectFile } from '../lib/api.js';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
-import { Input } from '@/components/ui/input';
-import { Textarea } from '@/components/ui/textarea';
-import { EmptyPanel, PageHeader, PageLoading, PageShell, Surface } from '@/components/ui/app-layout';
-import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from '@/components/ui/table';
-import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import { EmptyPanel, PageHeader, PageLoading, PageShell } from '@/components/ui/app-layout';
 import { cn } from '@/lib/utils';
 import FileBrowser from '../components/FileBrowser.js';
 import ArtifactsTab from '../components/ArtifactsTab.js';
@@ -25,12 +14,31 @@ import type { Project, Campaign, Session } from '../types.js';
 
 type Tab = string;
 
-const STATUS_BADGE: Record<Campaign['status'], string> = {
-  running: 'bg-foreground/8 text-foreground/70 border-transparent',
-  done: 'bg-success/10 text-success border-transparent',
-  error: 'bg-destructive/10 text-destructive border-destructive/20',
-  cancelled: 'bg-muted text-muted-foreground border-transparent',
-};
+const TABS = [
+  { id: 'overview', label: 'Overview' },
+  { id: 'campaigns', label: 'Campaigns' },
+  { id: 'artifacts', label: 'Artifacts' },
+  { id: 'files', label: 'Files' },
+  { id: 'settings', label: 'Settings' },
+];
+
+function StatusPill({ status }: { status: Campaign['status'] }) {
+  const styles: Record<Campaign['status'], string> = {
+    running: 'bg-primary/10 text-on-accent-soft',
+    done: 'bg-success/10 text-success',
+    error: 'bg-destructive/10 text-destructive',
+    cancelled: 'bg-muted text-muted-foreground',
+  };
+  const labels: Record<Campaign['status'], string> = {
+    running: 'Running', done: 'Done', error: 'Error', cancelled: 'Cancelled',
+  };
+  return (
+    <span className={cn('inline-flex items-center rounded-full px-2 py-0.5 text-[11px] font-medium', styles[status])}>
+      {status === 'running' && <span className="mr-1 size-1.5 animate-pulse rounded-full bg-primary" />}
+      {labels[status]}
+    </span>
+  );
+}
 
 function tabFromPath(pathname: string): Tab {
   const segments = pathname.split('/').filter(Boolean);
@@ -114,17 +122,10 @@ export default function ProjectPage() {
   }
 
   const runningCampaigns = campaigns.filter(c => c.status === 'running');
+  const runningCount = runningCampaigns.length;
   const activeCampaign = runningCampaigns[0] ?? null;
   const recentCampaigns = campaigns.filter(c => c.id !== activeCampaign?.id);
-
-  const TABS: { id: Tab; label: string }[] = [
-    { id: 'overview', label: 'Overview' },
-    { id: 'campaigns', label: `Campaigns${campaigns.length > 0 ? ` (${campaigns.length})` : ''}` },
-    { id: 'chats', label: `Chats${pinnedChats.length > 0 ? ` (${pinnedChats.length})` : ''}` },
-    { id: 'artifacts', label: 'Artifacts' },
-    { id: 'files', label: 'Files' },
-    { id: 'settings', label: 'Settings' },
-  ];
+  const artifactsCount = 0;
 
   return (
     <PageShell>
@@ -144,16 +145,22 @@ export default function ProjectPage() {
         }
       />
       {/* Tab strip */}
-      <div className="shrink-0 overflow-x-auto overflow-y-hidden border-b border-border/40 px-4 sm:px-6 [&::-webkit-scrollbar]:hidden [scrollbar-width:none]">
-        <Tabs value={tab} onValueChange={value => navigate(tabHref(project.id, value as Tab))}>
-          <TabsList variant="line" className="-mx-1 px-1 self-start">
-            {TABS.map(t => (
-              <TabsTrigger key={t.id} value={t.id} className="shrink-0 px-3 py-2 text-xs">
-                {t.label}
-              </TabsTrigger>
-            ))}
-          </TabsList>
-        </Tabs>
+      <div className="flex shrink-0 gap-0 overflow-x-auto border-b border-border-soft px-5">
+        {TABS.map(t => (
+          <Link
+            key={t.id}
+            to={tabHref(projectId!, t.id)}
+            className={cn(
+              'border-b-2 px-1 pb-3 pt-3 text-sm font-medium whitespace-nowrap transition-colors',
+              'mx-3 first:ml-0',
+              tab === t.id
+                ? 'border-primary text-foreground'
+                : 'border-transparent text-muted-foreground hover:text-fg-soft',
+            )}
+          >
+            {t.label}
+          </Link>
+        ))}
       </div>
       {/* Tab content */}
       <div className="flex-1 overflow-y-auto">
@@ -169,9 +176,7 @@ export default function ProjectPage() {
                 >
                   <div className="flex items-center justify-between">
                     <span className="text-sm font-semibold">{activeCampaign.title}</span>
-                    <Badge variant="outline" className={cn('capitalize', STATUS_BADGE[activeCampaign.status])}>
-                      {activeCampaign.status}
-                    </Badge>
+                    <StatusPill status={activeCampaign.status} />
                   </div>
                   <div className="text-xs text-muted-foreground mt-1">
                     Started {timeAgo(activeCampaign.created_at)}
@@ -181,22 +186,23 @@ export default function ProjectPage() {
             )}
 
             {/* 2. Stats row */}
-            <div className="grid grid-cols-3 gap-2 sm:gap-3">
-              <Surface className="p-3 sm:p-4">
-                <div className="text-xs text-muted-foreground mb-1">Campaigns</div>
-                <div className="text-xl sm:text-2xl font-semibold">{campaigns.length}</div>
-                {runningCampaigns.length > 0 && (
-                  <div className="text-xs text-muted-foreground mt-0.5">{runningCampaigns.length} running</div>
-                )}
-              </Surface>
-              <Surface className="p-3 sm:p-4">
-                <div className="text-xs text-muted-foreground mb-1">Chats</div>
-                <div className="text-xl sm:text-2xl font-semibold">{pinnedChats.length}</div>
-              </Surface>
-              <Surface className="p-3 sm:p-4">
-                <div className="text-xs text-muted-foreground mb-1">MCP Tools</div>
-                <div className="text-xl sm:text-2xl font-semibold">{project.enabled_connection_ids.length}</div>
-              </Surface>
+            <div className="grid grid-cols-3 gap-4">
+              {[
+                { label: 'Campaigns', value: campaigns.length, onClick: () => navigate(tabHref(projectId!, 'campaigns')) },
+                { label: 'Artifacts', value: artifactsCount, onClick: undefined },
+                { label: 'Running now', value: runningCount, onClick: undefined },
+              ].map(s => (
+                <button
+                  type="button"
+                  key={s.label}
+                  onClick={s.onClick}
+                  disabled={!s.onClick}
+                  className="rounded-xl border border-border-soft bg-card p-4 text-left transition-[transform,box-shadow,border-color] hover:enabled:-translate-y-px hover:enabled:border-border hover:enabled:shadow-md disabled:cursor-default"
+                >
+                  <div className="text-2xl font-semibold tracking-tight text-foreground">{s.value}</div>
+                  <div className="mt-1.5 text-xs text-muted-foreground">{s.label}</div>
+                </button>
+              ))}
             </div>
 
             {/* 3. Recent campaigns */}
@@ -220,9 +226,7 @@ export default function ProjectPage() {
                     >
                       <span className="text-sm font-medium truncate">{c.title}</span>
                       <div className="flex items-center gap-3 shrink-0 ml-3">
-                        <Badge variant="outline" className={cn('capitalize', STATUS_BADGE[c.status])}>
-                          {c.status}
-                        </Badge>
+                        <StatusPill status={c.status} />
                         <span className="text-xs text-muted-foreground">{timeAgo(c.created_at)}</span>
                       </div>
                     </Link>
@@ -236,12 +240,6 @@ export default function ProjectPage() {
               <div>
                 <div className="flex items-center justify-between mb-2">
                   <div className="text-xs font-medium text-muted-foreground">Recent Chats</div>
-                  <Link
-                    to={tabHref(project.id, 'chats')}
-                    className="text-xs text-indigo-500 hover:text-indigo-400 transition-colors"
-                  >
-                    View all →
-                  </Link>
                 </div>
                 <div className="overflow-hidden rounded-xl border border-border/50 bg-background/60 divide-y divide-border/50">
                   {pinnedChats.slice(0, 2).map(chat => (
@@ -340,39 +338,26 @@ export default function ProjectPage() {
                 }
               />
             ) : (
-              <div className="overflow-hidden rounded-xl border border-border/50 bg-background/60">
-                <Table>
-                  <TableHeader>
-                    <TableRow>
-                      <TableHead>Campaign</TableHead>
-                      <TableHead>Status</TableHead>
-                      <TableHead className="hidden sm:table-cell">Started</TableHead>
-                    </TableRow>
-                  </TableHeader>
-                  <TableBody>
-                    {campaigns.map(c => (
-                      <TableRow
-                        key={c.id}
-                        className="cursor-pointer"
-                        onClick={() => navigate(`/projects/${projectId}/campaigns/${c.id}`)}
-                      >
-                        <TableCell className="font-medium">
-                          <Link to={`/projects/${projectId}/campaigns/${c.id}`} className="hover:underline">
-                            {c.title}
-                          </Link>
-                        </TableCell>
-                        <TableCell>
-                          <Badge variant="outline" className={cn('capitalize', STATUS_BADGE[c.status])}>
-                            {c.status}
-                          </Badge>
-                        </TableCell>
-                        <TableCell className="hidden text-muted-foreground sm:table-cell">
-                          {timeAgo(c.created_at)}
-                        </TableCell>
-                      </TableRow>
-                    ))}
-                  </TableBody>
-                </Table>
+              <div className="flex flex-col gap-2">
+                {campaigns.map(c => (
+                  <button
+                    type="button"
+                    key={c.id}
+                    className="flex w-full items-center gap-3 rounded-xl border border-border-soft bg-card p-4 text-left transition-[transform,box-shadow,border-color] hover:-translate-y-px hover:border-border hover:shadow-md"
+                    onClick={() => navigate(`/projects/${projectId}/campaigns/${c.id}`)}
+                  >
+                    <div className="flex min-w-0 flex-1 flex-col gap-1.5">
+                      <div className="flex flex-wrap items-center gap-2">
+                        <span className="text-sm font-semibold text-foreground">{c.title}</span>
+                        <StatusPill status={c.status} />
+                      </div>
+                      <div className="flex flex-wrap items-center gap-2 text-[11px] text-faint-fg">
+                        <span>updated {timeAgo(c.created_at)}</span>
+                      </div>
+                    </div>
+                    <ChevronRight size={15} className="shrink-0 text-faint-fg" />
+                  </button>
+                ))}
               </div>
             )}
           </div>
@@ -442,32 +427,42 @@ export default function ProjectPage() {
 function ProjectSettingsForm({ project, onDelete }: { project: Project; onDelete: () => void }) {
   const queryClient = useQueryClient();
   const [description, setDescription] = useState(project.description ?? '');
-  const [confirmDelete, setConfirmDelete] = useState(false);
 
   const updateMutation = useMutation({
     mutationFn: () => updateProject(project.id, { description: description.trim() }),
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ['projects'] }),
   });
 
+  const handleDelete = onDelete;
+
   return (
     <div className="flex flex-col gap-5">
       <div className="flex flex-col gap-3">
         <div>
           <label className="text-xs font-medium text-muted-foreground block mb-1">Name</label>
-          <Input value={project.name} disabled />
+          <input
+            value={project.name}
+            disabled
+            className="w-full rounded-lg border border-border bg-card px-3 py-2 text-sm text-foreground placeholder:text-faint-fg focus:border-primary focus:outline-none focus:ring-2 focus:ring-ring"
+          />
         </div>
         <div>
           <label className="text-xs font-medium text-muted-foreground block mb-1">Description</label>
-          <Textarea
+          <textarea
             value={description}
             onChange={e => setDescription(e.target.value)}
             rows={3}
+            className="w-full resize-none rounded-lg border border-border bg-card px-3 py-2 text-sm text-foreground placeholder:text-faint-fg focus:border-primary focus:outline-none focus:ring-2 focus:ring-ring"
           />
         </div>
         {project.repo_path && (
           <div>
             <label className="text-xs font-medium text-muted-foreground block mb-1">Repo path</label>
-            <Input value={project.repo_path} disabled className="font-mono text-xs" />
+            <input
+              value={project.repo_path}
+              disabled
+              className="w-full rounded-lg border border-border bg-card px-3 py-2 text-sm font-mono text-foreground placeholder:text-faint-fg focus:border-primary focus:outline-none focus:ring-2 focus:ring-ring"
+            />
           </div>
         )}
         <Button
@@ -480,17 +475,20 @@ function ProjectSettingsForm({ project, onDelete }: { project: Project; onDelete
         </Button>
       </div>
       <div className="border-t border-border/40 pt-5">
-        <div className="text-xs font-medium text-muted-foreground mb-2">Danger zone</div>
-        {!confirmDelete ? (
-          <Button size="sm" variant="destructive" onClick={() => setConfirmDelete(true)}>
-            Delete project
-          </Button>
-        ) : (
-          <div className="flex items-center gap-2">
-            <Button size="sm" variant="destructive" onClick={onDelete}>Confirm delete</Button>
-            <Button size="sm" variant="ghost" onClick={() => setConfirmDelete(false)}>Cancel</Button>
+        <div className="text-xs font-medium text-muted-foreground mb-3">Danger zone</div>
+        <div className="flex items-center justify-between gap-4 rounded-xl border border-destructive/25 bg-destructive/5 p-4">
+          <div>
+            <div className="text-sm font-medium text-foreground">Delete project</div>
+            <div className="mt-0.5 text-xs text-muted-foreground">Permanently remove this project and all its campaigns.</div>
           </div>
-        )}
+          <button
+            type="button"
+            onClick={handleDelete}
+            className="rounded-lg bg-destructive px-3 py-1.5 text-sm font-medium text-white transition-[filter] hover:brightness-105"
+          >
+            Delete
+          </button>
+        </div>
       </div>
     </div>
   );

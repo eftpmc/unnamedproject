@@ -136,6 +136,10 @@ router.patch('/:id', (req, res) => {
 router.post('/', (req, res) => {
   const { userId } = req as AuthedRequest;
   const { title } = req.body as { title?: string };
+  // Clean up abandoned empty sessions before creating a new one
+  getDb()
+    .prepare(`DELETE FROM sessions WHERE user_id = ? AND id NOT IN (SELECT DISTINCT session_id FROM messages WHERE session_id IS NOT NULL)`)
+    .run(userId);
   const id = newId();
   getDb()
     .prepare('INSERT INTO sessions (id, user_id, title, effort) VALUES (?,?,?,?)')

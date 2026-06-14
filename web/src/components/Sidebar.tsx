@@ -1,4 +1,4 @@
-import { useNavigate, useLocation } from 'react-router-dom';
+import { useNavigate, useLocation, Link } from 'react-router-dom';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { Plus, MessagesSquare, LayoutGrid, Activity, Workflow } from 'lucide-react';
 import { getChats, createChat } from '../lib/api.js';
@@ -98,27 +98,31 @@ export default function Sidebar({ className, onNavigate, pendingApprovalCount = 
               <NavItem
                 icon={<Activity size={15} strokeWidth={1.75} />}
                 label="Activity"
+                href="/activity"
                 active={isActive('/activity')}
-                onClick={() => go('/activity')}
+                onClick={closeSidebar}
                 badge={pendingApprovalCount > 0 ? pendingApprovalCount : undefined}
               />
               <NavItem
                 icon={<MessagesSquare size={15} strokeWidth={1.75} />}
                 label="Chats"
+                href="/chats"
                 active={isActive('/chats')}
-                onClick={() => go('/chats')}
+                onClick={closeSidebar}
               />
               <NavItem
                 icon={<LayoutGrid size={15} strokeWidth={1.75} />}
                 label="Projects"
+                href="/projects"
                 active={isActive('/projects')}
-                onClick={() => go('/projects')}
+                onClick={closeSidebar}
               />
               <NavItem
                 icon={<Workflow size={15} strokeWidth={1.75} />}
                 label="Pipelines"
+                href="/pipelines"
                 active={isActive('/pipelines')}
-                onClick={() => go('/pipelines')}
+                onClick={closeSidebar}
               />
             </SidebarMenu>
           </SidebarGroupContent>
@@ -172,33 +176,37 @@ export default function Sidebar({ className, onNavigate, pendingApprovalCount = 
 function NavItem({
   icon,
   label,
+  href,
   active,
   onClick,
   badge,
 }: {
   icon: React.ReactNode;
   label: string;
+  href: string;
   active: boolean;
-  onClick: () => void;
+  onClick?: () => void;
   badge?: number;
 }) {
   return (
     <SidebarMenuItem>
       <SidebarMenuButton
+        asChild
         isActive={active}
-        onClick={onClick}
         className={cn(
           'h-9 rounded-lg px-2.5 text-sm font-medium text-muted-foreground transition-colors hover:bg-sidebar-accent hover:text-foreground',
           active && 'bg-sidebar-accent text-foreground shadow-xs ring-1 ring-sidebar-border/60',
         )}
       >
-        {icon}
-        <span className="flex-1">{label}</span>
-        {badge != null && (
-          <span className="ml-auto flex h-4 min-w-4 items-center justify-center rounded-full bg-warning px-1 text-[10px] font-semibold text-warning-foreground">
-            {badge}
-          </span>
-        )}
+        <Link to={href} onClick={onClick}>
+          {icon}
+          <span className="flex-1">{label}</span>
+          {badge != null && (
+            <span className="ml-auto flex h-4 min-w-4 items-center justify-center rounded-full bg-warning px-1 text-[10px] font-semibold text-warning-foreground">
+              {badge}
+            </span>
+          )}
+        </Link>
       </SidebarMenuButton>
     </SidebarMenuItem>
   );

@@ -234,8 +234,8 @@ export default function ProjectPage() {
                     key={campaign.id}
                     icon={<Sparkles size={17} />}
                     title={campaign.title}
-                    subtitle="Campaign"
-                    trailing={<span className="text-xs text-faint-fg">{timeAgo(campaign.created_at)}</span>}
+                    subtitle={`Campaign · ${timeAgo(campaign.created_at)}`}
+                    trailing={<StatusPill status={campaign.status} />}
                     onClick={() => navigate(`/projects/${projectId}/campaigns/${campaign.id}`)}
                   />
                 ))}

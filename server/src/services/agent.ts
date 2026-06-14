@@ -160,30 +160,40 @@ const PARALLEL_SAFE_TOOLS = new Set([
   'list_scheduled_tasks',
 ]);
 
-function noteProjectUse(userId: string, sessionId: string, project: { id: string; name: string }, executionId?: string): void {
-  // Best-effort bookkeeping: linking the chat to a project and emitting a
-  // session event is telemetry, not core execution. It must never abort the
-  // tool call that triggered it, so swallow and log any failure here.
+// Best-effort session-event emission: writing a session event + broadcasting it
+// is telemetry, not core execution. It must never abort or mask the tool call
+// that triggered it, so swallow and log any failure here.
+function emitSessionEvent(userId: string, input: Parameters<typeof createSessionEvent>[0]): void {
   try {
-    const linked = linkSessionProject(sessionId, project.id, 'agent');
-    if (!linked) return;
-    const event = createSessionEvent({
-      sessionId,
-      type: 'project_linked',
-      title: `Scoped to ${project.name}`,
-      body: 'The agent attached this chat to a project automatically.',
-      projectId: project.id,
-      executionId: executionId ?? null,
-      metadata: { source: 'agent' },
-    });
+    const event = createSessionEvent(input);
     broadcast(userId, {
       type: 'session_event_created',
-      sessionId,
+      sessionId: input.sessionId,
       event: { ...event, metadata: JSON.parse(event.metadata || '{}') },
     });
   } catch (err) {
-    console.error('noteProjectUse failed (non-fatal):', err);
+    console.error('emitSessionEvent failed (non-fatal):', err);
   }
+}
+
+function noteProjectUse(userId: string, sessionId: string, project: { id: string; name: string }, executionId?: string): void {
+  let linked = false;
+  try {
+    linked = linkSessionProject(sessionId, project.id, 'agent');
+  } catch (err) {
+    console.error('noteProjectUse: linkSessionProject failed (non-fatal):', err);
+    return;
+  }
+  if (!linked) return;
+  emitSessionEvent(userId, {
+    sessionId,
+    type: 'project_linked',
+    title: `Scoped to ${project.name}`,
+    body: 'The agent attached this chat to a project automatically.',
+    projectId: project.id,
+    executionId: executionId ?? null,
+    metadata: { source: 'agent' },
+  });
 }
 
 async function dispatchToolBlocks(
@@ -527,7 +537,7 @@ async function dispatchTool(
           metadata: { producer: 'create_artifact', execution_id: executionId },
         });
         result = JSON.stringify({ artifact_id: artifact.id, project_id: projectId, title: artifact.title, kind: artifact.kind, mime_type: artifact.mime_type });
-        const event = createSessionEvent({
+        emitSessionEvent(userId, {
           sessionId,
           type: 'artifact_created',
           title: `Created artifact: ${artifact.title}`,
@@ -537,7 +547,6 @@ async function dispatchTool(
           executionId,
           metadata: { kind: artifact.kind, mime_type: artifact.mime_type },
         });
-        broadcast(userId, { type: 'session_event_created', sessionId, event: { ...event, metadata: JSON.parse(event.metadata || '{}') } });
         if (artifactTaskId) finishCampaignTask(userId, artifactTaskId, result);
         break;
       }
@@ -556,8 +565,9 @@ async function dispatchTool(
             .prepare('SELECT id, name FROM projects WHERE user_id = ? AND name = ?')
             .get(userId, toolInput.name as string) as { id: string; name: string } | undefined;
           if (createdProject) {
-            linkSessionProject(sessionId, createdProject.id, 'agent');
-            const event = createSessionEvent({
+            try { linkSessionProject(sessionId, createdProject.id, 'agent'); }
+            catch (err) { console.error('create_project: linkSessionProject failed (non-fatal):', err); }
+            emitSessionEvent(userId, {
               sessionId,
               type: 'project_created',
               title: `Created project: ${createdProject.name}`,
@@ -566,7 +576,6 @@ async function dispatchTool(
               executionId,
               metadata: { source: 'agent' },
             });
-            broadcast(userId, { type: 'session_event_created', sessionId, event: { ...event, metadata: JSON.parse(event.metadata || '{}') } });
           }
         }
         break;
@@ -699,7 +708,7 @@ async function dispatchTool(
         try {
           const parsed = JSON.parse(result) as { campaign_id?: string; project_id?: string };
           if (parsed.campaign_id && parsed.project_id) {
-            const event = createSessionEvent({
+            emitSessionEvent(userId, {
               sessionId,
               type: 'campaign_created',
               title: `Created campaign: ${toolInput.title as string}`,
@@ -709,7 +718,6 @@ async function dispatchTool(
               executionId,
               metadata: { source: 'agent' },
             });
-            broadcast(userId, { type: 'session_event_created', sessionId, event: { ...event, metadata: JSON.parse(event.metadata || '{}') } });
           }
         } catch { /* ignore malformed tool result */ }
         break;

@@ -569,7 +569,65 @@ describe('agent', () => {
     await runAgentTurn(userId, sessionId, msgId);
     expect(runGitOpMock).toHaveBeenCalledTimes(1);
     // The bookkeeping failure is swallowed but logged, not silently dropped.
-    expect(errSpy).toHaveBeenCalledWith('noteProjectUse failed (non-fatal):', expect.anything());
+    expect(errSpy).toHaveBeenCalledWith('emitSessionEvent failed (non-fatal):', expect.anything());
+    errSpy.mockRestore();
+  });
+
+  it('returns the create_artifact success result even when its session event fails', async () => {
+    const db = getDb();
+    const projectId = newId();
+    db.prepare('INSERT INTO projects (id, user_id, name, description, repo_path, enabled_connection_ids) VALUES (?,?,?,?,?,?)')
+      .run(projectId, userId, 'artifact-bk-fail', 'Artifact bookkeeping fail', null, '[]');
+
+    // Bad execution id -> the artifact_created session event violates the FK and
+    // throws, but the artifact was already created and the tool must still succeed.
+    createExecutionMock.mockImplementationOnce(() => 'exec-missing-artifact');
+    const errSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+
+    streamMock.mockImplementationOnce(() => ({
+      on: () => ({ on: () => ({ finalMessage: async () => ({}) }) }),
+      finalMessage: async () => ({
+        stop_reason: 'tool_use',
+        content: [{
+          type: 'tool_use',
+          id: 'tool-artifact-bk',
+          name: 'create_artifact',
+          input: { project_id: projectId, kind: 'research', title: 'Resilient Report', content: '# Body', status: 'review' },
+        }],
+      }),
+    }));
+    streamMock.mockImplementationOnce(() => {
+      const listeners: Record<string, ((...args: unknown[]) => void)[]> = {};
+      return {
+        on: (event: string, cb: (...args: unknown[]) => void) => {
+          (listeners[event] ??= []).push(cb);
+          return { on: () => ({ finalMessage: async () => ({}) }) };
+        },
+        finalMessage: async () => {
+          for (const cb of listeners.text ?? []) cb('done');
+          return { stop_reason: 'end_turn', content: [{ type: 'text', text: 'done' }] };
+        },
+      };
+    });
+
+    const msgId = newId();
+    db.prepare('INSERT INTO messages (id, session_id, role, content) VALUES (?,?,?,?)').run(msgId, sessionId, 'user', 'save this report');
+
+    await runAgentTurn(userId, sessionId, msgId);
+
+    // Artifact persisted...
+    const artifact = db.prepare('SELECT title FROM artifacts WHERE project_id = ?').get(projectId) as { title: string } | undefined;
+    expect(artifact?.title).toBe('Resilient Report');
+
+    // ...and the tool reported success, not an error masked by the failed event.
+    const secondCall = streamMock.mock.calls[streamMock.mock.calls.length - 1][0];
+    const toolResultMsg = secondCall.messages.find((m: { role: string; content: unknown }) =>
+      m.role === 'user' && Array.isArray(m.content) && (m.content as { type: string }[]).some(c => c.type === 'tool_result')
+    );
+    const toolResult = (toolResultMsg.content as { content: string }[])[0].content;
+    expect(toolResult).toContain('artifact_id');
+    expect(toolResult).not.toContain('Error');
+    expect(errSpy).toHaveBeenCalledWith('emitSessionEvent failed (non-fatal):', expect.anything());
     errSpy.mockRestore();
   });
 });

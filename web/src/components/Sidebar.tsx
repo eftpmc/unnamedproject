@@ -84,7 +84,7 @@ export default function Sidebar({ className, onNavigate, pendingApprovalCount = 
         </div>
         <button
           onClick={handleNewChat}
-          className="flex w-full items-center justify-center gap-1.5 rounded-xl bg-primary px-3 py-2 text-sm font-medium text-primary-foreground transition-[filter] hover:brightness-105 active:translate-y-px"
+          className="flex w-full items-center justify-center gap-1.5 rounded-xl bg-primary px-3 py-2 text-sm font-medium text-primary-foreground transition-[filter,transform] hover:brightness-105 active:translate-y-px"
         >
           <Plus size={14} strokeWidth={2} />
           New chat
@@ -162,7 +162,7 @@ export default function Sidebar({ className, onNavigate, pendingApprovalCount = 
           <button
             onClick={() => go('/settings')}
             className={cn(
-              'flex flex-1 items-center gap-2 rounded-lg px-2.5 py-2 text-xs font-medium text-muted-foreground transition-colors hover:bg-sidebar-accent hover:text-foreground',
+              'flex flex-1 items-center gap-2 rounded-lg px-2.5 py-2 text-xs font-medium text-muted-foreground transition-colors hover:bg-sidebar-accent hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sidebar-ring',
               isActive('/settings') && 'bg-sidebar-accent text-foreground',
             )}
           >
@@ -172,7 +172,7 @@ export default function Sidebar({ className, onNavigate, pendingApprovalCount = 
           <button
             onClick={toggleTheme}
             aria-label="Toggle theme"
-            className="grid h-8 w-8 shrink-0 place-items-center rounded-lg border border-sidebar-border text-muted-foreground transition-colors hover:bg-sidebar-accent hover:text-foreground"
+            className="grid h-8 w-8 shrink-0 place-items-center rounded-lg border border-sidebar-border text-muted-foreground transition-colors hover:bg-sidebar-accent hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sidebar-ring"
           >
             {theme === 'unnamed-dark'
               ? <Sun size={14} strokeWidth={1.75} />

@@ -24,12 +24,6 @@ const STATUS_ICON_CLASS: Record<Campaign['status'], string> = {
   cancelled: 'text-muted-foreground/30',
 };
 
-const STATUS_BADGE: Record<Campaign['status'], string> = {
-  running: 'bg-blue-500/10 text-blue-600 border-blue-200/70 dark:text-blue-300 dark:border-blue-900',
-  done: 'bg-green-500/10 text-green-700 border-green-200/70 dark:text-green-300 dark:border-green-900',
-  error: 'bg-destructive/10 text-destructive border-destructive/20',
-  cancelled: 'bg-muted text-muted-foreground border-transparent',
-};
 
 export default function ActivityPage() {
   const navigate = useNavigate();
@@ -220,12 +214,10 @@ function CampaignRow({ campaign, status }: {
       </div>
       <div className="flex min-w-0 flex-1 flex-col gap-0.5">
         <span className="text-sm font-medium text-foreground">{campaign.project_name} · {campaign.title}</span>
-        <span className={cn('inline-flex w-fit rounded-full px-1.5 py-0.5 text-[11px] font-medium capitalize border', STATUS_BADGE[status])}>
-          {status}
-        </span>
+        <span className="text-xs text-muted-foreground capitalize">{status}</span>
       </div>
       <div className="flex shrink-0 items-center gap-2">
-        <span className="text-[11px] text-muted-foreground">{timeAgo(campaign.created_at)}</span>
+        <span className="text-[11px] text-faint-fg">{timeAgo(campaign.created_at)}</span>
       </div>
     </Link>
   );

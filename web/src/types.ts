@@ -243,6 +243,28 @@ export interface Campaign {
   completed_at: number | null;
 }
 
+export interface Pipeline {
+  id: string;
+  user_id: string;
+  title: string;
+  description: string | null;
+  created_at: number;
+  task_count?: number;
+  agents?: CampaignTask['agent'][];
+}
+
+export interface PipelineTask {
+  id: string;
+  pipeline_id: string;
+  title: string;
+  agent: CampaignTask['agent'];
+  prompt: string | null;
+  tool_args: string | null;
+  depends_on: string | null;
+  position: number;
+  created_at: number;
+}
+
 export interface WSCampaignTaskUpdated extends WSEvent {
   type: 'campaign_task_updated';
   taskId: string;

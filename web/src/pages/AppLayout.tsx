@@ -9,7 +9,7 @@ import { connect, subscribe } from '../lib/ws.js';
 import { SidebarInset, SidebarProvider, useSidebar } from '@/components/ui/sidebar';
 import type { WSApprovalRequested, WSExecutionUpdate } from '../types.js';
 
-const PAGE_ROUTES = ['/chats', '/projects', '/settings', '/activity'];
+const PAGE_ROUTES = ['/chats', '/projects', '/settings', '/activity', '/pipelines'];
 
 /** Mobile-only top bar: hamburger (left) · brand mark (centered) · spacer. */
 function MobileTopbar() {

@@ -1,5 +1,5 @@
 import { getToken, setToken, clearToken } from './auth.js';
-import type { Session, Message, Project, ProjectArtifact, Connection, EffortLevel, ClaudeModelInfo, UserSettings, AgentBudgets, Memory, ScheduledTask, SessionWorktree, Campaign, CampaignTask, PermissionProfile, SessionEvent, SessionProjectLink } from '../types.js';
+import type { Session, Message, Project, ProjectArtifact, Connection, EffortLevel, ClaudeModelInfo, UserSettings, AgentBudgets, Memory, ScheduledTask, SessionWorktree, Campaign, CampaignTask, Pipeline, PipelineTask, PermissionProfile, SessionEvent, SessionProjectLink } from '../types.js';
 
 async function request<T>(path: string, init: RequestInit = {}): Promise<T> {
   const token = getToken();
@@ -183,6 +183,29 @@ export function cancelCampaign(campaignId: string): Promise<{ campaign: Campaign
 
 export function resumeCampaign(campaignId: string): Promise<{ campaign: Campaign; tasks: CampaignTask[] }> {
   return request(`/campaigns/${campaignId}/resume`, { method: 'POST' });
+}
+
+export function getPipelines(): Promise<{ pipelines: Pipeline[] }> {
+  return request('/pipelines');
+}
+
+export function getPipeline(id: string): Promise<{ pipeline: Pipeline; tasks: PipelineTask[] }> {
+  return request(`/pipelines/${id}`);
+}
+
+export function deletePipeline(id: string): Promise<void> {
+  return request(`/pipelines/${id}`, { method: 'DELETE' });
+}
+
+export function runPipeline(
+  id: string,
+  projectId: string,
+  opts?: { title?: string; on_error?: 'stop' | 'continue' }
+): Promise<{ campaign_id: string; project_id: string }> {
+  return request(`/pipelines/${id}/run`, {
+    method: 'POST',
+    body: JSON.stringify({ project_id: projectId, ...opts }),
+  });
 }
 
 export function updateProject(projectId: string, body: { description?: string }): Promise<void> {

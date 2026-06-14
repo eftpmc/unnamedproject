@@ -398,7 +398,7 @@ async function executeCampaignTask(
   }
 }
 
-async function runCampaignAutoDispatch(
+export async function runCampaignAutoDispatch(
   campaignId: string,
   userId: string,
   messageId: string,

@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react';
 import type { ReactNode } from 'react';
 import { useParams, Link, useNavigate } from 'react-router-dom';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { Bot, Check, ChevronRight, Cpu, FileEdit, FileText, GitBranch, GitPullRequest, MessageSquare, Plus, Sparkles, Terminal, X } from 'lucide-react';
+import { ArrowDown, Bot, Check, ChevronRight, Cpu, FileEdit, FileText, GitBranch, GitPullRequest, MessageSquare, Plus, Sparkles, Terminal, X, Zap } from 'lucide-react';
 import { getCampaign, cancelCampaign, createChat, updateChatConfig, getChats, getProjectArtifacts, getSessionWorktree, getProjects } from '../lib/api.js';
 import { subscribe } from '../lib/ws.js';
 import { cn } from '@/lib/utils';
@@ -34,6 +34,23 @@ const AGENT_ICON: Record<CampaignTask['agent'], typeof Bot> = {
   eval: Terminal,
   subagent: Cpu,
 };
+
+function buildWaves(tasks: CampaignTask[]): CampaignTask[][] {
+  const waves: CampaignTask[][] = [];
+  const assigned = new Set<string>();
+  let remaining = tasks.filter(t => !assigned.has(t.id));
+  while (remaining.length > 0) {
+    const wave = remaining.filter(t => {
+      const deps: string[] = t.depends_on ? JSON.parse(t.depends_on) : [];
+      return deps.every(depId => assigned.has(depId));
+    });
+    if (wave.length === 0) { waves.push(remaining); break; }
+    wave.forEach(t => assigned.add(t.id));
+    waves.push(wave);
+    remaining = tasks.filter(t => !assigned.has(t.id));
+  }
+  return waves;
+}
 
 function StatusDot({ status }: { status: CampaignTask['status'] }) {
   const cls: Record<CampaignTask['status'], string> = {
@@ -138,6 +155,8 @@ export default function CampaignPage() {
   const effectiveStatuses = tasks.map(t => taskStatuses[t.id] ?? t.status);
   const doneCount = effectiveStatuses.filter(s => s === 'done').length;
   const progressPct = tasks.length > 0 ? (doneCount / tasks.length) * 100 : 0;
+  const hasDeps = tasks.some(t => t.depends_on && t.depends_on !== '[]');
+  const waves = hasDeps ? buildWaves(tasks) : null;
   const relatedChat = campaign.session_id ? chats.find(chat => chat.id === campaign.session_id) : null;
   const relatedArtifacts = (artifactData?.artifacts ?? []).filter(a => a.source_campaign_id === campaign.id);
   const branchName = worktree?.branch ?? null;
@@ -214,12 +233,45 @@ export default function CampaignPage() {
                   style={{ width: `${progressPct}%` }}
                 />
               </div>
-              <div className="flex flex-col">
-                {tasks.map(task => {
-                  const status = taskStatuses[task.id] ?? task.status;
-                  return <TaskRow key={task.id} task={task} status={status} />;
-                })}
-              </div>
+              {waves ? (
+                <div className="flex flex-col gap-3">
+                  {waves.map((wave, wi) => (
+                    <div key={wi}>
+                      {wave.length > 1 && (
+                        <div className="mb-2 flex items-center gap-2">
+                          <Zap size={11} className="shrink-0 text-primary" />
+                          <span className="text-[11px] font-medium text-primary">
+                            {wave.length} tasks in parallel
+                          </span>
+                          <div className="flex-1 border-t border-dashed border-border-soft" />
+                        </div>
+                      )}
+                      <div className={wave.length > 1 ? 'grid grid-cols-1 gap-1 sm:grid-cols-2' : 'flex flex-col'}>
+                        {wave.map(task => {
+                          const status = taskStatuses[task.id] ?? task.status;
+                          return (
+                            <div key={task.id} className={wave.length > 1 ? 'rounded-lg border border-border-soft bg-muted/30 px-3 py-1' : ''}>
+                              <TaskRow task={task} status={status} />
+                            </div>
+                          );
+                        })}
+                      </div>
+                      {wi < waves.length - 1 && (
+                        <div className="mt-3 flex justify-center">
+                          <ArrowDown size={14} className="text-border" />
+                        </div>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                <div className="flex flex-col">
+                  {tasks.map(task => {
+                    const status = taskStatuses[task.id] ?? task.status;
+                    return <TaskRow key={task.id} task={task} status={status} />;
+                  })}
+                </div>
+              )}
             </section>
 
             <section>

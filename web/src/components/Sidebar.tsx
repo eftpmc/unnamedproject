@@ -1,6 +1,6 @@
 import { useNavigate, useLocation } from 'react-router-dom';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
-import { Plus, MessagesSquare, LayoutGrid, Activity } from 'lucide-react';
+import { Plus, MessagesSquare, LayoutGrid, Activity, Workflow } from 'lucide-react';
 import { getChats, createChat } from '../lib/api.js';
 import { timeAgo, cn } from '../lib/utils.js';
 import UserMenu from './UserMenu.js';
@@ -113,6 +113,12 @@ export default function Sidebar({ className, onNavigate, pendingApprovalCount = 
                 label="Projects"
                 active={isActive('/projects')}
                 onClick={() => go('/projects')}
+              />
+              <NavItem
+                icon={<Workflow size={15} strokeWidth={1.75} />}
+                label="Pipelines"
+                active={isActive('/pipelines')}
+                onClick={() => go('/pipelines')}
               />
             </SidebarMenu>
           </SidebarGroupContent>

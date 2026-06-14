@@ -9,6 +9,7 @@ import ProjectsPage from './pages/ProjectsPage.js';
 import ProjectPage from './pages/ProjectPage.js';
 import CampaignPage from './pages/CampaignPage.js';
 import ActivityPage from './pages/ActivityPage.js';
+import PipelinesPage from './pages/PipelinesPage.js';
 import { TooltipProvider } from '@/components/ui/tooltip';
 
 const queryClient = new QueryClient({
@@ -35,6 +36,7 @@ const router = createBrowserRouter([
       { path: 'projects/:projectId/settings', element: <ProjectPage /> },
       { path: 'projects/:projectId/:tab', element: <ProjectPage /> },
       { path: 'projects/:projectId/campaigns/:campaignId', element: <CampaignPage /> },
+      { path: 'pipelines', element: <PipelinesPage /> },
       { path: 'settings', element: <Settings /> },
     ],
   },

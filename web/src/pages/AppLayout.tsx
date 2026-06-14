@@ -58,16 +58,16 @@ export default function AppLayout() {
     >
       <Sidebar pendingApprovalCount={pendingApprovals.size} />
       <SidebarInset className="relative min-h-0 min-w-0 overflow-hidden bg-background/58 backdrop-blur">
-        <div className="flex h-14 shrink-0 items-center justify-between border-b border-border/50 bg-background/70 px-4 backdrop-blur md:hidden">
+        <div className="flex h-12 shrink-0 items-center justify-between border-b border-border-soft bg-background px-4 md:hidden">
           <div className="flex items-center gap-2">
-            <div className="grid h-7 w-7 shrink-0 place-items-center rounded-lg bg-foreground text-sm font-semibold text-background shadow-sm">
+            <div className="grid h-7 w-7 shrink-0 place-items-center rounded-lg bg-primary text-xs font-semibold text-primary-foreground shadow-sm">
               u
             </div>
             <span className="text-sm font-semibold">unnamed</span>
           </div>
           <SidebarTrigger
             aria-label="Open navigation"
-            className="size-9 rounded-xl border border-border/60 bg-background/80 text-foreground shadow-xs"
+            className="size-8 rounded-lg border border-border text-muted-foreground hover:bg-muted hover:text-foreground"
           />
         </div>
         {mainContent}

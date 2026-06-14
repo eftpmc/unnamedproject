@@ -1,18 +1,9 @@
 import * as React from 'react';
 import { cn } from '@/lib/utils';
-import { Button } from '@/components/ui/button';
-import { Skeleton } from '@/components/ui/skeleton';
 
-function PageShell({
-  className,
-  children,
-  ...props
-}: React.ComponentProps<'div'>) {
+function PageShell({ className, children, ...props }: React.ComponentProps<'div'>) {
   return (
-    <div
-      className={cn('flex min-h-0 flex-1 flex-col overflow-hidden', className)}
-      {...props}
-    >
+    <div className={cn('flex min-h-0 flex-1 flex-col overflow-hidden', className)} {...props}>
       {children}
     </div>
   );
@@ -32,49 +23,35 @@ function PageHeader({
   className?: string;
 }) {
   return (
-    <header
-      className={cn(
-        'shrink-0 border-b border-border/40 px-4 py-3 sm:px-6',
-        className,
-      )}
-    >
-      {breadcrumb && (
-        <div className="mb-2">{breadcrumb}</div>
-      )}
+    <header className={cn('shrink-0 border-b border-border-soft px-5 py-4', className)}>
+      {breadcrumb && <div className="mb-1.5">{breadcrumb}</div>}
       <div className="flex min-h-8 items-center justify-between gap-3">
-        <h1 className="truncate font-semibold text-foreground text-[15px]">
+        <h1 className="truncate text-[15px] font-semibold tracking-tight text-foreground">
           {title}
         </h1>
-        {actions && <div className="shrink-0">{actions}</div>}
+        {actions && <div className="flex shrink-0 items-center gap-2">{actions}</div>}
       </div>
       {description && (
-        <div className="mt-1 max-w-2xl text-sm leading-relaxed text-muted-foreground">
-          {description}
-        </div>
+        <p className="mt-1 text-sm leading-relaxed text-muted-foreground">{description}</p>
       )}
     </header>
   );
 }
 
-function PageBody({
-  className,
-  children,
-  ...props
-}: React.ComponentProps<'div'>) {
+function PageBody({ className, children, ...props }: React.ComponentProps<'div'>) {
   return (
-    <div className={cn('flex-1 overflow-y-auto px-4 py-5 sm:px-6 sm:py-6', className)} {...props}>
+    <div
+      className={cn('flex-1 overflow-y-auto px-5 py-5', className)}
+      {...props}
+    >
       {children}
     </div>
   );
 }
 
-function ContentColumn({
-  className,
-  children,
-  ...props
-}: React.ComponentProps<'div'>) {
+function ContentColumn({ className, children, ...props }: React.ComponentProps<'div'>) {
   return (
-    <div className={cn('mx-auto w-full max-w-5xl', className)} {...props}>
+    <div className={cn('mx-auto w-full max-w-4xl', className)} {...props}>
       {children}
     </div>
   );
@@ -90,13 +67,14 @@ function PageSection({
   className?: string;
 }) {
   return (
-    <section className={cn('space-y-3 border-t border-border/50 py-6 first:border-t-0 first:pt-0', className)}>
-      <h2 className="text-sm font-semibold text-foreground">{title}</h2>
+    <section className={cn('space-y-3', className)}>
+      <h2 className="text-[13px] font-semibold text-muted-foreground">{title}</h2>
       {children}
     </section>
   );
 }
 
+/** Bordered card surface. `interactive` adds lift-on-hover. */
 function Surface({
   className,
   interactive = false,
@@ -105,8 +83,9 @@ function Surface({
   return (
     <div
       className={cn(
-        'rounded-xl border border-border/50 bg-background/55 shadow-none',
-        interactive && 'transition-colors hover:border-border hover:bg-background/85',
+        'rounded-xl border border-border-soft bg-card',
+        interactive &&
+          'cursor-pointer transition-[transform,box-shadow,border-color] duration-150 hover:-translate-y-px hover:border-border hover:shadow-md',
         className,
       )}
       {...props}
@@ -128,7 +107,7 @@ function EmptyPanel({
   return (
     <div
       className={cn(
-        'rounded-xl border border-dashed border-border/70 bg-muted/20 px-4 py-3 text-sm',
+        'rounded-xl border border-dashed border-border bg-muted/30 px-4 py-3 text-sm',
         className,
       )}
     >
@@ -156,38 +135,38 @@ function CenteredEmptyState({
 }) {
   return (
     <div className={cn('flex flex-1 items-center justify-center px-6', className)}>
-      <Surface className="w-full max-w-md px-6 py-5 text-center shadow-sm">
-        <div className="text-base font-semibold text-foreground">{title}</div>
+      <div className="w-full max-w-sm text-center">
+        <p className="text-base font-semibold tracking-tight text-foreground">{title}</p>
         {description && (
-          <p className="mx-auto mt-2 max-w-sm text-sm leading-relaxed text-muted-foreground">
+          <p className="mx-auto mt-2 max-w-xs text-sm leading-relaxed text-muted-foreground">
             {description}
           </p>
         )}
         {actionLabel && onAction && (
-          <Button onClick={onAction} className="mt-4">
+          <button
+            onClick={onAction}
+            className="mt-5 inline-flex items-center gap-1.5 rounded-lg bg-primary px-4 py-2 text-sm font-medium text-primary-foreground transition-[filter] hover:brightness-105"
+          >
             {actionLabel}
-          </Button>
+          </button>
         )}
-      </Surface>
+      </div>
     </div>
   );
 }
 
-function PageLoading({
-  className,
-  rows = 3,
-}: {
-  className?: string;
-  rows?: number;
-}) {
+function PageLoading({ className, rows = 3 }: { className?: string; rows?: number }) {
   return (
     <PageBody className={className}>
       <ContentColumn className="space-y-4">
-        <Skeleton className="h-8 w-48" />
+        <div className="h-7 w-40 animate-pulse rounded-lg bg-muted" />
         {Array.from({ length: rows }).map((_, i) => (
-          <Skeleton
+          <div
             key={i}
-            className={cn('h-20 rounded-xl', i % 2 === 1 && 'w-2/3', i % 2 === 0 && 'w-full')}
+            className={cn(
+              'h-20 animate-pulse rounded-xl bg-muted',
+              i % 2 === 1 && 'w-2/3',
+            )}
           />
         ))}
       </ContentColumn>

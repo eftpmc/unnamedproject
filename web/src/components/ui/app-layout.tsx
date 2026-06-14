@@ -144,6 +144,7 @@ function CenteredEmptyState({
         )}
         {actionLabel && onAction && (
           <button
+            type="button"
             onClick={onAction}
             className="mt-5 inline-flex items-center gap-1.5 rounded-lg bg-primary px-4 py-2 text-sm font-medium text-primary-foreground transition-[filter] hover:brightness-105"
           >

@@ -1,17 +1,17 @@
 import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { Trash2 } from 'lucide-react';
+import { Check, Play, Trash2 } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
-import { Card, CardAction, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '@/components/ui/card';
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { ConfirmDialog } from '@/components/ui/confirm-dialog';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Textarea } from '@/components/ui/textarea';
-import { ContentColumn, PageBody, PageHeader, PageSection, PageShell } from '@/components/ui/app-layout';
+import { ContentColumn, PageBody, PageHeader, PageShell } from '@/components/ui/app-layout';
+import { cn } from '@/lib/utils';
 import {
   createConnection,
   deleteConnection,
@@ -28,6 +28,17 @@ import {
 } from '../lib/api.js';
 import { clearToken } from '../lib/auth.js';
 import type { Connection, Memory, PermissionProfile, Project, ScheduledTask, UserSettings } from '../types.js';
+
+type Tab = 'agents' | 'tools' | 'mcp' | 'workspace' | 'memory' | 'account';
+
+const TABS: { id: Tab; label: string }[] = [
+  { id: 'agents', label: 'Agents' },
+  { id: 'tools', label: 'Tools' },
+  { id: 'mcp', label: 'MCP' },
+  { id: 'workspace', label: 'Workspace' },
+  { id: 'memory', label: 'Memory' },
+  { id: 'account', label: 'Account' },
+];
 
 type SetupKind = 'lead_agent' | 'claude_code' | 'codex' | 'github' | 'mcp';
 
@@ -87,115 +98,69 @@ interface McpPreset {
   description: string;
   command: string;
   args: string[];
-  /** If set, shows an extra input appended as the final arg (e.g. a path or connection string). */
   extraArgLabel?: string;
   extraArgPlaceholder?: string;
   envVars?: { key: string; label: string; placeholder?: string }[];
 }
 
 const MCP_PRESETS: McpPreset[] = [
-  {
-    id: 'sequential-thinking',
-    name: 'Sequential Thinking',
-    description: 'Structured step-by-step reasoning tool for complex problems.',
-    command: 'npx',
-    args: ['-y', '@modelcontextprotocol/server-sequential-thinking'],
-  },
-  {
-    id: 'playwright',
-    name: 'Playwright',
-    description: 'Browser automation — navigate, click, screenshot, test web UIs.',
-    command: 'npx',
-    args: ['-y', '@playwright/mcp@latest'],
-  },
-  {
-    id: 'puppeteer',
-    name: 'Puppeteer',
-    description: 'Headless Chrome browser automation and screenshots.',
-    command: 'npx',
-    args: ['-y', '@modelcontextprotocol/server-puppeteer'],
-  },
-  {
-    id: 'brave-search',
-    name: 'Brave Search',
-    description: 'Web and local search via the Brave Search API.',
-    command: 'npx',
-    args: ['-y', '@modelcontextprotocol/server-brave-search'],
-    envVars: [{ key: 'BRAVE_API_KEY', label: 'Brave API key' }],
-  },
-  {
-    id: 'github',
-    name: 'GitHub (extended)',
-    description: 'Full GitHub API coverage beyond the built-in github_api tool.',
-    command: 'npx',
-    args: ['-y', '@modelcontextprotocol/server-github'],
-    envVars: [{ key: 'GITHUB_PERSONAL_ACCESS_TOKEN', label: 'Personal access token', placeholder: 'ghp_...' }],
-  },
-  {
-    id: 'slack',
-    name: 'Slack',
-    description: 'Read and post messages, list channels.',
-    command: 'npx',
-    args: ['-y', '@modelcontextprotocol/server-slack'],
-    envVars: [
-      { key: 'SLACK_BOT_TOKEN', label: 'Bot token', placeholder: 'xoxb-...' },
-      { key: 'SLACK_TEAM_ID', label: 'Team ID', placeholder: 'T0123456' },
-    ],
-  },
-  {
-    id: 'postgres',
-    name: 'Postgres',
-    description: 'Read-only schema inspection and queries against a Postgres database.',
-    command: 'npx',
-    args: ['-y', '@modelcontextprotocol/server-postgres'],
-    extraArgLabel: 'Connection string',
-    extraArgPlaceholder: 'postgresql://user:pass@host:5432/db',
-  },
-  {
-    id: 'notion',
-    name: 'Notion',
-    description: 'Read and write Notion pages and databases.',
-    command: 'npx',
-    args: ['-y', '@notionhq/notion-mcp-server'],
-    envVars: [{ key: 'NOTION_TOKEN', label: 'Internal integration token', placeholder: 'ntn_...' }],
-  },
+  { id: 'sequential-thinking', name: 'Sequential Thinking', description: 'Structured step-by-step reasoning tool for complex problems.', command: 'npx', args: ['-y', '@modelcontextprotocol/server-sequential-thinking'] },
+  { id: 'playwright', name: 'Playwright', description: 'Browser automation — navigate, click, screenshot, test web UIs.', command: 'npx', args: ['-y', '@playwright/mcp@latest'] },
+  { id: 'puppeteer', name: 'Puppeteer', description: 'Headless Chrome browser automation and screenshots.', command: 'npx', args: ['-y', '@modelcontextprotocol/server-puppeteer'] },
+  { id: 'brave-search', name: 'Brave Search', description: 'Web and local search via the Brave Search API.', command: 'npx', args: ['-y', '@modelcontextprotocol/server-brave-search'], envVars: [{ key: 'BRAVE_API_KEY', label: 'Brave API key' }] },
+  { id: 'github', name: 'GitHub (extended)', description: 'Full GitHub API coverage beyond the built-in github_api tool.', command: 'npx', args: ['-y', '@modelcontextprotocol/server-github'], envVars: [{ key: 'GITHUB_PERSONAL_ACCESS_TOKEN', label: 'Personal access token', placeholder: 'ghp_...' }] },
+  { id: 'slack', name: 'Slack', description: 'Read and post messages, list channels.', command: 'npx', args: ['-y', '@modelcontextprotocol/server-slack'], envVars: [{ key: 'SLACK_BOT_TOKEN', label: 'Bot token', placeholder: 'xoxb-...' }, { key: 'SLACK_TEAM_ID', label: 'Team ID', placeholder: 'T0123456' }] },
+  { id: 'postgres', name: 'Postgres', description: 'Read-only schema inspection and queries against a Postgres database.', command: 'npx', args: ['-y', '@modelcontextprotocol/server-postgres'], extraArgLabel: 'Connection string', extraArgPlaceholder: 'postgresql://user:pass@host:5432/db' },
+  { id: 'notion', name: 'Notion', description: 'Read and write Notion pages and databases.', command: 'npx', args: ['-y', '@notionhq/notion-mcp-server'], envVars: [{ key: 'NOTION_TOKEN', label: 'Internal integration token', placeholder: 'ntn_...' }] },
 ];
 
-function Modal({ title, children, onClose }: { title: string; children: React.ReactNode; onClose: () => void }) {
-  return (
-    <Dialog open onOpenChange={open => { if (!open) onClose(); }}>
-      <DialogContent className="sm:max-w-lg">
-        <DialogHeader>
-          <DialogTitle>{title}</DialogTitle>
-        </DialogHeader>
-        {children}
-      </DialogContent>
-    </Dialog>
-  );
+function ConnectedBadge() {
+  return <Badge variant="secondary" className="text-success">Connected</Badge>;
+}
+
+function NotSetBadge() {
+  return <Badge variant="outline">Not set</Badge>;
 }
 
 function DeleteBtn({ onClick }: { onClick: () => void }) {
   return (
-    <Button variant="ghost" size="icon-sm" onClick={onClick} className="rounded-xl text-muted-foreground hover:text-destructive" title="Delete">
+    <Button variant="ghost" size="icon-sm" onClick={onClick} className="text-muted-foreground hover:text-destructive" title="Delete">
       <Trash2 size={15} strokeWidth={1.75} />
     </Button>
   );
 }
 
-function purposeLabel(purpose: Connection['purpose']): string {
-  switch (purpose) {
-    case 'lead_agent': return 'Lead Agent';
-    case 'claude_code': return 'Claude Code';
-    case 'codex': return 'Codex';
-    case 'github': return 'GitHub';
-    case 'mcp': return 'MCP';
-    case 'tool': return 'Tool';
-  }
+function SectionLabel({ children }: { children: React.ReactNode }) {
+  return <div className="mb-3 text-[11px] font-semibold uppercase tracking-wide text-faint-fg">{children}</div>;
+}
+
+function SettingRow({ children, className }: { children: React.ReactNode; className?: string }) {
+  return (
+    <div className={cn('flex items-center justify-between gap-4 rounded-lg border border-border-soft bg-card p-4', className)}>
+      {children}
+    </div>
+  );
+}
+
+function SettingRowInfo({ title, description, mono }: { title: string; description?: string; mono?: boolean }) {
+  return (
+    <div className="min-w-0">
+      <div className="text-sm font-medium text-foreground">{title}</div>
+      {description && (
+        <div className={cn('mt-0.5 text-xs text-faint-fg', mono && 'font-mono')}>{description}</div>
+      )}
+    </div>
+  );
+}
+
+function HintText({ children }: { children: React.ReactNode }) {
+  return <p className="mt-2 max-w-2xl text-xs leading-relaxed text-muted-foreground/70">{children}</p>;
 }
 
 export default function Settings() {
   const navigate = useNavigate();
   const qc = useQueryClient();
+  const [tab, setTab] = useState<Tab>('agents');
 
   const { data: connections = [] } = useQuery<Connection[]>({ queryKey: ['connections'], queryFn: getConnections });
   const { data: projects = [] } = useQuery<Project[]>({ queryKey: ['projects'], queryFn: getProjects });
@@ -224,14 +189,8 @@ export default function Settings() {
   const [agentBudgetsError, setAgentBudgetsError] = useState('');
   const [taskIntervals, setTaskIntervals] = useState<Record<string, string>>({});
 
-  const inputCls = 'text-sm';
-  const textareaCls = 'text-sm font-mono resize-y';
-  const rowCls = 'flex items-center gap-3 rounded-xl border border-border/50 bg-card px-4 py-3';
-
   const leadAgent = connections.find(c => c.purpose === 'lead_agent');
-  const toolConnections = connections.filter(c => c.purpose === 'claude_code' || c.purpose === 'codex' || c.purpose === 'github');
   const mcpConnections = connections.filter(c => c.purpose === 'mcp');
-  const projectConnections = connections.filter(c => c.purpose !== 'lead_agent');
 
   useEffect(() => {
     if (settings?.projects_root) setProjectsRoot(settings.projects_root);
@@ -279,17 +238,9 @@ export default function Settings() {
         config = activeSetup === 'github' ? { token: secret.trim() } : { apiKey: secret.trim() };
       }
 
-      return createConnection({
-        name: setupName.trim() || meta.title,
-        type: meta.type,
-        purpose: activeSetup,
-        config,
-      });
+      return createConnection({ name: setupName.trim() || meta.title, type: meta.type, purpose: activeSetup, config });
     },
-    onSuccess: () => {
-      qc.invalidateQueries({ queryKey: ['connections'] });
-      closeSetupModal();
-    },
+    onSuccess: () => { qc.invalidateQueries({ queryKey: ['connections'] }); closeSetupModal(); },
     onError: (e: Error) => setSetupError(e.message),
   });
 
@@ -319,9 +270,7 @@ export default function Settings() {
       return n;
     };
     try {
-      const claude_code = parseBudget(claudeCodeBudget);
-      const codex = parseBudget(codexBudget);
-      updateAgentBudgetsMutation.mutate({ claude_code, codex });
+      updateAgentBudgetsMutation.mutate({ claude_code: parseBudget(claudeCodeBudget), codex: parseBudget(codexBudget) });
     } catch (e) {
       setAgentBudgetsError((e as Error).message);
     }
@@ -345,36 +294,21 @@ export default function Settings() {
   function openSetupModal(kind: SetupKind) {
     setActiveSetup(kind);
     setSetupName(SETUP_META[kind].title);
-    setSecret('');
-    setMcpCommand('');
-    setMcpArgs('');
-    setMcpEnv('{}');
-    setMcpPreset('custom');
-    setMcpExtraArg('');
-    setMcpEnvValues({});
-    setSetupError('');
+    setSecret(''); setMcpCommand(''); setMcpArgs(''); setMcpEnv('{}');
+    setMcpPreset('custom'); setMcpExtraArg(''); setMcpEnvValues({}); setSetupError('');
   }
 
   function selectMcpPreset(presetId: string) {
     setMcpPreset(presetId);
-    setMcpExtraArg('');
-    setMcpEnvValues({});
-    setSetupError('');
+    setMcpExtraArg(''); setMcpEnvValues({}); setSetupError('');
     const preset = MCP_PRESETS.find(p => p.id === presetId);
     setSetupName(preset ? preset.name : SETUP_META.mcp.title);
   }
 
   function closeSetupModal() {
     setActiveSetup(null);
-    setSetupName('');
-    setSecret('');
-    setMcpCommand('');
-    setMcpArgs('');
-    setMcpEnv('{}');
-    setMcpPreset('custom');
-    setMcpExtraArg('');
-    setMcpEnvValues({});
-    setSetupError('');
+    setSetupName(''); setSecret(''); setMcpCommand(''); setMcpArgs(''); setMcpEnv('{}');
+    setMcpPreset('custom'); setMcpExtraArg(''); setMcpEnvValues({}); setSetupError('');
   }
 
   function handleSignOut() {
@@ -382,27 +316,20 @@ export default function Settings() {
     navigate('/login', { replace: true });
   }
 
-  function SetupCard({ kind, connection }: { kind: SetupKind; connection?: Connection }) {
+  function ConnectionRow({ kind }: { kind: SetupKind }) {
     const meta = SETUP_META[kind];
+    const connection = connections.find(c => c.purpose === kind);
     return (
-      <Card className="rounded-xl bg-background/55 shadow-none" size="sm">
-        <CardHeader>
-          <CardTitle>{meta.title}</CardTitle>
-          <CardDescription className="text-xs leading-relaxed">{meta.description}</CardDescription>
-          <CardAction>
-            <Badge variant={connection ? 'secondary' : 'outline'} className={connection ? 'text-success' : ''}>
-            {connection ? 'Connected' : 'Not set'}
-            </Badge>
-          </CardAction>
-        </CardHeader>
-        {connection && <CardContent className="text-xs text-muted-foreground">{connection.name}</CardContent>}
-        <CardFooter className="gap-2">
-          <Button variant={connection ? 'ghost' : undefined} size="sm" onClick={() => openSetupModal(kind)}>
-            {connection ? 'Details' : 'Connect'}
+      <SettingRow>
+        <SettingRowInfo title={meta.title} description={connection ? connection.name : meta.description} />
+        <div className="flex items-center gap-2 shrink-0">
+          {connection ? <ConnectedBadge /> : <NotSetBadge />}
+          <Button size="sm" variant={connection ? 'ghost' : 'default'} onClick={() => openSetupModal(kind)}>
+            {connection ? 'Edit' : 'Connect'}
           </Button>
           {connection && <DeleteBtn onClick={() => setPendingDelete({ id: connection.id })} />}
-        </CardFooter>
-      </Card>
+        </div>
+      </SettingRow>
     );
   }
 
@@ -412,126 +339,94 @@ export default function Settings() {
     const existing = connections.find(c => c.purpose === activeSetup);
 
     return (
-      <Modal title={meta.title} onClose={closeSetupModal}>
-        <DialogDescription>{meta.description}</DialogDescription>
-        {existing && (
-          <div className="mb-4 flex items-center gap-3 rounded-xl border bg-card px-4 py-3">
-            <div className="flex-1">
-              <div className="text-foreground/75 text-sm">{existing.name}</div>
-              <Badge variant="secondary" className="mt-1 text-success">Connected</Badge>
-            </div>
-            <DeleteBtn onClick={() => setPendingDelete({ id: existing.id })} />
-          </div>
-        )}
-        {existing && activeSetup !== 'mcp' ? (
-          <div className="flex justify-end">
-            <Button variant="ghost" onClick={closeSetupModal}>Close</Button>
-          </div>
-        ) : (
-        <div className="flex flex-col gap-3">
-          {activeSetup === 'mcp' && (
-            <div>
-              <Label>Preset</Label>
-              <div className="mt-1 flex flex-wrap gap-1.5">
-                <Button
-                  type="button"
-                  size="sm"
-                  variant={mcpPreset === 'custom' ? 'secondary' : 'outline'}
-                  onClick={() => selectMcpPreset('custom')}
-                >
-                  Custom
-                </Button>
-                {MCP_PRESETS.map(p => (
-                  <Button
-                    key={p.id}
-                    type="button"
-                    size="sm"
-                    variant={mcpPreset === p.id ? 'secondary' : 'outline'}
-                    onClick={() => selectMcpPreset(p.id)}
-                  >
-                    {p.name}
-                  </Button>
-                ))}
+      <Dialog open onOpenChange={open => { if (!open) closeSetupModal(); }}>
+        <DialogContent className="sm:max-w-lg">
+          <DialogHeader>
+            <DialogTitle>{meta.title}</DialogTitle>
+            <DialogDescription>{meta.description}</DialogDescription>
+          </DialogHeader>
+
+          {existing && (
+            <div className="flex items-center gap-3 rounded-lg border border-border-soft bg-card px-4 py-3">
+              <div className="flex-1 min-w-0">
+                <div className="text-sm text-foreground">{existing.name}</div>
+                <ConnectedBadge />
               </div>
-              {mcpPreset !== 'custom' && (
-                <p className="mt-1 text-xs text-muted-foreground">
-                  {MCP_PRESETS.find(p => p.id === mcpPreset)?.description}
-                </p>
-              )}
+              <DeleteBtn onClick={() => { setPendingDelete({ id: existing.id }); closeSetupModal(); }} />
             </div>
           )}
-          <div>
-            <Label>Name</Label>
-            <Input value={setupName} onChange={e => setSetupName(e.target.value)} className={inputCls} />
-          </div>
-          {activeSetup === 'mcp' ? (
-            mcpPreset !== 'custom' ? (
-              <>
-                {(() => {
-                  const preset = MCP_PRESETS.find(p => p.id === mcpPreset);
-                  if (!preset) return null;
-                  return (
-                    <>
-                      {preset.extraArgLabel && (
-                        <div>
-                          <Label>{preset.extraArgLabel}</Label>
-                          <Input
-                            placeholder={preset.extraArgPlaceholder}
-                            value={mcpExtraArg}
-                            onChange={e => setMcpExtraArg(e.target.value)}
-                            className={inputCls}
-                          />
-                        </div>
-                      )}
-                      {(preset.envVars ?? []).map(v => (
-                        <div key={v.key}>
-                          <Label>{v.label}</Label>
-                          <Input
-                            type="password"
-                            placeholder={v.placeholder}
-                            value={mcpEnvValues[v.key] ?? ''}
-                            onChange={e => setMcpEnvValues(prev => ({ ...prev, [v.key]: e.target.value }))}
-                            className={inputCls}
-                          />
-                        </div>
-                      ))}
-                    </>
-                  );
-                })()}
-              </>
-            ) : (
-              <>
-                <div>
-                  <Label>Command</Label>
-                  <Input placeholder="npx" value={mcpCommand} onChange={e => setMcpCommand(e.target.value)} className={inputCls} />
-                </div>
-                <div>
-                  <Label>Args JSON</Label>
-                  <Textarea rows={2} placeholder='["-y", "@modelcontextprotocol/server-filesystem", "/path"]' value={mcpArgs} onChange={e => setMcpArgs(e.target.value)} className={textareaCls} />
-                </div>
-                <div>
-                  <Label>Env JSON</Label>
-                  <Textarea rows={2} placeholder='{"TOKEN":"..."}' value={mcpEnv} onChange={e => setMcpEnv(e.target.value)} className={textareaCls} />
-                </div>
-              </>
-            )
+
+          {existing && activeSetup !== 'mcp' ? (
+            <div className="flex justify-end">
+              <Button variant="ghost" onClick={closeSetupModal}>Close</Button>
+            </div>
           ) : (
-            <div>
-              <Label>{meta.secretLabel}{meta.secretOptional ? ' (optional)' : ''}</Label>
-              <Input type="password" placeholder={meta.placeholder} value={secret} onChange={e => setSecret(e.target.value)} className={inputCls} />
-              {meta.secretOptionalHint && (
-                <p className="mt-1 text-xs text-muted-foreground">{meta.secretOptionalHint}</p>
+            <div className="flex flex-col gap-3">
+              {activeSetup === 'mcp' && (
+                <div>
+                  <Label>Preset</Label>
+                  <div className="mt-1 flex flex-wrap gap-1.5">
+                    <Button type="button" size="sm" variant={mcpPreset === 'custom' ? 'secondary' : 'outline'} onClick={() => selectMcpPreset('custom')}>Custom</Button>
+                    {MCP_PRESETS.map(p => (
+                      <Button key={p.id} type="button" size="sm" variant={mcpPreset === p.id ? 'secondary' : 'outline'} onClick={() => selectMcpPreset(p.id)}>{p.name}</Button>
+                    ))}
+                  </div>
+                  {mcpPreset !== 'custom' && (
+                    <p className="mt-1 text-xs text-muted-foreground">{MCP_PRESETS.find(p => p.id === mcpPreset)?.description}</p>
+                  )}
+                </div>
               )}
+              <div>
+                <Label>Name</Label>
+                <Input value={setupName} onChange={e => setSetupName(e.target.value)} className="text-sm" />
+              </div>
+              {activeSetup === 'mcp' ? (
+                mcpPreset !== 'custom' ? (
+                  <>
+                    {(() => {
+                      const preset = MCP_PRESETS.find(p => p.id === mcpPreset);
+                      if (!preset) return null;
+                      return (
+                        <>
+                          {preset.extraArgLabel && (
+                            <div>
+                              <Label>{preset.extraArgLabel}</Label>
+                              <Input placeholder={preset.extraArgPlaceholder} value={mcpExtraArg} onChange={e => setMcpExtraArg(e.target.value)} className="text-sm" />
+                            </div>
+                          )}
+                          {(preset.envVars ?? []).map(v => (
+                            <div key={v.key}>
+                              <Label>{v.label}</Label>
+                              <Input type="password" placeholder={v.placeholder} value={mcpEnvValues[v.key] ?? ''} onChange={e => setMcpEnvValues(prev => ({ ...prev, [v.key]: e.target.value }))} className="text-sm" />
+                            </div>
+                          ))}
+                        </>
+                      );
+                    })()}
+                  </>
+                ) : (
+                  <>
+                    <div><Label>Command</Label><Input placeholder="npx" value={mcpCommand} onChange={e => setMcpCommand(e.target.value)} className="text-sm" /></div>
+                    <div><Label>Args JSON</Label><Textarea rows={2} placeholder='["-y", "@modelcontextprotocol/server-filesystem", "/path"]' value={mcpArgs} onChange={e => setMcpArgs(e.target.value)} className="text-sm font-mono resize-y" /></div>
+                    <div><Label>Env JSON</Label><Textarea rows={2} placeholder='{"TOKEN":"..."}' value={mcpEnv} onChange={e => setMcpEnv(e.target.value)} className="text-sm font-mono resize-y" /></div>
+                  </>
+                )
+              ) : (
+                <div>
+                  <Label>{meta.secretLabel}{meta.secretOptional ? ' (optional)' : ''}</Label>
+                  <Input type="password" placeholder={meta.placeholder} value={secret} onChange={e => setSecret(e.target.value)} className="text-sm" />
+                  {meta.secretOptionalHint && <p className="mt-1 text-xs text-muted-foreground">{meta.secretOptionalHint}</p>}
+                </div>
+              )}
+              {setupError && <div className="text-sm text-destructive">{setupError}</div>}
+              <DialogFooter>
+                <Button variant="ghost" onClick={closeSetupModal}>Cancel</Button>
+                <Button onClick={() => createConnMutation.mutate()}>Save</Button>
+              </DialogFooter>
             </div>
           )}
-          {setupError && <div className="text-destructive text-sm">{setupError}</div>}
-          <DialogFooter>
-            <Button variant="ghost" onClick={closeSetupModal}>Cancel</Button>
-            <Button onClick={() => createConnMutation.mutate()}>Save setup</Button>
-          </DialogFooter>
-        </div>
-        )}
-      </Modal>
+        </DialogContent>
+      </Dialog>
     );
   }
 
@@ -539,285 +434,309 @@ export default function Settings() {
     <PageShell>
       <PageHeader
         title="Settings"
-        description="Connect agents, tools, workspaces, and local memory."
+        className="border-b-0 pb-0"
       />
+
+      {/* Tab strip */}
+      <div className="flex shrink-0 gap-0 overflow-x-auto border-b border-border-soft px-5 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+        {TABS.map(t => (
+          <button
+            key={t.id}
+            type="button"
+            onClick={() => setTab(t.id)}
+            className={cn(
+              'border-b-2 px-1 pb-3 pt-3 text-sm font-medium whitespace-nowrap transition-colors',
+              'mx-3 first:ml-0',
+              tab === t.id
+                ? 'border-primary text-foreground'
+                : 'border-transparent text-muted-foreground hover:text-fg-soft',
+            )}
+          >
+            {t.label}
+          </button>
+        ))}
+      </div>
+
       <PageBody>
-      <ContentColumn>
+        <ContentColumn className="max-w-3xl">
 
-      <PageSection title="Lead Agent">
-        <div className="max-w-2xl">
-          <SetupCard kind="lead_agent" connection={leadAgent} />
-        </div>
-      </PageSection>
+          {/* ── Agents ─────────────────────────────────── */}
+          {tab === 'agents' && (
+            <div className="flex flex-col gap-7">
+              <div>
+                <SectionLabel>Lead agent</SectionLabel>
+                <ConnectionRow kind="lead_agent" />
+              </div>
 
-      <PageSection title="Tools">
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
-          <SetupCard kind="claude_code" connection={toolConnections.find(c => c.purpose === 'claude_code')} />
-          <SetupCard kind="codex" connection={toolConnections.find(c => c.purpose === 'codex')} />
-          <SetupCard kind="github" connection={toolConnections.find(c => c.purpose === 'github')} />
-        </div>
-      </PageSection>
+              <div>
+                <SectionLabel>Permissions</SectionLabel>
+                <div className="rounded-lg border border-border-soft bg-card p-4 flex flex-col gap-4">
+                  <div className="flex items-end gap-3">
+                    <div className="flex-1">
+                      <Label className="text-xs">Permission profile</Label>
+                      <Select value={permissionProfile} onValueChange={value => setPermissionProfile(value as PermissionProfile)}>
+                        <SelectTrigger className="mt-1">
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="fast">Fast</SelectItem>
+                          <SelectItem value="trusted">Trusted</SelectItem>
+                          <SelectItem value="strict">Strict</SelectItem>
+                        </SelectContent>
+                      </Select>
+                    </div>
+                    <Button
+                      size="sm"
+                      className="h-9 gap-1.5 text-xs"
+                      onClick={() => updateSettingsMutation.mutate({ projects_root: projectsRoot, permission_profile: permissionProfile })}
+                    >
+                      <Check size={13} strokeWidth={2.2} />
+                      Save
+                    </Button>
+                  </div>
+                  <p className="text-xs leading-relaxed text-muted-foreground/70">
+                    Fast keeps delegated agents non-interactive with a minimal environment. Trusted restores full
+                    environment inheritance for local-only work. Strict removes bypass flags and may require manual CLI approval.
+                  </p>
+                </div>
+              </div>
 
-      <PageSection title="MCP">
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-          {mcpConnections.map(c => (
-            <Card key={c.id} className="rounded-xl bg-background/55 shadow-none" size="sm">
-              <CardHeader>
-                <CardTitle>{c.name}</CardTitle>
-                <CardAction><Badge variant="secondary" className="text-success">Connected</Badge></CardAction>
-              </CardHeader>
-              <CardFooter className="gap-2">
-                <Button variant="ghost" size="sm" onClick={() => openSetupModal('mcp')}>Details</Button>
-                <DeleteBtn onClick={() => setPendingDelete({ id: c.id })} />
-              </CardFooter>
-            </Card>
-          ))}
-          <Card className="rounded-xl border-dashed bg-background/40 shadow-none" size="sm">
-            <CardHeader>
-              <CardTitle>Add MCP Server</CardTitle>
-              <CardDescription>Run an MCP server process (command + args) to expose extra tools.</CardDescription>
-              <CardAction>
-                <Button size="sm" onClick={() => openSetupModal('mcp')}>Add</Button>
-              </CardAction>
-            </CardHeader>
-          </Card>
-        </div>
-      </PageSection>
+              <div>
+                <SectionLabel>Monthly budgets</SectionLabel>
+                <div className="rounded-lg border border-border-soft bg-card p-4 flex flex-col gap-4">
+                  <div className="flex gap-3 items-end">
+                    <div className="flex-1">
+                      <Label className="text-xs">Claude Code (USD)</Label>
+                      <Input type="number" min="0" step="0.01" placeholder="No limit" value={claudeCodeBudget} onChange={e => setClaudeCodeBudget(e.target.value)} className="mt-1 text-sm" />
+                    </div>
+                    <div className="flex-1">
+                      <Label className="text-xs">Codex (USD)</Label>
+                      <Input type="number" min="0" step="0.01" placeholder="No limit" value={codexBudget} onChange={e => setCodexBudget(e.target.value)} className="mt-1 text-sm" />
+                    </div>
+                    <Button size="sm" className="h-9 gap-1.5 text-xs" onClick={saveAgentBudgets}>
+                      <Check size={13} strokeWidth={2.2} />
+                      Save
+                    </Button>
+                  </div>
+                  {agentBudgetsError && <div className="text-sm text-destructive">{agentBudgetsError}</div>}
+                  <p className="text-xs leading-relaxed text-muted-foreground/70">
+                    Set a monthly spend cap for each coding agent. Leave blank for no limit.
+                  </p>
+                </div>
+              </div>
+            </div>
+          )}
 
-      <PageSection title="Projects">
-        <div className="mb-3 flex flex-col gap-3 sm:flex-row sm:items-end">
-          <div className="flex-1">
-            <Label>Projects root</Label>
-            <Input
-              placeholder="/Users/you/projects"
-              value={projectsRoot}
-              onChange={e => setProjectsRoot(e.target.value)}
-              className={inputCls}
-            />
-          </div>
-          <Button variant="ghost" onClick={() => updateSettingsMutation.mutate({ projects_root: projectsRoot })}>
-            Save
-          </Button>
-          <Button
-            variant="ghost"
-            onClick={() => {
-              setProjectsRoot('');
-              updateSettingsMutation.mutate({ projects_root: '' });
-            }}
-          >
-            Reset to default
-          </Button>
-        </div>
-        {projectsRootError && <div className="text-destructive text-sm mb-3">{projectsRootError}</div>}
-        <p className="mb-3 max-w-3xl text-xs leading-relaxed text-muted-foreground/70">
-          New repo-backed projects are created here. Keep the default app data folder, or point it at a workspace
-          location such as <code>~/code</code>.
-        </p>
-      </PageSection>
+          {/* ── Tools ──────────────────────────────────── */}
+          {tab === 'tools' && (
+            <div className="flex flex-col gap-3">
+              <SectionLabel>Coding &amp; integration tools</SectionLabel>
+              <ConnectionRow kind="claude_code" />
+              <ConnectionRow kind="codex" />
+              <ConnectionRow kind="github" />
+            </div>
+          )}
 
-      <PageSection title="Agent permissions">
-        <div className="mb-3 flex flex-col gap-3 sm:flex-row sm:items-end">
-          <div className="flex-1">
-            <Label>Permission profile</Label>
-            <Select value={permissionProfile} onValueChange={value => setPermissionProfile(value as PermissionProfile)}>
-              <SelectTrigger className="w-full">
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="fast">Fast</SelectItem>
-                <SelectItem value="trusted">Trusted</SelectItem>
-                <SelectItem value="strict">Strict</SelectItem>
-              </SelectContent>
-            </Select>
-          </div>
-          <Button
-            variant="ghost"
-            onClick={() => updateSettingsMutation.mutate({
-              projects_root: projectsRoot,
-              permission_profile: permissionProfile,
-            })}
-          >
-            Save
-          </Button>
-        </div>
-        <p className="mb-3 max-w-3xl text-xs leading-relaxed text-muted-foreground/70">
-          Fast keeps delegated agents non-interactive while using a minimal environment. Trusted restores full
-          environment inheritance for local-only work. Strict removes bypass flags and may require manual CLI approval.
-        </p>
-      </PageSection>
+          {/* ── MCP ────────────────────────────────────── */}
+          {tab === 'mcp' && (
+            <div className="flex flex-col gap-3">
+              <SectionLabel>MCP servers</SectionLabel>
+              {mcpConnections.map(c => (
+                <SettingRow key={c.id}>
+                  <SettingRowInfo title={c.name} description="MCP server" />
+                  <div className="flex items-center gap-2 shrink-0">
+                    <ConnectedBadge />
+                    <Button variant="ghost" size="sm" onClick={() => openSetupModal('mcp')}>Edit</Button>
+                    <DeleteBtn onClick={() => setPendingDelete({ id: c.id })} />
+                  </div>
+                </SettingRow>
+              ))}
+              <button
+                type="button"
+                onClick={() => openSetupModal('mcp')}
+                className="flex items-center justify-center gap-2 rounded-lg border border-dashed border-border bg-muted/30 px-4 py-3.5 text-sm text-muted-foreground transition-colors hover:border-border-soft hover:bg-muted/50 hover:text-foreground"
+              >
+                + Add MCP server
+              </button>
+              <HintText>MCP servers run as child processes and expose extra tools to the agent. Use presets or configure a custom command + args.</HintText>
+            </div>
+          )}
 
-      <PageSection title="Agent budgets">
-        <div className="mb-3 flex flex-col gap-3 sm:flex-row sm:items-end">
-          <div className="flex-1">
-            <Label>Claude Code monthly budget (USD)</Label>
-            <Input
-              type="number"
-              min="0"
-              step="0.01"
-              placeholder="No limit"
-              value={claudeCodeBudget}
-              onChange={e => setClaudeCodeBudget(e.target.value)}
-              className={inputCls}
-            />
-          </div>
-          <div className="flex-1">
-            <Label>Codex monthly budget (USD)</Label>
-            <Input
-              type="number"
-              min="0"
-              step="0.01"
-              placeholder="No limit"
-              value={codexBudget}
-              onChange={e => setCodexBudget(e.target.value)}
-              className={inputCls}
-            />
-          </div>
-          <Button variant="ghost" onClick={saveAgentBudgets}>
-            Save
-          </Button>
-        </div>
-        {agentBudgetsError && <div className="text-destructive text-sm mb-3">{agentBudgetsError}</div>}
-        <p className="mb-3 max-w-3xl text-xs leading-relaxed text-muted-foreground/70">
-          Set a monthly spend cap for each coding agent. Leave blank for no limit. The lead agent sees current
-          spend against these budgets and can favor the less-constrained agent when nearly exhausted.
-        </p>
-      </PageSection>
+          {/* ── Workspace ──────────────────────────────── */}
+          {tab === 'workspace' && (
+            <div className="flex flex-col gap-7">
+              <div>
+                <SectionLabel>Projects root</SectionLabel>
+                <div className="rounded-lg border border-border-soft bg-card p-4 flex flex-col gap-3">
+                  <div className="flex gap-3 items-end">
+                    <div className="flex-1">
+                      <Label className="text-xs">Directory path</Label>
+                      <Input
+                        placeholder="/Users/you/projects"
+                        value={projectsRoot}
+                        onChange={e => setProjectsRoot(e.target.value)}
+                        className="mt-1 text-sm font-mono"
+                      />
+                    </div>
+                    <Button size="sm" className="h-9 gap-1.5 text-xs" onClick={() => updateSettingsMutation.mutate({ projects_root: projectsRoot })}>
+                      <Check size={13} strokeWidth={2.2} />
+                      Save
+                    </Button>
+                    <Button size="sm" variant="ghost" className="h-9 text-xs" onClick={() => { setProjectsRoot(''); updateSettingsMutation.mutate({ projects_root: '' }); }}>
+                      Reset
+                    </Button>
+                  </div>
+                  {projectsRootError && <div className="text-sm text-destructive">{projectsRootError}</div>}
+                  <HintText>New repo-backed projects are created here. Keep the default, or point to a workspace location such as <code>~/code</code>.</HintText>
+                </div>
+              </div>
 
-      <PageSection title="Memory">
-        {memory.length === 0 ? (
-          <div className="text-muted-foreground/70 text-sm">No memory stored yet.</div>
-        ) : (
-          <div className="grid gap-4">
-            {(['user', 'feedback', 'project', 'reference'] as const).map(type => {
-              const entries = memory.filter(m => m.type === type);
-              if (entries.length === 0) return null;
-              return (
-                <div key={type}>
-                  <h3 className="mb-2 text-sm font-medium capitalize text-muted-foreground">{type}</h3>
-                  <div className="grid gap-2">
-                    {entries.map(m => (
-                      <div key={`${m.type}-${m.key}`} className={rowCls}>
-                        <div className="w-40 text-muted-foreground text-sm font-mono shrink-0">
-                          {m.key}
-                          {m.type === 'project' && (
-                            <div className="text-muted-foreground/60 text-xs font-sans">
-                              {projects.find(p => p.id === m.project_id)?.name ?? m.project_id}
+              <div>
+                <SectionLabel>Scheduled tasks</SectionLabel>
+                {scheduledTasks.length === 0 ? (
+                  <div className="rounded-lg border border-dashed border-border bg-muted/30 px-4 py-3 text-sm text-muted-foreground">
+                    No scheduled tasks.
+                  </div>
+                ) : (
+                  <div className="flex flex-col gap-2">
+                    {scheduledTasks.map(task => {
+                      const intervalVal = taskIntervals[task.id] ?? String(task.interval_hours);
+                      const intervalDirty = intervalVal !== String(task.interval_hours);
+                      const nextRun = task.enabled ? new Date(task.next_run_at * 1000).toLocaleString() : null;
+                      return (
+                        <div key={task.id} className="rounded-lg border border-border-soft bg-card p-4 flex flex-col gap-3">
+                          <div className="flex items-start gap-3">
+                            <div className="flex-1 min-w-0">
+                              <div className="text-sm font-medium text-foreground">
+                                {task.type === 'reorganize_memory' ? 'Memory reorganization' : task.type}
+                              </div>
+                              <div className="mt-0.5 text-xs text-faint-fg">
+                                {task.last_run_at ? `Last ran ${new Date(task.last_run_at * 1000).toLocaleString()}` : 'Never run'}
+                                {nextRun && ` · Next: ${nextRun}`}
+                              </div>
+                              {task.prompt && (
+                                <div className="mt-1 truncate text-xs text-muted-foreground/60" title={task.prompt}>
+                                  {task.prompt}
+                                </div>
+                              )}
                             </div>
-                          )}
+                            <div className="flex items-center gap-2 shrink-0">
+                              <Button variant="ghost" size="sm" className="h-7 gap-1 text-xs" onClick={() => runTaskMutation.mutate(task.id)}>
+                                <Play size={11} />
+                                Run now
+                              </Button>
+                              <label className="flex items-center gap-1.5 cursor-pointer">
+                                <input
+                                  type="checkbox"
+                                  checked={!!task.enabled}
+                                  onChange={e => updateTaskMutation.mutate({ id: task.id, body: { enabled: e.target.checked } })}
+                                  className="h-4 w-4 rounded border-border bg-background accent-primary"
+                                />
+                                <span className="text-xs text-muted-foreground">On</span>
+                              </label>
+                              <Button variant="ghost" size="icon-sm" className="text-muted-foreground hover:text-destructive" onClick={() => deleteTaskMutation.mutate(task.id)}>
+                                <Trash2 size={14} />
+                              </Button>
+                            </div>
+                          </div>
+                          <div className="flex items-center gap-2">
+                            <span className="text-xs text-muted-foreground shrink-0">Every</span>
+                            <Input
+                              type="number"
+                              min="1"
+                              className="h-7 w-20 text-xs"
+                              value={intervalVal}
+                              onChange={e => setTaskIntervals(prev => ({ ...prev, [task.id]: e.target.value }))}
+                            />
+                            <span className="text-xs text-muted-foreground shrink-0">hours</span>
+                            {intervalDirty && (
+                              <Button
+                                size="sm"
+                                className="h-7 text-xs"
+                                onClick={() => {
+                                  const hours = Number(intervalVal);
+                                  if (!Number.isFinite(hours) || hours < 1) return;
+                                  updateTaskMutation.mutate({ id: task.id, body: { interval_hours: hours } });
+                                  setTaskIntervals(prev => { const n = { ...prev }; delete n[task.id]; return n; });
+                                }}
+                              >
+                                Save
+                              </Button>
+                            )}
+                          </div>
                         </div>
-                        <div className="flex-1 text-foreground/75 text-sm">{m.value}</div>
-                      </div>
-                    ))}
+                      );
+                    })}
                   </div>
-                </div>
-              );
-            })}
-          </div>
-        )}
-      </PageSection>
+                )}
+              </div>
+            </div>
+          )}
 
-      <PageSection title="Scheduled Tasks">
-        {scheduledTasks.length === 0 ? (
-          <div className="text-muted-foreground/70 text-sm">No scheduled tasks.</div>
-        ) : (
-          <div className="grid gap-2">
-            {scheduledTasks.map(task => {
-              const intervalVal = taskIntervals[task.id] ?? String(task.interval_hours);
-              const intervalDirty = intervalVal !== String(task.interval_hours);
-              const nextRun = task.enabled ? new Date(task.next_run_at * 1000).toLocaleString() : null;
-              return (
-                <div key={task.id} className="rounded-xl border border-border/50 bg-card px-4 py-3 flex flex-col gap-2">
-                  <div className="flex items-start gap-3">
-                    <div className="flex-1 min-w-0">
-                      <div className="text-sm font-medium">
-                        {task.type === 'reorganize_memory' ? 'Memory reorganization' : task.type}
-                      </div>
-                      <div className="text-muted-foreground/70 text-xs mt-0.5">
-                        {task.last_run_at
-                          ? `Last ran ${new Date(task.last_run_at * 1000).toLocaleString()}`
-                          : 'Never run'}
-                        {nextRun && ` · Next: ${nextRun}`}
-                      </div>
-                      {task.prompt && (
-                        <div className="text-xs text-muted-foreground/60 mt-1 truncate" title={task.prompt}>
-                          Prompt: {task.prompt}
-                        </div>
-                      )}
-                    </div>
-                    <div className="flex items-center gap-2 shrink-0">
-                      <Button variant="ghost" size="sm" onClick={() => runTaskMutation.mutate(task.id)}>
-                        Run now
-                      </Button>
-                      <label className="flex items-center gap-1.5 cursor-pointer">
-                        <input
-                          type="checkbox"
-                          checked={!!task.enabled}
-                          onChange={e => updateTaskMutation.mutate({ id: task.id, body: { enabled: e.target.checked } })}
-                          className="h-4 w-4 rounded border-border bg-background accent-primary"
-                        />
-                        <span className="text-sm text-foreground/70">On</span>
-                      </label>
-                      <Button
-                        variant="ghost"
-                        size="sm"
-                        className="text-destructive hover:text-destructive px-2"
-                        onClick={() => deleteTaskMutation.mutate(task.id)}
-                      >
-                        <Trash2 size={14} />
-                      </Button>
-                    </div>
-                  </div>
-                  <div className="flex items-center gap-2">
-                    <span className="text-xs text-muted-foreground shrink-0">Every</span>
-                    <Input
-                      type="number"
-                      min="1"
-                      className="h-7 w-20 text-xs"
-                      value={intervalVal}
-                      onChange={e => setTaskIntervals(prev => ({ ...prev, [task.id]: e.target.value }))}
-                    />
-                    <span className="text-xs text-muted-foreground shrink-0">hours</span>
-                    {intervalDirty && (
-                      <Button
-                        size="sm"
-                        className="h-7 text-xs"
-                        onClick={() => {
-                          const hours = Number(intervalVal);
-                          if (!Number.isFinite(hours) || hours < 1) return;
-                          updateTaskMutation.mutate({ id: task.id, body: { interval_hours: hours } });
-                          setTaskIntervals(prev => { const n = { ...prev }; delete n[task.id]; return n; });
-                        }}
-                      >
-                        Save
-                      </Button>
-                    )}
-                  </div>
+          {/* ── Memory ─────────────────────────────────── */}
+          {tab === 'memory' && (
+            <div className="flex flex-col gap-5">
+              <SectionLabel>Stored memory</SectionLabel>
+              {memory.length === 0 ? (
+                <div className="rounded-lg border border-dashed border-border bg-muted/30 px-4 py-3 text-sm text-muted-foreground">
+                  No memory stored yet.
                 </div>
-              );
-            })}
-          </div>
-        )}
-      </PageSection>
+              ) : (
+                (['user', 'feedback', 'project', 'reference'] as const).map(type => {
+                  const entries = memory.filter(m => m.type === type);
+                  if (entries.length === 0) return null;
+                  return (
+                    <div key={type}>
+                      <div className="mb-2 text-[11px] font-semibold capitalize tracking-wide text-faint-fg">{type}</div>
+                      <div className="flex flex-col gap-1.5">
+                        {entries.map(m => (
+                          <div key={`${m.type}-${m.key}`} className="flex items-start gap-4 rounded-lg border border-border-soft bg-card px-4 py-3">
+                            <div className="w-36 shrink-0 font-mono text-xs text-muted-foreground">
+                              {m.key}
+                              {m.type === 'project' && (
+                                <div className="mt-0.5 font-sans text-[11px] text-faint-fg">
+                                  {projects.find(p => p.id === m.project_id)?.name ?? m.project_id}
+                                </div>
+                              )}
+                            </div>
+                            <div className="flex-1 text-sm text-fg-soft">{m.value}</div>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  );
+                })
+              )}
+            </div>
+          )}
 
-      <PageSection title="Account">
-        <Button variant="destructive" onClick={handleSignOut}>Sign out</Button>
-      </PageSection>
+          {/* ── Account ────────────────────────────────── */}
+          {tab === 'account' && (
+            <div className="flex flex-col gap-3">
+              <SectionLabel>Account</SectionLabel>
+              <div className="flex items-center justify-between gap-4 rounded-lg border border-destructive/20 bg-destructive/5 px-4 py-4">
+                <div>
+                  <div className="text-sm font-medium text-foreground">Sign out</div>
+                  <div className="mt-0.5 text-xs text-muted-foreground">You will be returned to the login screen.</div>
+                </div>
+                <Button variant="destructive" size="sm" onClick={handleSignOut}>Sign out</Button>
+              </div>
+            </div>
+          )}
+
+        </ContentColumn>
+      </PageBody>
 
       {pendingDelete && (
         <ConfirmDialog
           title="Remove connection?"
           description="This will disconnect the integration. You can reconnect it at any time."
           confirmLabel="Delete"
-          onConfirm={() => {
-            deleteConnMutation.mutate(pendingDelete.id);
-            setPendingDelete(null);
-          }}
+          onConfirm={() => { deleteConnMutation.mutate(pendingDelete.id); setPendingDelete(null); }}
           onCancel={() => setPendingDelete(null)}
         />
       )}
       <SetupModal />
-      </ContentColumn>
-      </PageBody>
     </PageShell>
   );
 }

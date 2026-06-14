@@ -1,14 +1,12 @@
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { Search, Trash2, X } from 'lucide-react';
+import { ChevronRight, Search, Trash2, X } from 'lucide-react';
 import { getChats, deleteChat, searchChats } from '../lib/api.js';
 import { timeAgo } from '../lib/utils.js';
 import { ConfirmDialog } from '@/components/ui/confirm-dialog';
 import { Button } from '@/components/ui/button';
-import { Input } from '@/components/ui/input';
-import { ScrollArea } from '@/components/ui/scroll-area';
-import { CenteredEmptyState, PageHeader, PageLoading, PageShell } from '@/components/ui/app-layout';
+import { ContentColumn, EmptyPanel, PageBody, PageHeader, PageLoading, PageShell } from '@/components/ui/app-layout';
 import type { Session } from '../types.js';
 import { useDebounce } from '../lib/useDebounce.js';
 
@@ -48,66 +46,80 @@ export default function ChatsPage() {
     <PageShell>
       <PageHeader title="Chats" />
 
-      <div className="shrink-0 px-6 pb-3 pt-1">
-        <div className="relative">
-          <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground/50" />
-          <Input
-            value={searchQuery}
-            onChange={e => setSearchQuery(e.target.value)}
-            placeholder="Search chats…"
-            className="pl-8 pr-8 h-8 text-sm"
-          />
-          {searchQuery && (
-            <button
-              onClick={() => setSearchQuery('')}
-              className="absolute right-2.5 top-1/2 -translate-y-1/2 text-muted-foreground/50 hover:text-muted-foreground"
-            >
-              <X size={13} />
-            </button>
-          )}
-        </div>
-      </div>
-
       {isLoading ? (
         <PageLoading rows={5} />
-      ) : displayedChats.length === 0 ? (
-        <CenteredEmptyState
-          title={isSearchActive ? 'No results' : 'No chats yet'}
-          description={isSearchActive ? `Nothing matched "${debouncedQuery}".` : 'Start a conversation to plan work, inspect a project, or make a change.'}
-        />
       ) : (
-        <ScrollArea className="flex-1">
-          <div className="px-6 py-3">
+        <PageBody>
+          <ContentColumn className="max-w-2xl">
+            <div className="relative mb-5">
+              <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-faint-fg pointer-events-none" />
+              <input
+                value={searchQuery}
+                onChange={e => setSearchQuery(e.target.value)}
+                placeholder="Search chats…"
+                className="w-full rounded-lg border border-border-soft bg-card py-2 pl-8 pr-8 text-sm text-foreground placeholder:text-faint-fg focus:border-border focus:outline-none focus:ring-2 focus:ring-ring transition-colors"
+              />
+              {searchQuery && (
+                <button
+                  onClick={() => setSearchQuery('')}
+                  className="absolute right-2.5 top-1/2 -translate-y-1/2 text-faint-fg hover:text-muted-foreground transition-colors"
+                >
+                  <X size={13} />
+                </button>
+              )}
+            </div>
+
             {isSearchActive && (
-              <p className="mb-2 text-xs text-muted-foreground">
+              <p className="mb-3 text-xs text-muted-foreground">
                 {isSearching ? 'Searching…' : `${displayedChats.length} result${displayedChats.length !== 1 ? 's' : ''}`}
               </p>
             )}
-            <div className="divide-y divide-border/50 rounded-lg border border-border/50 bg-background/40">
-              {displayedChats.map(chat => (
-                <div key={chat.id} className="flex items-center gap-3 px-4 py-3">
-                  <button
-                    aria-label={`Open chat ${chat.title ?? 'Untitled chat'}, updated ${timeAgo(chat.updated_at)}`}
-                    className="min-w-0 flex-1 text-left"
-                    onClick={() => navigate(`/c/${chat.id}`)}
+
+            {displayedChats.length === 0 ? (
+              <EmptyPanel
+                title={isSearchActive ? 'No results' : 'No chats yet'}
+                description={isSearchActive
+                  ? `Nothing matched "${debouncedQuery}".`
+                  : 'Start a conversation to plan work, inspect a project, or make a change.'}
+              />
+            ) : (
+              <div className="flex flex-col gap-2">
+                {displayedChats.map(chat => (
+                  <div
+                    key={chat.id}
+                    className="group flex items-center gap-3 rounded-lg border border-border-soft bg-card px-4 py-3.5 transition-[transform,box-shadow,border-color] hover:-translate-y-px hover:border-border hover:shadow-sm"
                   >
-                    <div className="truncate text-sm font-medium">{chat.title ?? 'Untitled chat'}</div>
-                    <div className="mt-0.5 text-xs text-muted-foreground">{timeAgo(chat.updated_at)}</div>
-                  </button>
-                  <Button
-                    variant="ghost"
-                    size="icon-sm"
-                    aria-label={`Delete chat ${chat.title ?? 'Untitled chat'}`}
-                    className="shrink-0 text-muted-foreground hover:text-destructive"
-                    onClick={() => setPendingDelete(chat.id)}
-                  >
-                    <Trash2 size={14} />
-                  </Button>
-                </div>
-              ))}
-            </div>
-          </div>
-        </ScrollArea>
+                    <button
+                      type="button"
+                      aria-label={`Open chat: ${chat.title ?? 'Untitled chat'}`}
+                      className="min-w-0 flex-1 text-left"
+                      onClick={() => navigate(`/c/${chat.id}`)}
+                    >
+                      <div className="truncate text-sm font-medium text-foreground">
+                        {chat.title ?? 'Untitled chat'}
+                      </div>
+                      <div className="mt-0.5 text-xs text-faint-fg">{timeAgo(chat.updated_at)}</div>
+                    </button>
+                    <ChevronRight
+                      size={15}
+                      className="shrink-0 text-faint-fg transition-colors group-hover:text-muted-foreground"
+                      onClick={() => navigate(`/c/${chat.id}`)}
+                    />
+                    <Button
+                      variant="ghost"
+                      size="icon-sm"
+                      aria-label={`Delete chat: ${chat.title ?? 'Untitled chat'}`}
+                      className="shrink-0 text-faint-fg opacity-0 transition-[opacity,color] hover:text-destructive group-hover:opacity-100"
+                      onClick={() => setPendingDelete(chat.id)}
+                    >
+                      <Trash2 size={14} />
+                    </Button>
+                  </div>
+                ))}
+              </div>
+            )}
+          </ContentColumn>
+        </PageBody>
       )}
 
       {pendingDelete && (

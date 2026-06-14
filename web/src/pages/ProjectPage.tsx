@@ -3,7 +3,6 @@ import { useParams, useNavigate, Link, useLocation } from 'react-router-dom';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { ChevronRight, FileText, GitBranch, GitGraph, Video } from 'lucide-react';
 import { getProjects, getProjectCampaigns, getProjectCapabilities, createChat, updateChatConfig, deleteProject, updateProject, getChats, getProjectFile } from '../lib/api.js';
-import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { EmptyPanel, PageHeader, PageLoading, PageShell } from '@/components/ui/app-layout';
 import { cn } from '@/lib/utils';
@@ -244,6 +243,7 @@ export default function ProjectPage() {
                 <div className="overflow-hidden rounded-xl border border-border/50 bg-background/60 divide-y divide-border/50">
                   {pinnedChats.slice(0, 2).map(chat => (
                     <button
+                      type="button"
                       key={chat.id}
                       aria-label={`Open chat ${chat.title ?? 'Untitled chat'}`}
                       onClick={() => navigate(`/c/${chat.id}`)}
@@ -384,6 +384,7 @@ export default function ProjectPage() {
               <div className="overflow-hidden rounded-xl border border-border/50 bg-background/60 divide-y divide-border/50">
                 {pinnedChats.map((chat) => (
                   <button
+                    type="button"
                     key={chat.id}
                     aria-label={`Open chat ${chat.title ?? 'Untitled chat'}`}
                     onClick={() => navigate(`/c/${chat.id}`)}
@@ -433,7 +434,10 @@ function ProjectSettingsForm({ project, onDelete }: { project: Project; onDelete
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ['projects'] }),
   });
 
-  const handleDelete = onDelete;
+  function handleDelete() {
+    if (!window.confirm('Delete this project and all its campaigns? This cannot be undone.')) return;
+    onDelete();
+  }
 
   return (
     <div className="flex flex-col gap-5">

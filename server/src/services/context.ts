@@ -34,7 +34,8 @@ function baseBlock(intent: Intent): string {
 
 ## Core rules
 - Auto-approved (do without asking): ${autoApproved}
-- User-approved (proceed and the system handles the pause): git_op push, write_file, delete_project, delete_scheduled_task
+- User-approved (proceed and the system handles the pause): git_op push, delete_project, delete_scheduled_task
+- write_file auto-approves on fast/trusted profiles; on strict it pauses for user approval like any other tool
 - If a task has multiple coordinated workstreams: call create_campaign first, then dispatch tasks with their campaign_task_id. Never dispatch parallel agents without a campaign tracking them.
 - Never ask the user for permission on an auto-approved action — just do it.
 - After any invoke_claude_code or invoke_codex succeeds: immediately run git_op add then git_op commit. This is mandatory. Never ask "should I commit?" or "would you like me to commit?" — that question is a protocol violation. Commit first, summarize after.

@@ -97,7 +97,7 @@ export default function ProjectPage() {
 
   const { data: workspaceMd } = useQuery({
     queryKey: ['project-workspace-md', projectId],
-    queryFn: () => getProjectFile(projectId!, 'workspace.md'),
+    queryFn: () => getProjectFile(projectId!, 'workspace.md').catch(() => null),
     enabled: !!projectId,
     staleTime: 60_000,
     retry: false,

@@ -3,7 +3,7 @@ import type { ReactNode } from 'react';
 import { useParams, Link, useNavigate } from 'react-router-dom';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { Bot, Check, ChevronRight, FileEdit, FileText, GitBranch, GitPullRequest, MessageSquare, Plus, Sparkles, X } from 'lucide-react';
-import { getCampaign, cancelCampaign, createChat, updateChatConfig, getChats, getProjectArtifacts, getSessionWorktree } from '../lib/api.js';
+import { getCampaign, cancelCampaign, createChat, updateChatConfig, getChats, getProjectArtifacts, getSessionWorktree, getProjects } from '../lib/api.js';
 import { subscribe } from '../lib/ws.js';
 import { cn } from '@/lib/utils';
 import { timeAgo } from '../lib/utils.js';
@@ -11,7 +11,7 @@ import { getToken } from '../lib/auth.js';
 import { PageBody, PageHeader, PageLoading, PageShell } from '@/components/ui/app-layout';
 import { Button } from '@/components/ui/button';
 import { StatusPill } from '@/components/ui/status-pill';
-import type { Campaign, CampaignTask, ProjectArtifact, Session, WSCampaignTaskUpdated, WSCampaignUpdated } from '../types.js';
+import type { Campaign, CampaignTask, Project, ProjectArtifact, Session, WSCampaignTaskUpdated, WSCampaignUpdated } from '../types.js';
 
 const AGENT_LABEL: Record<CampaignTask['agent'], string> = {
   claude_code: 'Claude Code',
@@ -86,6 +86,13 @@ export default function CampaignPage() {
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ['campaign', campaignId] }),
   });
 
+  const { data: projects = [] } = useQuery<Project[]>({
+    queryKey: ['projects'],
+    queryFn: getProjects,
+    staleTime: 30_000,
+  });
+  const project = projects.find(p => p.id === projectId) ?? null;
+
   const { data: chats = [] } = useQuery<Session[]>({
     queryKey: ['chats'],
     queryFn: getChats,
@@ -145,7 +152,7 @@ export default function CampaignPage() {
             </Link>
             <ChevronRight size={12} className="text-faint-fg" />
             <Link to={`/projects/${projectId}`} className="transition-colors hover:text-foreground">
-              Project
+              {project?.name ?? 'Project'}
             </Link>
             <ChevronRight size={12} className="text-faint-fg" />
             <Link to={`/projects/${projectId}/campaigns`} className="text-xs text-muted-foreground hover:text-foreground transition-colors">

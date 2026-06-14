@@ -40,7 +40,7 @@ describe('Settings', () => {
   it('renders the permission profile control', async () => {
     renderSettings();
 
-    expect(await screen.findByText('Agent permissions')).toBeInTheDocument();
+    expect(await screen.findByText('Permissions')).toBeInTheDocument();
     expect(screen.getByText('Permission profile')).toBeInTheDocument();
     expect(screen.getByText('Fast')).toBeInTheDocument();
   });

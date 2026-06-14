@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { Bell, Check, GitBranch } from 'lucide-react';
-import { approveExecution, getAllCampaigns, rejectExecution } from '../lib/api.js';
+import { approveExecution, getAllCampaigns, getPendingApprovals, rejectExecution } from '../lib/api.js';
 import { subscribe } from '../lib/ws.js';
 import { timeAgo } from '../lib/utils.js';
 import {
@@ -50,6 +50,26 @@ export default function ActivityPage() {
 
   const [statusOverrides, setStatusOverrides] = useState<Record<string, Campaign['status']>>({});
   const [pendingApprovals, setPendingApprovals] = useState<Map<string, { action: string }>>(new Map());
+
+  const { data: storedApprovals } = useQuery({
+    queryKey: ['pending-approvals'],
+    queryFn: getPendingApprovals,
+    staleTime: 15_000,
+    refetchInterval: 30_000,
+  });
+
+  useEffect(() => {
+    if (!storedApprovals) return;
+    setPendingApprovals(prev => {
+      const next = new Map(prev);
+      for (const a of storedApprovals) {
+        if (!next.has(a.execution_id)) {
+          next.set(a.execution_id, { action: a.action });
+        }
+      }
+      return next;
+    });
+  }, [storedApprovals]);
 
   useEffect(() => {
     return subscribe(event => {

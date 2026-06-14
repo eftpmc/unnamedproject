@@ -5,14 +5,17 @@ import {
   createCampaign,
   getCampaignById,
   getCampaignTasks,
+  getDb,
   getProjectForUser,
   getRecentCampaignsForUser,
   resumeCampaign,
   type DbCampaignTask,
 } from '../db/index.js';
+import { newId } from '../lib/ids.js';
 import { killProcess } from '../lib/process-registry.js';
 import { completeExecution } from '../services/executor.js';
 import { broadcast } from '../services/socket.js';
+import { runCampaignAutoDispatch } from '../services/agent.js';
 
 const router = Router();
 router.use(requireAuth);
@@ -93,6 +96,23 @@ router.post('/:id/resume', (req, res) => {
   }
   broadcast(userId, { type: 'campaign_updated', campaignId: campaign.id, status: result.campaign.status });
   res.json({ campaign: result.campaign, tasks: result.tasks });
+
+  // Dispatch resumed tasks in background
+  const db = getDb();
+  let sessionId = campaign.session_id;
+  if (!sessionId) {
+    sessionId = newId();
+    db.prepare('INSERT INTO sessions (id, user_id, title) VALUES (?,?,?)').run(
+      sessionId, userId, `Resumed: ${campaign.title}`,
+    );
+  }
+  const messageId = newId();
+  db.prepare('INSERT INTO messages (id, session_id, role, content) VALUES (?,?,?,?)').run(
+    messageId, sessionId, 'user', `Resume campaign: ${campaign.title}`,
+  );
+  runCampaignAutoDispatch(campaign.id, userId, messageId, sessionId).catch(err => {
+    console.error(`Campaign resume dispatch failed (${campaign.id}):`, err);
+  });
 });
 
 export default router;

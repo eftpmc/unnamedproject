@@ -88,6 +88,10 @@ export function sendMessage(sessionId: string, content: string): Promise<Message
   });
 }
 
+export function getPendingApprovals(): Promise<Array<{ approval_id: string; execution_id: string; action: string; payload: Record<string, unknown> }>> {
+  return request('/executions/pending-approvals');
+}
+
 export function approveExecution(executionId: string): Promise<void> {
   return request(`/executions/${executionId}/approve`, { method: 'POST' });
 }

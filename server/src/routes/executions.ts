@@ -8,6 +8,21 @@ import { completeExecution } from '../services/executor.js';
 const router = Router();
 router.use(requireAuth);
 
+router.get('/pending-approvals', (req, res) => {
+  const { userId } = req as unknown as AuthedRequest;
+  const rows = getDb()
+    .prepare(`
+      SELECT a.id as approval_id, a.execution_id, a.action, a.payload
+      FROM approvals a
+      JOIN executions e ON e.id = a.execution_id
+      JOIN messages m ON m.id = e.message_id
+      JOIN sessions t ON t.id = m.session_id
+      WHERE t.user_id = ? AND a.status = 'pending'
+    `)
+    .all(userId) as Array<{ approval_id: string; execution_id: string; action: string; payload: string }>;
+  res.json(rows.map(r => ({ ...r, payload: JSON.parse(r.payload) })));
+});
+
 router.get('/:id', (req, res) => {
   const { userId } = req as unknown as AuthedRequest;
   const execution = getDb()

@@ -2,8 +2,9 @@ import { useEffect, useState } from 'react';
 import type { ReactNode } from 'react';
 import { useParams, Link, useNavigate } from 'react-router-dom';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { ArrowDown, Bot, Check, ChevronRight, Cpu, FileEdit, FileText, GitBranch, GitPullRequest, MessageSquare, Plus, Sparkles, Terminal, X, Zap } from 'lucide-react';
-import { getCampaign, cancelCampaign, createChat, updateChatConfig, getChats, getProjectArtifacts, getSessionWorktree, getProjects } from '../lib/api.js';
+import { ArrowDown, Bot, Check, ChevronRight, Cpu, FileEdit, FileText, GitBranch, GitPullRequest, MessageSquare, Plus, RotateCcw, Sparkles, Terminal, X, Zap } from 'lucide-react';
+import { getCampaign, cancelCampaign, resumeCampaign, createChat, updateChatConfig, getChats, getProjectArtifacts, getSessionWorktree, getProjects } from '../lib/api.js';
+import ArtifactPreviewCard from '../components/ArtifactPreviewCard.js';
 import { subscribe } from '../lib/ws.js';
 import { cn } from '@/lib/utils';
 import { timeAgo } from '../lib/utils.js';
@@ -106,6 +107,11 @@ export default function CampaignPage() {
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ['campaign', campaignId] }),
   });
 
+  const resumeMutation = useMutation({
+    mutationFn: () => resumeCampaign(campaignId!),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['campaign', campaignId] }),
+  });
+
   const { data: projects = [] } = useQuery<Project[]>({
     queryKey: ['projects'],
     queryFn: getProjects,
@@ -203,6 +209,18 @@ export default function CampaignPage() {
               <Plus size={14} />
               New chat
             </Button>
+            {effectiveCampaignStatus === 'error' && (
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => resumeMutation.mutate()}
+                disabled={resumeMutation.isPending}
+                className="h-7 gap-1 text-xs text-muted-foreground"
+              >
+                <RotateCcw size={12} />
+                Resume
+              </Button>
+            )}
             {effectiveCampaignStatus === 'running' && (
               <Button
                 variant="outline"
@@ -313,20 +331,14 @@ export default function CampaignPage() {
               {relatedArtifacts.length > 0 ? (
                 <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
                   {relatedArtifacts.map(artifact => (
-                    <div key={artifact.id} className="flex flex-col gap-3 rounded-lg border border-border-soft bg-card p-4">
-                      <div className="grid aspect-[16/10] place-items-center rounded-md border border-border-soft bg-muted/35 bg-[repeating-linear-gradient(45deg,color-mix(in_oklch,var(--muted)_90%,transparent),color-mix(in_oklch,var(--muted)_90%,transparent)_8px,transparent_8px,transparent_16px)]">
-                        <span className="rounded-md border border-border-soft bg-background/75 px-2 py-1 text-[11px] font-medium text-muted-foreground">
-                          {artifact.mime_type}
-                        </span>
-                      </div>
-                      <div className="flex items-start justify-between gap-3">
-                        <div className="min-w-0">
-                          <div className="truncate text-sm font-semibold text-foreground">{artifact.title}</div>
-                          <div className="mt-0.5 text-xs text-muted-foreground">{artifact.kind}</div>
-                        </div>
-                        <StatusPill status={artifact.status} />
-                      </div>
-                    </div>
+                    <ArtifactPreviewCard
+                      key={artifact.id}
+                      artifactId={artifact.id}
+                      projectId={artifact.project_id}
+                      title={artifact.title}
+                      kind={artifact.kind}
+                      mimeType={artifact.mime_type}
+                    />
                   ))}
                 </div>
               ) : (

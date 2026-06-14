@@ -1,50 +1,131 @@
-import { spawn } from 'child_process';
-import fs from 'fs/promises';
+import Anthropic from '@anthropic-ai/sdk';
+import fs from 'fs';
+import fsPromises from 'fs/promises';
 import path from 'path';
 
-function graphPath(repoPath: string): string {
-  return path.join(repoPath, 'graphify-out', 'graph.json');
+// ─── Index path ────────────────────────────────────────────────────────────
+
+function indexPath(repoPath: string): string {
+  return path.join(repoPath, '.project-index.json');
 }
 
-function buildEnv(apiKey?: string | null): NodeJS.ProcessEnv {
-  if (!apiKey) return process.env;
-  return { ...process.env, ANTHROPIC_API_KEY: apiKey };
+// ─── File walking ──────────────────────────────────────────────────────────
+
+const SKIP_DIRS = new Set([
+  'node_modules', '.git', '.next', '.turbo', 'dist', 'build', 'out',
+  '.cache', 'coverage', '__pycache__', '.venv', 'venv', '.tox',
+  'graphify-out', '.project-index.json',
+]);
+
+const SOURCE_EXTS = new Set([
+  '.ts', '.tsx', '.js', '.jsx', '.mjs', '.cjs',
+  '.py', '.rb', '.go', '.rs', '.java', '.kt', '.swift', '.c', '.cpp', '.h',
+  '.cs', '.php', '.ex', '.exs', '.ml', '.hs', '.clj',
+  '.sql', '.graphql', '.proto',
+  '.json', '.yaml', '.yml', '.toml', '.env.example',
+  '.md', '.mdx',
+  '.css', '.scss', '.sass',
+  '.sh', '.bash', '.zsh',
+  'Dockerfile', 'Makefile', '.gitignore', 'Gemfile', 'Pipfile',
+]);
+
+function isSourceFile(filePath: string): boolean {
+  const base = path.basename(filePath);
+  if (SOURCE_EXTS.has(base)) return true;
+  const ext = path.extname(filePath);
+  return SOURCE_EXTS.has(ext);
 }
+
+interface FileEntry {
+  path: string;
+  preview: string;
+}
+
+function walkRepo(repoPath: string, maxFiles = 600): FileEntry[] {
+  const results: FileEntry[] = [];
+
+  function walk(dir: string): void {
+    if (results.length >= maxFiles) return;
+    let entries: fs.Dirent[];
+    try {
+      entries = fs.readdirSync(dir, { withFileTypes: true });
+    } catch {
+      return;
+    }
+    for (const entry of entries) {
+      if (results.length >= maxFiles) break;
+      if (entry.name.startsWith('.') && entry.name !== '.gitignore' && entry.name !== '.env.example') continue;
+      if (entry.isDirectory()) {
+        if (SKIP_DIRS.has(entry.name)) continue;
+        walk(path.join(dir, entry.name));
+      } else if (entry.isFile() && isSourceFile(entry.name)) {
+        const abs = path.join(dir, entry.name);
+        const rel = path.relative(repoPath, abs);
+        let preview = '';
+        try {
+          const content = fs.readFileSync(abs, 'utf8');
+          const lines = content.split('\n').slice(0, 40);
+          preview = lines.join('\n').slice(0, 2000);
+        } catch {
+          // binary or unreadable — skip preview
+        }
+        results.push({ path: rel, preview });
+      }
+    }
+  }
+
+  walk(repoPath);
+  return results;
+}
+
+// ─── Public API (mirrors old graphify shape) ───────────────────────────────
 
 export async function hasGraph(repoPath: string): Promise<boolean> {
   try {
-    await fs.access(graphPath(repoPath));
+    await fsPromises.access(indexPath(repoPath));
     return true;
   } catch {
     return false;
   }
 }
 
-export async function buildGraph(repoPath: string, _projectId: string, apiKey?: string | null): Promise<void> {
-  return new Promise((resolve, reject) => {
-    // graphify outputs to <repoPath>/graphify-out/ when run from repoPath
-    const proc = spawn('graphify', ['.', '--no-viz'], {
-      cwd: repoPath,
-      env: buildEnv(apiKey),
-    });
-    proc.on('close', code => {
-      if (code === 0) resolve();
-      else reject(new Error(`graphify build exited with code ${code}`));
-    });
-  });
+export async function buildGraph(repoPath: string, _projectId: string, _apiKey?: string | null): Promise<void> {
+  const files = walkRepo(repoPath);
+  const index = { built_at: Date.now(), repo_path: repoPath, files };
+  await fsPromises.writeFile(indexPath(repoPath), JSON.stringify(index), 'utf8');
 }
 
 export async function queryGraph(question: string, repoPath: string, apiKey?: string | null): Promise<string> {
-  return new Promise((resolve, reject) => {
-    const proc = spawn('graphify', ['query', question], {
-      cwd: repoPath,
-      env: buildEnv(apiKey),
-    });
-    let output = '';
-    proc.stdout.on('data', (chunk: Buffer) => { output += chunk.toString(); });
-    proc.on('close', code => {
-      if (code === 0) resolve(output.trim() || 'No matching information found in graph.');
-      else reject(new Error(`graphify query exited with code ${code}`));
-    });
+  if (!apiKey) {
+    return 'No API key configured — cannot answer project questions. Set an Anthropic key in Settings → Agents.';
+  }
+
+  let index: { files: FileEntry[] } | null = null;
+  try {
+    const raw = await fsPromises.readFile(indexPath(repoPath), 'utf8');
+    index = JSON.parse(raw) as { files: FileEntry[] };
+  } catch {
+    // no index — build a quick file-tree only answer
+  }
+
+  const client = new Anthropic({ apiKey });
+
+  let context: string;
+  if (index) {
+    const fileList = index.files.map(f => `### ${f.path}\n${f.preview}`).join('\n\n');
+    context = `The following is an index of the project's source files with previews of their first 40 lines:\n\n${fileList}`;
+  } else {
+    const files = walkRepo(repoPath, 200);
+    context = `File tree (no index built yet — previews of first 40 lines):\n\n${files.map(f => `### ${f.path}\n${f.preview}`).join('\n\n')}`;
+  }
+
+  const msg = await client.messages.create({
+    model: 'claude-haiku-4-5-20251001',
+    max_tokens: 1024,
+    system: 'You are a code navigator. Answer questions about a codebase using the provided file index. Be specific: cite file paths and line numbers where relevant. If the answer is not in the index, say so.',
+    messages: [{ role: 'user', content: `${context}\n\n---\n\nQuestion: ${question}` }],
   });
+
+  const block = msg.content[0];
+  return block.type === 'text' ? block.text : 'No answer produced.';
 }

@@ -26,9 +26,9 @@ export function detectCapabilities(projectId: string, repoPath?: string | null):
     has_media = fs.existsSync(outDir) && fs.readdirSync(outDir).some(f => f.toLowerCase().endsWith('.mp4'));
   }
 
-  // has_graph: per-project — graphify writes graph.json here when rebuild_graph is run
+  // has_graph: per-project — built by rebuild_graph tool, stored as .project-index.json
   const has_graph = repoPath
-    ? fs.existsSync(path.join(repoPath, 'graphify-out', 'graph.json'))
+    ? fs.existsSync(path.join(repoPath, '.project-index.json'))
     : false;
 
   // has_research: per-project — orchestrator writes .md files to research/ after deep research

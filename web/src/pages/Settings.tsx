@@ -40,7 +40,7 @@ const TABS: { id: Tab; label: string }[] = [
   { id: 'account', label: 'Account' },
 ];
 
-type SetupKind = 'lead_agent' | 'claude_code' | 'codex' | 'github' | 'mcp';
+type SetupKind = 'lead_agent' | 'claude_code' | 'codex' | 'mcp';
 
 const SETUP_META: Record<SetupKind, {
   title: string;
@@ -75,13 +75,6 @@ const SETUP_META: Record<SetupKind, {
     secretLabel: 'OpenAI API key',
     secretOptional: true,
     secretOptionalHint: "Leave blank to use this server's local `codex` CLI login instead of a metered API key.",
-  },
-  github: {
-    title: 'GitHub',
-    description: 'Reads repos, issues, and comments; write actions ask first.',
-    type: 'github',
-    placeholder: 'ghp_...',
-    secretLabel: 'Personal access token',
   },
   mcp: {
     title: 'MCP Server',
@@ -235,7 +228,7 @@ export default function Settings() {
         }
       } else {
         if (!secret.trim() && !meta.secretOptional) throw new Error(`${meta.secretLabel} required`);
-        config = activeSetup === 'github' ? { token: secret.trim() } : { apiKey: secret.trim() };
+        config = { apiKey: secret.trim() };
       }
 
       return createConnection({ name: setupName.trim() || meta.title, type: meta.type, purpose: activeSetup, config });
@@ -525,10 +518,9 @@ export default function Settings() {
           {/* ── Tools ──────────────────────────────────── */}
           {tab === 'tools' && (
             <div className="flex flex-col gap-3">
-              <SectionLabel>Coding &amp; integration tools</SectionLabel>
+              <SectionLabel>Coding tools</SectionLabel>
               <ConnectionRow kind="claude_code" />
               <ConnectionRow kind="codex" />
-              <ConnectionRow kind="github" />
             </div>
           )}
 

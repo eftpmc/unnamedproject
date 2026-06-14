@@ -161,22 +161,29 @@ const PARALLEL_SAFE_TOOLS = new Set([
 ]);
 
 function noteProjectUse(userId: string, sessionId: string, project: { id: string; name: string }, executionId?: string): void {
-  const linked = linkSessionProject(sessionId, project.id, 'agent');
-  if (!linked) return;
-  const event = createSessionEvent({
-    sessionId,
-    type: 'project_linked',
-    title: `Scoped to ${project.name}`,
-    body: 'The agent attached this chat to a project automatically.',
-    projectId: project.id,
-    executionId: executionId ?? null,
-    metadata: { source: 'agent' },
-  });
-  broadcast(userId, {
-    type: 'session_event_created',
-    sessionId,
-    event: { ...event, metadata: JSON.parse(event.metadata || '{}') },
-  });
+  // Best-effort bookkeeping: linking the chat to a project and emitting a
+  // session event is telemetry, not core execution. It must never abort the
+  // tool call that triggered it, so swallow and log any failure here.
+  try {
+    const linked = linkSessionProject(sessionId, project.id, 'agent');
+    if (!linked) return;
+    const event = createSessionEvent({
+      sessionId,
+      type: 'project_linked',
+      title: `Scoped to ${project.name}`,
+      body: 'The agent attached this chat to a project automatically.',
+      projectId: project.id,
+      executionId: executionId ?? null,
+      metadata: { source: 'agent' },
+    });
+    broadcast(userId, {
+      type: 'session_event_created',
+      sessionId,
+      event: { ...event, metadata: JSON.parse(event.metadata || '{}') },
+    });
+  } catch (err) {
+    console.error('noteProjectUse failed (non-fatal):', err);
+  }
 }
 
 async function dispatchToolBlocks(

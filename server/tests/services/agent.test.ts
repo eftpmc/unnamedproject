@@ -524,4 +524,52 @@ describe('agent', () => {
     const toolResult = (toolResultMsg.content as { content: string }[])[0].content;
     expect(toolResult).toBe('Forgot [user] scratch_note');
   });
+
+  it('still dispatches the tool when project bookkeeping (session event) fails', async () => {
+    const db = getDb();
+    const projectId = newId();
+    db.prepare('INSERT INTO projects (id, user_id, name, description, repo_path, enabled_connection_ids) VALUES (?,?,?,?,?,?)')
+      .run(projectId, userId, 'bookkeeping-fail', 'Bookkeeping fail project', '/tmp/repo', '[]');
+
+    // Return an execution id with no backing row. noteProjectUse -> createSessionEvent
+    // then violates the execution_id FK and throws — but that bookkeeping failure
+    // must not abort the actual tool call.
+    createExecutionMock.mockImplementationOnce(() => 'exec-missing');
+
+    const errSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+
+    runGitOpMock.mockReset();
+    runGitOpMock.mockResolvedValue('staged 1 file(s)');
+
+    streamMock.mockImplementationOnce(() => ({
+      on: () => ({ on: () => ({ finalMessage: async () => ({}) }) }),
+      finalMessage: async () => ({
+        stop_reason: 'tool_use',
+        content: [{ type: 'tool_use', id: 'tool-bk', name: 'git_op', input: { project_id: projectId, op: 'add' } }],
+      }),
+    }));
+    streamMock.mockImplementationOnce(() => {
+      const listeners: Record<string, ((...args: unknown[]) => void)[]> = {};
+      return {
+        on: (event: string, cb: (...args: unknown[]) => void) => {
+          (listeners[event] ??= []).push(cb);
+          return { on: () => ({ finalMessage: async () => ({}) }) };
+        },
+        finalMessage: async () => {
+          for (const cb of listeners.text ?? []) cb('done');
+          return { stop_reason: 'end_turn', content: [{ type: 'text', text: 'done' }] };
+        },
+      };
+    });
+
+    const msgId = newId();
+    db.prepare('INSERT INTO messages (id, session_id, role, content) VALUES (?,?,?,?)').run(msgId, sessionId, 'user', 'stage the changes');
+
+    // Would reject here (FK violation in noteProjectUse) before the fix.
+    await runAgentTurn(userId, sessionId, msgId);
+    expect(runGitOpMock).toHaveBeenCalledTimes(1);
+    // The bookkeeping failure is swallowed but logged, not silently dropped.
+    expect(errSpy).toHaveBeenCalledWith('noteProjectUse failed (non-fatal):', expect.anything());
+    errSpy.mockRestore();
+  });
 });

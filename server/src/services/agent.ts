@@ -9,7 +9,6 @@ import { ensureWorktree } from '../lib/worktree.js';
 import { getDecryptedConfig } from '../routes/connections.js';
 import { createExecution, completeExecution, appendOutput, requestApproval } from './executor.js';
 import { runGitOp } from '../tools/git_op.js';
-import { runGithubApi } from '../tools/github_api.js';
 import { invokeClaudeCode } from '../tools/invoke_claude_code.js';
 import { invokeCodex } from '../tools/invoke_codex.js';
 import { callMcpTool } from '../tools/mcp_call.js';
@@ -354,11 +353,7 @@ async function executeCampaignTask(
         break;
       }
       case 'github': {
-        const ghConn = getDb()
-          .prepare("SELECT id FROM connections WHERE user_id = ? AND type = 'github' LIMIT 1")
-          .get(userId) as { id: string } | undefined;
-        const token = ghConn ? getDecryptedConfig(ghConn.id, userId).token ?? '' : '';
-        result = await runGithubApi(toolArgs as unknown as Parameters<typeof runGithubApi>[0], { userId, executionId, token });
+        result = 'Error: github task type is no longer supported. Configure the GitHub MCP server in Settings → MCP and use agent type "mcp" with the appropriate tool_name instead.';
         break;
       }
       case 'file_write': {
@@ -570,17 +565,6 @@ async function dispatchTool(
         });
         result = codexCtx.result!;
         if (codexTaskId) finishCampaignTask(userId, codexTaskId, result);
-        break;
-      }
-      case 'github_api': {
-        const ghConn = getDb()
-          .prepare("SELECT id FROM connections WHERE user_id = ? AND type = 'github' LIMIT 1")
-          .get(userId) as { id: string } | undefined;
-        const token = ghConn ? getDecryptedConfig(ghConn.id, userId).token ?? '' : '';
-        const ghTaskId = toolInput.campaign_task_id as string | undefined;
-        if (ghTaskId) startCampaignTask(userId, ghTaskId, executionId);
-        result = await runGithubApi(toolInput as unknown as Parameters<typeof runGithubApi>[0], { userId, executionId, token });
-        if (ghTaskId) finishCampaignTask(userId, ghTaskId, result);
         break;
       }
       case 'mcp_call': {

@@ -30,28 +30,6 @@ export const toolDefinitions: Anthropic.Tool[] = [
     },
   },
   {
-    name: 'github_api',
-    description: 'Interact with GitHub repos, issues, and pull requests. Write ops (create_issue, create_pull_request, create_issue_comment) require user approval.',
-    input_schema: {
-      type: 'object',
-      properties: {
-        op: { type: 'string', enum: ['list_repos', 'get_repo', 'list_issues', 'get_issue', 'create_issue', 'create_issue_comment', 'list_pull_requests', 'get_pull_request', 'create_pull_request'] },
-        owner: { type: 'string', description: 'Repo owner (user or org)' },
-        repo: { type: 'string', description: 'Repo name' },
-        issue_number: { type: 'number', description: 'Issue number (for get_issue, create_issue_comment)' },
-        pr_number: { type: 'number', description: 'PR number (for get_pull_request)' },
-        title: { type: 'string', description: 'Title (for create_issue, create_pull_request)' },
-        body: { type: 'string', description: 'Body text (for create_issue, create_pull_request)' },
-        head: { type: 'string', description: 'Source branch (for create_pull_request)' },
-        base: { type: 'string', description: 'Target branch (for create_pull_request, defaults to main)' },
-        labels: { type: 'array', items: { type: 'string' }, description: 'Labels (for create_issue)' },
-        comment_body: { type: 'string', description: 'Comment text (for create_issue_comment)' },
-        campaign_task_id: { type: 'string', description: 'Campaign task ID to link this execution to (from create_campaign response)' },
-      },
-      required: ['op'],
-    },
-  },
-  {
     name: 'mcp_call',
     description: 'Call a tool on a configured MCP server.',
     input_schema: {
@@ -548,13 +526,4 @@ export const toolDefinitions: Anthropic.Tool[] = [
       required: ['project_id', 'title', 'scenes'],
     },
   },
-  {
-    type: 'web_search_20250305',
-    name: 'web_search',
-  } as unknown as Anthropic.Tool,
-  {
-    type: 'web_fetch_20250910',
-    name: 'web_fetch',
-    max_uses: 5,
-  } as unknown as Anthropic.Tool,
 ];

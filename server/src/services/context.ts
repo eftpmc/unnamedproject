@@ -27,14 +27,14 @@ function readWorkspaceMd(project: DbProject): string | null {
 function baseBlock(intent: Intent): string {
   const isCode = intent.domain === 'code' || intent.domain === 'multi' || intent.domain === 'general';
   const autoApproved = isCode
-    ? 'invoke_claude_code, invoke_codex, generate_video, git_op add/commit, create_project, update_project, project_query, rebuild_graph, search_files, read_file, list_dir, recall, remember, forget, list_chats, read_chat, register_artifact, list_artifacts, read_artifact, list_connections, test_connection, create_campaign, resume_campaign, list_campaigns, get_campaign, get_execution_output, list_scheduled_tasks, create_scheduled_task, update_scheduled_task'
-    : 'create_project, search_files, read_file, list_dir, recall, remember, forget, write_file, list_chats, read_chat, list_artifacts, read_artifact, web_search, web_fetch';
+    ? 'invoke_claude_code, invoke_codex, generate_video, git_op add/commit, create_project, update_project, project_query, rebuild_graph, search_files, read_file, list_dir, recall, remember, forget, list_chats, read_chat, register_artifact, list_artifacts, read_artifact, list_connections, test_connection, mcp_call, create_campaign, resume_campaign, list_campaigns, get_campaign, get_execution_output, list_scheduled_tasks, create_scheduled_task, update_scheduled_task'
+    : 'create_project, search_files, read_file, list_dir, recall, remember, forget, write_file, list_chats, read_chat, list_artifacts, read_artifact, list_connections, test_connection, mcp_call';
 
   return `You are a personal AI operator and orchestrator. You decide how work gets done — you never implement code, write files, or run git operations yourself when the task belongs to a coding agent.
 
 ## Core rules
 - Auto-approved (do without asking): ${autoApproved}
-- User-approved (proceed and the system handles the pause): git_op push, write_file, github_api write ops, delete_project, delete_scheduled_task
+- User-approved (proceed and the system handles the pause): git_op push, write_file, delete_project, delete_scheduled_task
 - If a task has multiple coordinated workstreams: call create_campaign first, then dispatch tasks with their campaign_task_id. Never dispatch parallel agents without a campaign tracking them.
 - Never ask the user for permission on an auto-approved action — just do it.
 - After any invoke_claude_code or invoke_codex succeeds: immediately run git_op add then git_op commit. This is mandatory. Never ask "should I commit?" or "would you like me to commit?" — that question is a protocol violation. Commit first, summarize after.
@@ -47,7 +47,7 @@ Before starting work on the active project, check what already exists there:
 Only check other projects when the user's request explicitly involves them.
 
 ## MCP connections
-Before calling mcp_call, use list_connections to discover available MCP servers and their tool names. Never guess a connection_id or tool name. Use test_connection to verify an MCP server is reachable before dispatching dependent work.
+GitHub, web search, and other external service integrations are provided through MCP servers configured in Settings → MCP. Before calling mcp_call, use list_connections to discover available MCP servers and their tool names — never guess a connection_id or tool name. Use test_connection to verify an MCP server is reachable before dispatching dependent work. If the user asks you to do something that requires GitHub or web search and no suitable MCP is configured, tell them which type of MCP server to add (e.g. GitHub MCP for repo/PR/issue operations, a search MCP like Brave or Exa for web research).
 
 ## File search
 Use search_files for fast codebase lookups (finding where a function is defined, tracing usages, locating config). Only fall back to project_query for broad architectural questions that need reasoning across the whole codebase.`;
@@ -66,8 +66,8 @@ Active profile: ${profile}. ${description}`;
 
 function researchBlock(): string {
   return `## Research discipline
-web_search returns snippet previews only — always follow with web_fetch to read the full page before drawing conclusions.
 Use recall before searching; the answer may already be in memory.
+Web search and fetch are provided by MCP servers (e.g. Brave, Exa, Tavily) — use list_connections to find the available search tool, then call it via mcp_call. Always read the full source after getting search results before drawing conclusions.
 When a coding task requires external knowledge (library APIs, patterns, examples): complete the research pass first and include findings in the agent brief.`;
 }
 
@@ -111,7 +111,7 @@ Do not invoke coding agents for writing, documentation, or note-taking tasks.`;
 
     case 'research':
       return `## Research tasks
-Always read the full source — web_search alone is insufficient, always follow with web_fetch.
+Use list_connections to find the configured search MCP, then mcp_call for searches. Always fetch and read the full source page after getting results — snippets alone are insufficient.
 Cite sources in your response.
 Check recall first before any web search.`;
 
@@ -261,10 +261,9 @@ const SHARED = [
   'remember', 'recall', 'forget',
   'list_chats', 'read_chat',
   'register_artifact', 'list_artifacts', 'read_artifact',
-  'list_connections', 'test_connection',
+  'list_connections', 'test_connection', 'mcp_call',
   'search_files', 'read_file', 'list_dir',
   'create_project', 'update_project',
-  'web_search', 'web_fetch',
 ];
 
 const SCHEDULED = [
@@ -273,7 +272,7 @@ const SCHEDULED = [
 
 const TOOL_SETS: Record<string, string[]> = {
   code: [
-    'invoke_claude_code', 'invoke_codex', 'git_op', 'github_api',
+    'invoke_claude_code', 'invoke_codex', 'git_op',
     'project_query', 'rebuild_graph',
     'create_campaign', 'resume_campaign', 'list_campaigns', 'get_campaign', 'get_execution_output',
     'write_file', 'create_artifact', 'generate_video',

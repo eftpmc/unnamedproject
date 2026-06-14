@@ -1,29 +1,14 @@
 import { useEffect, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
-import { Activity, Bell, CheckCircle2, Circle, AlertCircle, LoaderCircle } from 'lucide-react';
+import { Activity, Bell, Check, CheckCircle2, Circle, AlertCircle, LoaderCircle } from 'lucide-react';
 import { getAllCampaigns, getChats } from '../lib/api.js';
 import { subscribe } from '../lib/ws.js';
 import { timeAgo, cn } from '../lib/utils.js';
-import { Badge } from '@/components/ui/badge';
 import { CenteredEmptyState, PageHeader, PageLoading, PageShell } from '@/components/ui/app-layout';
 import type { Campaign, Session, WSCampaignUpdated, WSApprovalRequested, WSExecutionUpdate } from '../types.js';
 
 type CampaignRow = Campaign & { project_name: string };
-
-const STATUS_DOT: Record<Campaign['status'], string> = {
-  running: 'bg-blue-500 animate-pulse',
-  done: 'bg-green-500',
-  error: 'bg-destructive',
-  cancelled: 'bg-muted-foreground/30',
-};
-
-const STATUS_BADGE: Record<Campaign['status'], string> = {
-  running: 'bg-blue-500/10 text-blue-700 border-blue-200/70 dark:text-blue-300 dark:border-blue-900',
-  done: 'bg-green-500/10 text-green-700 border-green-200/70 dark:text-green-300 dark:border-green-900',
-  error: 'bg-destructive/10 text-destructive border-destructive/20',
-  cancelled: 'bg-muted text-muted-foreground border-transparent',
-};
 
 const STATUS_ICON: Record<Campaign['status'], typeof Circle> = {
   running: LoaderCircle,
@@ -37,6 +22,13 @@ const STATUS_ICON_CLASS: Record<Campaign['status'], string> = {
   done: 'text-green-500',
   error: 'text-destructive',
   cancelled: 'text-muted-foreground/30',
+};
+
+const STATUS_BADGE: Record<Campaign['status'], string> = {
+  running: 'bg-blue-500/10 text-blue-600 border-blue-200/70 dark:text-blue-300 dark:border-blue-900',
+  done: 'bg-green-500/10 text-green-700 border-green-200/70 dark:text-green-300 dark:border-green-900',
+  error: 'bg-destructive/10 text-destructive border-destructive/20',
+  cancelled: 'bg-muted text-muted-foreground border-transparent',
 };
 
 export default function ActivityPage() {
@@ -58,7 +50,7 @@ export default function ActivityPage() {
   // Live campaign status overrides
   const [statusOverrides, setStatusOverrides] = useState<Record<string, Campaign['status']>>({});
 
-  // Pending approvals: executionId → { chatId?, action }
+  // Pending approvals: executionId → { action }
   const [pendingApprovals, setPendingApprovals] = useState<Map<string, { action: string }>>(new Map());
 
   useEffect(() => {
@@ -80,6 +72,14 @@ export default function ActivityPage() {
       }
     });
   }, [queryClient]);
+
+  function handleApprove(executionId: string) {
+    setPendingApprovals(prev => { const n = new Map(prev); n.delete(executionId); return n; });
+  }
+
+  function handleReject(executionId: string) {
+    setPendingApprovals(prev => { const n = new Map(prev); n.delete(executionId); return n; });
+  }
 
   const campaigns = data?.campaigns ?? [];
   const running = campaigns.filter(c => (statusOverrides[c.id] ?? c.status) === 'running');
@@ -111,85 +111,91 @@ export default function ActivityPage() {
 
             {/* Pending approvals */}
             {approvalList.length > 0 && (
-              <Section
-                icon={<Bell size={13} className="text-amber-500" />}
-                title="Awaiting approval"
-                count={approvalList.length}
-              >
-                <div className="divide-y divide-border/40 rounded-xl border border-amber-500/20 bg-amber-500/5 overflow-hidden">
-                  {approvalList.map(([execId, { action }]) => {
-                    const chat = chats.find(c =>
-                      activeChats.some(ac => ac.id === c.id)
-                    );
-                    return (
-                      <div key={execId} className="flex items-center justify-between px-4 py-3 gap-3">
-                        <div className="flex items-center gap-2.5 min-w-0">
-                          <Bell size={13} className="shrink-0 text-amber-500" />
-                          <span className="text-sm truncate">{action}</span>
-                        </div>
-                        {chat && (
-                          <button
-                            onClick={() => navigate(`/c/${chat.id}`)}
-                            className="shrink-0 text-xs font-medium text-amber-600 hover:text-amber-500 transition-colors"
-                          >
-                            Review →
-                          </button>
-                        )}
+              <section>
+                <h2 className="mb-3 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+                  Needs your attention
+                </h2>
+                <div className="flex flex-col gap-2">
+                  {approvalList.map(([execId, { action }]) => (
+                    <div key={execId} className="flex items-center gap-3 rounded-xl border border-warning/35 bg-warning/5 p-4">
+                      <div className="grid h-9 w-9 shrink-0 place-items-center rounded-lg bg-warning/10 text-warning">
+                        <Bell size={16} />
                       </div>
-                    );
-                  })}
+                      <div className="flex min-w-0 flex-1 flex-col gap-0.5">
+                        <span className="text-sm font-medium text-foreground">{action}</span>
+                        <span className="text-xs text-muted-foreground">Awaiting your approval</span>
+                      </div>
+                      <div className="flex shrink-0 items-center gap-2">
+                        <button
+                          type="button"
+                          onClick={() => handleReject(execId)}
+                          className="rounded-lg px-3 py-1.5 text-xs font-medium text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
+                        >
+                          Deny
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => handleApprove(execId)}
+                          className="flex items-center gap-1 rounded-lg bg-primary px-3 py-1.5 text-xs font-medium text-primary-foreground transition-[filter] hover:brightness-105"
+                        >
+                          <Check size={12} strokeWidth={2.5} />
+                          Approve
+                        </button>
+                      </div>
+                    </div>
+                  ))}
                 </div>
-              </Section>
+              </section>
             )}
 
             {/* Running campaigns */}
             {running.length > 0 && (
-              <Section
-                icon={<LoaderCircle size={13} className="text-blue-500 animate-spin" />}
-                title="Running"
-                count={running.length}
-              >
+              <section>
+                <h2 className="mb-3 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+                  Running
+                </h2>
                 <div className="flex flex-col gap-2">
                   {running.map(c => (
                     <CampaignRow key={c.id} campaign={c} status={statusOverrides[c.id] ?? c.status} />
                   ))}
                 </div>
-              </Section>
+              </section>
             )}
 
             {/* Recent campaigns */}
             {recent.length > 0 && (
-              <Section
-                icon={<Activity size={13} className="text-muted-foreground/60" />}
-                title="Recent"
-              >
-                <div className="overflow-hidden rounded-xl border border-border/50 bg-background/60 divide-y divide-border/40">
+              <section>
+                <h2 className="mb-3 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+                  Recent
+                </h2>
+                <div className="flex flex-col gap-2">
                   {recent.map(c => (
-                    <CampaignRow key={c.id} campaign={c} status={statusOverrides[c.id] ?? c.status} compact />
+                    <CampaignRow key={c.id} campaign={c} status={statusOverrides[c.id] ?? c.status} />
                   ))}
                 </div>
-              </Section>
+              </section>
             )}
 
             {/* Recent chats */}
             {activeChats.length > 0 && (
-              <Section
-                icon={<Circle size={13} className="text-muted-foreground/40" />}
-                title="Recent chats"
-              >
-                <div className="overflow-hidden rounded-xl border border-border/50 bg-background/60 divide-y divide-border/40">
+              <section>
+                <h2 className="mb-3 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+                  Recent chats
+                </h2>
+                <div className="flex flex-col gap-2">
                   {activeChats.map(chat => (
                     <button
                       key={chat.id}
+                      type="button"
                       onClick={() => navigate(`/c/${chat.id}`)}
-                      className="flex w-full items-center justify-between px-4 py-3 text-left hover:bg-muted/30 transition-colors"
+                      className="flex w-full items-center justify-between rounded-xl border border-border-soft bg-card p-4 text-left transition-colors hover:bg-muted/30"
                     >
                       <span className="text-sm font-medium truncate">{chat.title ?? 'Untitled chat'}</span>
                       <span className="text-xs text-muted-foreground shrink-0 ml-3">{timeAgo(chat.updated_at)}</span>
                     </button>
                   ))}
                 </div>
-              </Section>
+              </section>
             )}
 
           </div>
@@ -199,68 +205,28 @@ export default function ActivityPage() {
   );
 }
 
-function Section({ icon, title, count, children }: {
-  icon: React.ReactNode;
-  title: string;
-  count?: number;
-  children: React.ReactNode;
-}) {
-  return (
-    <div className="flex flex-col gap-2">
-      <div className="flex items-center gap-1.5">
-        {icon}
-        <span className="text-xs font-medium text-muted-foreground">{title}</span>
-        {count != null && (
-          <span className="ml-0.5 rounded-full bg-muted px-1.5 py-0.5 text-[10px] font-medium text-muted-foreground">
-            {count}
-          </span>
-        )}
-      </div>
-      {children}
-    </div>
-  );
-}
-
-function CampaignRow({ campaign, status, compact = false }: {
+function CampaignRow({ campaign, status }: {
   campaign: CampaignRow;
   status: Campaign['status'];
-  compact?: boolean;
 }) {
-  const Icon = STATUS_ICON[status];
-  const content = (
-    <>
-      <div className="flex items-center gap-2.5 min-w-0">
-        <Icon size={13} className={cn('shrink-0', STATUS_ICON_CLASS[status])} />
-        <div className="min-w-0">
-          <div className="text-sm font-medium truncate">{campaign.title}</div>
-          {!compact && (
-            <div className="text-xs text-muted-foreground mt-0.5">{campaign.project_name}</div>
-          )}
-        </div>
-      </div>
-      <div className="flex items-center gap-2.5 shrink-0 ml-3">
-        {compact && (
-          <span className="text-xs text-muted-foreground">{campaign.project_name}</span>
-        )}
-        <Badge variant="outline" className={cn('capitalize', STATUS_BADGE[status])}>
-          {status}
-        </Badge>
-        <span className="text-xs text-muted-foreground">{timeAgo(campaign.created_at)}</span>
-      </div>
-    </>
-  );
-
-  const cls = cn(
-    'flex items-center justify-between transition-colors hover:bg-muted/30',
-    compact ? 'px-4 py-3' : 'rounded-xl border border-border/50 bg-background/60 px-4 py-3.5',
-  );
-
+  const StatusIcon = STATUS_ICON[status];
   return (
     <Link
       to={`/projects/${campaign.project_id}/campaigns/${campaign.id}`}
-      className={cls}
+      className="flex items-center gap-3 rounded-xl border border-border-soft bg-card p-4 transition-colors hover:bg-muted/30"
     >
-      {content}
+      <div className="grid h-9 w-9 shrink-0 place-items-center rounded-lg bg-muted text-muted-foreground">
+        <StatusIcon size={16} className={STATUS_ICON_CLASS[status]} />
+      </div>
+      <div className="flex min-w-0 flex-1 flex-col gap-0.5">
+        <span className="text-sm font-medium text-foreground">{campaign.project_name} · {campaign.title}</span>
+        <span className={cn('inline-flex w-fit rounded-full px-1.5 py-0.5 text-[11px] font-medium capitalize border', STATUS_BADGE[status])}>
+          {status}
+        </span>
+      </div>
+      <div className="flex shrink-0 items-center gap-2">
+        <span className="text-[11px] text-muted-foreground">{timeAgo(campaign.created_at)}</span>
+      </div>
     </Link>
   );
 }

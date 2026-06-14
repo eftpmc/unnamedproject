@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { Check, Play, Trash2 } from 'lucide-react';
+import { Check, Play, Plus, Trash2 } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
@@ -131,7 +131,7 @@ function DeleteBtn({ onClick }: { onClick: () => void }) {
 }
 
 function SectionLabel({ children }: { children: React.ReactNode }) {
-  return <div className="mb-3 text-[11px] font-semibold uppercase tracking-wide text-faint-fg">{children}</div>;
+  return <div className="mb-3 text-[11px] font-semibold tracking-wide text-faint-fg">{children}</div>;
 }
 
 function SettingRow({ children, className }: { children: React.ReactNode; className?: string }) {
@@ -298,11 +298,13 @@ export default function Settings() {
     setMcpPreset('custom'); setMcpExtraArg(''); setMcpEnvValues({}); setSetupError('');
   }
 
-  function selectMcpPreset(presetId: string) {
+  function openMcpPresetModal(presetId: string) {
+    const preset = MCP_PRESETS.find(p => p.id === presetId);
+    setActiveSetup('mcp');
+    setSetupName(preset ? preset.name : SETUP_META.mcp.title);
     setMcpPreset(presetId);
     setMcpExtraArg(''); setMcpEnvValues({}); setSetupError('');
-    const preset = MCP_PRESETS.find(p => p.id === presetId);
-    setSetupName(preset ? preset.name : SETUP_META.mcp.title);
+    setSecret(''); setMcpCommand(''); setMcpArgs(''); setMcpEnv('{}');
   }
 
   function closeSetupModal() {
@@ -338,12 +340,16 @@ export default function Settings() {
     const meta = SETUP_META[activeSetup];
     const existing = connections.find(c => c.purpose === activeSetup);
 
+    const selectedPreset = activeSetup === 'mcp' && mcpPreset !== 'custom'
+      ? MCP_PRESETS.find(p => p.id === mcpPreset)
+      : null;
+
     return (
       <Dialog open onOpenChange={open => { if (!open) closeSetupModal(); }}>
         <DialogContent className="sm:max-w-lg">
           <DialogHeader>
-            <DialogTitle>{meta.title}</DialogTitle>
-            <DialogDescription>{meta.description}</DialogDescription>
+            <DialogTitle>{selectedPreset ? selectedPreset.name : meta.title}</DialogTitle>
+            <DialogDescription>{selectedPreset ? selectedPreset.description : meta.description}</DialogDescription>
           </DialogHeader>
 
           {existing && (
@@ -362,20 +368,6 @@ export default function Settings() {
             </div>
           ) : (
             <div className="flex flex-col gap-3">
-              {activeSetup === 'mcp' && (
-                <div>
-                  <Label>Preset</Label>
-                  <div className="mt-1 flex flex-wrap gap-1.5">
-                    <Button type="button" size="sm" variant={mcpPreset === 'custom' ? 'secondary' : 'outline'} onClick={() => selectMcpPreset('custom')}>Custom</Button>
-                    {MCP_PRESETS.map(p => (
-                      <Button key={p.id} type="button" size="sm" variant={mcpPreset === p.id ? 'secondary' : 'outline'} onClick={() => selectMcpPreset(p.id)}>{p.name}</Button>
-                    ))}
-                  </div>
-                  {mcpPreset !== 'custom' && (
-                    <p className="mt-1 text-xs text-muted-foreground">{MCP_PRESETS.find(p => p.id === mcpPreset)?.description}</p>
-                  )}
-                </div>
-              )}
               <div>
                 <Label>Name</Label>
                 <Input value={setupName} onChange={e => setSetupName(e.target.value)} className="text-sm" />
@@ -400,6 +392,9 @@ export default function Settings() {
                               <Input type="password" placeholder={v.placeholder} value={mcpEnvValues[v.key] ?? ''} onChange={e => setMcpEnvValues(prev => ({ ...prev, [v.key]: e.target.value }))} className="text-sm" />
                             </div>
                           ))}
+                          {!preset.extraArgLabel && (preset.envVars ?? []).length === 0 && (
+                            <p className="text-sm text-muted-foreground">No configuration needed — just save to add this server.</p>
+                          )}
                         </>
                       );
                     })()}
@@ -539,26 +534,47 @@ export default function Settings() {
 
           {/* ── MCP ────────────────────────────────────── */}
           {tab === 'mcp' && (
-            <div className="flex flex-col gap-3">
-              <SectionLabel>MCP servers</SectionLabel>
-              {mcpConnections.map(c => (
-                <SettingRow key={c.id}>
-                  <SettingRowInfo title={c.name} description="MCP server" />
-                  <div className="flex items-center gap-2 shrink-0">
-                    <ConnectedBadge />
-                    <Button variant="ghost" size="sm" onClick={() => openSetupModal('mcp')}>Edit</Button>
-                    <DeleteBtn onClick={() => setPendingDelete({ id: c.id })} />
-                  </div>
-                </SettingRow>
-              ))}
-              <button
-                type="button"
-                onClick={() => openSetupModal('mcp')}
-                className="flex items-center justify-center gap-2 rounded-lg border border-dashed border-border bg-muted/30 px-4 py-3.5 text-sm text-muted-foreground transition-colors hover:border-border-soft hover:bg-muted/50 hover:text-foreground"
-              >
-                + Add MCP server
-              </button>
-              <HintText>MCP servers run as child processes and expose extra tools to the agent. Use presets or configure a custom command + args.</HintText>
+            <div className="flex flex-col gap-6">
+              {mcpConnections.length > 0 && (
+                <div className="flex flex-col gap-3">
+                  <SectionLabel>Connected</SectionLabel>
+                  {mcpConnections.map(c => (
+                    <SettingRow key={c.id}>
+                      <SettingRowInfo title={c.name} description="MCP server" />
+                      <div className="flex items-center gap-2 shrink-0">
+                        <ConnectedBadge />
+                        <DeleteBtn onClick={() => setPendingDelete({ id: c.id })} />
+                      </div>
+                    </SettingRow>
+                  ))}
+                </div>
+              )}
+
+              <div>
+                <SectionLabel>Add a server</SectionLabel>
+                <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
+                  {MCP_PRESETS.map(p => (
+                    <button
+                      key={p.id}
+                      type="button"
+                      onClick={() => openMcpPresetModal(p.id)}
+                      className="group flex flex-col gap-1 rounded-lg border border-border-soft bg-card p-3.5 text-left transition-colors hover:border-border hover:bg-muted/40"
+                    >
+                      <span className="text-sm font-medium text-foreground">{p.name}</span>
+                      <span className="text-[11px] leading-relaxed text-muted-foreground line-clamp-2">{p.description}</span>
+                    </button>
+                  ))}
+                  <button
+                    type="button"
+                    onClick={() => openSetupModal('mcp')}
+                    className="flex flex-col items-center justify-center gap-1.5 rounded-lg border border-dashed border-border bg-muted/20 p-3.5 text-muted-foreground transition-colors hover:border-border-soft hover:bg-muted/40 hover:text-foreground"
+                  >
+                    <Plus size={16} />
+                    <span className="text-sm font-medium">Custom</span>
+                  </button>
+                </div>
+                <HintText>MCP servers run as child processes and expose extra tools to the agent.</HintText>
+              </div>
             </div>
           )}
 
@@ -687,7 +703,7 @@ export default function Settings() {
                   if (entries.length === 0) return null;
                   return (
                     <div key={type}>
-                      <div className="mb-2 text-[11px] font-semibold capitalize tracking-wide text-faint-fg">{type}</div>
+                      <div className="mb-2 text-[11px] font-semibold capitalize text-faint-fg">{type}</div>
                       <div className="flex flex-col gap-1.5">
                         {entries.map(m => (
                           <div key={`${m.type}-${m.key}`} className="flex items-start gap-4 rounded-lg border border-border-soft bg-card px-4 py-3">

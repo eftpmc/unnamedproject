@@ -81,6 +81,9 @@ export async function invokeClaudeCode(input: ClaudeCodeInput, ctx: ToolContext)
     const timeoutTimer = setTimeout(() => {
       timedOut = true;
       proc.kill('SIGTERM');
+      setTimeout(() => {
+        if (proc.exitCode === null) proc.kill('SIGKILL');
+      }, 5000);
     }, DELEGATE_TIMEOUT_MS);
 
     proc.stdout.on('data', (chunk: Buffer) => {

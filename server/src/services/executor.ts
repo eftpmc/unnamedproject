@@ -93,12 +93,21 @@ export async function requestApproval(
     getDb()
       .prepare("UPDATE executions SET status = 'running' WHERE id = ?")
       .run(executionId);
+    broadcast(userId, {
+      type: 'execution_update',
+      executionId,
+      status: 'running',
+    });
+  } else {
+    getDb()
+      .prepare("UPDATE executions SET status = 'error', completed_at = unixepoch() WHERE id = ?")
+      .run(executionId);
+    broadcast(userId, {
+      type: 'execution_update',
+      executionId,
+      status: 'error',
+    });
   }
-  broadcast(userId, {
-    type: 'execution_update',
-    executionId,
-    status: 'running',
-  });
   if (executionContext) {
     const event = createSessionEvent({
       sessionId: executionContext.sessionId,

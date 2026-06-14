@@ -55,6 +55,7 @@ function walkRepo(repoPath: string, maxFiles = 600): FileEntry[] {
     for (const entry of entries) {
       if (results.length >= maxFiles) break;
       if (entry.name.startsWith('.') && entry.name !== '.gitignore' && entry.name !== '.env.example') continue;
+      if (entry.isSymbolicLink()) continue;
       if (entry.isDirectory()) {
         if (SKIP_DIRS.has(entry.name)) continue;
         walk(path.join(dir, entry.name));

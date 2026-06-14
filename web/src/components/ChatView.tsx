@@ -65,11 +65,14 @@ export default function ChatView({ chatId }: ChatViewProps) {
     },
   });
 
-  const { data: worktree, refetch: refetchWorktree } = useQuery({
+  const { data: worktree, refetch: refetchWorktreeQuery } = useQuery({
     queryKey: ['worktree', chatId],
     queryFn: () => getSessionWorktree(chatId),
     refetchInterval: 20000,
   });
+  const refetchWorktreeRef = useRef(refetchWorktreeQuery);
+  refetchWorktreeRef.current = refetchWorktreeQuery;
+  const refetchWorktree = useCallback(() => refetchWorktreeRef.current(), []);
 
   const [mergeState, setMergeState] = useState<'idle' | 'merging' | 'done' | 'error'>('idle');
 
@@ -149,12 +152,13 @@ export default function ChatView({ chatId }: ChatViewProps) {
 
   const mutation = useMutation({
     mutationFn: (content: string) => sendMessage(chatId, content),
-    onMutate: () => setSending(true),
     onSettled: () => setSending(false),
     onSuccess: (newMsg) => {
-      queryClient.setQueryData<Message[]>(['messages', chatId], prev =>
-        prev ? [...prev, newMsg] : [newMsg]
-      );
+      queryClient.setQueryData<Message[]>(['messages', chatId], prev => {
+        if (!prev) return [newMsg];
+        if (prev.some(m => m.id === newMsg.id)) return prev.map(m => m.id === newMsg.id ? newMsg : m);
+        return [...prev, newMsg];
+      });
     },
   });
 
@@ -166,6 +170,7 @@ export default function ChatView({ chatId }: ChatViewProps) {
   const sendPrompt = useCallback(async (overrideContent?: string) => {
     const content = (overrideContent ?? inputValue).trim();
     if (!content) return;
+    setSending(true);
     setAgentError(null);
     setInputValue('');
 

@@ -421,7 +421,20 @@ export async function runCampaignAutoDispatch(
       return deps.every(depId => doneIds.has(depId));
     });
 
-    if (ready.length === 0) break;
+    if (ready.length === 0) {
+      const waitingTasks = allTasks.filter(t => t.status === 'waiting');
+      if (waitingTasks.length > 0) {
+        const db = getDb();
+        for (const t of waitingTasks) {
+          db.prepare("UPDATE campaign_tasks SET status = 'error', completed_at = unixepoch() WHERE id = ?").run(t.id);
+          broadcast(userId, { type: 'campaign_task_updated', taskId: t.id, status: 'error' });
+        }
+        const taskRow = waitingTasks[0];
+        const campRow = db.prepare('SELECT campaign_id FROM campaign_tasks WHERE id = ?').get(taskRow.id) as { campaign_id: string } | undefined;
+        if (campRow) maybeCompleteCampaign(campRow.campaign_id);
+      }
+      break;
+    }
 
     const results = await Promise.allSettled(
       ready.map(task => executeCampaignTask(task, campaign, userId, messageId, sessionId))
@@ -1042,11 +1055,21 @@ async function dispatchTool(
       case 'generate_video': {
         const title = toolInput.title as string;
         const scenes = toolInput.scenes as VideoScene[];
+        const videoTaskId = toolInput.campaign_task_id as string | undefined;
+        if (videoTaskId) startCampaignTask(userId, videoTaskId, executionId);
         renderVideo(projectId, title, scenes, (progress) => {
           appendOutput(executionId, userId, `progress:${Math.round(progress * 100)}%\n`);
         })
-          .then((fileName) => completeExecution(executionId, userId, 'done', `Rendered ${fileName}`))
-          .catch((err) => completeExecution(executionId, userId, 'error', err instanceof Error ? err.message : String(err)));
+          .then((fileName) => {
+            const r = `Rendered ${fileName}`;
+            completeExecution(executionId, userId, 'done', r);
+            if (videoTaskId) finishCampaignTask(userId, videoTaskId, r);
+          })
+          .catch((err) => {
+            const msg = err instanceof Error ? err.message : String(err);
+            completeExecution(executionId, userId, 'error', msg);
+            if (videoTaskId) finishCampaignTask(userId, videoTaskId, `Error: ${msg}`);
+          });
 
         result = `Video render started (execution ${executionId}). It will appear in the project's Artifacts tab when done.`;
         asyncExecution = true;
@@ -1115,8 +1138,8 @@ export async function runAgentTurn(userId: string, sessionId: string, userMessag
 
   if (session?.summary && messages.length > 0) {
     messages.unshift(
-      { role: 'assistant', content: `Session context noted.` },
       { role: 'user', content: `Earlier in this session: ${session.summary}` },
+      { role: 'assistant', content: `Session context noted.` },
     );
   }
 

@@ -11,7 +11,7 @@ router.use(requireAuth);
 router.get('/', (req, res) => {
   const { userId } = req as AuthedRequest;
   const rows = getDb()
-    .prepare('SELECT id, title, effort, model, pinned_project_id, created_at, updated_at FROM sessions WHERE user_id = ? ORDER BY updated_at DESC')
+    .prepare('SELECT id, title, effort, model, pinned_project_id, created_at, updated_at FROM sessions WHERE user_id = ? ORDER BY updated_at DESC LIMIT 200')
     .all(userId);
   res.json(rows);
 });

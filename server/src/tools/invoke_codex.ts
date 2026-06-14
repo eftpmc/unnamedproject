@@ -104,6 +104,9 @@ export async function invokeCodex(input: CodexInput, ctx: ToolContext): Promise<
     const timeoutTimer = setTimeout(() => {
       timedOut = true;
       proc.kill('SIGTERM');
+      setTimeout(() => {
+        if (proc.exitCode === null) proc.kill('SIGKILL');
+      }, 5000);
     }, DELEGATE_TIMEOUT_MS);
 
     proc.stdout.on('data', (chunk: Buffer) => {

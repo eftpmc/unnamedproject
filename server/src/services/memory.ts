@@ -12,18 +12,16 @@ export interface MemoryEntry {
 }
 
 export function rememberFact(userId: string, type: MemoryType, key: string, value: string, projectId: string | null = null): void {
-  const existing = getDb()
-    .prepare('SELECT id FROM memories WHERE user_id = ? AND type = ? AND key = ?')
-    .get(userId, type, key);
-  if (existing) {
-    getDb()
-      .prepare('UPDATE memories SET value = ?, project_id = ?, updated_at = unixepoch() WHERE user_id = ? AND type = ? AND key = ?')
-      .run(value, projectId, userId, type, key);
-  } else {
-    getDb()
-      .prepare('INSERT INTO memories (id, user_id, type, key, value, project_id) VALUES (?,?,?,?,?,?)')
-      .run(newId(), userId, type, key, value, projectId);
-  }
+  getDb()
+    .prepare(`
+      INSERT INTO memories (id, user_id, type, key, value, project_id)
+      VALUES (?, ?, ?, ?, ?, ?)
+      ON CONFLICT(user_id, type, key) DO UPDATE SET
+        value = excluded.value,
+        project_id = excluded.project_id,
+        updated_at = unixepoch()
+    `)
+    .run(newId(), userId, type, key, value, projectId);
 }
 
 export function recallFact(userId: string, type: MemoryType, key: string): string | null {

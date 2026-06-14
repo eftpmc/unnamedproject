@@ -44,7 +44,7 @@ export default function ProjectPage() {
   const queryClient = useQueryClient();
   const tab = tabFromPath(location.pathname);
 
-  const { data: projects = [] } = useQuery<Project[]>({
+  const { data: projects = [], isLoading: projectsLoading } = useQuery<Project[]>({
     queryKey: ['projects'],
     queryFn: getProjects,
     staleTime: 30_000,
@@ -103,10 +103,18 @@ export default function ProjectPage() {
     retry: false,
   });
 
-  if (!project) {
+  if (projectsLoading) {
     return (
       <PageShell>
         <PageLoading rows={3} />
+      </PageShell>
+    );
+  }
+
+  if (!project) {
+    return (
+      <PageShell>
+        <PageHeader title="Project not found" />
       </PageShell>
     );
   }

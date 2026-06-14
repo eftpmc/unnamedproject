@@ -35,8 +35,13 @@ router.post('/:id/run', async (req, res) => {
   const task = getScheduledTaskForUser(req.params.id, userId);
   if (!task) { res.status(404).json({ error: 'Scheduled task not found' }); return; }
 
-  await runScheduledTask(userId, req.params.id);
-  res.json({ ok: true });
+  try {
+    await runScheduledTask(userId, req.params.id);
+    res.json({ ok: true });
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : 'Task run failed';
+    res.status(500).json({ error: msg });
+  }
 });
 
 export default router;

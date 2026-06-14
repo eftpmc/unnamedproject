@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { Bell, Check, GitBranch } from 'lucide-react';
@@ -50,6 +50,7 @@ export default function ActivityPage() {
 
   const [statusOverrides, setStatusOverrides] = useState<Record<string, Campaign['status']>>({});
   const [pendingApprovals, setPendingApprovals] = useState<Map<string, { action: string }>>(new Map());
+  const dismissedRef = useRef(new Set<string>());
 
   const { data: storedApprovals } = useQuery({
     queryKey: ['pending-approvals'],
@@ -63,7 +64,7 @@ export default function ActivityPage() {
     setPendingApprovals(prev => {
       const next = new Map(prev);
       for (const a of storedApprovals) {
-        if (!next.has(a.execution_id)) {
+        if (!next.has(a.execution_id) && !dismissedRef.current.has(a.execution_id)) {
           next.set(a.execution_id, { action: a.action });
         }
       }
@@ -85,6 +86,7 @@ export default function ActivityPage() {
       if (event.type === 'execution_update') {
         const e = event as unknown as WSExecutionUpdate;
         if (e.status === 'running' || e.status === 'done' || e.status === 'error') {
+          dismissedRef.current.add(e.executionId);
           setPendingApprovals(prev => {
             const n = new Map(prev);
             n.delete(e.executionId);
@@ -101,6 +103,7 @@ export default function ActivityPage() {
     } else {
       await rejectExecution(executionId);
     }
+    dismissedRef.current.add(executionId);
     setPendingApprovals(prev => {
       const n = new Map(prev);
       n.delete(executionId);
@@ -122,7 +125,7 @@ export default function ActivityPage() {
     })
     .slice(0, 20);
 
-  const isEmpty = campaigns.length === 0 && approvalList.length === 0;
+  const isEmpty = !isLoading && campaigns.length === 0 && approvalList.length === 0;
 
   return (
     <PageShell>

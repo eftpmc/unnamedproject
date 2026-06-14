@@ -46,8 +46,9 @@ export async function runCommand(input: RunCommandInput, ctx: ToolContext): Prom
   try {
     const { stdout, stderr } = await execAsync(input.command, { cwd, timeout });
     const combined = [stdout, stderr].filter(Boolean).join('\n');
-    if (combined.length > MAX_OUTPUT_BYTES) {
-      return combined.slice(0, MAX_OUTPUT_BYTES) + `\n…(truncated — ${combined.length} bytes total)`;
+    const buf = Buffer.from(combined, 'utf8');
+    if (buf.length > MAX_OUTPUT_BYTES) {
+      return buf.subarray(0, MAX_OUTPUT_BYTES).toString('utf8') + `\n…(truncated — ${buf.length} bytes total)`;
     }
     return combined || '(no output)';
   } catch (err: unknown) {

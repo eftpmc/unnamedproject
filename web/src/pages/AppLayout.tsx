@@ -5,7 +5,7 @@ import Sidebar from '../components/Sidebar.js';
 import ChatView from '../components/ChatView.js';
 import EmptyState from '../components/EmptyState.js';
 import { createChat } from '../lib/api.js';
-import { connect, subscribe } from '../lib/ws.js';
+import { connect, disconnect, subscribe } from '../lib/ws.js';
 import { SidebarInset, SidebarProvider, useSidebar } from '@/components/ui/sidebar';
 import type { WSApprovalRequested, WSExecutionUpdate } from '../types.js';
 
@@ -59,7 +59,7 @@ export default function AppLayout() {
         }
       }
     });
-    return unsub;
+    return () => { unsub(); disconnect(); };
   }, []);
 
   async function handleNewChat() {

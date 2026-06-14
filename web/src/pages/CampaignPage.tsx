@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import type { ReactNode } from 'react';
 import { useParams, Link, useNavigate } from 'react-router-dom';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
@@ -67,7 +67,7 @@ export default function CampaignPage() {
   const { projectId, campaignId } = useParams<{ projectId: string; campaignId: string }>();
   const navigate = useNavigate();
 
-  const { data, isLoading } = useQuery({
+  const { data, isLoading, isError } = useQuery({
     queryKey: ['campaign', campaignId],
     queryFn: () => getCampaign(campaignId!),
     enabled: !!campaignId,
@@ -79,14 +79,15 @@ export default function CampaignPage() {
   const queryClient = useQueryClient();
   const [taskStatuses, setTaskStatuses] = useState<Record<string, CampaignTask['status']>>({});
   const [campaignStatus, setCampaignStatus] = useState<Campaign['status'] | null>(null);
+  const hydratedRef = useRef(false);
 
   useEffect(() => {
-    if (data) {
-      const initial: Record<string, CampaignTask['status']> = {};
-      data.tasks.forEach(t => { initial[t.id] = t.status; });
-      setTaskStatuses(initial);
-      setCampaignStatus(data.campaign.status);
-    }
+    if (!data || hydratedRef.current) return;
+    hydratedRef.current = true;
+    const initial: Record<string, CampaignTask['status']> = {};
+    data.tasks.forEach(t => { initial[t.id] = t.status; });
+    setTaskStatuses(initial);
+    setCampaignStatus(data.campaign.status);
   }, [data]);
 
   useEffect(() => {
@@ -148,10 +149,18 @@ export default function CampaignPage() {
     onSuccess: (id) => navigate(`/c/${id}`),
   });
 
-  if (isLoading || !data) {
+  if (isLoading) {
     return (
       <PageShell>
         <PageLoading rows={4} />
+      </PageShell>
+    );
+  }
+
+  if (isError || !data) {
+    return (
+      <PageShell>
+        <PageHeader title="Campaign not found" />
       </PageShell>
     );
   }

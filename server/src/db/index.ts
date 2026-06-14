@@ -19,6 +19,7 @@ export function initDb(): void {
   db = new Database(dbPath);
   db.pragma('journal_mode = WAL');
   db.pragma('foreign_keys = ON');
+  db.pragma('busy_timeout = 5000');
   applySchema();
 }
 
@@ -410,8 +411,8 @@ function applySchema(): void {
         created_at INTEGER NOT NULL DEFAULT (unixepoch()),
         completed_at INTEGER
       );
-      INSERT INTO campaign_tasks (id, campaign_id, title, agent, status, execution_id, position, created_at, completed_at)
-        SELECT id, campaign_id, title, agent, status, execution_id, position, created_at, completed_at
+      INSERT INTO campaign_tasks (id, campaign_id, title, agent, status, execution_id, position, prompt, depends_on, tool_args, created_at, completed_at)
+        SELECT id, campaign_id, title, agent, status, execution_id, position, prompt, depends_on, tool_args, created_at, completed_at
         FROM campaign_tasks_old2;
       DROP TABLE campaign_tasks_old2;
       PRAGMA foreign_keys = ON;
@@ -467,6 +468,14 @@ function applySchema(): void {
       );
     `);
   }
+
+  db.exec(`
+    CREATE INDEX IF NOT EXISTS idx_messages_session_id ON messages(session_id);
+    CREATE INDEX IF NOT EXISTS idx_session_events_session_id ON session_events(session_id);
+    CREATE INDEX IF NOT EXISTS idx_campaign_tasks_campaign_id ON campaign_tasks(campaign_id);
+    CREATE INDEX IF NOT EXISTS idx_agent_usage_user_tool_date ON agent_usage(user_id, tool, created_at);
+    CREATE INDEX IF NOT EXISTS idx_scheduled_tasks_enabled_next ON scheduled_tasks(enabled, next_run_at);
+  `);
 }
 
 /**
@@ -1042,37 +1051,41 @@ export function updateCampaignTaskStatus(
 }
 
 export function maybeCompleteCampaign(campaignId: string): DbCampaign['status'] {
-  const campaign = getCampaignById(campaignId)!;
-  if (campaign.status === 'cancelled') return campaign.status;
+  return getDb().transaction(() => {
+    const campaign = getCampaignById(campaignId)!;
+    if (campaign.status === 'cancelled') return campaign.status;
 
-  const tasks = getCampaignTasks(campaignId);
-  const allDone = tasks.every(t => t.status === 'done');
-  const anyError = tasks.some(t => t.status === 'error');
-  const anyRunning = tasks.some(t => t.status === 'running');
-  let newStatus: DbCampaign['status'] | null = null;
-  if (allDone) newStatus = 'done';
-  else if (anyError && !anyRunning) newStatus = 'error';
-  if (newStatus) {
-    const now = Math.floor(Date.now() / 1000);
-    getDb()
-      .prepare('UPDATE campaigns SET status = ?, completed_at = ? WHERE id = ?')
-      .run(newStatus, now, campaignId);
-    return newStatus;
-  }
-  return campaign.status;
+    const tasks = getCampaignTasks(campaignId);
+    const allDone = tasks.every(t => t.status === 'done');
+    const anyError = tasks.some(t => t.status === 'error');
+    const anyRunning = tasks.some(t => t.status === 'running');
+    let newStatus: DbCampaign['status'] | null = null;
+    if (allDone) newStatus = 'done';
+    else if (anyError && !anyRunning) newStatus = 'error';
+    if (newStatus) {
+      const now = Math.floor(Date.now() / 1000);
+      getDb()
+        .prepare('UPDATE campaigns SET status = ?, completed_at = ? WHERE id = ?')
+        .run(newStatus, now, campaignId);
+      return newStatus;
+    }
+    return campaign.status;
+  })();
 }
 
 // Cancels a running campaign and marks any tasks still waiting/running as
 // errored so dispatchTool/maybeCompleteCampaign treat them as terminal.
 export function cancelCampaign(campaignId: string): DbCampaign | undefined {
-  const now = Math.floor(Date.now() / 1000);
-  getDb()
-    .prepare("UPDATE campaigns SET status = 'cancelled', completed_at = ? WHERE id = ? AND status = 'running'")
-    .run(now, campaignId);
-  getDb()
-    .prepare("UPDATE campaign_tasks SET status = 'error', completed_at = ? WHERE campaign_id = ? AND status IN ('waiting','running')")
-    .run(now, campaignId);
-  return getCampaignById(campaignId);
+  return getDb().transaction(() => {
+    const now = Math.floor(Date.now() / 1000);
+    getDb()
+      .prepare("UPDATE campaigns SET status = 'cancelled', completed_at = ? WHERE id = ? AND status = 'running'")
+      .run(now, campaignId);
+    getDb()
+      .prepare("UPDATE campaign_tasks SET status = 'error', completed_at = ? WHERE campaign_id = ? AND status IN ('waiting','running')")
+      .run(now, campaignId);
+    return getCampaignById(campaignId);
+  })();
 }
 
 export function getCampaignForTask(taskId: string): DbCampaign | undefined {

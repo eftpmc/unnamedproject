@@ -211,12 +211,8 @@ ${formatUsageLine('Codex (invoke_codex)', codexSpent, budgets.codex)}
 When a budget is set and nearly exhausted, route routine work to the other agent and reserve the constrained one for tasks where it's clearly the better fit. Once a budget is fully used, that agent's tool will return an error instead of running until the next month or until the budget is raised in Settings.`;
 }
 
-function sessionSummaryBlock(sessionId: string): string {
-  const row = getDb()
-    .prepare('SELECT summary FROM sessions WHERE id = ?')
-    .get(sessionId) as { summary: string | null } | undefined;
-  if (!row?.summary) return '';
-  return `Earlier in this session:\n${row.summary}`;
+function sessionSummaryBlock(_sessionId: string): string {
+  return '';
 }
 
 // ─── Public API ────────────────────────────────────────────────────────────

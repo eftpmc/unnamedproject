@@ -352,7 +352,7 @@ export default function Settings() {
             <DialogDescription>{selectedPreset ? selectedPreset.description : meta.description}</DialogDescription>
           </DialogHeader>
 
-          {existing && (
+          {existing && activeSetup !== 'mcp' && (
             <div className="flex items-center gap-3 rounded-lg border border-border-soft bg-card px-4 py-3">
               <div className="flex-1 min-w-0">
                 <div className="text-sm text-foreground">{existing.name}</div>

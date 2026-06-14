@@ -1,9 +1,9 @@
 import { useNavigate, useLocation } from 'react-router-dom';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
-import { Plus, MessagesSquare, LayoutGrid, Activity, Settings, Sun, Moon } from 'lucide-react';
+import { Plus, MessagesSquare, LayoutGrid, Activity } from 'lucide-react';
 import { getChats, createChat } from '../lib/api.js';
 import { timeAgo, cn } from '../lib/utils.js';
-import { useTheme } from '../lib/useTheme.js';
+import UserMenu from './UserMenu.js';
 import {
   Sidebar as SidebarRoot,
   SidebarContent,
@@ -32,7 +32,6 @@ export default function Sidebar({ className, onNavigate, pendingApprovalCount = 
   const location = useLocation();
   const queryClient = useQueryClient();
   const { isMobile, setOpenMobile } = useSidebar();
-  const { theme, toggleTheme } = useTheme();
 
   const { data: chats = [] } = useQuery<Session[]>({
     queryKey: ['chats'],
@@ -121,7 +120,7 @@ export default function Sidebar({ className, onNavigate, pendingApprovalCount = 
 
         {recentChats.length > 0 && (
           <SidebarGroup className="min-h-0 flex-1 pt-1">
-            <SidebarGroupLabel className="h-6 px-2 text-[11px] font-semibold uppercase tracking-wide text-faint-fg">
+            <SidebarGroupLabel className="h-6 px-2 text-[11px] font-semibold text-faint-fg">
               Recent
             </SidebarGroupLabel>
             <SidebarGroupContent className="min-h-0 flex-1">
@@ -156,29 +155,9 @@ export default function Sidebar({ className, onNavigate, pendingApprovalCount = 
         {recentChats.length === 0 && <div className="flex-1" />}
       </SidebarContent>
 
-      {/* ---- Footer: Settings + Theme toggle ---- */}
-      <SidebarFooter className="border-t border-sidebar-border px-3 py-2">
-        <div className="flex items-center justify-between gap-2">
-          <button
-            onClick={() => go('/settings')}
-            className={cn(
-              'flex flex-1 items-center gap-2 rounded-lg px-2.5 py-2 text-xs font-medium text-muted-foreground transition-colors hover:bg-sidebar-accent hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sidebar-ring',
-              isActive('/settings') && 'bg-sidebar-accent text-foreground',
-            )}
-          >
-            <Settings size={14} strokeWidth={1.75} />
-            Settings
-          </button>
-          <button
-            onClick={toggleTheme}
-            aria-label="Toggle theme"
-            className="grid h-8 w-8 shrink-0 place-items-center rounded-lg border border-sidebar-border text-muted-foreground transition-colors hover:bg-sidebar-accent hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sidebar-ring"
-          >
-            {theme === 'unnamed-dark'
-              ? <Sun size={14} strokeWidth={1.75} />
-              : <Moon size={14} strokeWidth={1.75} />}
-          </button>
-        </div>
+      {/* ---- Footer: account menu (settings + theme) ---- */}
+      <SidebarFooter className="border-t border-sidebar-border px-2.5 py-2.5">
+        <UserMenu />
       </SidebarFooter>
     </SidebarRoot>
   );
@@ -210,7 +189,7 @@ function NavItem({
         {icon}
         <span className="flex-1">{label}</span>
         {badge != null && (
-          <span className="ml-auto flex h-4 min-w-4 items-center justify-center rounded-full bg-warning px-1 text-[10px] font-semibold text-amber-900">
+          <span className="ml-auto flex h-4 min-w-4 items-center justify-center rounded-full bg-warning px-1 text-[10px] font-semibold text-warning-foreground">
             {badge}
           </span>
         )}

@@ -1,15 +1,17 @@
 import { useEffect, useState } from 'react';
-import { useParams, Link } from 'react-router-dom';
+import type { ReactNode } from 'react';
+import { useParams, Link, useNavigate } from 'react-router-dom';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { ArrowLeft, Bot, Check, FileEdit, GitBranch, GitPullRequest, X } from 'lucide-react';
-import { getCampaign, cancelCampaign } from '../lib/api.js';
+import { Bot, Check, ChevronRight, FileEdit, FileText, GitBranch, GitPullRequest, MessageSquare, Plus, Sparkles, X } from 'lucide-react';
+import { getCampaign, cancelCampaign, createChat, updateChatConfig, getChats, getProjectArtifacts, getSessionWorktree } from '../lib/api.js';
 import { subscribe } from '../lib/ws.js';
 import { cn } from '@/lib/utils';
 import { timeAgo } from '../lib/utils.js';
 import { getToken } from '../lib/auth.js';
-import { ContentColumn, PageBody, PageHeader, PageLoading, PageShell, Surface } from '@/components/ui/app-layout';
+import { PageBody, PageHeader, PageLoading, PageShell } from '@/components/ui/app-layout';
 import { Button } from '@/components/ui/button';
-import type { Campaign, CampaignTask, WSCampaignTaskUpdated, WSCampaignUpdated } from '../types.js';
+import { StatusPill } from '@/components/ui/status-pill';
+import type { Campaign, CampaignTask, ProjectArtifact, Session, WSCampaignTaskUpdated, WSCampaignUpdated } from '../types.js';
 
 const AGENT_LABEL: Record<CampaignTask['agent'], string> = {
   claude_code: 'Claude Code',
@@ -30,21 +32,6 @@ const AGENT_ICON: Record<CampaignTask['agent'], typeof Bot> = {
   github: GitPullRequest,
 };
 
-function StatusPill({ status }: { status: Campaign['status'] }) {
-  const styles: Record<Campaign['status'], string> = {
-    running: 'bg-primary/10 text-on-accent-soft',
-    done:    'bg-success/10 text-success',
-    error:   'bg-destructive/10 text-destructive',
-    cancelled: 'bg-muted text-muted-foreground',
-  };
-  return (
-    <span className={cn('inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-[11px] font-medium', styles[status])}>
-      {status === 'running' && <span className="size-1.5 animate-pulse rounded-full bg-primary" />}
-      {{ running: 'Running', done: 'Done', error: 'Error', cancelled: 'Cancelled' }[status]}
-    </span>
-  );
-}
-
 function StatusDot({ status }: { status: CampaignTask['status'] }) {
   const cls: Record<CampaignTask['status'], string> = {
     waiting: 'bg-faint-fg',
@@ -57,6 +44,7 @@ function StatusDot({ status }: { status: CampaignTask['status'] }) {
 
 export default function CampaignPage() {
   const { projectId, campaignId } = useParams<{ projectId: string; campaignId: string }>();
+  const navigate = useNavigate();
 
   const { data, isLoading } = useQuery({
     queryKey: ['campaign', campaignId],
@@ -98,6 +86,35 @@ export default function CampaignPage() {
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ['campaign', campaignId] }),
   });
 
+  const { data: chats = [] } = useQuery<Session[]>({
+    queryKey: ['chats'],
+    queryFn: getChats,
+  });
+
+  const { data: artifactData } = useQuery<{ artifacts: ProjectArtifact[] }>({
+    queryKey: ['project-artifacts', projectId],
+    queryFn: () => getProjectArtifacts(projectId!),
+    enabled: !!projectId,
+    staleTime: 20_000,
+  });
+
+  const originatingSessionId = data?.campaign.session_id ?? null;
+  const { data: worktree } = useQuery({
+    queryKey: ['worktree', originatingSessionId],
+    queryFn: () => getSessionWorktree(originatingSessionId!),
+    enabled: !!originatingSessionId,
+    staleTime: 20_000,
+  });
+
+  const startChatMutation = useMutation({
+    mutationFn: async () => {
+      const { id } = await createChat();
+      await updateChatConfig(id, { pinned_project_id: projectId ?? null });
+      return id;
+    },
+    onSuccess: (id) => navigate(`/c/${id}`),
+  });
+
   if (isLoading || !data) {
     return (
       <PageShell>
@@ -111,23 +128,32 @@ export default function CampaignPage() {
   const effectiveStatuses = tasks.map(t => taskStatuses[t.id] ?? t.status);
   const doneCount = effectiveStatuses.filter(s => s === 'done').length;
   const progressPct = tasks.length > 0 ? (doneCount / tasks.length) * 100 : 0;
+  const relatedChat = campaign.session_id ? chats.find(chat => chat.id === campaign.session_id) : null;
+  const relatedArtifacts = (artifactData?.artifacts ?? []).filter(a => a.source_campaign_id === campaign.id);
+  const branchName = worktree?.branch ?? null;
+  const taskEvents = tasks
+    .filter(task => (taskStatuses[task.id] ?? task.status) !== 'waiting')
+    .slice(0, 4);
 
   return (
     <PageShell>
       <PageHeader
         breadcrumb={(
-          <div className="flex items-center gap-2">
-            <Link to={`/projects/${projectId}`} className="text-muted-foreground hover:text-foreground transition-colors">
-              <ArrowLeft size={13} />
+          <nav className="flex items-center gap-1.5 text-xs text-muted-foreground">
+            <Link to="/projects" className="transition-colors hover:text-foreground">
+              Projects
             </Link>
-            <Link to={`/projects/${projectId}`} className="text-xs text-muted-foreground hover:text-foreground transition-colors">
+            <ChevronRight size={12} className="text-faint-fg" />
+            <Link to={`/projects/${projectId}`} className="transition-colors hover:text-foreground">
               Project
             </Link>
-            <span className="text-xs text-muted-foreground/40">/</span>
+            <ChevronRight size={12} className="text-faint-fg" />
             <Link to={`/projects/${projectId}/campaigns`} className="text-xs text-muted-foreground hover:text-foreground transition-colors">
               Campaigns
             </Link>
-          </div>
+            <ChevronRight size={12} className="text-faint-fg" />
+            <span className="text-foreground">{campaign.title}</span>
+          </nav>
         )}
         title={campaign.title}
         description={(
@@ -138,6 +164,16 @@ export default function CampaignPage() {
         )}
         actions={(
           <div className="flex items-center gap-2">
+            <StatusPill status={effectiveCampaignStatus} />
+            <Button
+              size="sm"
+              onClick={() => startChatMutation.mutate()}
+              disabled={startChatMutation.isPending}
+              className="h-8 gap-1.5 text-xs"
+            >
+              <Plus size={14} />
+              New chat
+            </Button>
             {effectiveCampaignStatus === 'running' && (
               <Button
                 variant="outline"
@@ -153,51 +189,141 @@ export default function CampaignPage() {
           </div>
         )}
       />
-      <div className="px-4 py-2.5 sm:px-6 border-b border-border/40">
-        <div className="flex items-center gap-3">
-          <div className="flex-1 h-1.5 bg-border/50 rounded-full overflow-hidden">
-            <div
-              className="h-full bg-primary rounded-full transition-all duration-500"
-              style={{ width: `${progressPct}%` }}
-            />
-          </div>
-          <span className="text-xs text-muted-foreground shrink-0">{doneCount} / {tasks.length}</span>
-        </div>
-      </div>
 
       <PageBody>
-        <ContentColumn className="max-w-2xl">
-          <div className="grid grid-cols-1 gap-6 lg:grid-cols-[1fr_17rem] lg:items-start">
-            {/* Left column — main content */}
-            <div className="flex flex-col gap-6">
+        <div className="mx-auto grid max-w-5xl grid-cols-1 gap-7 lg:grid-cols-[minmax(0,1fr)_16.5rem] lg:items-start">
+          <div className="flex min-w-0 flex-col gap-8">
+            <section>
+              <div className="mb-3 flex items-center gap-3">
+                <h2 className="text-sm font-semibold text-foreground">Progress</h2>
+                <span className="ml-auto text-xs text-muted-foreground">{doneCount} of {tasks.length} done</span>
+              </div>
+              <div className="mb-4 h-2 overflow-hidden rounded-full border border-border-soft bg-muted">
+                <div
+                  className="h-full rounded-full bg-primary transition-all duration-500"
+                  style={{ width: `${progressPct}%` }}
+                />
+              </div>
               <div className="flex flex-col">
                 {tasks.map(task => {
                   const status = taskStatuses[task.id] ?? task.status;
-                  return (
-                    <TaskRow key={task.id} task={task} status={status} />
-                  );
+                  return <TaskRow key={task.id} task={task} status={status} />;
                 })}
               </div>
-            </div>
-            {/* Right aside — sticky on large screens */}
-            <aside className="flex flex-col gap-4 lg:sticky lg:top-0">
-              <div className="rounded-xl border border-border-soft bg-card p-4 flex flex-col gap-3">
-                {[
-                  { label: 'Status', value: <StatusPill status={effectiveCampaignStatus} /> },
-                  { label: 'Started', value: <span className="text-sm font-medium">{timeAgo(campaign.created_at)}</span> },
-                  ...(campaign.completed_at ? [{ label: 'Completed', value: <span className="text-sm font-medium">{timeAgo(campaign.completed_at)}</span> }] : []),
-                ].map(row => (
-                  <div key={row.label} className="flex items-center justify-between gap-3">
-                    <span className="text-xs text-muted-foreground">{row.label}</span>
-                    {row.value}
-                  </div>
-                ))}
+            </section>
+
+            <section>
+              <div className="mb-3 flex items-center gap-2">
+                <h2 className="text-sm font-semibold text-foreground">Chats</h2>
+                <span className="rounded-full border border-border-soft bg-muted px-2 py-0.5 text-[11px] font-medium text-muted-foreground">
+                  {relatedChat ? 1 : 0}
+                </span>
               </div>
-            </aside>
+              {relatedChat ? (
+                <button
+                  type="button"
+                  onClick={() => navigate(`/c/${relatedChat.id}`)}
+                  className="flex w-full items-center gap-3 rounded-lg border border-border-soft bg-card p-4 text-left transition-[transform,box-shadow,border-color] hover:-translate-y-px hover:border-border hover:shadow-sm"
+                >
+                  <span className="grid size-8 shrink-0 place-items-center rounded-md bg-muted text-muted-foreground">
+                    <MessageSquare size={15} />
+                  </span>
+                  <span className="min-w-0 flex-1">
+                    <span className="block truncate text-sm font-medium text-foreground">{relatedChat.title ?? 'Untitled chat'}</span>
+                    <span className="mt-0.5 block text-xs text-faint-fg">Updated {timeAgo(relatedChat.updated_at)}</span>
+                  </span>
+                  <ChevronRight size={16} className="shrink-0 text-faint-fg" />
+                </button>
+              ) : (
+                <div className="rounded-lg border border-dashed border-border bg-muted/30 p-4 text-sm text-muted-foreground">
+                  No originating chat is attached to this campaign yet.
+                </div>
+              )}
+            </section>
+
+            <section>
+              <div className="mb-3 flex items-center gap-2">
+                <h2 className="text-sm font-semibold text-foreground">Artifacts</h2>
+                <span className="rounded-full border border-border-soft bg-muted px-2 py-0.5 text-[11px] font-medium text-muted-foreground">
+                  {relatedArtifacts.length}
+                </span>
+              </div>
+              {relatedArtifacts.length > 0 ? (
+                <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+                  {relatedArtifacts.map(artifact => (
+                    <div key={artifact.id} className="flex flex-col gap-3 rounded-lg border border-border-soft bg-card p-4">
+                      <div className="grid aspect-[16/10] place-items-center rounded-md border border-border-soft bg-muted/35 bg-[repeating-linear-gradient(45deg,color-mix(in_oklch,var(--muted)_90%,transparent),color-mix(in_oklch,var(--muted)_90%,transparent)_8px,transparent_8px,transparent_16px)]">
+                        <span className="rounded-md border border-border-soft bg-background/75 px-2 py-1 text-[11px] font-medium text-muted-foreground">
+                          {artifact.mime_type}
+                        </span>
+                      </div>
+                      <div className="flex items-start justify-between gap-3">
+                        <div className="min-w-0">
+                          <div className="truncate text-sm font-semibold text-foreground">{artifact.title}</div>
+                          <div className="mt-0.5 text-xs text-muted-foreground">{artifact.kind}</div>
+                        </div>
+                        <StatusPill status={artifact.status} />
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                <div className="rounded-lg border border-dashed border-border bg-muted/30 p-4 text-sm text-muted-foreground">
+                  Artifacts produced by this campaign will appear here.
+                </div>
+              )}
+            </section>
           </div>
-        </ContentColumn>
+
+          <aside className="flex flex-col gap-4 lg:sticky lg:top-0">
+            <div className="flex flex-col gap-3 rounded-lg border border-border-soft bg-card p-4">
+              <InfoRow label="Status" value={<StatusPill status={effectiveCampaignStatus} />} />
+              {branchName && (
+                <InfoRow label="Branch" value={<code className="max-w-32 truncate font-mono text-[11px] text-fg-soft">{branchName}</code>} />
+              )}
+              <InfoRow label="Started" value={<span className="text-xs font-medium text-foreground">{timeAgo(campaign.created_at)}</span>} />
+              {campaign.completed_at && (
+                <InfoRow label="Completed" value={<span className="text-xs font-medium text-foreground">{timeAgo(campaign.completed_at)}</span>} />
+              )}
+            </div>
+
+            <div className="flex flex-col gap-3 rounded-lg border border-border-soft bg-card p-4">
+              <div className="text-xs font-semibold text-muted-foreground">Recent activity</div>
+              <div className="flex flex-col gap-4">
+                {taskEvents.length > 0 ? taskEvents.map((task, index) => {
+                  const status = taskStatuses[task.id] ?? task.status;
+                  const Icon = AGENT_ICON[task.agent];
+                  return (
+                    <div key={task.id} className="relative flex gap-3">
+                      {index < taskEvents.length - 1 && <span className="absolute left-3 top-7 h-[calc(100%+0.5rem)] w-px bg-border-soft" />}
+                      <span className="z-10 grid size-6 shrink-0 place-items-center rounded-full bg-muted text-muted-foreground">
+                        <Icon size={12} />
+                      </span>
+                      <span className="min-w-0">
+                        <span className="block truncate text-xs font-medium text-foreground">{AGENT_LABEL[task.agent]}</span>
+                        <span className="mt-0.5 block text-[11px] leading-relaxed text-muted-foreground">{task.title}</span>
+                        <span className="mt-0.5 block text-[11px] text-faint-fg">{status === 'running' ? 'running · ' : ''}{timeAgo(task.created_at)}</span>
+                      </span>
+                    </div>
+                  );
+                }) : (
+                  <div className="text-xs text-muted-foreground">No task activity yet.</div>
+                )}
+              </div>
+            </div>
+          </aside>
+        </div>
       </PageBody>
     </PageShell>
+  );
+}
+
+function InfoRow({ label, value }: { label: string; value: ReactNode }) {
+  return (
+    <div className="flex items-center justify-between gap-3">
+      <span className="text-xs text-muted-foreground">{label}</span>
+      <span className="min-w-0 shrink">{value}</span>
+    </div>
   );
 }
 
@@ -206,33 +332,35 @@ function TaskRow({ task, status }: { task: CampaignTask; status: CampaignTask['s
   const done = status === 'done';
 
   return (
-    <div
-      className={cn(
-        'flex items-center gap-3 border-b border-border-soft py-2.5 text-sm last:border-b-0',
-        done ? 'text-muted-foreground' : 'text-foreground',
-      )}
-    >
-      <span className={cn(
-        'grid h-5 w-5 shrink-0 place-items-center rounded-md border transition-colors',
-        done ? 'border-primary bg-primary text-primary-foreground' : 'border-border',
-      )}>
-        {done && <Check size={11} strokeWidth={2.5} />}
-      </span>
-      <span className={cn('flex-1', done && 'line-through decoration-faint-fg decoration-1')}>{task.title}</span>
-      <span className="flex items-center gap-1 text-xs text-muted-foreground shrink-0">
-        {(() => { const Icon = AGENT_ICON[task.agent]; return <Icon className="size-3" />; })()}
-        {AGENT_LABEL[task.agent]}
-      </span>
-      <StatusDot status={status} />
-      {(status === 'done' || status === 'running' || status === 'error') && task.execution_id && (
-        <button
-          type="button"
-          onClick={() => setExpanded(v => !v)}
-          className="text-xs text-muted-foreground hover:text-foreground transition-colors shrink-0"
-        >
-          {expanded ? 'hide' : 'view'}
-        </button>
-      )}
+    <div className="border-b border-border-soft py-2.5 last:border-b-0">
+      <div
+        className={cn(
+          'flex items-center gap-3 text-sm',
+          done ? 'text-muted-foreground' : 'text-foreground',
+        )}
+      >
+        <span className={cn(
+          'grid h-5 w-5 shrink-0 place-items-center rounded-md border transition-colors',
+          done ? 'border-primary bg-primary text-primary-foreground' : 'border-border',
+        )}>
+          {done && <Check size={11} strokeWidth={2.5} />}
+        </span>
+        <span className={cn('min-w-0 flex-1', done && 'line-through decoration-faint-fg decoration-1')}>{task.title}</span>
+        <span className="hidden shrink-0 items-center gap-1 text-xs text-muted-foreground sm:flex">
+          {(() => { const Icon = AGENT_ICON[task.agent]; return <Icon className="size-3" />; })()}
+          {AGENT_LABEL[task.agent]}
+        </span>
+        <StatusDot status={status} />
+        {(status === 'done' || status === 'running' || status === 'error') && task.execution_id && (
+          <button
+            type="button"
+            onClick={() => setExpanded(v => !v)}
+            className="shrink-0 text-xs text-muted-foreground transition-colors hover:text-foreground"
+          >
+            {expanded ? 'hide' : 'view'}
+          </button>
+        )}
+      </div>
       {expanded && task.execution_id && (
         <ExecutionOutput executionId={task.execution_id} />
       )}

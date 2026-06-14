@@ -1,4 +1,4 @@
-import { getDb } from '../db/index.js';
+import { createSessionEvent, getDb } from '../db/index.js';
 import { newId } from '../lib/ids.js';
 import { broadcast } from './socket.js';
 import { waitForApproval } from '../lib/approval.js';
@@ -56,9 +56,34 @@ export async function requestApproval(
     return 'approved';
   }
 
+  const executionContext = getDb()
+    .prepare(`
+      SELECT m.session_id AS sessionId, e.project_id AS projectId
+      FROM executions e
+      JOIN messages m ON m.id = e.message_id
+      WHERE e.id = ?
+    `)
+    .get(executionId) as { sessionId: string; projectId: string | null } | undefined;
+
   getDb()
     .prepare("UPDATE executions SET status = 'awaiting_approval' WHERE id = ?")
     .run(executionId);
+  if (executionContext) {
+    const event = createSessionEvent({
+      sessionId: executionContext.sessionId,
+      type: 'approval_requested',
+      title: `Approval needed: ${action}`,
+      body: 'The agent is waiting for your decision.',
+      projectId: executionContext.projectId,
+      executionId,
+      metadata: { action, payload },
+    });
+    broadcast(userId, {
+      type: 'session_event_created',
+      sessionId: executionContext.sessionId,
+      event: { ...event, metadata: JSON.parse(event.metadata || '{}') },
+    });
+  }
   broadcast(userId, { type: 'approval_requested', executionId, approvalId, action, payload });
   const decision = await waitForApproval(approvalId);
   getDb()
@@ -72,7 +97,23 @@ export async function requestApproval(
   broadcast(userId, {
     type: 'execution_update',
     executionId,
-    status: decision === 'approved' ? 'running' : 'rejected',
+    status: 'running',
   });
+  if (executionContext) {
+    const event = createSessionEvent({
+      sessionId: executionContext.sessionId,
+      type: 'approval_resolved',
+      title: decision === 'approved' ? `Approved: ${action}` : `Denied: ${action}`,
+      body: decision === 'approved' ? 'The agent can continue.' : 'The agent action was denied.',
+      projectId: executionContext.projectId,
+      executionId,
+      metadata: { action, decision },
+    });
+    broadcast(userId, {
+      type: 'session_event_created',
+      sessionId: executionContext.sessionId,
+      event: { ...event, metadata: JSON.parse(event.metadata || '{}') },
+    });
+  }
   return decision;
 }

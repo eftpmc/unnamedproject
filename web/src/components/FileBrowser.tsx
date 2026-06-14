@@ -32,14 +32,15 @@ function TreeNode({ entry, projectId, depth, selectedPath, onSelect }: TreeNodeP
       <button
         onClick={() => onSelect(entry.path)}
         className={cn(
-          'flex w-full items-center gap-1.5 rounded px-2 py-1 text-left text-xs hover:bg-muted/60',
+          'flex w-full items-center gap-2 px-3 py-2 text-left text-sm transition-colors hover:bg-muted/50',
           selectedPath === entry.path && 'bg-muted text-foreground font-medium',
           selectedPath !== entry.path && 'text-muted-foreground',
         )}
-        style={{ paddingLeft: `${8 + depth * 14}px` }}
+        style={{ paddingLeft: `${12 + depth * 16}px` }}
       >
-        <FileText size={12} className="shrink-0 opacity-60" />
-        <span className="truncate">{entry.name}</span>
+        <FileText size={15} className="shrink-0 opacity-65" />
+        <span className="min-w-0 flex-1 truncate">{entry.name}</span>
+        <span className="hidden shrink-0 font-mono text-[11px] text-faint-fg sm:inline">{entry.path}</span>
       </button>
     );
   }
@@ -48,17 +49,18 @@ function TreeNode({ entry, projectId, depth, selectedPath, onSelect }: TreeNodeP
     <div>
       <button
         onClick={() => setOpen(v => !v)}
-        className="flex w-full items-center gap-1.5 rounded px-2 py-1 text-left text-xs text-muted-foreground hover:bg-muted/60"
-        style={{ paddingLeft: `${8 + depth * 14}px` }}
+        className="flex w-full items-center gap-2 px-3 py-2 text-left text-sm text-muted-foreground transition-colors hover:bg-muted/50"
+        style={{ paddingLeft: `${12 + depth * 16}px` }}
       >
         {isFetching
-          ? <Loader2 size={12} className="shrink-0 animate-spin opacity-60" />
+          ? <Loader2 size={13} className="shrink-0 animate-spin opacity-60" />
           : open
-            ? <ChevronDown size={12} className="shrink-0 opacity-60" />
-            : <ChevronRight size={12} className="shrink-0 opacity-60" />
+            ? <ChevronDown size={13} className="shrink-0 opacity-60" />
+            : <ChevronRight size={13} className="shrink-0 opacity-60" />
         }
-        {open ? <FolderOpen size={12} className="shrink-0 opacity-70" /> : <Folder size={12} className="shrink-0 opacity-70" />}
-        <span className="truncate font-medium">{entry.name}</span>
+        {open ? <FolderOpen size={15} className="shrink-0 text-on-accent-soft" /> : <Folder size={15} className="shrink-0 text-on-accent-soft" />}
+        <span className="min-w-0 flex-1 truncate font-medium">{entry.name}</span>
+        <span className="hidden shrink-0 font-mono text-[11px] text-faint-fg sm:inline">{entry.path}</span>
       </button>
       {open && data?.entries.map(child => (
         <TreeNode
@@ -120,9 +122,13 @@ export default function FileBrowser({ projectId }: FileBrowserProps) {
   const isMd = lang === 'markdown';
 
   return (
-    <Surface className="flex min-h-0 flex-1 overflow-hidden bg-background/40">
-      {/* Tree panel */}
-      <div className="w-52 shrink-0 overflow-y-auto border-r border-border/40 py-2">
+    <div className="grid min-h-[30rem] gap-4 lg:grid-cols-[minmax(18rem,0.8fr)_minmax(0,1.2fr)]">
+      <Surface className="min-w-0 overflow-hidden bg-card">
+        <div className="border-b border-border-soft px-4 py-3">
+          <div className="text-sm font-semibold text-foreground">Files</div>
+          <div className="mt-0.5 text-xs text-muted-foreground">Project workspace</div>
+        </div>
+        <div className="max-h-[34rem] overflow-y-auto py-2">
         {isLoading && (
           <div className="flex items-center justify-center py-8">
             <Loader2 size={14} className="animate-spin text-muted-foreground/50" />
@@ -147,18 +153,18 @@ export default function FileBrowser({ projectId }: FileBrowserProps) {
             onSelect={setSelectedPath}
           />
         ))}
-      </div>
+        </div>
+      </Surface>
 
-      {/* File viewer */}
-      <div className="flex min-w-0 flex-1 flex-col overflow-hidden">
+      <Surface className="flex min-w-0 flex-col overflow-hidden bg-card">
         {!selectedPath && (
           <div className="flex flex-1 items-center justify-center">
-            <p className="text-xs text-muted-foreground/40">Select a file to view</p>
+            <p className="text-xs text-muted-foreground">Select a file to view</p>
           </div>
         )}
         {selectedPath && (
           <>
-            <div className="flex h-9 shrink-0 items-center border-b border-border/40 px-3">
+            <div className="flex h-11 shrink-0 items-center border-b border-border-soft px-4">
               <span className="truncate font-mono text-xs text-muted-foreground">{selectedPath}</span>
             </div>
             <div className="flex-1 overflow-auto">
@@ -180,7 +186,7 @@ export default function FileBrowser({ projectId }: FileBrowserProps) {
             </div>
           </>
         )}
-      </div>
-    </Surface>
+      </Surface>
+    </div>
   );
 }

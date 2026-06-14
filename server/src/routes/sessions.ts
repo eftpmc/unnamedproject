@@ -1,6 +1,6 @@
 import { Router } from 'express';
 import simpleGit from 'simple-git';
-import { getDb } from '../db/index.js';
+import { createSessionEvent, getDb, getProjectForUser, getSessionEvents, getSessionProjectLinks, linkSessionProject } from '../db/index.js';
 import { newId } from '../lib/ids.js';
 import { requireAuth, type AuthedRequest } from '../middleware/auth.js';
 import { DEFAULT_EFFORT, isEffortLevel, getModelsForEffort } from '../services/anthropic.js';
@@ -14,6 +14,25 @@ router.get('/', (req, res) => {
     .prepare('SELECT id, title, effort, model, pinned_project_id, created_at, updated_at FROM sessions WHERE user_id = ? ORDER BY updated_at DESC')
     .all(userId);
   res.json(rows);
+});
+
+router.get('/:id/events', (req, res) => {
+  const { userId } = req as unknown as AuthedRequest;
+  const session = getDb()
+    .prepare('SELECT id FROM sessions WHERE id = ? AND user_id = ?')
+    .get(req.params.id, userId);
+  if (!session) { res.status(404).json({ error: 'Session not found' }); return; }
+
+  res.json({
+    events: getSessionEvents(req.params.id).map(event => ({
+      ...event,
+      metadata: JSON.parse(event.metadata || '{}'),
+    })),
+    projects: getSessionProjectLinks(req.params.id).map(project => ({
+      ...project,
+      enabled_connection_ids: JSON.parse(project.enabled_connection_ids || '[]'),
+    })),
+  });
 });
 
 router.get('/search', (req, res) => {
@@ -66,7 +85,9 @@ router.patch('/:id', (req, res) => {
     return;
   }
 
-  const session = getDb().prepare('SELECT id FROM sessions WHERE id = ? AND user_id = ?').get(req.params.id, userId);
+  const session = getDb()
+    .prepare('SELECT id, pinned_project_id FROM sessions WHERE id = ? AND user_id = ?')
+    .get(req.params.id, userId) as { id: string; pinned_project_id: string | null } | undefined;
   if (!session) { res.status(404).json({ error: 'Session not found' }); return; }
 
   if (effort !== undefined) {
@@ -79,7 +100,35 @@ router.patch('/:id', (req, res) => {
     getDb().prepare('UPDATE sessions SET title = ? WHERE id = ?').run(title, req.params.id);
   }
   if (pinned_project_id !== undefined) {
+    const project = pinned_project_id ? getProjectForUser(pinned_project_id, userId) : null;
+    if (pinned_project_id && !project) {
+      res.status(404).json({ error: 'Project not found' });
+      return;
+    }
     getDb().prepare('UPDATE sessions SET pinned_project_id = ? WHERE id = ?').run(pinned_project_id, req.params.id);
+    if (pinned_project_id) {
+      linkSessionProject(req.params.id, project!.id, 'user');
+      createSessionEvent({
+        sessionId: req.params.id,
+        type: 'scope_changed',
+        title: `Scoped to ${project!.name}`,
+        body: 'You pinned this chat to a project.',
+        projectId: project!.id,
+        metadata: { source: 'user' },
+      });
+    } else {
+      if (session.pinned_project_id) {
+        const previousProject = getProjectForUser(session.pinned_project_id, userId);
+        if (previousProject) linkSessionProject(req.params.id, previousProject.id, 'user');
+      }
+      createSessionEvent({
+        sessionId: req.params.id,
+        type: 'scope_changed',
+        title: 'Back to Auto',
+        body: 'The agent can route this chat or create project context as needed.',
+        metadata: { source: 'user' },
+      });
+    }
   }
   res.json({ ok: true });
 });

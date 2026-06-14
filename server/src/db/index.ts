@@ -97,6 +97,28 @@ function applySchema(): void {
       created_at INTEGER NOT NULL DEFAULT (unixepoch())
     );
 
+    CREATE TABLE IF NOT EXISTS session_project_links (
+      session_id TEXT NOT NULL REFERENCES sessions(id) ON DELETE CASCADE,
+      project_id TEXT NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
+      source TEXT NOT NULL DEFAULT 'agent' CHECK(source IN ('agent','user','system')),
+      created_at INTEGER NOT NULL DEFAULT (unixepoch()),
+      PRIMARY KEY (session_id, project_id)
+    );
+
+    CREATE TABLE IF NOT EXISTS session_events (
+      id TEXT PRIMARY KEY,
+      session_id TEXT NOT NULL REFERENCES sessions(id) ON DELETE CASCADE,
+      type TEXT NOT NULL CHECK(type IN ('scope_changed','project_linked','project_created','campaign_created','artifact_created','approval_requested','approval_resolved')),
+      title TEXT NOT NULL,
+      body TEXT,
+      project_id TEXT REFERENCES projects(id) ON DELETE SET NULL,
+      campaign_id TEXT REFERENCES campaigns(id) ON DELETE SET NULL,
+      artifact_id TEXT REFERENCES artifacts(id) ON DELETE SET NULL,
+      execution_id TEXT REFERENCES executions(id) ON DELETE SET NULL,
+      metadata TEXT NOT NULL DEFAULT '{}',
+      created_at INTEGER NOT NULL DEFAULT (unixepoch())
+    );
+
     CREATE TABLE IF NOT EXISTS executions (
       id TEXT PRIMARY KEY,
       message_id TEXT REFERENCES messages(id) ON DELETE SET NULL,
@@ -423,6 +445,96 @@ export function getProjectsForUser(userId: string): DbProject[] {
   return getDb()
     .prepare('SELECT id, name, description, repo_path, enabled_connection_ids FROM projects WHERE user_id = ?')
     .all(userId) as DbProject[];
+}
+
+export type SessionEventType =
+  | 'scope_changed'
+  | 'project_linked'
+  | 'project_created'
+  | 'campaign_created'
+  | 'artifact_created'
+  | 'approval_requested'
+  | 'approval_resolved';
+
+export interface DbSessionEvent {
+  id: string;
+  session_id: string;
+  type: SessionEventType;
+  title: string;
+  body: string | null;
+  project_id: string | null;
+  campaign_id: string | null;
+  artifact_id: string | null;
+  execution_id: string | null;
+  metadata: string;
+  created_at: number;
+}
+
+export function createSessionEvent(input: {
+  sessionId: string;
+  type: SessionEventType;
+  title: string;
+  body?: string | null;
+  projectId?: string | null;
+  campaignId?: string | null;
+  artifactId?: string | null;
+  executionId?: string | null;
+  metadata?: Record<string, unknown>;
+}): DbSessionEvent {
+  const id = newId();
+  getDb()
+    .prepare(`
+      INSERT INTO session_events (id, session_id, type, title, body, project_id, campaign_id, artifact_id, execution_id, metadata)
+      VALUES (?,?,?,?,?,?,?,?,?,?)
+    `)
+    .run(
+      id,
+      input.sessionId,
+      input.type,
+      input.title,
+      input.body ?? null,
+      input.projectId ?? null,
+      input.campaignId ?? null,
+      input.artifactId ?? null,
+      input.executionId ?? null,
+      JSON.stringify(input.metadata ?? {}),
+    );
+  return getDb()
+    .prepare('SELECT * FROM session_events WHERE id = ?')
+    .get(id) as DbSessionEvent;
+}
+
+export function getSessionEvents(sessionId: string): DbSessionEvent[] {
+  return getDb()
+    .prepare('SELECT * FROM session_events WHERE session_id = ? ORDER BY created_at ASC, rowid ASC')
+    .all(sessionId) as DbSessionEvent[];
+}
+
+export function linkSessionProject(
+  sessionId: string,
+  projectId: string,
+  source: 'agent' | 'user' | 'system',
+): boolean {
+  const result = getDb()
+    .prepare(`
+      INSERT OR IGNORE INTO session_project_links (session_id, project_id, source)
+      VALUES (?,?,?)
+    `)
+    .run(sessionId, projectId, source);
+  return result.changes > 0;
+}
+
+export function getSessionProjectLinks(sessionId: string): Array<DbProject & { source: 'agent' | 'user' | 'system'; linked_at: number }> {
+  return getDb()
+    .prepare(`
+      SELECT p.id, p.name, p.description, p.repo_path, p.enabled_connection_ids,
+             l.source, l.created_at AS linked_at
+      FROM session_project_links l
+      JOIN projects p ON p.id = l.project_id
+      WHERE l.session_id = ?
+      ORDER BY l.created_at ASC
+    `)
+    .all(sessionId) as Array<DbProject & { source: 'agent' | 'user' | 'system'; linked_at: number }>;
 }
 
 export function getProjectsRoot(userId: string): string {

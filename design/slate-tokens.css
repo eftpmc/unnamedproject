@@ -1,0 +1,111 @@
+/* ============================================================
+   SLATE — soft / minimal / clean
+   Drop-in token override for your existing index.css.
+
+   HOW TO USE
+   1. Replace the contents of your `:root, [data-theme="unnamed-light"]`
+      block and your `[data-theme="unnamed-dark"]` block with the two
+      blocks below (keep your @theme inline + @layer base as-is).
+   2. Bump --radius (already included below) — softer corners.
+   3. (Optional) Switch the typeface to Hanken Grotesk for the full
+      Slate feel:
+         npm i @fontsource-variable/hanken-grotesk
+      then in index.css:
+         @import "@fontsource-variable/hanken-grotesk";
+         @theme inline { --font-sans: "Hanken Grotesk Variable", sans-serif; }
+      Geist also looks great with this palette if you'd rather not add a font.
+
+   NOTE: --primary now carries the muted blue (it drives the New-chat
+   button, primary actions, focus rings). The shadcn --accent token stays
+   a subtle neutral hover surface, as in the default theme.
+   ============================================================ */
+
+:root,
+[data-theme="unnamed-light"] {
+  color-scheme: light;
+
+  --background:            oklch(0.983 0.004 250);
+  --foreground:            oklch(0.31 0.013 258);
+
+  --card:                  oklch(1 0 0);
+  --card-foreground:       var(--foreground);
+  --popover:               oklch(1 0 0);
+  --popover-foreground:    var(--foreground);
+
+  /* brand / primary action — muted blue */
+  --primary:               oklch(0.58 0.085 252);
+  --primary-foreground:    oklch(0.99 0.004 250);
+
+  --secondary:             oklch(0.968 0.005 250);
+  --secondary-foreground:  var(--foreground);
+
+  --muted:                 oklch(0.966 0.005 250);
+  --muted-foreground:      oklch(0.565 0.014 256);
+
+  /* subtle hover surface (not the brand color) */
+  --accent:                oklch(0.95 0.008 250);
+  --accent-foreground:     var(--foreground);
+
+  --destructive:           oklch(0.58 0.2 25);
+
+  /* softer, near-hairline separators */
+  --border:                oklch(0.93 0.006 250);
+  --input:                 oklch(0.92 0.006 250);
+  --ring:                  oklch(0.62 0.08 252);
+
+  --success:               oklch(0.6 0.09 165);
+  --warning:               oklch(0.7 0.1 70);
+
+  --sidebar:                     oklch(0.972 0.005 250);
+  --sidebar-foreground:          var(--foreground);
+  --sidebar-primary:             var(--primary);
+  --sidebar-primary-foreground:  var(--primary-foreground);
+  --sidebar-accent:              oklch(1 0 0);
+  --sidebar-accent-foreground:   var(--foreground);
+  --sidebar-border:              oklch(0.945 0.005 250);
+  --sidebar-ring:                var(--ring);
+
+  --radius: 1.125rem;
+}
+
+[data-theme="unnamed-dark"] {
+  color-scheme: dark;
+
+  --background:            oklch(0.19 0.011 258);
+  --foreground:            oklch(0.93 0.006 258);
+
+  --card:                  oklch(0.232 0.013 258);
+  --card-foreground:       var(--foreground);
+  --popover:               oklch(0.248 0.014 258);
+  --popover-foreground:    var(--foreground);
+
+  --primary:               oklch(0.7 0.1 256);
+  --primary-foreground:    oklch(0.18 0.02 258);
+
+  --secondary:             oklch(0.258 0.014 258);
+  --secondary-foreground:  var(--foreground);
+
+  --muted:                 oklch(0.252 0.013 258);
+  --muted-foreground:      oklch(0.67 0.012 256);
+
+  --accent:                oklch(0.3 0.013 258);
+  --accent-foreground:     var(--foreground);
+
+  --destructive:           oklch(0.68 0.19 24);
+
+  --border:                oklch(1 0 0 / 8%);
+  --input:                 oklch(1 0 0 / 11%);
+  --ring:                  oklch(0.7 0.1 256);
+
+  --success:               oklch(0.74 0.1 165);
+  --warning:               oklch(0.78 0.1 70);
+
+  --sidebar:                     oklch(0.168 0.011 258);
+  --sidebar-foreground:          var(--foreground);
+  --sidebar-primary:             var(--primary);
+  --sidebar-primary-foreground:  var(--primary-foreground);
+  --sidebar-accent:              oklch(0.255 0.014 258);
+  --sidebar-accent-foreground:   var(--foreground);
+  --sidebar-border:              oklch(1 0 0 / 6%);
+  --sidebar-ring:                var(--ring);
+}

@@ -1,32 +1,44 @@
 import { useEffect, useState } from 'react';
-import { Link, useNavigate } from 'react-router-dom';
+import { Link } from 'react-router-dom';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
-import { Activity, Bell, Check, CheckCircle2, Circle, AlertCircle, LoaderCircle } from 'lucide-react';
-import { getAllCampaigns, getChats } from '../lib/api.js';
+import { Bell, Check, GitBranch } from 'lucide-react';
+import { approveExecution, getAllCampaigns, rejectExecution } from '../lib/api.js';
 import { subscribe } from '../lib/ws.js';
-import { timeAgo, cn } from '../lib/utils.js';
-import { CenteredEmptyState, PageHeader, PageLoading, PageShell } from '@/components/ui/app-layout';
-import type { Campaign, Session, WSCampaignUpdated, WSApprovalRequested, WSExecutionUpdate } from '../types.js';
+import { timeAgo } from '../lib/utils.js';
+import {
+  CenteredEmptyState,
+  ContentColumn,
+  PageBody,
+  PageHeader,
+  PageLoading,
+  PageSection,
+  PageShell,
+} from '@/components/ui/app-layout';
+import { StatusPill, type PillStatus } from '@/components/ui/status-pill';
+import type {
+  Campaign,
+  WSApprovalRequested,
+  WSCampaignUpdated,
+  WSExecutionUpdate,
+} from '../types.js';
 
 type CampaignRow = Campaign & { project_name: string };
 
-const STATUS_ICON: Record<Campaign['status'], typeof Circle> = {
-  running: LoaderCircle,
-  done: CheckCircle2,
-  error: AlertCircle,
-  cancelled: Circle,
-};
-
-const STATUS_ICON_CLASS: Record<Campaign['status'], string> = {
-  running: 'text-primary animate-spin',
-  done: 'text-success',
-  error: 'text-destructive',
-  cancelled: 'text-muted-foreground/30',
-};
-
+/** Tile shared by every activity row — neutral square holding a glyph. */
+function IconTile({ children, tone = 'muted' }: { children: React.ReactNode; tone?: 'muted' | 'warning' }) {
+  return (
+    <div
+      className={
+        'grid size-8 shrink-0 place-items-center rounded-md bg-muted ' +
+        (tone === 'warning' ? 'text-warning' : 'text-muted-foreground')
+      }
+    >
+      {children}
+    </div>
+  );
+}
 
 export default function ActivityPage() {
-  const navigate = useNavigate();
   const queryClient = useQueryClient();
 
   const { data, isLoading } = useQuery({
@@ -36,15 +48,7 @@ export default function ActivityPage() {
     refetchInterval: 30_000,
   });
 
-  const { data: chats = [] } = useQuery<Session[]>({
-    queryKey: ['chats'],
-    queryFn: getChats,
-  });
-
-  // Live campaign status overrides
   const [statusOverrides, setStatusOverrides] = useState<Record<string, Campaign['status']>>({});
-
-  // Pending approvals: executionId → { action }
   const [pendingApprovals, setPendingApprovals] = useState<Map<string, { action: string }>>(new Map());
 
   useEffect(() => {
@@ -60,37 +64,49 @@ export default function ActivityPage() {
       }
       if (event.type === 'execution_update') {
         const e = event as unknown as WSExecutionUpdate;
-        if (e.status === 'done' || e.status === 'error') {
-          setPendingApprovals(prev => { const n = new Map(prev); n.delete(e.executionId); return n; });
+        if (e.status === 'running' || e.status === 'done' || e.status === 'error') {
+          setPendingApprovals(prev => {
+            const n = new Map(prev);
+            n.delete(e.executionId);
+            return n;
+          });
         }
       }
     });
   }, [queryClient]);
 
-  function handleApprove(executionId: string) {
-    setPendingApprovals(prev => { const n = new Map(prev); n.delete(executionId); return n; });
+  async function resolveApproval(executionId: string, decision: 'approved' | 'rejected') {
+    if (decision === 'approved') {
+      await approveExecution(executionId);
+    } else {
+      await rejectExecution(executionId);
+    }
+    setPendingApprovals(prev => {
+      const n = new Map(prev);
+      n.delete(executionId);
+      return n;
+    });
   }
 
-  function handleReject(executionId: string) {
-    setPendingApprovals(prev => { const n = new Map(prev); n.delete(executionId); return n; });
-  }
-
-  const campaigns = data?.campaigns ?? [];
-  const running = campaigns.filter(c => (statusOverrides[c.id] ?? c.status) === 'running');
-  const recent = campaigns.filter(c => (statusOverrides[c.id] ?? c.status) !== 'running').slice(0, 15);
-
+  const campaigns = (data?.campaigns ?? []) as CampaignRow[];
   const approvalList = [...pendingApprovals.entries()];
 
-  // Find chats that have activity (updated recently)
-  const activeChats = [...chats]
-    .sort((a, b) => b.updated_at - a.updated_at)
-    .slice(0, 5);
+  // Single "Recent" feed — running first, then most-recent, matching the design.
+  const rows = campaigns
+    .map(c => ({ ...c, status: statusOverrides[c.id] ?? c.status }))
+    .sort((a, b) => {
+      const ar = a.status === 'running' ? 0 : 1;
+      const br = b.status === 'running' ? 0 : 1;
+      if (ar !== br) return ar - br;
+      return b.created_at - a.created_at;
+    })
+    .slice(0, 20);
 
   const isEmpty = campaigns.length === 0 && approvalList.length === 0;
 
   return (
     <PageShell>
-      <PageHeader title="Activity" />
+      <PageHeader title="Activity" description="Live tool runs and approvals across all projects" />
 
       {isLoading ? (
         <PageLoading rows={4} />
@@ -100,36 +116,35 @@ export default function ActivityPage() {
           description="Running campaigns, pending approvals, and recent completions will appear here."
         />
       ) : (
-        <div className="flex-1 overflow-y-auto">
-          <div className="mx-auto max-w-3xl px-4 py-5 sm:px-6 flex flex-col gap-6">
-
-            {/* Pending approvals */}
+        <PageBody>
+          <ContentColumn className="space-y-7">
+            {/* Needs your attention */}
             {approvalList.length > 0 && (
-              <section>
-                <h2 className="mb-3 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
-                  Needs your attention
-                </h2>
-                <div className="flex flex-col gap-2">
+              <PageSection title="Needs your attention">
+                <div className="flex flex-col gap-2.5">
                   {approvalList.map(([execId, { action }]) => (
-                    <div key={execId} className="flex items-center gap-3 rounded-xl border border-warning/35 bg-warning/5 p-4">
-                      <div className="grid h-9 w-9 shrink-0 place-items-center rounded-lg bg-warning/10 text-warning">
+                    <div
+                      key={execId}
+                      className="flex items-center gap-3.5 rounded-lg border border-warning/40 bg-warning/[0.07] p-4"
+                    >
+                      <IconTile tone="warning">
                         <Bell size={16} />
-                      </div>
-                      <div className="flex min-w-0 flex-1 flex-col gap-0.5">
-                        <span className="text-sm font-medium text-foreground">{action}</span>
-                        <span className="text-xs text-muted-foreground">Awaiting your approval</span>
+                      </IconTile>
+                      <div className="min-w-0 flex-1">
+                        <div className="truncate text-sm font-medium text-foreground">{action}</div>
+                        <div className="mt-0.5 text-xs text-muted-foreground">Awaiting your approval</div>
                       </div>
                       <div className="flex shrink-0 items-center gap-2">
                         <button
                           type="button"
-                          onClick={() => handleReject(execId)}
+                          onClick={() => void resolveApproval(execId, 'rejected')}
                           className="rounded-lg px-3 py-1.5 text-xs font-medium text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
                         >
                           Deny
                         </button>
                         <button
                           type="button"
-                          onClick={() => handleApprove(execId)}
+                          onClick={() => void resolveApproval(execId, 'approved')}
                           className="flex items-center gap-1 rounded-lg bg-primary px-3 py-1.5 text-xs font-medium text-primary-foreground transition-[filter] hover:brightness-105"
                         >
                           <Check size={12} strokeWidth={2.5} />
@@ -139,86 +154,42 @@ export default function ActivityPage() {
                     </div>
                   ))}
                 </div>
-              </section>
+              </PageSection>
             )}
 
-            {/* Running campaigns */}
-            {running.length > 0 && (
-              <section>
-                <h2 className="mb-3 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
-                  Running
-                </h2>
-                <div className="flex flex-col gap-2">
-                  {running.map(c => (
-                    <CampaignRow key={c.id} campaign={c} status={statusOverrides[c.id] ?? c.status} />
+            {/* Recent */}
+            {rows.length > 0 && (
+              <PageSection title="Recent">
+                <div className="flex flex-col gap-2.5">
+                  {rows.map(c => (
+                    <ActivityRow key={c.id} campaign={c} />
                   ))}
                 </div>
-              </section>
+              </PageSection>
             )}
-
-            {/* Recent campaigns */}
-            {recent.length > 0 && (
-              <section>
-                <h2 className="mb-3 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
-                  Recent
-                </h2>
-                <div className="flex flex-col gap-2">
-                  {recent.map(c => (
-                    <CampaignRow key={c.id} campaign={c} status={statusOverrides[c.id] ?? c.status} />
-                  ))}
-                </div>
-              </section>
-            )}
-
-            {/* Recent chats */}
-            {activeChats.length > 0 && (
-              <section>
-                <h2 className="mb-3 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
-                  Recent chats
-                </h2>
-                <div className="flex flex-col gap-2">
-                  {activeChats.map(chat => (
-                    <button
-                      key={chat.id}
-                      type="button"
-                      onClick={() => navigate(`/c/${chat.id}`)}
-                      className="flex w-full items-center justify-between rounded-xl border border-border-soft bg-card p-4 text-left transition-colors hover:bg-muted/30"
-                    >
-                      <span className="text-sm font-medium truncate">{chat.title ?? 'Untitled chat'}</span>
-                      <span className="text-xs text-muted-foreground shrink-0 ml-3">{timeAgo(chat.updated_at)}</span>
-                    </button>
-                  ))}
-                </div>
-              </section>
-            )}
-
-          </div>
-        </div>
+          </ContentColumn>
+        </PageBody>
       )}
     </PageShell>
   );
 }
 
-function CampaignRow({ campaign, status }: {
-  campaign: CampaignRow;
-  status: Campaign['status'];
-}) {
-  const StatusIcon = STATUS_ICON[status];
+function ActivityRow({ campaign }: { campaign: CampaignRow }) {
+  const status = campaign.status as PillStatus;
   return (
     <Link
       to={`/projects/${campaign.project_id}/campaigns/${campaign.id}`}
-      className="flex items-center gap-3 rounded-xl border border-border-soft bg-card p-4 transition-colors hover:bg-muted/30"
+      className="flex items-center gap-3.5 rounded-lg border border-border-soft bg-card p-4 transition-colors hover:border-border"
     >
-      <div className="grid h-9 w-9 shrink-0 place-items-center rounded-lg bg-muted text-muted-foreground">
-        <StatusIcon size={16} className={STATUS_ICON_CLASS[status]} />
+      <IconTile>
+        <GitBranch size={16} />
+      </IconTile>
+      <div className="min-w-0 flex-1">
+        <div className="truncate text-sm font-medium text-foreground">{campaign.title}</div>
+        <div className="mt-0.5 truncate text-xs text-muted-foreground">{campaign.project_name}</div>
       </div>
-      <div className="flex min-w-0 flex-1 flex-col gap-0.5">
-        <span className="text-sm font-medium text-foreground">{campaign.project_name} · {campaign.title}</span>
-        <span className="text-xs text-muted-foreground capitalize">{status}</span>
-      </div>
-      <div className="flex shrink-0 items-center gap-2">
-        <span className="text-[11px] text-faint-fg">{timeAgo(campaign.created_at)}</span>
-      </div>
+      <StatusPill status={status} />
+      <span className="shrink-0 text-[11px] text-faint-fg">{timeAgo(campaign.created_at)}</span>
     </Link>
   );
 }

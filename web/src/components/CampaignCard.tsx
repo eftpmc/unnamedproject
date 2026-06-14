@@ -5,8 +5,8 @@ import { AlertCircle, ArrowRight, Bot, CheckCircle2, Circle, FileEdit, GitBranch
 import { getCampaign } from '../lib/api.js';
 import { subscribe } from '../lib/ws.js';
 import { cn } from '@/lib/utils';
-import { Badge } from '@/components/ui/badge';
 import { Skeleton } from '@/components/ui/skeleton';
+import { StatusPill } from '@/components/ui/status-pill';
 import { Surface } from '@/components/ui/app-layout';
 import type { CampaignTask, WSCampaignTaskUpdated } from '../types.js';
 
@@ -94,23 +94,12 @@ export default function CampaignCard({ campaignId, projectId }: CampaignCardProp
   const displayStatus = isDone ? 'done' : isError ? 'error' : isRunning ? 'running' : campaign.status;
 
   return (
-    <Surface className="w-full overflow-hidden rounded-2xl border-border/25 bg-background shadow-sm ring-1 ring-black/[0.03]">
-      <div className="flex items-center justify-between border-b border-border/35 bg-muted/15 px-3 py-2">
+    <Surface className="w-full overflow-hidden rounded-lg border-border-soft bg-card shadow-sm">
+      <div className="flex items-center justify-between border-b border-border-soft px-3.5 py-2.5">
         <span className="text-xs font-semibold text-foreground truncate pr-2">{campaign.title}</span>
-        <Badge
-          variant="outline"
-          className={cn(
-            'shrink-0 capitalize',
-            isRunning && 'bg-primary/10 text-on-accent-soft border-transparent',
-            isDone && 'bg-success/10 text-success border-transparent',
-            isError && 'bg-destructive/10 text-destructive border-destructive/20',
-            !isRunning && !isDone && !isError && 'bg-muted text-muted-foreground border-transparent',
-          )}
-        >
-          {displayStatus}
-        </Badge>
+        <StatusPill status={displayStatus} />
       </div>
-      <div className="flex flex-col gap-2 px-3 py-2.5">
+      <div className="flex flex-col gap-2 px-3.5 py-3">
         {orderedTasks.map(task => {
           const status = taskStatuses[task.id] ?? task.status;
           const StatusIcon = STATUS_ICON[status];
@@ -127,7 +116,7 @@ export default function CampaignCard({ campaignId, projectId }: CampaignCardProp
           );
         })}
       </div>
-      <div className="border-t border-border/35 px-3 py-2">
+      <div className="border-t border-border-soft px-3.5 py-2">
         <Link
           to={`/projects/${projectId}/campaigns/${campaignId}`}
           className="flex items-center justify-center gap-1.5 text-xs font-medium text-foreground/70 transition-colors hover:text-foreground"

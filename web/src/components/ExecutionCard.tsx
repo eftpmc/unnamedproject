@@ -1,7 +1,8 @@
 import { useState, useMemo } from 'react';
-import { Bell, Bot, Check, ChevronDown, ChevronUp, Code2, FileText, GitBranch, GitPullRequest, Square, Terminal, X } from 'lucide-react';
+import { Bot, Check, ChevronDown, ChevronUp, Code2, FileText, GitBranch, GitPullRequest, Square, Terminal, X } from 'lucide-react';
 import { approveExecution, rejectExecution, cancelExecution } from '../lib/api.js';
 import { Button } from '@/components/ui/button';
+import { StatusPill } from '@/components/ui/status-pill';
 import { cn } from '@/lib/utils';
 
 const COLLAPSED_LINES = 6;
@@ -46,27 +47,6 @@ interface ExecutionCardProps {
   needsApproval: boolean;
   approvalId: string | null;
   action: string | null;
-}
-
-function StatusBadge({ status }: { status: ExecutionStatus }) {
-  const styles: Record<ExecutionStatus, string> = {
-    pending:           'bg-muted text-muted-foreground',
-    running:           'bg-primary/10 text-on-accent-soft',
-    done:              'bg-success/10 text-success',
-    error:             'bg-destructive/10 text-destructive',
-    awaiting_approval: 'bg-warning/15 text-amber-700 dark:text-amber-300',
-  };
-  const labels: Record<ExecutionStatus, string> = {
-    pending: 'Pending', running: 'Running', done: 'Done',
-    error: 'Error', awaiting_approval: 'Approval',
-  };
-  return (
-    <span className={cn('flex items-center gap-1.5 rounded-full px-2 py-0.5 text-[11px] font-medium', styles[status])}>
-      {status === 'running' && <span className="size-1.5 animate-pulse rounded-full bg-primary" />}
-      {status === 'awaiting_approval' && <Bell size={10} />}
-      {labels[status]}
-    </span>
-  );
 }
 
 const TOOL_ICON: Array<[RegExp, typeof Bot]> = [
@@ -126,24 +106,32 @@ export default function ExecutionCard({
 
   return (
     <div className={cn(
-      'overflow-hidden rounded-xl border bg-card',
+      'overflow-hidden rounded-lg border bg-card shadow-sm',
       status === 'awaiting_approval'
         ? 'border-warning/35'
         : 'border-border-soft',
     )}>
       <div
         role={!isApproval ? 'button' : undefined}
+        tabIndex={!isApproval ? 0 : undefined}
+        aria-expanded={!isApproval ? expanded : undefined}
         onClick={!isApproval ? () => setExpanded(e => !e) : undefined}
+        onKeyDown={!isApproval ? (e) => {
+          if (e.key === 'Enter' || e.key === ' ') {
+            e.preventDefault();
+            setExpanded(v => !v);
+          }
+        } : undefined}
         className={`flex items-center gap-2.5 px-3.5 py-3 ${isApproval ? 'cursor-default' : 'cursor-pointer hover:bg-muted/20 transition-colors'}`}
       >
-        <div className="grid h-7 w-7 shrink-0 place-items-center rounded-lg bg-muted text-muted-foreground">
+        <div className="grid h-7 w-7 shrink-0 place-items-center rounded-md bg-muted text-muted-foreground">
           <ToolIcon size={14} />
         </div>
         <div className="flex min-w-0 flex-1 flex-col">
           <span className="text-xs font-medium text-foreground">{formatToolName(tool)}</span>
           {projectName && <span className="text-[11px] text-faint-fg">{projectName}</span>}
         </div>
-        <StatusBadge status={decided === 'approved' ? 'done' : decided === 'rejected' ? 'error' : status} />
+        <StatusPill status={decided === 'approved' ? 'done' : decided === 'rejected' ? 'error' : status} />
 
         {isApproval && (
           <div className="flex shrink-0 gap-1">
@@ -187,7 +175,7 @@ export default function ExecutionCard({
       </div>
 
       {isApproval && action && (
-        <div className="border-t border-warning/20 px-3 py-2 text-xs text-muted-foreground">
+        <div className="border-t border-warning/20 px-3.5 py-2 text-xs text-muted-foreground">
           Approval requested for <span className="font-medium text-foreground">{action}</span>
         </div>
       )}

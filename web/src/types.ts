@@ -30,6 +30,34 @@ export interface MessageExecution {
   action: string | null;
 }
 
+export type SessionEventType =
+  | 'scope_changed'
+  | 'project_linked'
+  | 'project_created'
+  | 'campaign_created'
+  | 'artifact_created'
+  | 'approval_requested'
+  | 'approval_resolved';
+
+export interface SessionEvent {
+  id: string;
+  session_id: string;
+  type: SessionEventType;
+  title: string;
+  body: string | null;
+  project_id: string | null;
+  campaign_id: string | null;
+  artifact_id: string | null;
+  execution_id: string | null;
+  metadata: Record<string, unknown>;
+  created_at: number;
+}
+
+export interface SessionProjectLink extends Project {
+  source: 'agent' | 'user' | 'system';
+  linked_at: number;
+}
+
 export interface Message {
   id: string;
   role: 'user' | 'assistant';
@@ -158,6 +186,12 @@ export interface WSSessionTitleUpdated extends WSEvent {
   type: 'session_title_updated';
   sessionId: string;
   title: string;
+}
+
+export interface WSSessionEventCreated extends WSEvent {
+  type: 'session_event_created';
+  sessionId: string;
+  event: SessionEvent;
 }
 
 export interface Memory {

@@ -6,7 +6,7 @@ import { getProjects, createProject, getProjectCampaigns, getProjectCapabilities
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
-import { CenteredEmptyState, PageBody, PageHeader, PageLoading, PageShell, Surface } from '@/components/ui/app-layout';
+import { CenteredEmptyState, ContentColumn, PageBody, PageHeader, PageLoading, PageShell, Surface } from '@/components/ui/app-layout';
 import type { Project } from '../types.js';
 
 function ProjectCard({ project }: { project: Project }) {
@@ -24,15 +24,15 @@ function ProjectCard({ project }: { project: Project }) {
   const runningCount = campaigns.filter(c => c.status === 'running').length;
 
   return (
-    <button type="button" aria-label={`Open project: ${project.name}`} className="block h-full w-full rounded-xl text-left" onClick={() => navigate(`/projects/${project.id}`)}>
-      <Surface interactive className="flex h-full flex-col gap-2.5 p-4">
-        <div className="flex items-start justify-between gap-2">
-          <div className="flex items-center gap-2.5">
+    <button type="button" aria-label={`Open project: ${project.name}`} className="block h-full w-full rounded-lg text-left" onClick={() => navigate(`/projects/${project.id}`)}>
+      <Surface interactive className="flex h-full flex-col gap-2.5 rounded-lg p-4">
+        <div className="flex items-start justify-between gap-2.5">
+          <div className="flex min-w-0 flex-1 items-center gap-2.5">
             {project.repo_path
-              ? <FolderGit2 size={15} className="shrink-0 text-muted-foreground" />
-              : <FileText size={15} className="shrink-0 text-muted-foreground" />
+              ? <FolderGit2 size={16} className="shrink-0 text-muted-foreground" />
+              : <FileText size={16} className="shrink-0 text-muted-foreground" />
             }
-            <span className="truncate text-sm font-semibold text-foreground">{project.name}</span>
+            <span className="truncate text-sm font-semibold tracking-tight text-foreground">{project.name}</span>
           </div>
           {runningCount > 0 && (
             <span className="flex shrink-0 items-center gap-1.5 text-[11px] font-medium text-on-accent-soft">
@@ -42,7 +42,7 @@ function ProjectCard({ project }: { project: Project }) {
           )}
         </div>
         {project.description && (
-          <p className="line-clamp-2 text-xs leading-relaxed text-muted-foreground">{project.description}</p>
+          <p className="line-clamp-2 text-[13px] leading-relaxed text-muted-foreground">{project.description}</p>
         )}
         <div className="flex flex-wrap items-center gap-x-2 gap-y-1 text-[11px] text-faint-fg">
           <span>{project.repo_path ? 'code repo' : 'doc project'}</span>
@@ -101,10 +101,10 @@ export default function ProjectsPage() {
         actions={(
           <button
             type="button"
-            className="flex items-center gap-1.5 rounded-lg border border-border bg-card px-3 py-1.5 text-sm font-medium text-fg-soft shadow-xs transition-colors hover:border-muted-foreground hover:text-foreground"
+            className="flex items-center gap-1.5 rounded-md border border-border bg-muted px-2.5 py-1.5 text-[13px] font-medium text-fg-soft transition-colors hover:border-muted-foreground hover:bg-card hover:text-foreground"
             onClick={() => setOpen(true)}
           >
-            <Plus size={13} />
+            <Plus size={14} />
             New project
           </button>
         )}
@@ -121,9 +121,11 @@ export default function ProjectsPage() {
         />
       ) : (
         <PageBody>
-          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
-            {projects.map(p => <ProjectCard key={p.id} project={p} />)}
-          </div>
+          <ContentColumn>
+            <div className="grid gap-5 [grid-template-columns:repeat(auto-fill,minmax(15.5rem,1fr))]">
+              {projects.map(p => <ProjectCard key={p.id} project={p} />)}
+            </div>
+          </ContentColumn>
         </PageBody>
       )}
 

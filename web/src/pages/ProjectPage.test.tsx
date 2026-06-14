@@ -91,7 +91,7 @@ describe('ProjectPage', () => {
     expect(await screen.findByText('No chats yet')).toBeInTheDocument();
   });
 
-  it('shows active campaign hero when a campaign is running', async () => {
+  it('shows the active-now section when a campaign is running', async () => {
     const { getProjectCampaigns } = await import('../lib/api.js');
     (getProjectCampaigns as ReturnType<typeof vi.fn>).mockResolvedValueOnce([
       {
@@ -105,11 +105,12 @@ describe('ProjectPage', () => {
       },
     ]);
     renderPage('/projects/proj-1');
-    expect(await screen.findByText('Active Campaign')).toBeInTheDocument();
-    expect(screen.getByText('Implement auth flow')).toBeInTheDocument();
+    expect(await screen.findByText('Active now')).toBeInTheDocument();
+    // Running campaign appears in both "Active now" and the "Recent activity" feed.
+    expect(screen.getAllByText('Implement auth flow').length).toBeGreaterThan(0);
   });
 
-  it('shows recent campaigns section with campaign title on overview', async () => {
+  it('shows campaigns in the recent activity feed on overview', async () => {
     const { getProjectCampaigns } = await import('../lib/api.js');
     (getProjectCampaigns as ReturnType<typeof vi.fn>).mockResolvedValueOnce([
       {
@@ -123,13 +124,13 @@ describe('ProjectPage', () => {
       },
     ]);
     renderPage('/projects/proj-1');
-    expect(await screen.findByText('Recent Campaigns')).toBeInTheDocument();
+    expect(await screen.findByText('Recent activity')).toBeInTheDocument();
     expect(screen.getByText('Add dark mode')).toBeInTheDocument();
   });
 
-  it('shows recent chats section on overview when chats are pinned', async () => {
+  it('shows pinned chats in the recent activity feed on overview', async () => {
     renderPage('/projects/proj-1');
-    expect(await screen.findByText('Recent Chats')).toBeInTheDocument();
+    expect(await screen.findByText('Recent activity')).toBeInTheDocument();
     expect(screen.getByText('Fix the render bug')).toBeInTheDocument();
   });
 

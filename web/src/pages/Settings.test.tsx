@@ -19,6 +19,7 @@ vi.mock('../lib/api.js', () => ({
   updateSettings: vi.fn(),
   updateAgentBudgets: vi.fn(),
   updateScheduledTask: vi.fn(),
+  deleteScheduledTask: vi.fn(),
   runScheduledTask: vi.fn(),
 }));
 

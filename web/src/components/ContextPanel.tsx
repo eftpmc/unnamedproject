@@ -1,6 +1,8 @@
-import { X, GitMerge, Check, Bell } from 'lucide-react';
+import { useQuery } from '@tanstack/react-query';
+import { X, GitMerge, Check, Bell, Sparkles } from 'lucide-react';
+import { getProjectArtifacts } from '../lib/api.js';
 import { cn } from '@/lib/utils';
-import type { Project } from '../types.js';
+import type { Project, ProjectArtifact } from '../types.js';
 
 interface Approval {
   executionId: string;
@@ -36,11 +38,11 @@ export default function ContextPanel({
       {/* Desktop: slide-in right panel */}
       <aside
         className={cn(
-          'hidden shrink-0 overflow-hidden border-l border-border-soft bg-muted transition-[width] duration-300 ease-in-out md:block',
+          'hidden shrink-0 overflow-hidden border-l border-border-soft bg-muted/65 transition-[width] duration-300 ease-in-out md:block',
           open ? 'w-72' : 'w-0 border-l-transparent',
         )}
       >
-        <div className="w-72 overflow-y-auto h-full">
+        <div className="h-full w-72 overflow-y-auto">
           <PanelContent
             onClose={onClose}
             project={project}
@@ -59,7 +61,7 @@ export default function ContextPanel({
         <div className="fixed inset-0 z-40 md:hidden" onClick={onClose}>
           <div className="absolute inset-0 bg-black/30" />
           <div
-            className="absolute inset-x-0 bottom-0 max-h-[80dvh] overflow-y-auto rounded-t-2xl border-t border-border bg-background shadow-xl"
+            className="absolute inset-x-0 bottom-0 max-h-[82dvh] overflow-y-auto rounded-t-2xl border-t border-border bg-background shadow-xl"
             onClick={e => e.stopPropagation()}
           >
             <div className="mx-auto mt-2 h-1 w-8 rounded-full bg-border" />
@@ -90,11 +92,18 @@ function PanelContent({
   onMerge,
   mergeState,
 }: Omit<ContextPanelProps, 'open'>) {
+  const { data: artifactData } = useQuery<{ artifacts: ProjectArtifact[] }>({
+    queryKey: ['project-artifacts', project?.id],
+    queryFn: () => getProjectArtifacts(project!.id),
+    enabled: !!project,
+    staleTime: 20_000,
+  });
+  const artifacts = artifactData?.artifacts.slice(0, 3) ?? [];
+
   return (
     <div className="flex flex-col gap-5 p-4 pb-6">
-      {/* Header */}
       <div className="flex items-center justify-between">
-        <span className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">Context</span>
+        <span className="text-[13px] font-semibold text-muted-foreground">Context</span>
         <button
           type="button"
           onClick={onClose}
@@ -106,13 +115,13 @@ function PanelContent({
 
       {/* Project */}
       {project && (
-        <section className="flex flex-col gap-1.5">
+        <section className="flex flex-col gap-2">
           <span className="text-[11px] font-medium text-muted-foreground">Project</span>
-          <div className="flex items-center gap-2.5 rounded-xl border border-border-soft bg-card p-3">
+          <div className="flex items-center gap-2.5 rounded-lg border border-border-soft bg-card p-3">
             <span className="size-2 shrink-0 rounded-full bg-success shadow-[0_0_0_3px_color-mix(in_oklch,var(--success)_22%,transparent)]" />
-            <div className="min-w-0">
-              <div className="text-sm font-semibold text-foreground">{project.name}</div>
-              <div className="text-[11px] text-faint-fg">{project.description ?? (project.repo_path ? 'code repo' : 'doc project')}</div>
+            <div className="min-w-0 flex-1">
+              <div className="truncate text-sm font-semibold text-foreground">{project.name}</div>
+              <div className="truncate text-[11px] text-faint-fg">{project.description ?? (project.repo_path ? 'code repo' : 'doc project')}</div>
             </div>
           </div>
         </section>
@@ -124,7 +133,7 @@ function PanelContent({
           <span className="text-[11px] font-medium text-muted-foreground">Working branch</span>
           <div className="flex items-center gap-2 text-sm">
             <GitMerge size={13} className="shrink-0 text-muted-foreground" />
-            <code className="font-mono text-xs text-fg-soft">{worktree.branch}</code>
+            <code className="truncate font-mono text-xs text-fg-soft">{worktree.branch}</code>
           </div>
           <div className="text-[11px] text-faint-fg">
             {worktree.commits_ahead} commit{worktree.commits_ahead !== 1 ? 's' : ''} ahead
@@ -133,7 +142,7 @@ function PanelContent({
             type="button"
             onClick={onMerge}
             disabled={mergeState === 'merging' || mergeState === 'done'}
-            className="flex w-full items-center justify-center gap-1.5 rounded-lg bg-primary px-3 py-2 text-xs font-medium text-primary-foreground transition-[filter] hover:enabled:brightness-105 disabled:opacity-60"
+            className="mt-0.5 flex w-full items-center justify-center gap-1.5 rounded-lg bg-primary px-3 py-2 text-xs font-medium text-primary-foreground transition-[filter] hover:enabled:brightness-105 disabled:opacity-60"
           >
             {mergeState === 'merging' ? 'Merging…' : mergeState === 'done' ? 'Merged ✓' : 'Merge to main'}
           </button>
@@ -145,7 +154,7 @@ function PanelContent({
 
       {/* Pending approval */}
       {pendingApproval && (
-        <section className="flex flex-col gap-2 rounded-xl border border-warning/35 bg-warning/5 p-3">
+        <section className="flex flex-col gap-2 rounded-lg border border-warning/35 bg-warning/5 p-3">
           <div className="flex items-center gap-1.5 text-[11px] font-medium text-warning">
             <Bell size={12} />
             Needs approval
@@ -168,6 +177,37 @@ function PanelContent({
               Approve
             </button>
           </div>
+        </section>
+      )}
+
+      {project && (
+        <section className="flex flex-col gap-2">
+          <span className="text-[11px] font-medium text-muted-foreground">Artifacts</span>
+          {artifacts.length > 0 ? (
+            <div className="flex flex-col gap-2">
+              {artifacts.map(artifact => (
+                <div key={artifact.id} className="flex items-center gap-2.5 rounded-lg border border-border-soft bg-card p-2.5">
+                  <span className="grid size-8 shrink-0 place-items-center rounded-md bg-muted text-muted-foreground">
+                    <Sparkles size={13} />
+                  </span>
+                  <span className="min-w-0 flex-1">
+                    <span className="block truncate text-xs font-medium text-foreground">{artifact.title}</span>
+                    <span className="block truncate text-[11px] text-faint-fg">{artifact.kind}</span>
+                  </span>
+                  <span className={cn(
+                    'size-2 shrink-0 rounded-full',
+                    artifact.status === 'ready' ? 'bg-success' :
+                      artifact.status === 'running' ? 'bg-primary animate-pulse' :
+                        artifact.status === 'error' ? 'bg-destructive' : 'bg-warning',
+                  )} />
+                </div>
+              ))}
+            </div>
+          ) : (
+            <div className="rounded-lg border border-dashed border-border bg-background/50 p-3 text-xs leading-relaxed text-muted-foreground">
+              Artifacts created from this chat will appear here.
+            </div>
+          )}
         </section>
       )}
     </div>

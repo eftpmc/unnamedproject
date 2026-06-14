@@ -1,5 +1,5 @@
 import Anthropic from '@anthropic-ai/sdk';
-import { getDb, getProjectForUser, setAgentWorktreeSession, updateCampaignTaskStatus, maybeCompleteCampaign, getCampaignForTask, getCampaignSummaries, getCampaignById, getCampaignTasks, getExecutionById, getScheduledTasksForUser, createScheduledTask, updateScheduledTask, deleteScheduledTask, resumeCampaign, getPermissionProfile } from '../db/index.js';
+import { createSessionEvent, getDb, getProjectForUser, linkSessionProject, setAgentWorktreeSession, updateCampaignTaskStatus, maybeCompleteCampaign, getCampaignForTask, getCampaignSummaries, getCampaignById, getCampaignTasks, getExecutionById, getScheduledTasksForUser, createScheduledTask, updateScheduledTask, deleteScheduledTask, resumeCampaign, getPermissionProfile } from '../db/index.js';
 import { runAgentPipeline, type AgentPipelineCtx } from './agent_pipeline.js';
 import { ensureWorktree } from '../lib/worktree.js';
 import { getDecryptedConfig } from '../routes/connections.js';
@@ -160,6 +160,25 @@ const PARALLEL_SAFE_TOOLS = new Set([
   'list_scheduled_tasks',
 ]);
 
+function noteProjectUse(userId: string, sessionId: string, project: { id: string; name: string }, executionId?: string): void {
+  const linked = linkSessionProject(sessionId, project.id, 'agent');
+  if (!linked) return;
+  const event = createSessionEvent({
+    sessionId,
+    type: 'project_linked',
+    title: `Scoped to ${project.name}`,
+    body: 'The agent attached this chat to a project automatically.',
+    projectId: project.id,
+    executionId: executionId ?? null,
+    metadata: { source: 'agent' },
+  });
+  broadcast(userId, {
+    type: 'session_event_created',
+    sessionId,
+    event: { ...event, metadata: JSON.parse(event.metadata || '{}') },
+  });
+}
+
 async function dispatchToolBlocks(
   toolUseBlocks: Anthropic.ToolUseBlock[],
   userId: string,
@@ -196,6 +215,7 @@ async function dispatchTool(
   const projectId = (toolInput.project_id as string | undefined) ?? 'unknown';
   const project = getProjectForUser(projectId, userId);
   const executionId = createExecution(userId, messageId, project?.id ?? null, toolName);
+  if (project) noteProjectUse(userId, sessionId, project, executionId);
 
   const campaignTaskId = toolInput.campaign_task_id as string | undefined;
   if (campaignTaskId) {
@@ -500,6 +520,17 @@ async function dispatchTool(
           metadata: { producer: 'create_artifact', execution_id: executionId },
         });
         result = JSON.stringify({ artifact_id: artifact.id, project_id: projectId, title: artifact.title, kind: artifact.kind, mime_type: artifact.mime_type });
+        const event = createSessionEvent({
+          sessionId,
+          type: 'artifact_created',
+          title: `Created artifact: ${artifact.title}`,
+          body: artifact.kind,
+          projectId,
+          artifactId: artifact.id,
+          executionId,
+          metadata: { kind: artifact.kind, mime_type: artifact.mime_type },
+        });
+        broadcast(userId, { type: 'session_event_created', sessionId, event: { ...event, metadata: JSON.parse(event.metadata || '{}') } });
         if (artifactTaskId) finishCampaignTask(userId, artifactTaskId, result);
         break;
       }
@@ -513,6 +544,24 @@ async function dispatchTool(
           userId,
           executionId
         );
+        if (!result.startsWith('Error:')) {
+          const createdProject = getDb()
+            .prepare('SELECT id, name FROM projects WHERE user_id = ? AND name = ?')
+            .get(userId, toolInput.name as string) as { id: string; name: string } | undefined;
+          if (createdProject) {
+            linkSessionProject(sessionId, createdProject.id, 'agent');
+            const event = createSessionEvent({
+              sessionId,
+              type: 'project_created',
+              title: `Created project: ${createdProject.name}`,
+              body: 'Created from this chat.',
+              projectId: createdProject.id,
+              executionId,
+              metadata: { source: 'agent' },
+            });
+            broadcast(userId, { type: 'session_event_created', sessionId, event: { ...event, metadata: JSON.parse(event.metadata || '{}') } });
+          }
+        }
         break;
       case 'update_project':
         result = await updateProject(
@@ -640,6 +689,22 @@ async function dispatchTool(
           },
           userId
         );
+        try {
+          const parsed = JSON.parse(result) as { campaign_id?: string; project_id?: string };
+          if (parsed.campaign_id && parsed.project_id) {
+            const event = createSessionEvent({
+              sessionId,
+              type: 'campaign_created',
+              title: `Created campaign: ${toolInput.title as string}`,
+              body: 'Tracks agent work from this chat.',
+              projectId: parsed.project_id,
+              campaignId: parsed.campaign_id,
+              executionId,
+              metadata: { source: 'agent' },
+            });
+            broadcast(userId, { type: 'session_event_created', sessionId, event: { ...event, metadata: JSON.parse(event.metadata || '{}') } });
+          }
+        } catch { /* ignore malformed tool result */ }
         break;
       }
       case 'generate_video': {

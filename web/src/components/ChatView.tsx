@@ -1,14 +1,14 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useNavigate } from 'react-router-dom';
-import { Bell, ChevronDown, PanelRight, X } from 'lucide-react';
+import { Bell, Check, ChevronDown, Folder, PanelRight, Target, X } from 'lucide-react';
 import ContextPanel from './ContextPanel.js';
 import MessageList from './MessageList.js';
 import MessageInput from './MessageInput.js';
-import { getMessages, sendMessage, getChats, updateChatConfig, getModelsForEffort, getSessionWorktree, mergeSessionBranch, getProjects, truncateMessagesFrom, approveExecution, rejectExecution } from '../lib/api.js';
+import { getMessages, sendMessage, getChats, updateChatConfig, getModelsForEffort, getSessionWorktree, mergeSessionBranch, getProjects, truncateMessagesFrom, approveExecution, rejectExecution, getChatEvents } from '../lib/api.js';
 import { subscribe } from '../lib/ws.js';
 import { cn } from '../lib/utils.js';
-import type { EffortLevel, Message, MessageExecution, Session, WSEvent, WSMessageCreated, WSMessageStarted, WSMessageDelta, WSExecutionUpdate, WSApprovalRequested, WSAutoApproved, WSSessionTitleUpdated, WSAgentError, ClaudeModelInfo } from '../types.js';
+import type { EffortLevel, Message, MessageExecution, Project, Session, SessionEvent, SessionProjectLink, WSEvent, WSMessageCreated, WSMessageStarted, WSMessageDelta, WSExecutionUpdate, WSApprovalRequested, WSAutoApproved, WSSessionTitleUpdated, WSSessionEventCreated, WSAgentError, ClaudeModelInfo } from '../types.js';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Button } from '@/components/ui/button';
@@ -30,6 +30,13 @@ export default function ChatView({ chatId }: ChatViewProps) {
     queryFn: () => getMessages(chatId),
   });
 
+  const { data: chatEventsData } = useQuery({
+    queryKey: ['chat-events', chatId],
+    queryFn: () => getChatEvents(chatId),
+  });
+  const chatEvents = chatEventsData?.events ?? [];
+  const linkedProjects = chatEventsData?.projects ?? [];
+
   const { data: chats = [] } = useQuery<Session[]>({
     queryKey: ['chats'],
     queryFn: getChats,
@@ -47,10 +54,15 @@ export default function ChatView({ chatId }: ChatViewProps) {
     queryFn: getProjects,
   });
   const pinnedProject = projects.find(p => p.id === chat?.pinned_project_id) ?? null;
+  const inferredProject = !pinnedProject ? linkedProjects[linkedProjects.length - 1] ?? null : null;
+  const contextProject = pinnedProject ?? inferredProject;
 
   const configMutation = useMutation({
     mutationFn: (config: { effort?: EffortLevel; model?: string | null; pinned_project_id?: string | null }) => updateChatConfig(chatId, config),
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['chats'] }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['chats'] });
+      queryClient.invalidateQueries({ queryKey: ['chat-events', chatId] });
+    },
   });
 
   const { data: worktree, refetch: refetchWorktree } = useQuery({
@@ -82,6 +94,15 @@ export default function ChatView({ chatId }: ChatViewProps) {
   // Hydrate executions from persisted message data so reloading mid-execution
   // or after completion still shows past tool runs and their output.
   const hydratedRef = useRef(false);
+  useEffect(() => {
+    hydratedRef.current = false;
+    execToMsgRef.current = {};
+    setExecutions({});
+    setStreamingIds(new Set());
+    setSending(false);
+    setAgentError(null);
+  }, [chatId]);
+
   useEffect(() => {
     if (hydratedRef.current || !messages.length) return;
     hydratedRef.current = true;
@@ -235,7 +256,12 @@ export default function ChatView({ chatId }: ChatViewProps) {
           if (!existing) return prev;
           const updated = {
             ...existing,
-            ...(ev.status ? { status: ev.status as InlineExecution['status'] } : {}),
+            ...(ev.status ? {
+              status: ev.status as InlineExecution['status'],
+              needsApproval: ev.status === 'awaiting_approval' ? existing.needsApproval : false,
+              approvalId: ev.status === 'awaiting_approval' ? existing.approvalId : null,
+              action: ev.status === 'awaiting_approval' ? existing.action : null,
+            } : {}),
             ...(ev.chunk ? { outputLog: existing.outputLog + ev.chunk } : {}),
             ...(ev.result ? { result: ev.result } : {}),
           };
@@ -282,6 +308,18 @@ export default function ChatView({ chatId }: ChatViewProps) {
       }
     }
 
+    if (event.type === 'session_event_created') {
+      const ev = event as WSSessionEventCreated;
+      if (ev.sessionId === chatId) {
+        queryClient.setQueryData<{ events: SessionEvent[]; projects: SessionProjectLink[] }>(['chat-events', chatId], prev => {
+          if (!prev) return { events: [ev.event], projects: [] };
+          if (prev.events.some(e => e.id === ev.event.id)) return prev;
+          return { ...prev, events: [...prev.events, ev.event] };
+        });
+        queryClient.invalidateQueries({ queryKey: ['chat-events', chatId] });
+      }
+    }
+
   }, [chatId, queryClient, refetchWorktree]);
 
   useEffect(() => {
@@ -304,19 +342,17 @@ export default function ChatView({ chatId }: ChatViewProps) {
       <div className="flex min-w-0 flex-1 flex-col">
       <PageHeader
         title={chat?.title ?? 'Untitled chat'}
-        description={pinnedProject ? (
-          <button
-            onClick={() => navigate(`/projects/${pinnedProject.id}`)}
-            className="flex w-fit max-w-full items-center gap-1.5 text-left text-xs text-muted-foreground transition-colors hover:text-foreground"
-            title={`Open ${pinnedProject.name}`}
-          >
-            <span className={cn(
-              'size-1.5 shrink-0 rounded-full',
-              agentActive ? 'bg-success' : 'bg-muted-foreground/40',
-            )} />
-            <span className="truncate">{pinnedProject.name}</span>
-          </button>
-        ) : undefined}
+        className="border-b border-border-soft px-5 py-4"
+        description={
+          <ScopePopover
+            projects={projects}
+            pinnedProject={pinnedProject}
+            inferredProject={inferredProject}
+            agentActive={agentActive}
+            onOpenProject={(projectId) => navigate(`/projects/${projectId}`)}
+            onScopeChange={(projectId) => configMutation.mutate({ pinned_project_id: projectId })}
+          />
+        }
         actions={
           <div className="flex items-center gap-2">
             <ChatConfigPopover
@@ -361,6 +397,7 @@ export default function ChatView({ chatId }: ChatViewProps) {
           sessionId={chatId}
           onEditMessage={handleEditMessage}
           canEdit={!agentActive}
+          events={chatEvents}
         />
       )}
 
@@ -374,7 +411,7 @@ export default function ChatView({ chatId }: ChatViewProps) {
       )}
 
       {pendingApproval && !ctxOpen && (
-        <div className="flex shrink-0 items-center justify-between gap-3 border-t border-warning/25 bg-warning/8 px-5 py-2.5 text-sm">
+        <div className="flex shrink-0 items-center justify-between gap-3 border-t border-warning/25 bg-warning/8 px-5 py-2.5 text-sm md:hidden">
           <div className="flex items-center gap-2 text-fg-soft">
             <Bell size={14} className="text-warning" />
             <span>Approval needed for <strong className="font-semibold text-foreground">{pendingApproval.action ?? 'Tool execution'}</strong></span>
@@ -399,7 +436,7 @@ export default function ChatView({ chatId }: ChatViewProps) {
       <ContextPanel
         open={ctxOpen}
         onClose={() => { setCtxOpen(false); localStorage.setItem('ctx_panel', 'closed'); }}
-        project={pinnedProject}
+        project={contextProject}
         worktree={worktree ? { branch: worktree.branch, commits_ahead: worktree.ahead } : null}
         pendingApproval={pendingApproval ? {
           executionId: pendingApproval.executionId,
@@ -464,6 +501,118 @@ function EmptyChatState({
   );
 }
 
+function ScopePopover({
+  projects,
+  pinnedProject,
+  inferredProject,
+  agentActive,
+  onOpenProject,
+  onScopeChange,
+}: {
+  projects: Project[];
+  pinnedProject: Project | null;
+  inferredProject: SessionProjectLink | null;
+  agentActive: boolean;
+  onOpenProject: (projectId: string) => void;
+  onScopeChange: (projectId: string | null) => void;
+}) {
+  const isAuto = !pinnedProject;
+  const triggerLabel = pinnedProject?.name ?? (inferredProject ? `Auto · ${inferredProject.name}` : 'Auto');
+
+  return (
+    <Popover>
+      <PopoverTrigger asChild>
+        <button
+          type="button"
+          className="mt-1 flex w-fit max-w-full items-center gap-1.5 rounded-lg border border-border/40 bg-muted/50 px-2 py-1 text-left text-xs text-muted-foreground transition-colors hover:border-border hover:bg-muted hover:text-foreground"
+          aria-label={`Chat scope: ${triggerLabel}`}
+        >
+          {isAuto ? (
+            <Target size={12} className="shrink-0" strokeWidth={1.85} />
+          ) : (
+            <span className={cn('size-1.5 shrink-0 rounded-full', agentActive ? 'bg-success' : 'bg-muted-foreground/40')} />
+          )}
+          <span className="truncate">{triggerLabel}</span>
+          <ChevronDown size={11} className="shrink-0" />
+        </button>
+      </PopoverTrigger>
+      <PopoverContent align="start" className="w-72 p-2">
+        <div className="px-2 pb-1.5 pt-1 text-[11px] font-semibold uppercase tracking-wide text-faint-fg">
+          Scope of this chat
+        </div>
+        <ScopeOption
+          selected={isAuto}
+          icon={<Target size={14} />}
+          title="Auto"
+          description={inferredProject ? `Agent attached ${inferredProject.name}.` : 'Let the agent route this work or create a project.'}
+          onClick={() => onScopeChange(null)}
+        />
+        <div className="my-1 border-t border-border-soft" />
+        <div className="max-h-60 overflow-y-auto">
+          {projects.map(project => (
+            <ScopeOption
+              key={project.id}
+              selected={pinnedProject?.id === project.id}
+              icon={<Folder size={14} />}
+              title={project.name}
+              description={project.repo_path ? project.repo_path.split('/').pop() ?? 'Code project' : 'Project context'}
+              onClick={() => onScopeChange(project.id)}
+              onAuxClick={() => onOpenProject(project.id)}
+            />
+          ))}
+        </div>
+      </PopoverContent>
+    </Popover>
+  );
+}
+
+function ScopeOption({
+  selected,
+  icon,
+  title,
+  description,
+  onClick,
+  onAuxClick,
+}: {
+  selected: boolean;
+  icon: React.ReactNode;
+  title: string;
+  description: string;
+  onClick: () => void;
+  onAuxClick?: () => void;
+}) {
+  return (
+    <div className="group flex items-center gap-1">
+      <button
+        type="button"
+        onClick={onClick}
+        className={cn(
+          'flex min-w-0 flex-1 items-center gap-2 rounded-lg px-2 py-2 text-left transition-colors',
+          selected ? 'bg-accent-tint text-on-accent-soft' : 'hover:bg-muted',
+        )}
+      >
+        <span className={cn('grid size-7 shrink-0 place-items-center rounded-md', selected ? 'bg-primary/10' : 'bg-muted text-muted-foreground')}>
+          {icon}
+        </span>
+        <span className="min-w-0 flex-1">
+          <span className="block truncate text-xs font-medium text-foreground">{title}</span>
+          <span className="block truncate text-[11px] text-muted-foreground">{description}</span>
+        </span>
+        {selected && <Check size={13} className="shrink-0" strokeWidth={2.4} />}
+      </button>
+      {onAuxClick && (
+        <button
+          type="button"
+          onClick={onAuxClick}
+          className="hidden shrink-0 rounded-md px-1.5 py-1 text-[11px] font-medium text-muted-foreground transition-colors hover:bg-muted hover:text-foreground group-hover:block"
+        >
+          Open
+        </button>
+      )}
+    </div>
+  );
+}
+
 function ChatConfigPopover({
   effort,
   model,
@@ -484,7 +633,7 @@ function ChatConfigPopover({
         <Button
           variant="ghost"
           size="sm"
-          className="h-7 max-w-36 gap-1.5 rounded-lg border border-border/50 bg-muted/70 px-3 text-xs font-normal sm:max-w-none"
+          className="flex h-7 max-w-28 gap-1.5 rounded-lg border border-border/50 bg-muted/70 px-3 text-xs font-normal sm:max-w-none"
         >
           <span className="truncate">{label}</span>
           <ChevronDown size={11} className="shrink-0 text-muted-foreground" />

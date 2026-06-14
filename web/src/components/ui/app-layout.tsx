@@ -51,7 +51,7 @@ function PageBody({ className, children, ...props }: React.ComponentProps<'div'>
 
 function ContentColumn({ className, children, ...props }: React.ComponentProps<'div'>) {
   return (
-    <div className={cn('mx-auto w-full max-w-4xl', className)} {...props}>
+    <div className={cn('mx-auto w-full max-w-5xl', className)} {...props}>
       {children}
     </div>
   );
@@ -83,7 +83,7 @@ function Surface({
   return (
     <div
       className={cn(
-        'rounded-xl border border-border-soft bg-card',
+        'rounded-lg border border-border-soft bg-card',
         interactive &&
           'cursor-pointer transition-[transform,box-shadow,border-color] duration-150 hover:-translate-y-px hover:border-border hover:shadow-md',
         className,
@@ -107,7 +107,7 @@ function EmptyPanel({
   return (
     <div
       className={cn(
-        'rounded-xl border border-dashed border-border bg-muted/30 px-4 py-3 text-sm',
+        'rounded-lg border border-dashed border-border bg-muted/30 px-4 py-3 text-sm',
         className,
       )}
     >

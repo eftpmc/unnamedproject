@@ -5,19 +5,12 @@ import remarkGfm from 'remark-gfm';
 import { FileText, Image, Loader2, Package, Video } from 'lucide-react';
 import { getArtifactContent, getProjectArtifacts } from '../lib/api.js';
 import { getToken } from '../lib/auth.js';
-import { EmptyPanel, PageLoading, Surface } from '@/components/ui/app-layout';
-import { Badge } from '@/components/ui/badge';
+import { EmptyPanel, PageLoading } from '@/components/ui/app-layout';
+import { StatusPill } from '@/components/ui/status-pill';
 import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
 import { timeAgo } from '../lib/utils.js';
 import type { Project, ProjectArtifact } from '../types.js';
-
-const STATUS_CLASS: Record<ProjectArtifact['status'], string> = {
-  ready: 'bg-success/10 text-success border-transparent',
-  review: 'bg-warning/10 text-foreground border-warning/25',
-  running: 'bg-primary/10 text-on-accent-soft border-transparent',
-  error: 'bg-destructive/10 text-destructive border-destructive/20',
-};
 
 function artifactIcon(mimeType: string) {
   if (mimeType.startsWith('video/')) return Video;
@@ -105,8 +98,8 @@ export default function ArtifactsTab({ project }: { project: Project }) {
   }
 
   return (
-    <div className="grid min-h-0 gap-5 lg:grid-cols-[minmax(0,1fr)_340px]">
-      <div className="min-w-0">
+    <div className="flex min-w-0 flex-col gap-5">
+      <div>
         <div className="mb-4 flex flex-wrap items-center gap-2">
           <Button size="sm" variant={kind === 'all' ? 'default' : 'outline'} className="h-8 text-xs" onClick={() => setKind('all')}>
             All
@@ -117,7 +110,7 @@ export default function ArtifactsTab({ project }: { project: Project }) {
             </Button>
           ))}
         </div>
-        <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
+        <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-3">
           {visible.map(artifact => {
             const Icon = artifactIcon(artifact.mime_type);
             const isSelected = selected?.id === artifact.id;
@@ -125,38 +118,41 @@ export default function ArtifactsTab({ project }: { project: Project }) {
               <button
                 key={artifact.id}
                 onClick={() => setSelectedId(artifact.id)}
-                className="block text-left"
+                className={cn(
+                  'group flex min-w-0 flex-col gap-3 rounded-lg border border-border-soft bg-card p-4 text-left transition-[transform,box-shadow,border-color]',
+                  'hover:-translate-y-px hover:border-border hover:shadow-sm',
+                  isSelected && 'border-border bg-background/85 shadow-sm',
+                )}
               >
-                <Surface interactive className={cn('p-4', isSelected && 'border-foreground/35 bg-background/85')}>
-                  <div className="flex items-start gap-3">
-                    <div className="grid size-9 shrink-0 place-items-center rounded-lg border border-border/50 bg-muted/25">
-                      <Icon size={16} className="text-muted-foreground" />
-                    </div>
-                    <div className="min-w-0 flex-1">
-                      <div className="truncate text-sm font-semibold text-foreground">{artifact.title}</div>
-                      <div className="mt-1 flex flex-wrap items-center gap-1.5 text-xs text-muted-foreground">
-                        <span>{kindLabel(artifact.kind)}</span>
-                        <span className="text-muted-foreground/35">·</span>
-                        <span>{timeAgo(artifact.created_at)}</span>
-                      </div>
-                    </div>
-                    <Badge variant="outline" className={cn('capitalize', STATUS_CLASS[artifact.status])}>
-                      {artifact.status}
-                    </Badge>
+                <div className="grid aspect-[16/10] w-full place-items-center rounded-md border border-border-soft bg-muted/35 bg-[repeating-linear-gradient(45deg,color-mix(in_oklch,var(--muted)_90%,transparent),color-mix(in_oklch,var(--muted)_90%,transparent)_8px,transparent_8px,transparent_16px)]">
+                  <div className="inline-flex items-center gap-1.5 rounded-md border border-border-soft bg-background/75 px-2 py-1 text-[11px] font-medium text-muted-foreground shadow-sm">
+                    <Icon size={12} />
+                    {artifact.mime_type}
                   </div>
-                  {artifact.description && (
-                    <p className="mt-3 line-clamp-2 text-xs leading-relaxed text-muted-foreground">
-                      {artifact.description}
-                    </p>
-                  )}
-                </Surface>
+                </div>
+                <div className="flex min-w-0 items-start justify-between gap-3">
+                  <div className="min-w-0">
+                    <div className="truncate text-sm font-semibold text-foreground">{artifact.title}</div>
+                    <div className="mt-1 flex flex-wrap items-center gap-1.5 text-xs text-muted-foreground">
+                      <span>{kindLabel(artifact.kind)}</span>
+                      <span className="text-border">·</span>
+                      <span>{timeAgo(artifact.created_at)}</span>
+                    </div>
+                  </div>
+                  <StatusPill status={artifact.status} />
+                </div>
+                {artifact.description && (
+                  <p className="line-clamp-2 text-xs leading-relaxed text-muted-foreground">
+                    {artifact.description}
+                  </p>
+                )}
               </button>
             );
           })}
         </div>
       </div>
 
-      <Surface className="min-w-0 p-4">
+      <div className="min-w-0 rounded-lg border border-border-soft bg-card p-4">
         {selected ? (
           <div className="flex flex-col gap-4">
             <div>
@@ -170,7 +166,7 @@ export default function ArtifactsTab({ project }: { project: Project }) {
         ) : (
           <div className="text-sm text-muted-foreground">Select an artifact to preview it.</div>
         )}
-      </Surface>
+      </div>
     </div>
   );
 }

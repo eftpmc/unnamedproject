@@ -1,11 +1,11 @@
 import { useEffect, useRef } from 'react';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
-import { Pencil } from 'lucide-react';
+import { GitMerge, Pencil, Sparkles, Target } from 'lucide-react';
 import ExecutionCard from './ExecutionCard.js';
 import CampaignCard from './CampaignCard.js';
 import ArtifactPreviewCard from './ArtifactPreviewCard.js';
-import type { Message } from '../types.js';
+import type { Message, SessionEvent } from '../types.js';
 
 interface InlineExecution {
   executionId: string;
@@ -21,8 +21,9 @@ interface InlineExecution {
 }
 
 type TimelineItem =
-  | { type: 'message'; message: Message }
-  | { type: 'execution'; execution: InlineExecution };
+  | { type: 'message'; message: Message; order: number }
+  | { type: 'execution'; execution: InlineExecution; order: number }
+  | { type: 'event'; event: SessionEvent; order: number };
 
 interface MessageListProps {
   messages: Message[];
@@ -31,6 +32,7 @@ interface MessageListProps {
   sessionId?: string;
   onEditMessage?: (messageId: string, content: string) => void;
   canEdit?: boolean;
+  events?: SessionEvent[];
 }
 
 const markdownComponents: React.ComponentProps<typeof ReactMarkdown>['components'] = {
@@ -95,7 +97,13 @@ function renderExecutionCard(exec: InlineExecution) {
   return <ExecutionCard key={exec.executionId} {...exec} />;
 }
 
-export default function MessageList({ messages, executions, streamingIds, sessionId, onEditMessage, canEdit }: MessageListProps) {
+function eventIcon(type: SessionEvent['type']) {
+  if (type === 'scope_changed' || type === 'project_linked') return Target;
+  if (type === 'campaign_created' || type === 'artifact_created' || type === 'project_created') return Sparkles;
+  return GitMerge;
+}
+
+export default function MessageList({ messages, executions, streamingIds, sessionId, onEditMessage, canEdit, events = [] }: MessageListProps) {
   const lastUserMessageId = [...messages].reverse().find(m => m.role === 'user')?.id ?? null;
   const bottomRef = useRef<HTMLDivElement>(null);
   const initialScrollDone = useRef(false);
@@ -106,20 +114,25 @@ export default function MessageList({ messages, executions, streamingIds, sessio
   const sortedMessages = [...messages].sort((a, b) => a.created_at - b.created_at);
   const knownMessageIds = new Set(sortedMessages.map(m => m.id));
   const timeline: TimelineItem[] = [];
-  sortedMessages.forEach((message) => {
-    timeline.push({ type: 'message' as const, message });
-    (executions[message.id] ?? []).forEach((execution) => {
-      timeline.push({ type: 'execution' as const, execution });
+  sortedMessages.forEach((message, messageIndex) => {
+    const messageOrder = message.created_at * 1000 + messageIndex * 10;
+    timeline.push({ type: 'message' as const, message, order: messageOrder });
+    (executions[message.id] ?? []).forEach((execution, executionIndex) => {
+      timeline.push({ type: 'execution' as const, execution, order: messageOrder + executionIndex + 1 });
     });
   });
   // Orphaned executions (no matching message yet) go at the end
-  Object.entries(executions).forEach(([msgId, execs]) => {
+  Object.entries(executions).forEach(([msgId, execs], orphanIndex) => {
     if (!knownMessageIds.has(msgId)) {
-      execs.forEach((execution) => {
-        timeline.push({ type: 'execution' as const, execution });
+      execs.forEach((execution, executionIndex) => {
+        timeline.push({ type: 'execution' as const, execution, order: execution.createdAt * 1000 + orphanIndex * 10 + executionIndex });
       });
     }
   });
+  events.forEach((event, eventIndex) => {
+    timeline.push({ type: 'event' as const, event, order: event.created_at * 1000 + 500 + eventIndex });
+  });
+  timeline.sort((a, b) => a.order - b.order);
 
   useEffect(() => {
     initialScrollDone.current = false;
@@ -135,8 +148,23 @@ export default function MessageList({ messages, executions, streamingIds, sessio
 
   return (
     <div className="flex-1 overflow-y-auto">
-      <div className="mx-auto flex w-full max-w-3xl flex-col gap-5 px-4 py-6 sm:px-6 sm:py-7">
+      <div className="mx-auto flex w-full max-w-[46rem] flex-col gap-6 px-4 py-7 sm:px-6 sm:py-8">
         {timeline.map(item => {
+          if (item.type === 'event') {
+            const Icon = eventIcon(item.event.type);
+            return (
+              <div key={`event-${item.event.id}`} className="flex items-center gap-2 text-xs text-muted-foreground">
+                <span className="grid size-6 shrink-0 place-items-center rounded-full bg-muted text-muted-foreground">
+                  <Icon size={12} />
+                </span>
+                <span className="min-w-0 flex-1">
+                  <span className="font-medium text-fg-soft">{item.event.title}</span>
+                  {item.event.body && <span className="text-faint-fg"> · {item.event.body}</span>}
+                </span>
+              </div>
+            );
+          }
+
           if (item.type === 'execution') {
             return (
               <div key={`exec-${item.execution.executionId}`} data-execution-id={item.execution.executionId} className="flex max-w-[94%] flex-col sm:max-w-[86%]">
@@ -167,7 +195,7 @@ export default function MessageList({ messages, executions, streamingIds, sessio
                       <Pencil size={13} />
                     </button>
                   )}
-                  <div className="max-w-[80%] rounded-2xl rounded-tr-md bg-muted px-4 py-2.5 text-[15px] leading-relaxed text-foreground">
+                  <div className="max-w-[88%] rounded-[18px] rounded-tr-md bg-muted px-4 py-2.5 text-[15px] leading-relaxed text-foreground sm:max-w-[80%]">
                     {msg.content}
                   </div>
                 </div>

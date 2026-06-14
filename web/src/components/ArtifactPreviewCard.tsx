@@ -64,8 +64,8 @@ export default function ArtifactPreviewCard({ artifactId, projectId, title, kind
   const displayed = truncated ? content.slice(0, PREVIEW_CHAR_LIMIT) : content;
 
   return (
-    <Surface className="w-full overflow-hidden rounded-2xl border-border/25 bg-background shadow-sm ring-1 ring-black/[0.03]">
-      <div className="flex items-center gap-2.5 border-b border-border/35 bg-muted/15 px-3 py-2">
+    <Surface className="w-full overflow-hidden rounded-lg border-border-soft bg-card shadow-sm">
+      <div className="flex items-center gap-2.5 border-b border-border-soft px-3.5 py-2.5">
         <FileText size={13} className="shrink-0 text-muted-foreground/60" />
         <span className="flex-1 truncate text-xs font-semibold text-foreground">{title}</span>
         <span className="shrink-0 rounded-md bg-muted/60 px-1.5 py-0.5 text-[10px] font-medium text-muted-foreground capitalize">
@@ -74,7 +74,7 @@ export default function ArtifactPreviewCard({ artifactId, projectId, title, kind
       </div>
 
       {isText && (
-        <div className={cn('px-3 py-3 text-xs text-foreground/75 leading-relaxed', !expanded && 'max-h-64 overflow-hidden')}>
+        <div className={cn('px-3.5 py-3 text-xs text-foreground/75 leading-relaxed', !expanded && 'max-h-64 overflow-hidden')}>
           {isLoading ? (
             <span className="text-muted-foreground/50">Loading…</span>
           ) : displayed ? (
@@ -91,7 +91,7 @@ export default function ArtifactPreviewCard({ artifactId, projectId, title, kind
           {truncated && (
             <button
               onClick={() => setExpanded(true)}
-              className="mt-1 text-[11px] text-indigo-500 hover:text-indigo-400 transition-colors"
+              className="mt-1 text-[11px] text-on-accent-soft transition-colors hover:text-primary"
             >
               Show more
             </button>
@@ -99,7 +99,7 @@ export default function ArtifactPreviewCard({ artifactId, projectId, title, kind
         </div>
       )}
 
-      <div className="border-t border-border/35 px-3 py-2">
+      <div className="border-t border-border-soft px-3.5 py-2">
         <Link
           to={`/projects/${projectId}/artifacts`}
           className="flex items-center justify-center gap-1.5 text-xs font-medium text-foreground/70 transition-colors hover:text-foreground"

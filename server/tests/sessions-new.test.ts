@@ -53,6 +53,21 @@ describe('PATCH /sessions/:id pinned_project_id', () => {
     const list = await request(app).get('/sessions').set('Authorization', `Bearer ${token}`);
     const sess = list.body.find((s: { id: string }) => s.id === sessionId);
     expect(sess.pinned_project_id).toBe(projectId);
+
+    const events = await request(app)
+      .get(`/sessions/${sessionId}/events`)
+      .set('Authorization', `Bearer ${token}`);
+    expect(events.status).toBe(200);
+    expect(events.body.projects).toHaveLength(1);
+    expect(events.body.projects[0]).toMatchObject({ id: projectId, name: 'myproj', source: 'user' });
+    expect(events.body.events).toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        type: 'scope_changed',
+        title: 'Scoped to myproj',
+        project_id: projectId,
+        metadata: expect.objectContaining({ source: 'user' }),
+      }),
+    ]));
   });
 
   it('unpins a project (null)', async () => {
@@ -61,6 +76,58 @@ describe('PATCH /sessions/:id pinned_project_id', () => {
       .set('Authorization', `Bearer ${token}`)
       .send({ pinned_project_id: null });
     expect(res.status).toBe(200);
+
+    const events = await request(app)
+      .get(`/sessions/${sessionId}/events`)
+      .set('Authorization', `Bearer ${token}`);
+    expect(events.body.events).toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        type: 'scope_changed',
+        title: 'Back to Auto',
+        project_id: null,
+        metadata: expect.objectContaining({ source: 'user' }),
+      }),
+    ]));
+  });
+
+  it('keeps legacy pinned context available when switching back to auto', async () => {
+    const legacy = await request(app)
+      .post('/sessions')
+      .set('Authorization', `Bearer ${token}`)
+      .send({ title: 'legacy pin' });
+
+    getDb()
+      .prepare('UPDATE sessions SET pinned_project_id = ? WHERE id = ?')
+      .run(projectId, legacy.body.id);
+
+    const res = await request(app)
+      .patch(`/sessions/${legacy.body.id}`)
+      .set('Authorization', `Bearer ${token}`)
+      .send({ pinned_project_id: null });
+    expect(res.status).toBe(200);
+
+    const events = await request(app)
+      .get(`/sessions/${legacy.body.id}/events`)
+      .set('Authorization', `Bearer ${token}`);
+    expect(events.body.projects).toEqual([
+      expect.objectContaining({ id: projectId, name: 'myproj', source: 'user' }),
+    ]);
+    expect(events.body.events).toEqual(expect.arrayContaining([
+      expect.objectContaining({ type: 'scope_changed', title: 'Back to Auto' }),
+    ]));
+  });
+
+  it('rejects pinning a project that does not belong to the user', async () => {
+    const missingProjectId = newId();
+    const res = await request(app)
+      .patch(`/sessions/${sessionId}`)
+      .set('Authorization', `Bearer ${token}`)
+      .send({ pinned_project_id: missingProjectId });
+    expect(res.status).toBe(404);
+
+    const list = await request(app).get('/sessions').set('Authorization', `Bearer ${token}`);
+    const sess = list.body.find((s: { id: string }) => s.id === sessionId);
+    expect(sess.pinned_project_id).toBeNull();
   });
 });
 

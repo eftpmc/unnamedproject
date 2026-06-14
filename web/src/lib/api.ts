@@ -1,5 +1,5 @@
 import { getToken, setToken, clearToken } from './auth.js';
-import type { Session, Message, Project, ProjectArtifact, Connection, EffortLevel, ClaudeModelInfo, UserSettings, AgentBudgets, Memory, ScheduledTask, SessionWorktree, Campaign, CampaignTask, PermissionProfile } from '../types.js';
+import type { Session, Message, Project, ProjectArtifact, Connection, EffortLevel, ClaudeModelInfo, UserSettings, AgentBudgets, Memory, ScheduledTask, SessionWorktree, Campaign, CampaignTask, PermissionProfile, SessionEvent, SessionProjectLink } from '../types.js';
 
 async function request<T>(path: string, init: RequestInit = {}): Promise<T> {
   const token = getToken();
@@ -39,6 +39,10 @@ export function getChats(): Promise<Session[]> {
 
 export function searchChats(q: string): Promise<Session[]> {
   return request(`/sessions/search?q=${encodeURIComponent(q)}`);
+}
+
+export function getChatEvents(chatId: string): Promise<{ events: SessionEvent[]; projects: SessionProjectLink[] }> {
+  return request(`/sessions/${chatId}/events`);
 }
 
 export function truncateMessagesFrom(sessionId: string, messageId: string): Promise<{ deleted: number }> {

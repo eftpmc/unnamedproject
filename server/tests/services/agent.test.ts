@@ -32,13 +32,14 @@ vi.mock('@anthropic-ai/sdk', () => ({
 
 vi.mock('../../src/services/socket.js', () => ({ broadcast: vi.fn() }));
 vi.mock('../../src/services/executor.js', () => ({
-  createExecution: vi.fn().mockReturnValue('exec-1'),
+  createExecution: createExecutionMock,
   completeExecution: vi.fn(),
   appendOutput: vi.fn(),
   requestApproval: vi.fn().mockResolvedValue('approved'),
 }));
 
-const { runGitOpMock, invokeClaudeCodeMock, invokeCodexMock, ensureWorktreeMock, readFileMock } = vi.hoisted(() => ({
+const { runGitOpMock, invokeClaudeCodeMock, invokeCodexMock, ensureWorktreeMock, readFileMock, createExecutionMock } = vi.hoisted(() => ({
+  createExecutionMock: vi.fn(),
   runGitOpMock: vi.fn().mockResolvedValue('git op result'),
   invokeClaudeCodeMock: vi.fn().mockResolvedValue('claude code result'),
   invokeCodexMock: vi.fn().mockResolvedValue('codex result'),
@@ -70,6 +71,16 @@ let messageId: string;
 beforeAll(async () => {
   fs.mkdirSync(process.env.DATA_DIR!, { recursive: true });
   initDb();
+
+  // Mirror the real createExecution: insert a row so session_events.execution_id
+  // (FK -> executions.id) is satisfied when the agent records project use.
+  createExecutionMock.mockImplementation((_userId: string, msgId: string, projectId: string | null, tool: string) => {
+    const id = newId();
+    getDb().prepare('INSERT INTO executions (id, message_id, project_id, tool, status) VALUES (?,?,?,?,?)')
+      .run(id, msgId, projectId, tool, 'running');
+    return id;
+  });
+
   const db = getDb();
   db.prepare('INSERT INTO users (id, email, hashed_password) VALUES (?,?,?)').run(userId, `agent-${userId}@test.com`, 'x');
 

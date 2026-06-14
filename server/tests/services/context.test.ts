@@ -46,7 +46,9 @@ describe('buildContext', () => {
   it('includes write_file guidance for writing domain', () => {
     const ctx = buildContext(userId, sessionId, writingIntent);
     expect(ctx).toContain('write_file');
-    expect(ctx).not.toContain('invoke_claude_code');
+    // The always-on core rules reference the coding-agent commit protocol, but the
+    // writing domain guidance must steer away from delegating to coding agents.
+    expect(ctx).toContain('Do not invoke coding agents');
   });
 
   it('includes citation guidance for research domain', () => {

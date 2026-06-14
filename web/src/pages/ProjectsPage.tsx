@@ -24,7 +24,7 @@ function ProjectCard({ project }: { project: Project }) {
   const runningCount = campaigns.filter(c => c.status === 'running').length;
 
   return (
-    <button className="block h-full w-full rounded-xl text-left" onClick={() => navigate(`/projects/${project.id}`)}>
+    <button type="button" aria-label={`Open project: ${project.name}`} className="block h-full w-full rounded-xl text-left" onClick={() => navigate(`/projects/${project.id}`)}>
       <Surface interactive className="flex h-full flex-col gap-2.5 p-4">
         <div className="flex items-start justify-between gap-2">
           <div className="flex items-center gap-2.5">
@@ -100,6 +100,7 @@ export default function ProjectsPage() {
         title="Projects"
         actions={(
           <button
+            type="button"
             className="flex items-center gap-1.5 rounded-lg border border-border bg-card px-3 py-1.5 text-sm font-medium text-fg-soft shadow-xs transition-colors hover:border-muted-foreground hover:text-foreground"
             onClick={() => setOpen(true)}
           >

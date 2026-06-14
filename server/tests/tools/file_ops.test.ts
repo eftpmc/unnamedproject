@@ -35,7 +35,8 @@ import { readFile, listDir, writeFile } from '../../src/tools/file_ops.js';
 import { requestApproval } from '../../src/services/executor.js';
 
 const mockApproval = requestApproval as ReturnType<typeof vi.fn>;
-const ctx = { userId: 'u1', executionId: 'e1', projectId: 'p1', sessionId: 's1' };
+const ctx = { userId: 'u1', executionId: 'e1', projectId: 'p1', sessionId: 's1', permissionProfile: 'fast' as const };
+const strictCtx = { ...ctx, permissionProfile: 'strict' as const };
 
 beforeEach(() => {
   vi.clearAllMocks();
@@ -76,8 +77,13 @@ describe('file_ops', () => {
   });
 
   describe('writeFile', () => {
-    it('requests user approval before writing', async () => {
+    it('auto-approves on fast profile', async () => {
       await writeFile({ project_id: 'p1', path: 'out.txt', content: 'hello' }, ctx);
+      expect(mockApproval).toHaveBeenCalledWith('e1', 'u1', 'write_file', { path: 'out.txt' }, 'agent');
+    });
+
+    it('requests user approval on strict profile', async () => {
+      await writeFile({ project_id: 'p1', path: 'out.txt', content: 'hello' }, strictCtx);
       expect(mockApproval).toHaveBeenCalledWith('e1', 'u1', 'write_file', { path: 'out.txt' }, 'user');
     });
 

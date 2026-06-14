@@ -17,6 +17,7 @@ import { runProjectQuery } from '../tools/project_query.js';
 import { buildGraph } from './graphify.js';
 import { remember, recall, forget } from '../tools/memory_tools.js';
 import { readFile, listDir, writeFile, searchFiles } from '../tools/file_ops.js';
+import { runCommand } from '../tools/run_command.js';
 import { readChat } from '../tools/read_chat.js';
 import { createProject, updateProject, deleteProject } from '../tools/project_ops.js';
 import { runCreateCampaign } from '../tools/create_campaign.js';
@@ -363,7 +364,7 @@ async function executeCampaignTask(
       case 'file_write': {
         result = await writeFile(
           { project_id: project.id, path: toolArgs.path as string, content: (toolArgs.content as string) ?? prompt },
-          { userId, executionId, projectId: project.id, sessionId },
+          { userId, executionId, projectId: project.id, sessionId, permissionProfile: getPermissionProfile(userId) },
         );
         break;
       }
@@ -758,12 +759,26 @@ async function dispatchTool(
           ignore_case: toolInput.ignore_case as boolean | undefined,
         }, { userId, executionId, projectId, sessionId });
         break;
+      case 'run_command': {
+        const rcTaskId = toolInput.campaign_task_id as string | undefined;
+        if (rcTaskId) startCampaignTask(userId, rcTaskId, executionId);
+        result = await runCommand(
+          {
+            command: toolInput.command as string,
+            project_id: toolInput.project_id as string | undefined,
+            timeout_ms: toolInput.timeout_ms as number | undefined,
+          },
+          { userId, executionId, permissionProfile: getPermissionProfile(userId) },
+        );
+        if (rcTaskId) finishCampaignTask(userId, rcTaskId, result);
+        break;
+      }
       case 'write_file': {
         const writeTaskId = toolInput.campaign_task_id as string | undefined;
         if (writeTaskId) startCampaignTask(userId, writeTaskId, executionId);
         result = await writeFile(
           { project_id: projectId, path: toolInput.path as string, content: toolInput.content as string },
-          { userId, executionId, projectId, sessionId }
+          { userId, executionId, projectId, sessionId, permissionProfile: getPermissionProfile(userId) }
         );
         if (writeTaskId) finishCampaignTask(userId, writeTaskId, result);
         break;

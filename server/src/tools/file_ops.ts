@@ -4,12 +4,14 @@ import path from 'path';
 import { getProjectForUser, getDataDir } from '../db/index.js';
 import { requestApproval } from '../services/executor.js';
 import { ensureWorktree } from '../lib/worktree.js';
+import type { PermissionProfile } from '../services/permissions.js';
 
 interface ToolContext {
   userId: string;
   executionId: string;
   projectId: string;
   sessionId: string;
+  permissionProfile?: PermissionProfile;
 }
 
 function resolveInProject(repoPath: string, relPath: string): string {
@@ -112,7 +114,8 @@ export async function writeFile(input: { project_id: string; path: string; conte
   const repoPath = await getWorkspacePath(input.project_id, ctx.userId, ctx.sessionId);
   const target = resolveInProject(repoPath, input.path);
 
-  const decision = await requestApproval(ctx.executionId, ctx.userId, 'write_file', { path: input.path } as Record<string, unknown>, 'user');
+  const tier = (ctx.permissionProfile ?? 'fast') === 'strict' ? 'user' : 'agent';
+  const decision = await requestApproval(ctx.executionId, ctx.userId, 'write_file', { path: input.path } as Record<string, unknown>, tier);
   if (decision === 'rejected') return 'write_file cancelled';
 
   await fs.mkdir(path.dirname(target), { recursive: true });

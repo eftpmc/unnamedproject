@@ -66,6 +66,20 @@ export const toolDefinitions: Anthropic.Tool[] = [
     },
   },
   {
+    name: 'run_command',
+    description: 'Run a shell command and return its output. Use for quick operations — running tests, checking git log, listing files, inspecting processes — where spinning up a full coding agent would be wasteful. Runs in the project repo directory when project_id is provided, otherwise in the data directory. Output is capped at 10 KB; use invoke_claude_code for commands that produce large output you need to reason about.',
+    input_schema: {
+      type: 'object',
+      properties: {
+        command: { type: 'string', description: 'Shell command to run, e.g. "npm test", "git log --oneline -10"' },
+        project_id: { type: 'string', description: 'Optional project to run the command in. Uses the project repo_path as working directory.' },
+        timeout_ms: { type: 'number', description: 'Timeout in milliseconds. Defaults to 30000, max 60000.' },
+        campaign_task_id: { type: 'string', description: 'Campaign task ID to link this execution to (from create_campaign response)' },
+      },
+      required: ['command'],
+    },
+  },
+  {
     name: 'git_op',
     description: "Run git operations in this session's isolated agent worktree. To commit: run add first (stages everything), then commit. Push sends the session branch for PR review. Status and diff are useful for summarizing what changed.",
     input_schema: {

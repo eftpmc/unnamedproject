@@ -27,8 +27,8 @@ function readWorkspaceMd(project: DbProject): string | null {
 function baseBlock(intent: Intent): string {
   const isCode = intent.domain === 'code' || intent.domain === 'multi' || intent.domain === 'general';
   const autoApproved = isCode
-    ? 'invoke_claude_code, invoke_codex, generate_video, git_op add/commit, create_project, update_project, project_query, rebuild_graph, search_files, read_file, list_dir, recall, remember, forget, list_chats, read_chat, register_artifact, list_artifacts, read_artifact, list_connections, test_connection, mcp_call, create_campaign, resume_campaign, list_campaigns, get_campaign, get_execution_output, list_scheduled_tasks, create_scheduled_task, update_scheduled_task'
-    : 'create_project, search_files, read_file, list_dir, recall, remember, forget, write_file, list_chats, read_chat, list_artifacts, read_artifact, list_connections, test_connection, mcp_call';
+    ? 'invoke_claude_code, invoke_codex, generate_video, git_op add/commit, run_command, create_project, update_project, project_query, rebuild_graph, search_files, read_file, list_dir, recall, remember, forget, list_chats, read_chat, register_artifact, list_artifacts, read_artifact, list_connections, test_connection, mcp_call, create_campaign, resume_campaign, list_campaigns, get_campaign, get_execution_output, list_scheduled_tasks, create_scheduled_task, update_scheduled_task'
+    : 'create_project, search_files, read_file, list_dir, recall, remember, forget, write_file, run_command, list_chats, read_chat, list_artifacts, read_artifact, list_connections, test_connection, mcp_call';
 
   return `You are a personal AI operator and orchestrator. You decide how work gets done — you never implement code, write files, or run git operations yourself when the task belongs to a coding agent.
 
@@ -82,6 +82,7 @@ Scoping rules — choose the right unit of work:
 - Independent parallel workstreams → campaign with parallel tasks
 - Strict ordering (e.g. schema → API → frontend) → campaign with sequenced tasks
 - Never break a coherent task into multiple small round-trips — it wastes context and loses continuity
+- Quick checks (run tests, inspect git log, list files, check a process) → run_command directly; do not spin up a coding agent for a one-liner
 
 Sub-agent model hints (pass as model param to invoke_claude_code):
 - 'haiku': trivial edits, single-file changes
@@ -272,7 +273,7 @@ const SCHEDULED = [
 
 const TOOL_SETS: Record<string, string[]> = {
   code: [
-    'invoke_claude_code', 'invoke_codex', 'git_op',
+    'invoke_claude_code', 'invoke_codex', 'git_op', 'run_command',
     'project_query', 'rebuild_graph',
     'create_campaign', 'resume_campaign', 'list_campaigns', 'get_campaign', 'get_execution_output',
     'write_file', 'create_artifact', 'generate_video',
@@ -281,17 +282,17 @@ const TOOL_SETS: Record<string, string[]> = {
     ...SHARED,
   ],
   writing: [
-    'write_file', 'create_artifact',
+    'write_file', 'create_artifact', 'run_command',
     ...SCHEDULED,
     ...SHARED,
   ],
   research: [
-    'write_file', 'create_artifact',
+    'write_file', 'create_artifact', 'run_command',
     ...SCHEDULED,
     ...SHARED,
   ],
   creative: [
-    'write_file', 'create_artifact', 'generate_video',
+    'write_file', 'create_artifact', 'generate_video', 'run_command',
     ...SCHEDULED,
     ...SHARED,
   ],

@@ -93,6 +93,22 @@ export async function buildGraph(repoPath: string, _projectId: string, _apiKey?:
   const files = walkRepo(repoPath);
   const index = { built_at: Date.now(), repo_path: repoPath, files };
   await fsPromises.writeFile(indexPath(repoPath), JSON.stringify(index), 'utf8');
+  await ensureGitignored(repoPath, '.project-index.json');
+}
+
+async function ensureGitignored(repoPath: string, entry: string): Promise<void> {
+  const gitignorePath = path.join(repoPath, '.gitignore');
+  try {
+    const existing = await fsPromises.readFile(gitignorePath, 'utf8').catch(() => '');
+    const lines = existing.split('\n');
+    if (lines.some(l => l.trim() === entry)) return;
+    const appended = existing.endsWith('\n') || existing === ''
+      ? existing + entry + '\n'
+      : existing + '\n' + entry + '\n';
+    await fsPromises.writeFile(gitignorePath, appended, 'utf8');
+  } catch {
+    // no .gitignore or not writable — skip silently
+  }
 }
 
 export async function queryGraph(question: string, repoPath: string, apiKey?: string | null): Promise<string> {

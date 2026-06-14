@@ -18,8 +18,8 @@ const STATUS_ICON: Record<Campaign['status'], typeof Circle> = {
 };
 
 const STATUS_ICON_CLASS: Record<Campaign['status'], string> = {
-  running: 'text-blue-500 animate-spin',
-  done: 'text-green-500',
+  running: 'text-primary animate-spin',
+  done: 'text-success',
   error: 'text-destructive',
   cancelled: 'text-muted-foreground/30',
 };

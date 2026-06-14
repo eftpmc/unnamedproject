@@ -13,9 +13,9 @@ import { timeAgo } from '../lib/utils.js';
 import type { Project, ProjectArtifact } from '../types.js';
 
 const STATUS_CLASS: Record<ProjectArtifact['status'], string> = {
-  ready: 'bg-green-500/10 text-green-700 border-green-200/70 dark:text-green-300 dark:border-green-900',
+  ready: 'bg-success/10 text-success border-transparent',
   review: 'bg-warning/10 text-foreground border-warning/25',
-  running: 'bg-blue-500/10 text-blue-700 border-blue-200/70 dark:text-blue-300 dark:border-blue-900',
+  running: 'bg-primary/10 text-on-accent-soft border-transparent',
   error: 'bg-destructive/10 text-destructive border-destructive/20',
 };
 

@@ -24,7 +24,7 @@ const STATUS_ICON: Record<CampaignTask['status'], typeof Circle> = {
 
 const STATUS_ICON_CLASS: Record<CampaignTask['status'], string> = {
   waiting: 'text-muted-foreground/40',
-  running: 'text-blue-500 animate-spin',
+  running: 'text-primary animate-spin',
   done: 'text-success',
   error: 'text-destructive',
 };
@@ -101,8 +101,8 @@ export default function CampaignCard({ campaignId, projectId }: CampaignCardProp
           variant="outline"
           className={cn(
             'shrink-0 capitalize',
-            isRunning && 'bg-blue-500/10 text-blue-700 border-blue-200 dark:text-blue-300 dark:border-blue-900',
-            isDone && 'bg-green-500/10 text-green-700 border-green-200 dark:text-green-300 dark:border-green-900',
+            isRunning && 'bg-primary/10 text-on-accent-soft border-transparent',
+            isDone && 'bg-success/10 text-success border-transparent',
             isError && 'bg-destructive/10 text-destructive border-destructive/20',
             !isRunning && !isDone && !isError && 'bg-muted text-muted-foreground border-transparent',
           )}

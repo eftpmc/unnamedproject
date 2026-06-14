@@ -418,6 +418,31 @@ function applySchema(): void {
     `);
   }
 
+  // Widen session_events.type CHECK to include 'mcp_required'.
+  const sessionEventsSql = (db.prepare("SELECT sql FROM sqlite_master WHERE type='table' AND name='session_events'").get() as { sql: string } | undefined)?.sql;
+  if (sessionEventsSql && !sessionEventsSql.includes("'mcp_required'")) {
+    db.exec(`
+      PRAGMA foreign_keys = OFF;
+      ALTER TABLE session_events RENAME TO session_events_old;
+      CREATE TABLE session_events (
+        id TEXT PRIMARY KEY,
+        session_id TEXT NOT NULL REFERENCES sessions(id) ON DELETE CASCADE,
+        type TEXT NOT NULL CHECK(type IN ('scope_changed','project_linked','project_created','campaign_created','artifact_created','approval_requested','approval_resolved','mcp_required')),
+        title TEXT NOT NULL,
+        body TEXT,
+        project_id TEXT REFERENCES projects(id) ON DELETE SET NULL,
+        campaign_id TEXT REFERENCES campaigns(id) ON DELETE SET NULL,
+        artifact_id TEXT REFERENCES artifacts(id) ON DELETE SET NULL,
+        execution_id TEXT REFERENCES executions(id) ON DELETE SET NULL,
+        metadata TEXT NOT NULL DEFAULT '{}',
+        created_at INTEGER NOT NULL DEFAULT (unixepoch())
+      );
+      INSERT INTO session_events SELECT * FROM session_events_old;
+      DROP TABLE session_events_old;
+      PRAGMA foreign_keys = ON;
+    `);
+  }
+
   // Create pipelines and pipeline_tasks tables for existing DBs (already in CREATE TABLE for new DBs).
   const tableNames2 = db.prepare("SELECT name FROM sqlite_master WHERE type='table'").all() as { name: string }[];
   if (!tableNames2.some(t => t.name === 'pipelines')) {
@@ -531,7 +556,8 @@ export type SessionEventType =
   | 'campaign_created'
   | 'artifact_created'
   | 'approval_requested'
-  | 'approval_resolved';
+  | 'approval_resolved'
+  | 'mcp_required';
 
 export interface DbSessionEvent {
   id: string;

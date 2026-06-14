@@ -704,6 +704,19 @@ async function dispatchTool(
           }
         }));
         result = JSON.stringify(enriched, null, 2);
+        if (enriched.filter(c => c.type === 'mcp').length === 0) {
+          const alreadyNotified = getDb()
+            .prepare("SELECT id FROM session_events WHERE session_id = ? AND type = 'mcp_required'")
+            .get(sessionId) as { id: string } | undefined;
+          if (!alreadyNotified) {
+            emitSessionEvent(userId, {
+              sessionId,
+              type: 'mcp_required',
+              title: 'No MCP servers configured',
+              body: 'Add an MCP server in Settings → MCP to enable GitHub, web search, and other integrations.',
+            });
+          }
+        }
         break;
       }
       case 'test_connection': {

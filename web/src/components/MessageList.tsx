@@ -1,7 +1,8 @@
 import { useEffect, useRef } from 'react';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
-import { GitMerge, Pencil, Sparkles, Target } from 'lucide-react';
+import { ArrowRight, GitMerge, Pencil, Plug, Sparkles, Target } from 'lucide-react';
+import { Link } from 'react-router-dom';
 import ExecutionCard from './ExecutionCard.js';
 import CampaignCard from './CampaignCard.js';
 import ArtifactPreviewCard from './ArtifactPreviewCard.js';
@@ -151,6 +152,27 @@ export default function MessageList({ messages, executions, streamingIds, sessio
       <div className="mx-auto flex w-full max-w-[46rem] flex-col gap-6 px-4 py-7 sm:px-6 sm:py-8">
         {timeline.map(item => {
           if (item.type === 'event') {
+            if (item.event.type === 'mcp_required') {
+              return (
+                <div key={`event-${item.event.id}`} className="flex items-start gap-3 rounded-lg border border-border-soft bg-muted/40 p-3.5">
+                  <span className="mt-0.5 grid size-6 shrink-0 place-items-center rounded-md bg-muted text-muted-foreground">
+                    <Plug size={13} />
+                  </span>
+                  <div className="min-w-0 flex-1">
+                    <p className="text-sm font-medium text-foreground">{item.event.title}</p>
+                    {item.event.body && (
+                      <p className="mt-0.5 text-xs text-muted-foreground">{item.event.body}</p>
+                    )}
+                    <Link
+                      to="/settings"
+                      className="mt-2 inline-flex items-center gap-1 text-xs font-medium text-primary hover:underline"
+                    >
+                      Open Settings → MCP <ArrowRight size={11} />
+                    </Link>
+                  </div>
+                </div>
+              );
+            }
             const Icon = eventIcon(item.event.type);
             return (
               <div key={`event-${item.event.id}`} className="flex items-center gap-2 text-xs text-muted-foreground">

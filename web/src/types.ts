@@ -37,7 +37,8 @@ export type SessionEventType =
   | 'campaign_created'
   | 'artifact_created'
   | 'approval_requested'
-  | 'approval_resolved';
+  | 'approval_resolved'
+  | 'mcp_required';
 
 export interface SessionEvent {
   id: string;

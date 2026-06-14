@@ -1,6 +1,5 @@
 import { useEffect, useRef, type KeyboardEvent } from 'react';
 import { ArrowUp } from 'lucide-react';
-import { Button } from '@/components/ui/button';
 import { Textarea } from '@/components/ui/textarea';
 import { cn } from '@/lib/utils';
 
@@ -34,8 +33,8 @@ export default function MessageInput({ value, onChange, onSend, disabled }: Mess
   }
 
   return (
-    <div className="shrink-0 border-t border-border/35 bg-background/70 px-4 pb-4 pt-3 backdrop-blur sm:px-6 sm:pb-5">
-      <div className="mx-auto flex max-w-3xl items-end gap-2 rounded-2xl border border-border/45 bg-muted/20 p-2 shadow-xs dark:border-white/10 dark:bg-card/55 sm:gap-3">
+    <div className="shrink-0 px-5 pb-5 pt-3">
+      <div className="mx-auto flex max-w-3xl items-end gap-2 rounded-2xl border border-border-soft bg-card px-3 pb-2.5 pt-2.5 shadow-sm">
         <Textarea
           ref={textareaRef}
           value={value}
@@ -44,25 +43,22 @@ export default function MessageInput({ value, onChange, onSend, disabled }: Mess
           placeholder={disabled ? 'Agent is responding…' : 'Message…'}
           disabled={disabled}
           rows={1}
-          className={cn(
-            'max-h-44 min-h-11 flex-1 resize-none overflow-y-auto border-0 bg-transparent px-3 py-2.5 text-[15px] shadow-none focus-visible:ring-0 dark:bg-transparent',
-            disabled && 'text-muted-foreground',
-          )}
+          className="max-h-44 min-h-[1.5rem] flex-1 resize-none border-0 bg-transparent px-1 py-1 text-[15px] shadow-none placeholder:text-faint-fg focus-visible:ring-0"
         />
-        <div className="mb-1">
-          <Button
-            size="icon-lg"
-            onClick={submit}
-            disabled={disabled || !value.trim()}
-            title="Send"
-            className={cn(
-              'rounded-xl bg-foreground text-background hover:bg-foreground/90',
-              (disabled || !value.trim()) && 'bg-muted text-muted-foreground hover:bg-muted',
-            )}
-          >
-            <ArrowUp size={16} strokeWidth={2} />
-          </Button>
-        </div>
+        <button
+          type="button"
+          onClick={submit}
+          disabled={disabled || !value.trim()}
+          title="Send"
+          className={cn(
+            'mb-0.5 grid h-9 w-9 shrink-0 place-items-center rounded-lg transition-[filter]',
+            value.trim() && !disabled
+              ? 'bg-primary text-primary-foreground hover:brightness-105'
+              : 'bg-muted text-faint-fg cursor-default',
+          )}
+        >
+          <ArrowUp size={16} strokeWidth={2} />
+        </button>
       </div>
     </div>
   );

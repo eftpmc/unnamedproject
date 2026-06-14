@@ -1,9 +1,7 @@
 import { useState, useMemo } from 'react';
-import { AlertCircle, Bot, Check, CheckCircle2, ChevronDown, ChevronUp, Clock3, Code2, FileText, GitBranch, GitPullRequest, LoaderCircle, Square, Terminal, X } from 'lucide-react';
+import { Bell, Bot, Check, ChevronDown, ChevronUp, Code2, FileText, GitBranch, GitPullRequest, Square, Terminal, X } from 'lucide-react';
 import { approveExecution, rejectExecution, cancelExecution } from '../lib/api.js';
-import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
-import { Card } from '@/components/ui/card';
 import { cn } from '@/lib/utils';
 
 const COLLAPSED_LINES = 6;
@@ -16,9 +14,10 @@ function OutputLog({ outputLog, result }: { outputLog: string; result: string | 
   const displayed = truncated ? lines.slice(-COLLAPSED_LINES).join('\n') : text;
 
   return (
-    <div className="border-t border-border/35 bg-muted/15">
+    <div className="border-t border-border-soft bg-muted/20">
       {truncated && (
         <button
+          type="button"
           onClick={() => setShowAll(true)}
           className="w-full px-3 py-1.5 text-left text-xs text-muted-foreground/60 hover:text-muted-foreground"
         >
@@ -27,7 +26,7 @@ function OutputLog({ outputLog, result }: { outputLog: string; result: string | 
       )}
       <div
         role="log"
-        className="max-h-48 overflow-y-auto px-3 py-3 font-mono text-xs leading-relaxed whitespace-pre-wrap text-muted-foreground"
+        className="max-h-44 overflow-y-auto px-3.5 py-3 font-mono text-[12px] leading-relaxed text-muted-foreground whitespace-pre-wrap"
       >
         {displayed}
       </div>
@@ -49,21 +48,26 @@ interface ExecutionCardProps {
   action: string | null;
 }
 
-const STATUS_LABEL: Record<ExecutionStatus, string> = {
-  pending: 'Pending',
-  running: 'Running',
-  done: 'Done',
-  error: 'Error',
-  awaiting_approval: 'Approval',
-};
-
-const STATUS_BADGE: Record<ExecutionStatus, string> = {
-  pending: 'bg-muted/70 text-muted-foreground border-transparent',
-  running: 'bg-blue-500/10 text-blue-700 border-blue-200/70 dark:text-blue-300 dark:border-blue-900',
-  done: 'bg-green-500/10 text-green-700 border-green-200/70 dark:text-green-300 dark:border-green-900',
-  error: 'bg-destructive/10 text-destructive border-destructive/20',
-  awaiting_approval: 'bg-warning/10 text-foreground border-warning/25',
-};
+function StatusBadge({ status }: { status: ExecutionStatus }) {
+  const styles: Record<ExecutionStatus, string> = {
+    pending:           'bg-muted text-muted-foreground',
+    running:           'bg-primary/10 text-on-accent-soft',
+    done:              'bg-success/10 text-success',
+    error:             'bg-destructive/10 text-destructive',
+    awaiting_approval: 'bg-warning/15 text-amber-700 dark:text-amber-300',
+  };
+  const labels: Record<ExecutionStatus, string> = {
+    pending: 'Pending', running: 'Running', done: 'Done',
+    error: 'Error', awaiting_approval: 'Approval',
+  };
+  return (
+    <span className={cn('flex items-center gap-1.5 rounded-full px-2 py-0.5 text-[11px] font-medium', styles[status])}>
+      {status === 'running' && <span className="size-1.5 animate-pulse rounded-full bg-primary" />}
+      {status === 'awaiting_approval' && <Bell size={10} />}
+      {labels[status]}
+    </span>
+  );
+}
 
 const TOOL_ICON: Array<[RegExp, typeof Bot]> = [
   [/claude|codex|mcp/i, Bot],
@@ -72,22 +76,6 @@ const TOOL_ICON: Array<[RegExp, typeof Bot]> = [
   [/file|read|write/i, FileText],
   [/project_query|code/i, Code2],
 ];
-
-const STATUS_ICON: Record<ExecutionStatus, typeof Clock3> = {
-  pending: Clock3,
-  running: LoaderCircle,
-  done: CheckCircle2,
-  error: AlertCircle,
-  awaiting_approval: Clock3,
-};
-
-const STATUS_ICON_CLASS: Record<ExecutionStatus, string> = {
-  pending: 'text-muted-foreground/50',
-  running: 'text-blue-500 animate-spin',
-  done: 'text-success',
-  error: 'text-destructive',
-  awaiting_approval: 'text-warning',
-};
 
 
 function formatToolName(tool: string): string {
@@ -117,9 +105,7 @@ export default function ExecutionCard({
   const [acting, setActing] = useState(false);
   const [cancelling, setCancelling] = useState(false);
 
-  const label = projectName ? `${formatToolName(tool)} · ${projectName}` : formatToolName(tool);
   const ToolIcon = getToolIcon(tool);
-  const StatusIcon = decided === 'approved' ? CheckCircle2 : decided === 'rejected' ? AlertCircle : STATUS_ICON[status];
 
   async function handleApprove() {
     setActing(true);
@@ -139,30 +125,25 @@ export default function ExecutionCard({
   const isApproval = needsApproval && !decided;
 
   return (
-    <Card className={cn(
-      'overflow-hidden rounded-2xl border-border/25 bg-background py-0 shadow-sm ring-1 ring-black/[0.03]',
-      status === 'awaiting_approval' && !decided ? 'bg-warning/5' : '',
+    <div className={cn(
+      'overflow-hidden rounded-xl border bg-card',
+      status === 'awaiting_approval'
+        ? 'border-warning/35'
+        : 'border-border-soft',
     )}>
       <div
         role={!isApproval ? 'button' : undefined}
         onClick={!isApproval ? () => setExpanded(e => !e) : undefined}
-        className={`flex min-w-0 items-center gap-2.5 px-3 py-2.5 ${isApproval ? 'cursor-default' : 'cursor-pointer hover:bg-muted/20 transition-colors'}`}
+        className={`flex items-center gap-2.5 px-3.5 py-3 ${isApproval ? 'cursor-default' : 'cursor-pointer hover:bg-muted/20 transition-colors'}`}
       >
-        <StatusIcon
-          size={13}
-          className={cn(
-            'shrink-0',
-            decided === 'approved' ? 'text-success' : decided === 'rejected' ? 'text-destructive' : STATUS_ICON_CLASS[status],
-          )}
-        />
-        <ToolIcon size={14} className="shrink-0 text-muted-foreground/50" />
-        <span className="flex-1 select-none truncate text-xs font-medium text-foreground/75">{label}</span>
-        <Badge
-          variant="outline"
-          className={cn('capitalize', decided ? 'bg-muted text-muted-foreground border-transparent' : STATUS_BADGE[status])}
-        >
-          {decided ?? STATUS_LABEL[status]}
-        </Badge>
+        <div className="grid h-7 w-7 shrink-0 place-items-center rounded-lg bg-muted text-muted-foreground">
+          <ToolIcon size={14} />
+        </div>
+        <div className="flex min-w-0 flex-1 flex-col">
+          <span className="text-xs font-medium text-foreground">{formatToolName(tool)}</span>
+          {projectName && <span className="text-[11px] text-faint-fg">{projectName}</span>}
+        </div>
+        <StatusBadge status={decided === 'approved' ? 'done' : decided === 'rejected' ? 'error' : status} />
 
         {isApproval && (
           <div className="flex shrink-0 gap-1">
@@ -189,6 +170,7 @@ export default function ExecutionCard({
 
         {status === 'running' && !isApproval && (
           <button
+            type="button"
             onClick={e => { e.stopPropagation(); handleCancel(); }}
             disabled={cancelling}
             title="Cancel"
@@ -214,6 +196,6 @@ export default function ExecutionCard({
       {expanded && !isApproval && (
         <OutputLog outputLog={outputLog} result={result} />
       )}
-    </Card>
+    </div>
   );
 }

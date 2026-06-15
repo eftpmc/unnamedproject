@@ -12,7 +12,7 @@ import type { PendingApproval, WSEvent } from '../../../types';
 export default function ActivityScreen() {
   const navigation = useNavigation();
   const qc = useQueryClient();
-  const { data: approvals = [], isLoading, refetch } = useActivity();
+  const { data: approvals = [], isLoading, isFetching, refetch } = useActivity();
   const { setPendingApprovalCount } = useAppStore();
 
   useEffect(() => {
@@ -47,7 +47,7 @@ export default function ActivityScreen() {
           data={approvals}
           keyExtractor={a => a.id}
           contentContainerStyle={{ padding: 16, gap: 12 }}
-          refreshControl={<RefreshControl refreshing={false} onRefresh={refetch} />}
+          refreshControl={<RefreshControl refreshing={isFetching && !isLoading} onRefresh={refetch} />}
           renderItem={({ item }: { item: PendingApproval }) => <ApprovalCard approval={item} />}
           ListEmptyComponent={
             <View className="items-center mt-12 gap-2">

@@ -64,6 +64,9 @@ vi.mock('../../src/tools/file_ops.js', async () => {
   const actual = await vi.importActual<typeof import('../../src/tools/file_ops.js')>('../../src/tools/file_ops.js');
   return { ...actual, readFile: readFileMock };
 });
+vi.mock('../../src/services/video.js', () => ({
+  renderVideo: vi.fn().mockResolvedValue('test-video.mp4'),
+}));
 
 const userId = newId();
 let sessionId: string;
@@ -804,4 +807,119 @@ describe('agent', () => {
     expect(errSpy).toHaveBeenCalledWith('emitSessionEvent failed (non-fatal):', expect.anything());
     errSpy.mockRestore();
   });
+
+  it('generate_video returns structured JSON with execution_id', async () => {
+    const db = getDb();
+    const projectId = newId();
+    db.prepare('INSERT INTO projects (id, user_id, name, description, repo_path, enabled_connection_ids) VALUES (?,?,?,?,?,?)')
+      .run(projectId, userId, 'video-json', 'Video JSON test', null, '[]');
+
+    streamMock.mockImplementationOnce(() => ({
+      on: () => ({ on: () => ({ finalMessage: async () => ({}) }) }),
+      finalMessage: async () => ({
+        stop_reason: 'tool_use',
+        usage: { input_tokens: 10, output_tokens: 5 },
+        content: [{ type: 'tool_use', id: 'tool-vid', name: 'generate_video', input: { project_id: projectId, title: 'Test', scenes: [{ text: 'hello', durationInSeconds: 2 }] } }],
+      }),
+    }));
+    streamMock.mockImplementationOnce(() => {
+      const listeners: Record<string, ((...args: unknown[]) => void)[]> = {};
+      return {
+        on: (event: string, cb: (...args: unknown[]) => void) => { (listeners[event] ??= []).push(cb); return { on: () => ({ finalMessage: async () => ({}) }) }; },
+        finalMessage: async () => {
+          for (const cb of listeners.text ?? []) cb('video started');
+          return { stop_reason: 'end_turn', usage: { input_tokens: 10, output_tokens: 10 }, content: [{ type: 'text', text: 'video started' }] };
+        },
+      };
+    });
+
+    const msgId = newId();
+    db.prepare('INSERT INTO messages (id, session_id, role, content) VALUES (?,?,?,?)').run(msgId, sessionId, 'user', 'render a video');
+    await runAgentTurn(userId, sessionId, msgId);
+
+    const secondCall = streamMock.mock.calls[streamMock.mock.calls.length - 1][0];
+    const toolResultMsg = secondCall.messages.find((m: { role: string; content: unknown }) =>
+      m.role === 'user' && Array.isArray(m.content) && (m.content as { type: string }[]).some(c => c.type === 'tool_result')
+    );
+    const toolResult = JSON.parse((toolResultMsg.content as { content: string }[])[0].content);
+    expect(toolResult.execution_id).toBeDefined();
+    expect(toolResult.status).toBe('started');
+    expect(toolResult.message).toContain('wait_for_execution');
+  });
+
+  it('wait_for_execution returns result when execution reaches done state', async () => {
+    const db = getDb();
+    const execId = newId();
+    db.prepare('INSERT INTO executions (id, message_id, project_id, tool, status, result) VALUES (?,?,?,?,?,?)')
+      .run(execId, null, null, 'generate_video', 'done', 'Rendered test-video.mp4');
+
+    streamMock.mockImplementationOnce(() => ({
+      on: () => ({ on: () => ({ finalMessage: async () => ({}) }) }),
+      finalMessage: async () => ({
+        stop_reason: 'tool_use',
+        usage: { input_tokens: 10, output_tokens: 5 },
+        content: [{ type: 'tool_use', id: 'tool-wfe', name: 'wait_for_execution', input: { execution_id: execId } }],
+      }),
+    }));
+    streamMock.mockImplementationOnce(() => {
+      const listeners: Record<string, ((...args: unknown[]) => void)[]> = {};
+      return {
+        on: (event: string, cb: (...args: unknown[]) => void) => { (listeners[event] ??= []).push(cb); return { on: () => ({ finalMessage: async () => ({}) }) }; },
+        finalMessage: async () => {
+          for (const cb of listeners.text ?? []) cb('done');
+          return { stop_reason: 'end_turn', usage: { input_tokens: 10, output_tokens: 10 }, content: [{ type: 'text', text: 'done' }] };
+        },
+      };
+    });
+
+    const msgId = newId();
+    db.prepare('INSERT INTO messages (id, session_id, role, content) VALUES (?,?,?,?)').run(msgId, sessionId, 'user', 'wait for the video');
+    await runAgentTurn(userId, sessionId, msgId);
+
+    const secondCall = streamMock.mock.calls[streamMock.mock.calls.length - 1][0];
+    const toolResultMsg = secondCall.messages.find((m: { role: string; content: unknown }) =>
+      m.role === 'user' && Array.isArray(m.content) && (m.content as { type: string }[]).some(c => c.type === 'tool_result')
+    );
+    const toolResult = JSON.parse((toolResultMsg.content as { content: string }[])[0].content);
+    expect(toolResult.status).toBe('done');
+    expect(toolResult.result).toBe('Rendered test-video.mp4');
+  });
+
+  it('wait_for_execution returns error string on timeout', async () => {
+    const db = getDb();
+    const execId = newId();
+    db.prepare('INSERT INTO executions (id, message_id, project_id, tool, status) VALUES (?,?,?,?,?)')
+      .run(execId, null, null, 'generate_video', 'running');
+
+    streamMock.mockImplementationOnce(() => ({
+      on: () => ({ on: () => ({ finalMessage: async () => ({}) }) }),
+      finalMessage: async () => ({
+        stop_reason: 'tool_use',
+        usage: { input_tokens: 10, output_tokens: 5 },
+        content: [{ type: 'tool_use', id: 'tool-wfe2', name: 'wait_for_execution', input: { execution_id: execId, timeout_seconds: 1 } }],
+      }),
+    }));
+    streamMock.mockImplementationOnce(() => {
+      const listeners: Record<string, ((...args: unknown[]) => void)[]> = {};
+      return {
+        on: (event: string, cb: (...args: unknown[]) => void) => { (listeners[event] ??= []).push(cb); return { on: () => ({ finalMessage: async () => ({}) }) }; },
+        finalMessage: async () => {
+          for (const cb of listeners.text ?? []) cb('noted');
+          return { stop_reason: 'end_turn', usage: { input_tokens: 10, output_tokens: 10 }, content: [{ type: 'text', text: 'noted' }] };
+        },
+      };
+    });
+
+    const msgId = newId();
+    db.prepare('INSERT INTO messages (id, session_id, role, content) VALUES (?,?,?,?)').run(msgId, sessionId, 'user', 'wait for video with timeout');
+    await runAgentTurn(userId, sessionId, msgId);
+
+    const secondCall = streamMock.mock.calls[streamMock.mock.calls.length - 1][0];
+    const toolResultMsg = secondCall.messages.find((m: { role: string; content: unknown }) =>
+      m.role === 'user' && Array.isArray(m.content) && (m.content as { type: string }[]).some(c => c.type === 'tool_result')
+    );
+    const toolResult = (toolResultMsg.content as { content: string }[])[0].content;
+    expect(toolResult).toContain('Error');
+    expect(toolResult).toContain('still running');
+  }, 10_000);
 });

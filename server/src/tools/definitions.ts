@@ -461,6 +461,18 @@ export const toolDefinitions: Anthropic.Tool[] = [
     },
   },
   {
+    name: 'wait_for_execution',
+    description: 'Block until an execution reaches a terminal state (done or error), then return its result and output log. Use after generate_video (or any fire-and-forget tool) when downstream work depends on its completion. Times out after timeout_seconds (default 300, max 600) and returns an error string if still running.',
+    input_schema: {
+      type: 'object',
+      properties: {
+        execution_id: { type: 'string', description: 'ID of the execution to wait for' },
+        timeout_seconds: { type: 'integer', description: 'Max seconds to wait before returning a timeout error (default 300, max 600)', minimum: 1, maximum: 600 },
+      },
+      required: ['execution_id'],
+    },
+  },
+  {
     name: 'list_scheduled_tasks',
     description: 'List all scheduled tasks for the user — their type, interval, enabled status, and next/last run times.',
     input_schema: { type: 'object', properties: {} },

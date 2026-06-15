@@ -162,6 +162,7 @@ const PARALLEL_SAFE_TOOLS = new Set([
   'get_campaign',
   'get_execution_output',
   'list_scheduled_tasks',
+  'wait_for_execution',
 ]);
 
 // Best-effort session-event emission: writing a session event + broadcasting it
@@ -1119,7 +1120,32 @@ async function dispatchTool(
             if (videoTaskId) finishCampaignTask(userId, videoTaskId, `Error: ${msg}`);
           });
         // Return early — completeExecution is handled by the fire-and-forget above
-        return `Video render started (execution ${executionId}). It will appear in the project's Artifacts tab when done.`;
+        return JSON.stringify({
+          execution_id: executionId,
+          status: 'started',
+          message: 'Video render started. Call wait_for_execution with this execution_id to await completion, then check project Artifacts.',
+        });
+      }
+      case 'wait_for_execution': {
+        const waitExecId = toolInput.execution_id as string;
+        const timeoutSecs = Math.min(600, (toolInput.timeout_seconds as number | undefined) ?? 300);
+        const deadline = Date.now() + timeoutSecs * 1000;
+
+        let waitResult: string | null = null;
+        while (Date.now() < deadline) {
+          const ex = getExecutionById(waitExecId);
+          if (!ex) { waitResult = `Error: execution ${waitExecId} not found`; break; }
+          if (ex.status === 'done' || ex.status === 'error') {
+            const LOG_CAP = 8000;
+            const log = ex.output_log ?? '';
+            const output_log = log.length > LOG_CAP ? `[truncated — showing last ${LOG_CAP} of ${log.length} chars]\n${log.slice(-LOG_CAP)}` : log;
+            waitResult = JSON.stringify({ id: ex.id, tool: ex.tool, status: ex.status, result: ex.result, output_log });
+            break;
+          }
+          await new Promise(resolve => setTimeout(resolve, 2000));
+        }
+        result = waitResult ?? `Error: execution ${waitExecId} still running after ${timeoutSecs}s timeout`;
+        break;
       }
       default:
         result = `Unknown tool: ${toolName}`;

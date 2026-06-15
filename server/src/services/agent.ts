@@ -1113,7 +1113,7 @@ async function dispatchTool(
         result = `Unknown tool: ${toolName}`;
     }
 
-    completeExecution(executionId, userId, result.startsWith('Error') ? 'error' : 'done', result);
+    completeExecution(executionId, userId, 'done', result);
     return result;
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err);

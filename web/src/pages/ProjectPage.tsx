@@ -18,6 +18,7 @@ type Tab = string;
 const TABS = [
   { id: 'overview', label: 'Overview' },
   { id: 'campaigns', label: 'Campaigns' },
+  { id: 'chats', label: 'Chats' },
   { id: 'artifacts', label: 'Artifacts' },
   { id: 'files', label: 'Files' },
   { id: 'settings', label: 'Settings' },
@@ -437,7 +438,7 @@ function CampaignRow({
             {artifactCount} artifact{artifactCount !== 1 ? 's' : ''}
           </span>
           <span className="text-border">·</span>
-          <span>updated {timeAgo(campaign.created_at)}</span>
+          <span>{campaign.completed_at ? `completed ${timeAgo(campaign.completed_at)}` : `started ${timeAgo(campaign.created_at)}`}</span>
         </div>
       </div>
       <ChevronRight size={16} className="shrink-0 text-faint-fg" />

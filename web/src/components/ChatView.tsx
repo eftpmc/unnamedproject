@@ -1,14 +1,14 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useNavigate } from 'react-router-dom';
-import { Bell, Check, ChevronDown, Folder, PanelRight, Target, X } from 'lucide-react';
+import { Bell, Check, ChevronDown, Folder, Loader2, PanelRight, Target, X } from 'lucide-react';
 import ContextPanel from './ContextPanel.js';
 import MessageList from './MessageList.js';
 import MessageInput from './MessageInput.js';
-import { getMessages, sendMessage, getChats, updateChatConfig, getModelsForEffort, getSessionWorktree, mergeSessionBranch, getProjects, truncateMessagesFrom, approveExecution, rejectExecution, getChatEvents } from '../lib/api.js';
+import { getMessages, sendMessage, getChats, updateChatConfig, getModelsForEffort, getSessionWorktree, mergeSessionBranch, getProjects, truncateMessagesFrom, approveExecution, rejectExecution, getChatEvents, getChatStatus } from '../lib/api.js';
 import { subscribe } from '../lib/ws.js';
 import { cn } from '../lib/utils.js';
-import type { EffortLevel, Message, MessageExecution, Project, Session, SessionEvent, SessionProjectLink, WSEvent, WSMessageCreated, WSMessageStarted, WSMessageDelta, WSExecutionUpdate, WSApprovalRequested, WSAutoApproved, WSSessionTitleUpdated, WSSessionEventCreated, WSAgentError, ClaudeModelInfo } from '../types.js';
+import type { EffortLevel, Message, MessageExecution, Project, Session, SessionEvent, SessionProjectLink, WSEvent, WSMessageCreated, WSMessageStarted, WSMessageDelta, WSExecutionUpdate, WSApprovalRequested, WSAutoApproved, WSSessionTitleUpdated, WSSessionEventCreated, WSAgentError, WSTurnComplete, ClaudeModelInfo } from '../types.js';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Button } from '@/components/ui/button';
@@ -25,9 +25,15 @@ export default function ChatView({ chatId }: ChatViewProps) {
   const queryClient = useQueryClient();
   const navigate = useNavigate();
 
-  const { data: messages = [], isLoading } = useQuery({
+  const { data: messages = [], isLoading, isError: messagesError, error: messagesErrorObj, refetch: refetchMessages } = useQuery({
     queryKey: ['messages', chatId],
     queryFn: () => getMessages(chatId),
+  });
+
+  const { data: chatStatus } = useQuery({
+    queryKey: ['chat-status', chatId],
+    queryFn: () => getChatStatus(chatId),
+    refetchInterval: query => query.state.data?.active ? 3000 : false,
   });
 
   const { data: chatEventsData } = useQuery({
@@ -122,9 +128,11 @@ export default function ChatView({ chatId }: ChatViewProps) {
   const [editingMessageId, setEditingMessageId] = useState<string | null>(null);
   const [sending, setSending] = useState(false);
   const [agentError, setAgentError] = useState<string | null>(null);
-  const agentActive = sending || streamingIds.size > 0 || Object.values(executions).some(list =>
+  const hasActiveExecution = Object.values(executions).some(list =>
     list.some(exec => exec.status === 'running' || exec.status === 'awaiting_approval')
   );
+  const agentActive = sending || !!chatStatus?.active || streamingIds.size > 0 || hasActiveExecution;
+  const agentStarting = !!chatStatus?.active && streamingIds.size === 0 && !hasActiveExecution;
 
   const pendingApproval = Object.values(executions).flat().find(
     e => e.status === 'awaiting_approval' && e.needsApproval
@@ -151,13 +159,17 @@ export default function ChatView({ chatId }: ChatViewProps) {
   }
 
   const mutation = useMutation({
-    mutationFn: (content: string) => sendMessage(chatId, content),
-    onSettled: () => setSending(false),
+    mutationFn: ({ content, attachments }: { content: string; attachments: File[] }) => sendMessage(chatId, content, attachments),
     onSuccess: (newMsg) => {
       queryClient.setQueryData<Message[]>(['messages', chatId], prev => {
         if (!prev) return [newMsg];
         if (prev.some(m => m.id === newMsg.id)) return prev.map(m => m.id === newMsg.id ? newMsg : m);
         return [...prev, newMsg];
+      });
+      queryClient.setQueryData(['chat-status', chatId], {
+        active: true,
+        turn: { id: `pending-${newMsg.id}`, userMessageId: newMsg.id, startedAt: Math.floor(Date.now() / 1000) },
+        execution: null,
       });
     },
   });
@@ -167,12 +179,12 @@ export default function ChatView({ chatId }: ChatViewProps) {
     setInputValue(content);
   }, []);
 
-  const sendPrompt = useCallback(async (overrideContent?: string) => {
+  const sendPrompt = useCallback(async (overrideContent?: string, attachments: File[] = []): Promise<boolean> => {
     const content = (overrideContent ?? inputValue).trim();
-    if (!content) return;
+    if (!content && attachments.length === 0) return false;
+    const previousInput = inputValue;
     setSending(true);
     setAgentError(null);
-    setInputValue('');
 
     try {
       if (editingMessageId) {
@@ -186,17 +198,39 @@ export default function ChatView({ chatId }: ChatViewProps) {
         });
       }
 
-      mutation.mutate(content);
-    } catch {
+      await mutation.mutateAsync({ content, attachments });
+      setInputValue('');
       setSending(false);
+      return true;
+    } catch {
+      setInputValue(previousInput);
+      setSending(false);
+      setAgentError('Message could not be sent. Please try again.');
+      return false;
     }
   }, [inputValue, editingMessageId, chatId, queryClient, mutation]);
 
   const handleWsEvent = useCallback((event: WSEvent) => {
+    const scopedTypes = new Set([
+      'agent_error',
+      'message_started',
+      'message_delta',
+      'message_created',
+      'execution_update',
+      'approval_requested',
+      'action_auto_approved',
+      'turn_complete',
+    ]);
+    if (scopedTypes.has(event.type)) {
+      const eventSessionId = typeof event.sessionId === 'string' ? event.sessionId : null;
+      if (eventSessionId !== chatId) return;
+    }
+
     if (event.type === 'agent_error') {
       const ev = event as WSAgentError;
       setSending(false);
       setAgentError(ev.error ?? 'The agent encountered an error. Please try again.');
+      queryClient.setQueryData(['chat-status', chatId], { active: false, turn: null, execution: null });
     }
 
     if (event.type === 'message_started') {
@@ -208,6 +242,7 @@ export default function ChatView({ chatId }: ChatViewProps) {
       });
       setStreamingIds(prev => new Set(prev).add(message.id));
       setSending(false);
+      queryClient.setQueryData(['chat-status', chatId], (prev: unknown) => ({ ...(prev as object ?? {}), active: true }));
     }
 
     if (event.type === 'message_delta') {
@@ -233,8 +268,17 @@ export default function ChatView({ chatId }: ChatViewProps) {
       setSending(false);
     }
 
+    if (event.type === 'turn_complete') {
+      const ev = event as WSTurnComplete;
+      queryClient.setQueryData(['chat-status', chatId], { active: false, turn: null, execution: null });
+      if (ev.status === 'error') queryClient.invalidateQueries({ queryKey: ['messages', chatId] });
+    }
+
     if (event.type === 'execution_update') {
       const ev = event as WSExecutionUpdate;
+      if (ev.status === 'running' || ev.status === 'awaiting_approval') {
+        queryClient.setQueryData(['chat-status', chatId], (prev: unknown) => ({ ...(prev as object ?? {}), active: true }));
+      }
 
       if (ev.status === 'running' && ev.messageId && !execToMsgRef.current[ev.executionId]) {
         // New execution started — register it
@@ -275,6 +319,7 @@ export default function ChatView({ chatId }: ChatViewProps) {
             ...(ev.result ? { result: ev.result } : {}),
           };
           if (ev.status === 'done' || ev.status === 'error') refetchWorktree();
+          if (ev.status === 'done' || ev.status === 'error') queryClient.invalidateQueries({ queryKey: ['chat-status', chatId] });
           return { ...prev, [msgId]: list.map(e => e.executionId === ev.executionId ? updated : e) };
         });
       }
@@ -342,6 +387,20 @@ export default function ChatView({ chatId }: ChatViewProps) {
         <Skeleton className="h-8 w-64" />
         <Skeleton className="h-28 w-2/3 rounded-2xl" />
         <Skeleton className="ml-auto h-20 w-1/2 rounded-2xl" />
+      </div>
+    );
+  }
+
+  if (messagesError) {
+    return (
+      <div className="flex flex-1 items-center justify-center p-6">
+        <div className="w-full max-w-md rounded-lg border border-destructive/20 bg-destructive/5 p-4 text-sm">
+          <div className="font-medium text-destructive">Could not load this chat.</div>
+          <p className="mt-1 text-muted-foreground">{messagesErrorObj instanceof Error ? messagesErrorObj.message : 'Please try again.'}</p>
+          <Button variant="outline" size="sm" className="mt-3" onClick={() => refetchMessages()}>
+            Retry
+          </Button>
+        </div>
       </div>
     );
   }
@@ -435,10 +494,17 @@ export default function ChatView({ chatId }: ChatViewProps) {
         </div>
       )}
 
+      {agentActive && !pendingApproval && (
+        <div className="flex shrink-0 items-center gap-2 border-t border-border-soft bg-muted/35 px-5 py-2 text-xs text-muted-foreground">
+          <Loader2 size={13} className="animate-spin" />
+          <span>{agentStarting ? 'Agent is getting started…' : 'Agent is working…'}</span>
+        </div>
+      )}
+
       <MessageInput
         value={inputValue}
         onChange={setInputValue}
-        onSend={sendPrompt}
+        onSend={(attachments) => sendPrompt(undefined, attachments)}
         disabled={agentActive}
       />
       </div>

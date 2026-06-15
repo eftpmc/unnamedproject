@@ -3,6 +3,25 @@ import { newId } from '../lib/ids.js';
 import { broadcast } from './socket.js';
 import { waitForApproval } from '../lib/approval.js';
 
+function getSessionIdForMessage(messageId: string): string | null {
+  const row = getDb()
+    .prepare('SELECT session_id as sessionId FROM messages WHERE id = ?')
+    .get(messageId) as { sessionId: string } | undefined;
+  return row?.sessionId ?? null;
+}
+
+function getSessionIdForExecution(executionId: string): string | null {
+  const row = getDb()
+    .prepare(`
+      SELECT m.session_id as sessionId
+      FROM executions e
+      JOIN messages m ON m.id = e.message_id
+      WHERE e.id = ?
+    `)
+    .get(executionId) as { sessionId: string } | undefined;
+  return row?.sessionId ?? null;
+}
+
 export function createExecution(
   userId: string,
   messageId: string,
@@ -13,7 +32,7 @@ export function createExecution(
   getDb()
     .prepare('INSERT INTO executions (id, message_id, project_id, tool, status) VALUES (?,?,?,?,?)')
     .run(id, messageId, projectId, tool, 'running');
-  broadcast(userId, { type: 'execution_update', executionId: id, status: 'running', tool, messageId });
+  broadcast(userId, { type: 'execution_update', sessionId: getSessionIdForMessage(messageId), executionId: id, status: 'running', tool, messageId });
   return id;
 }
 
@@ -21,7 +40,7 @@ export function appendOutput(executionId: string, userId: string, chunk: string)
   getDb()
     .prepare('UPDATE executions SET output_log = output_log || ? WHERE id = ?')
     .run(chunk, executionId);
-  broadcast(userId, { type: 'execution_update', executionId, chunk });
+  broadcast(userId, { type: 'execution_update', sessionId: getSessionIdForExecution(executionId), executionId, chunk });
 }
 
 export function completeExecution(
@@ -33,7 +52,7 @@ export function completeExecution(
   getDb()
     .prepare('UPDATE executions SET status = ?, result = ?, completed_at = unixepoch() WHERE id = ?')
     .run(status, result, executionId);
-  broadcast(userId, { type: 'execution_update', executionId, status, result });
+  broadcast(userId, { type: 'execution_update', sessionId: getSessionIdForExecution(executionId), executionId, status, result });
 }
 
 export async function requestApproval(
@@ -52,7 +71,7 @@ export async function requestApproval(
     getDb()
       .prepare("UPDATE approvals SET status = 'approved', resolved_at = unixepoch() WHERE id = ?")
       .run(approvalId);
-    broadcast(userId, { type: 'action_auto_approved', executionId, approvalId, action, payload });
+    broadcast(userId, { type: 'action_auto_approved', sessionId: getSessionIdForExecution(executionId), executionId, approvalId, action, payload });
     return 'approved';
   }
 
@@ -84,7 +103,7 @@ export async function requestApproval(
       event: { ...event, metadata: JSON.parse(event.metadata || '{}') },
     });
   }
-  broadcast(userId, { type: 'approval_requested', executionId, approvalId, action, payload });
+  broadcast(userId, { type: 'approval_requested', sessionId: executionContext?.sessionId ?? null, executionId, approvalId, action, payload });
   const decision = await waitForApproval(approvalId);
   getDb()
     .prepare('UPDATE approvals SET status = ?, resolved_at = unixepoch() WHERE id = ?')
@@ -95,6 +114,7 @@ export async function requestApproval(
       .run(executionId);
     broadcast(userId, {
       type: 'execution_update',
+      sessionId: executionContext?.sessionId ?? null,
       executionId,
       status: 'running',
     });
@@ -104,6 +124,7 @@ export async function requestApproval(
       .run(executionId);
     broadcast(userId, {
       type: 'execution_update',
+      sessionId: executionContext?.sessionId ?? null,
       executionId,
       status: 'error',
     });

@@ -10,7 +10,7 @@ vi.mock('./auth', () => ({
 const mockFetch = vi.fn();
 globalThis.fetch = mockFetch;
 
-const { login, getChats, createChat, getProjectArtifacts, getArtifactContent } = await import('./api');
+const { login, getChats, createChat, getChatStatus, sendMessage, getProjectArtifacts, getArtifactContent } = await import('./api');
 
 beforeEach(() => {
   mockFetch.mockReset();
@@ -42,6 +42,25 @@ describe('api', () => {
     mockFetch.mockResolvedValueOnce({ ok: true, json: async () => ({ id: 'sess-1' }) });
     const result = await createChat('My session');
     expect(result.id).toBe('sess-1');
+  });
+
+  it('getChatStatus fetches active state', async () => {
+    mockFetch.mockResolvedValueOnce({ ok: true, json: async () => ({ active: true, turn: null, execution: null }) });
+    const result = await getChatStatus('sess-1');
+    expect(result.active).toBe(true);
+    expect(mockFetch).toHaveBeenCalledWith('/sessions/sess-1/status', expect.any(Object));
+  });
+
+  it('sendMessage uses multipart form data for attachments', async () => {
+    mockFetch.mockResolvedValueOnce({ ok: true, json: async () => ({ id: 'msg-1', role: 'user', content: 'See attached', created_at: 1 }) });
+    const file = new File(['hello'], 'notes.txt', { type: 'text/plain' });
+    await sendMessage('sess-1', 'See attached', [file]);
+
+    const [path, opts] = mockFetch.mock.calls[0];
+    expect(path).toBe('/sessions/sess-1/messages');
+    expect(opts.body).toBeInstanceOf(FormData);
+    expect(opts.headers['Content-Type']).toBeUndefined();
+    expect(opts.headers.Authorization).toBe('Bearer test-token');
   });
 
   it('getProjectArtifacts fetches the project artifact list', async () => {

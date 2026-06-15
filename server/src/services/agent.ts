@@ -1,5 +1,6 @@
 import Anthropic from '@anthropic-ai/sdk';
 import { exec as execCallback } from 'child_process';
+import fs from 'fs';
 import { promisify } from 'util';
 import { createSessionEvent, getDb, getProjectForUser, linkSessionProject, setAgentWorktreeSession, updateCampaignTaskStatus, maybeCompleteCampaign, getCampaignForTask, getCampaignSummaries, getCampaignById, getCampaignTasks, getExecutionById, getScheduledTasksForUser, createScheduledTask, updateScheduledTask, deleteScheduledTask, resumeCampaign, getPermissionProfile, createPipeline, getPipelineById, getPipelineTasks, listPipelinesForUser, createCampaign, recordAgentUsage, type DbCampaign, type DbCampaignTask } from '../db/index.js';
 
@@ -106,7 +107,14 @@ async function maybeGenerateSessionTitle(userId: string, sessionId: string): Pro
   }
 }
 
-interface DbMessage { role: string; content: string; }
+interface DbMessage { id: string; role: string; content: string; }
+interface DbMessageAttachment {
+  messageId: string;
+  filename: string;
+  mimeType: string;
+  sizeBytes: number;
+  storagePath: string;
+}
 
 
 interface McpServerConfig { command: string; args?: string[]; env?: Record<string, string> }
@@ -199,6 +207,77 @@ function noteProjectUse(userId: string, sessionId: string, project: { id: string
     executionId: executionId ?? null,
     metadata: { source: 'agent' },
   });
+}
+
+function isTextLikeAttachment(attachment: DbMessageAttachment): boolean {
+  if (attachment.mimeType.startsWith('text/')) return true;
+  return /\.(csv|json|md|txt|log|tsx?|jsx?|css|html?|xml|yaml|yml|toml|sql|py|rb|go|rs|java|kt|swift|c|cc|cpp|h|hpp|sh|zsh|env)$/i
+    .test(attachment.filename);
+}
+
+function buildMessageContent(content: string, attachments: DbMessageAttachment[]): string | Anthropic.ContentBlockParam[] {
+  if (attachments.length === 0) return content;
+
+  const blocks: Anthropic.ContentBlockParam[] = [];
+  const intro = content.trim();
+  if (intro) blocks.push({ type: 'text', text: intro });
+
+  const skipped: string[] = [];
+  for (const attachment of attachments) {
+    if (!fs.existsSync(attachment.storagePath)) {
+      skipped.push(`${attachment.filename} (missing from storage)`);
+      continue;
+    }
+
+    if (['image/jpeg', 'image/png', 'image/gif', 'image/webp'].includes(attachment.mimeType)) {
+      blocks.push({
+        type: 'image',
+        source: {
+          type: 'base64',
+          media_type: attachment.mimeType as 'image/jpeg' | 'image/png' | 'image/gif' | 'image/webp',
+          data: fs.readFileSync(attachment.storagePath).toString('base64'),
+        },
+      });
+      continue;
+    }
+
+    if (attachment.mimeType === 'application/pdf') {
+      blocks.push({
+        type: 'document',
+        title: attachment.filename,
+        source: {
+          type: 'base64',
+          media_type: 'application/pdf',
+          data: fs.readFileSync(attachment.storagePath).toString('base64'),
+        },
+      });
+      continue;
+    }
+
+    if (isTextLikeAttachment(attachment)) {
+      const MAX_TEXT_ATTACHMENT_CHARS = 30_000;
+      const text = fs.readFileSync(attachment.storagePath, 'utf8');
+      const truncated = text.length > MAX_TEXT_ATTACHMENT_CHARS
+        ? `${text.slice(0, MAX_TEXT_ATTACHMENT_CHARS)}\n\n[Attachment truncated after ${MAX_TEXT_ATTACHMENT_CHARS} characters.]`
+        : text;
+      blocks.push({
+        type: 'text',
+        text: `\n\n[Attached file: ${attachment.filename} (${attachment.mimeType || 'text/plain'}, ${attachment.sizeBytes} bytes)]\n${truncated}`,
+      });
+      continue;
+    }
+
+    skipped.push(`${attachment.filename} (${attachment.mimeType || 'unknown type'}, ${attachment.sizeBytes} bytes)`);
+  }
+
+  if (skipped.length) {
+    blocks.push({
+      type: 'text',
+      text: `\n\n[Unsupported attachments were provided but not sent to the model: ${skipped.join(', ')}]`,
+    });
+  }
+
+  return blocks.length ? blocks : content;
 }
 
 async function runSubAgent(
@@ -1181,8 +1260,26 @@ export async function runAgentTurn(userId: string, sessionId: string, userMessag
   const effort = session?.effort ?? DEFAULT_EFFORT;
 
   const history = getDb()
-    .prepare('SELECT role, content FROM messages WHERE session_id = ? ORDER BY created_at')
+    .prepare('SELECT id, role, content FROM messages WHERE session_id = ? ORDER BY created_at')
     .all(sessionId) as DbMessage[];
+
+  const attachments = history.length
+    ? getDb()
+      .prepare(`
+        SELECT a.message_id as messageId, a.filename, a.mime_type as mimeType,
+               a.size_bytes as sizeBytes, a.storage_path as storagePath
+        FROM message_attachments a
+        WHERE a.message_id IN (${history.map(() => '?').join(',')})
+        ORDER BY a.created_at, a.filename
+      `)
+      .all(...history.map(m => m.id)) as DbMessageAttachment[]
+    : [];
+  const attachmentsByMessage = new Map<string, DbMessageAttachment[]>();
+  for (const attachment of attachments) {
+    const list = attachmentsByMessage.get(attachment.messageId) ?? [];
+    list.push(attachment);
+    attachmentsByMessage.set(attachment.messageId, list);
+  }
 
   const lastUserMsg = [...history].reverse().find(m => m.role === 'user')?.content ?? '';
 
@@ -1203,7 +1300,9 @@ export async function runAgentTurn(userId: string, sessionId: string, userMessag
 
   const messages: Anthropic.MessageParam[] = windowedHistory.map(m => ({
     role: m.role as 'user' | 'assistant',
-    content: m.content,
+    content: m.role === 'user'
+      ? buildMessageContent(m.content, attachmentsByMessage.get(m.id) ?? [])
+      : m.content,
   }));
 
   if (session?.summary && messages.length > 0) {
@@ -1239,10 +1338,10 @@ export async function runAgentTurn(userId: string, sessionId: string, userMessag
           getDb()
             .prepare('INSERT INTO messages (id, session_id, role, content) VALUES (?,?,?,?)')
             .run(replyId, sessionId, 'assistant', '');
-          broadcast(userId, { type: 'message_started', message: { id: replyId, role: 'assistant', content: '' } });
+          broadcast(userId, { type: 'message_started', sessionId, message: { id: replyId, role: 'assistant', content: '' } });
         }
         fullText += delta;
-        broadcast(userId, { type: 'message_delta', messageId: replyId, delta });
+        broadcast(userId, { type: 'message_delta', sessionId, messageId: replyId, delta });
       });
 
       const response = await stream.finalMessage();
@@ -1268,7 +1367,7 @@ export async function runAgentTurn(userId: string, sessionId: string, userMessag
       // assistant message in history (the API rejects empty assistant content).
       if (fullText) {
         getDb().prepare('UPDATE messages SET content = ? WHERE id = ?').run(fullText, replyId);
-        broadcast(userId, { type: 'message_created', message: { id: replyId, role: 'assistant', content: fullText } });
+        broadcast(userId, { type: 'message_created', sessionId, message: { id: replyId, role: 'assistant', content: fullText } });
       } else {
         getDb().prepare('DELETE FROM messages WHERE id = ?').run(replyId);
       }
@@ -1280,13 +1379,16 @@ export async function runAgentTurn(userId: string, sessionId: string, userMessag
     getDb()
       .prepare('UPDATE messages SET content = ? WHERE id = ?')
       .run(fullText, replyId);
-    broadcast(userId, { type: 'message_created', message: { id: replyId, role: 'assistant', content: fullText } });
+    broadcast(userId, { type: 'message_created', sessionId, message: { id: replyId, role: 'assistant', content: fullText } });
   }
 
   getDb()
+    .prepare("UPDATE session_turns SET status = 'done', completed_at = unixepoch() WHERE session_id = ? AND user_message_id = ? AND status = 'running'")
+    .run(sessionId, userMessageId);
+  getDb()
     .prepare('UPDATE sessions SET updated_at = unixepoch() WHERE id = ?')
     .run(sessionId);
-  broadcast(userId, { type: 'turn_complete', sessionId });
+  broadcast(userId, { type: 'turn_complete', sessionId, status: 'done' });
 
   recordAgentUsage(userId, 'lead_agent', tokensToUsd(model, totalInputTokens, totalOutputTokens));
 

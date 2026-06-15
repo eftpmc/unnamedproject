@@ -2,7 +2,8 @@ import { describe, it, expect, beforeAll } from 'vitest';
 import request from 'supertest';
 import fs from 'fs';
 import { app } from '../src/index.js';
-import { initDb } from '../src/db/index.js';
+import { initDb, getDb } from '../src/db/index.js';
+import { newId } from '../src/lib/ids.js';
 
 let token: string;
 
@@ -69,6 +70,24 @@ describe('sessions', () => {
       .get('/sessions')
       .set('Authorization', `Bearer ${token}`);
     expect(list.body[0].title).toBe('Fix the login bug');
+  });
+
+  it('reports active chat status from running turns', async () => {
+    const messageId = newId();
+    getDb()
+      .prepare('INSERT INTO messages (id, session_id, role, content) VALUES (?,?,?,?)')
+      .run(messageId, sessionId, 'user', 'long task');
+    getDb()
+      .prepare('INSERT INTO session_turns (id, session_id, user_message_id, status) VALUES (?,?,?,?)')
+      .run(newId(), sessionId, messageId, 'running');
+
+    const res = await request(app)
+      .get(`/sessions/${sessionId}/status`)
+      .set('Authorization', `Bearer ${token}`);
+
+    expect(res.status).toBe(200);
+    expect(res.body.active).toBe(true);
+    expect(res.body.turn.userMessageId).toBe(messageId);
   });
 
   it('DELETE /sessions/:id deletes the session', async () => {

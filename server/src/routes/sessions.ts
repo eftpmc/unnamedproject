@@ -35,6 +35,41 @@ router.get('/:id/events', (req, res) => {
   });
 });
 
+router.get('/:id/status', (req, res) => {
+  const { userId } = req as unknown as AuthedRequest;
+  const session = getDb()
+    .prepare('SELECT id FROM sessions WHERE id = ? AND user_id = ?')
+    .get(req.params.id, userId);
+  if (!session) { res.status(404).json({ error: 'Session not found' }); return; }
+
+  const activeTurn = getDb()
+    .prepare(`
+      SELECT id, user_message_id as userMessageId, started_at as startedAt
+      FROM session_turns
+      WHERE session_id = ? AND status = 'running'
+      ORDER BY started_at DESC
+      LIMIT 1
+    `)
+    .get(req.params.id) as { id: string; userMessageId: string; startedAt: number } | undefined;
+
+  const activeExecution = getDb()
+    .prepare(`
+      SELECT id, status, created_at as createdAt
+      FROM executions
+      WHERE message_id IN (SELECT id FROM messages WHERE session_id = ?)
+        AND status IN ('running','awaiting_approval')
+      ORDER BY created_at DESC
+      LIMIT 1
+    `)
+    .get(req.params.id) as { id: string; status: string; createdAt: number } | undefined;
+
+  res.json({
+    active: !!activeTurn || !!activeExecution,
+    turn: activeTurn ?? null,
+    execution: activeExecution ?? null,
+  });
+});
+
 router.get('/search', (req, res) => {
   const { userId } = req as AuthedRequest;
   const q = (req.query.q as string | undefined)?.trim();

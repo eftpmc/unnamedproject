@@ -30,6 +30,15 @@ export interface MessageExecution {
   action: string | null;
 }
 
+export interface MessageAttachment {
+  id: string;
+  filename: string;
+  mimeType: string;
+  sizeBytes: number;
+  url: string;
+  createdAt: number;
+}
+
 export type SessionEventType =
   | 'scope_changed'
   | 'project_linked'
@@ -64,6 +73,7 @@ export interface Message {
   role: 'user' | 'assistant';
   content: string;
   created_at: number;
+  attachments?: MessageAttachment[];
   executions?: MessageExecution[];
 }
 
@@ -138,11 +148,13 @@ export interface WSEvent {
 
 export interface WSAgentError extends WSEvent {
   type: 'agent_error';
+  sessionId?: string;
   error: string;
 }
 
 export interface WSExecutionUpdate extends WSEvent {
   type: 'execution_update';
+  sessionId?: string | null;
   executionId: string;
   status?: string;
   chunk?: string;
@@ -154,6 +166,7 @@ export interface WSExecutionUpdate extends WSEvent {
 
 export interface WSApprovalRequested extends WSEvent {
   type: 'approval_requested';
+  sessionId?: string | null;
   executionId: string;
   approvalId: string;
   action: string;
@@ -162,6 +175,7 @@ export interface WSApprovalRequested extends WSEvent {
 
 export interface WSAutoApproved extends WSEvent {
   type: 'action_auto_approved';
+  sessionId?: string | null;
   executionId: string;
   approvalId: string;
   action: string;
@@ -169,18 +183,27 @@ export interface WSAutoApproved extends WSEvent {
 
 export interface WSMessageCreated extends WSEvent {
   type: 'message_created';
+  sessionId: string;
   message: Message;
 }
 
 export interface WSMessageStarted extends WSEvent {
   type: 'message_started';
+  sessionId: string;
   message: Message;
 }
 
 export interface WSMessageDelta extends WSEvent {
   type: 'message_delta';
+  sessionId: string;
   messageId: string;
   delta: string;
+}
+
+export interface WSTurnComplete extends WSEvent {
+  type: 'turn_complete';
+  sessionId: string;
+  status?: 'done' | 'error';
 }
 
 export interface WSSessionTitleUpdated extends WSEvent {

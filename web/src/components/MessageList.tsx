@@ -1,7 +1,7 @@
 import { useEffect, useRef } from 'react';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
-import { ArrowRight, GitMerge, Pencil, Plug, Sparkles, Target } from 'lucide-react';
+import { ArrowRight, FileText, GitMerge, Image, Pencil, Plug, Sparkles, Target } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import ExecutionCard from './ExecutionCard.js';
 import CampaignCard from './CampaignCard.js';
@@ -202,6 +202,7 @@ export default function MessageList({ messages, executions, streamingIds, sessio
           }
 
           const isLastUser = msg.role === 'user' && msg.id === lastUserMessageId;
+          const attachments = msg.attachments ?? [];
           return (
           <div key={msg.id}>
             {msg.role === 'user' ? (
@@ -218,7 +219,21 @@ export default function MessageList({ messages, executions, streamingIds, sessio
                     </button>
                   )}
                   <div className="max-w-[88%] rounded-[18px] rounded-tr-md bg-muted px-4 py-2.5 text-[15px] leading-relaxed text-foreground sm:max-w-[80%]">
-                    {msg.content}
+                    {msg.content && <div className="whitespace-pre-wrap">{msg.content}</div>}
+                    {attachments.length > 0 && (
+                      <div className={msg.content ? 'mt-2 flex flex-wrap gap-1.5' : 'flex flex-wrap gap-1.5'}>
+                        {attachments.map(attachment => {
+                          const Icon = attachment.mimeType.startsWith('image/') ? Image : FileText;
+                          return (
+                            <div key={attachment.id} className="flex max-w-full items-center gap-1.5 rounded-lg border border-border-soft bg-background/70 px-2 py-1 text-xs text-muted-foreground">
+                              <Icon size={13} className="shrink-0" />
+                              <span className="max-w-44 truncate">{attachment.filename}</span>
+                              <span className="shrink-0 text-faint-fg">{formatFileSize(attachment.sizeBytes)}</span>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    )}
                   </div>
                 </div>
               </div>
@@ -243,4 +258,10 @@ export default function MessageList({ messages, executions, streamingIds, sessio
       </div>
     </div>
   );
+}
+
+function formatFileSize(bytes: number): string {
+  if (bytes < 1024) return `${bytes} B`;
+  if (bytes < 1024 * 1024) return `${Math.round(bytes / 1024)} KB`;
+  return `${(bytes / 1024 / 1024).toFixed(1)} MB`;
 }

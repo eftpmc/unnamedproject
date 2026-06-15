@@ -3,11 +3,12 @@ import type { Session, Message, Project, ProjectArtifact, Connection, EffortLeve
 
 async function request<T>(path: string, init: RequestInit = {}): Promise<T> {
   const token = getToken();
+  const isFormData = init.body instanceof FormData;
   const res = await fetch(path, {
     ...init,
     headers: {
-      'Content-Type': 'application/json',
       'Accept': 'application/json',
+      ...(isFormData ? {} : { 'Content-Type': 'application/json' }),
       ...(token ? { Authorization: `Bearer ${token}` } : {}),
       ...(init.headers ?? {}),
     },
@@ -43,6 +44,16 @@ export function searchChats(q: string): Promise<Session[]> {
 
 export function getChatEvents(chatId: string): Promise<{ events: SessionEvent[]; projects: SessionProjectLink[] }> {
   return request(`/sessions/${chatId}/events`);
+}
+
+export interface ChatStatus {
+  active: boolean;
+  turn: { id: string; userMessageId: string; startedAt: number } | null;
+  execution: { id: string; status: 'running' | 'awaiting_approval'; createdAt: number } | null;
+}
+
+export function getChatStatus(chatId: string): Promise<ChatStatus> {
+  return request(`/sessions/${chatId}/status`);
 }
 
 export function truncateMessagesFrom(sessionId: string, messageId: string): Promise<{ deleted: number }> {
@@ -81,11 +92,20 @@ export function getMessages(sessionId: string): Promise<Message[]> {
   return request(`/sessions/${sessionId}/messages`);
 }
 
-export function sendMessage(sessionId: string, content: string): Promise<Message> {
-  return request(`/sessions/${sessionId}/messages`, {
-    method: 'POST',
-    body: JSON.stringify({ content }),
-  });
+export function sendMessage(sessionId: string, content: string, attachments: File[] = []): Promise<Message> {
+  if (attachments.length === 0) {
+    return request(`/sessions/${sessionId}/messages`, {
+      method: 'POST',
+      body: JSON.stringify({ content }),
+    });
+  }
+
+  const body = new FormData();
+  body.append('content', content);
+  for (const attachment of attachments) {
+    body.append('attachments', attachment);
+  }
+  return request(`/sessions/${sessionId}/messages`, { method: 'POST', body });
 }
 
 export function getPendingApprovals(): Promise<Array<{ approval_id: string; execution_id: string; action: string; payload: Record<string, unknown> }>> {

@@ -98,6 +98,26 @@ function applySchema(): void {
       created_at INTEGER NOT NULL DEFAULT (unixepoch())
     );
 
+    CREATE TABLE IF NOT EXISTS message_attachments (
+      id TEXT PRIMARY KEY,
+      message_id TEXT NOT NULL REFERENCES messages(id) ON DELETE CASCADE,
+      filename TEXT NOT NULL,
+      mime_type TEXT NOT NULL,
+      size_bytes INTEGER NOT NULL,
+      storage_path TEXT NOT NULL,
+      created_at INTEGER NOT NULL DEFAULT (unixepoch())
+    );
+
+    CREATE TABLE IF NOT EXISTS session_turns (
+      id TEXT PRIMARY KEY,
+      session_id TEXT NOT NULL REFERENCES sessions(id) ON DELETE CASCADE,
+      user_message_id TEXT NOT NULL REFERENCES messages(id) ON DELETE CASCADE,
+      status TEXT NOT NULL DEFAULT 'running' CHECK(status IN ('running','done','error')),
+      error TEXT,
+      started_at INTEGER NOT NULL DEFAULT (unixepoch()),
+      completed_at INTEGER
+    );
+
     CREATE TABLE IF NOT EXISTS session_project_links (
       session_id TEXT NOT NULL REFERENCES sessions(id) ON DELETE CASCADE,
       project_id TEXT NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
@@ -295,6 +315,30 @@ function applySchema(): void {
   if (!sessionCols.some(c => c.name === 'summary')) {
     db.exec('ALTER TABLE sessions ADD COLUMN summary TEXT');
   }
+
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS message_attachments (
+      id TEXT PRIMARY KEY,
+      message_id TEXT NOT NULL REFERENCES messages(id) ON DELETE CASCADE,
+      filename TEXT NOT NULL,
+      mime_type TEXT NOT NULL,
+      size_bytes INTEGER NOT NULL,
+      storage_path TEXT NOT NULL,
+      created_at INTEGER NOT NULL DEFAULT (unixepoch())
+    );
+  `);
+
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS session_turns (
+      id TEXT PRIMARY KEY,
+      session_id TEXT NOT NULL REFERENCES sessions(id) ON DELETE CASCADE,
+      user_message_id TEXT NOT NULL REFERENCES messages(id) ON DELETE CASCADE,
+      status TEXT NOT NULL DEFAULT 'running' CHECK(status IN ('running','done','error')),
+      error TEXT,
+      started_at INTEGER NOT NULL DEFAULT (unixepoch()),
+      completed_at INTEGER
+    );
+  `);
 
   // Remove legacy type column (added in an old migration, no longer needed)
   const projectCols = db.prepare("SELECT name FROM pragma_table_info('projects')").all() as { name: string }[];
@@ -584,6 +628,8 @@ function applySchema(): void {
 
   db.exec(`
     CREATE INDEX IF NOT EXISTS idx_messages_session_id ON messages(session_id);
+    CREATE INDEX IF NOT EXISTS idx_message_attachments_message_id ON message_attachments(message_id);
+    CREATE INDEX IF NOT EXISTS idx_session_turns_session_status ON session_turns(session_id, status);
     CREATE INDEX IF NOT EXISTS idx_session_events_session_id ON session_events(session_id);
     CREATE INDEX IF NOT EXISTS idx_campaign_tasks_campaign_id ON campaign_tasks(campaign_id);
     CREATE INDEX IF NOT EXISTS idx_agent_usage_user_tool_date ON agent_usage(user_id, tool, created_at);
@@ -601,7 +647,7 @@ export function reconcileOrphanedExecutions(): void {
   const db = getDb();
   const stale = db.prepare("SELECT id, message_id FROM executions WHERE status = 'running'").all() as
     { id: string; message_id: string | null }[];
-  if (stale.length === 0) return;
+  const staleTurns = db.prepare("SELECT id FROM session_turns WHERE status = 'running'").all() as { id: string }[];
 
   const markError = db.prepare(
     "UPDATE executions SET status = 'error', result = 'Interrupted by server restart', completed_at = unixepoch() WHERE id = ?"
@@ -614,8 +660,11 @@ export function reconcileOrphanedExecutions(): void {
     if (message_id) deleteEmptyMessage.run(message_id);
   }
 
+  db.prepare("UPDATE session_turns SET status = 'error', error = 'Interrupted by server restart', completed_at = unixepoch() WHERE status = 'running'").run();
   db.prepare("UPDATE campaign_tasks SET status = 'error', completed_at = unixepoch() WHERE status = 'running'").run();
-  console.log(`Reconciled ${stale.length} orphaned execution(s) from a previous run.`);
+  if (stale.length || staleTurns.length) {
+    console.log(`Reconciled ${stale.length} orphaned execution(s) and ${staleTurns.length} orphaned turn(s) from a previous run.`);
+  }
 }
 
 export interface DbProject {

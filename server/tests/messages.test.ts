@@ -6,9 +6,12 @@ import { initDb, getDb } from '../src/db/index.js';
 import { newId } from '../src/lib/ids.js';
 
 vi.mock('../src/services/agent.js', () => ({
-  runAgentTurn: vi.fn().mockImplementation(async (_userId: string, sessionId: string) => {
+  runAgentTurn: vi.fn().mockImplementation(async (_userId: string, sessionId: string, userMessageId: string) => {
     getDb().prepare('INSERT INTO messages (id, session_id, role, content) VALUES (?,?,?,?)')
       .run(newId(), sessionId, 'assistant', 'Agent reply here');
+    getDb()
+      .prepare("UPDATE session_turns SET status = 'done', completed_at = unixepoch() WHERE session_id = ? AND user_message_id = ?")
+      .run(sessionId, userMessageId);
   }),
 }));
 vi.mock('../src/services/socket.js', () => ({ broadcast: vi.fn(), initSocket: vi.fn() }));
@@ -51,6 +54,32 @@ describe('messages', () => {
     const roles = (res.body as { role: string }[]).map(m => m.role);
     expect(roles).toContain('assistant');
     expect(res.body.every((m: { executions: unknown[] }) => Array.isArray(m.executions))).toBe(true);
+    expect(res.body.every((m: { attachments: unknown[] }) => Array.isArray(m.attachments))).toBe(true);
+  });
+
+  it('stores attachments on user messages', async () => {
+    const res = await request(app)
+      .post(`/sessions/${sessionId}/messages`)
+      .set('Authorization', `Bearer ${token}`)
+      .field('content', 'Review this file')
+      .attach('attachments', Buffer.from('hello from an attachment'), {
+        filename: 'notes.md',
+        contentType: 'text/markdown',
+      });
+
+    expect(res.status).toBe(201);
+    expect(res.body.attachments).toHaveLength(1);
+    expect(res.body.attachments[0]).toMatchObject({
+      filename: 'notes.md',
+      mimeType: 'text/markdown',
+      sizeBytes: 24,
+    });
+
+    const list = await request(app)
+      .get(`/sessions/${sessionId}/messages`)
+      .set('Authorization', `Bearer ${token}`);
+    const message = (list.body as { id: string; attachments: unknown[] }[]).find(m => m.id === res.body.id);
+    expect(message?.attachments).toHaveLength(1);
   });
 
   it('embeds executions linked to a message so a reload can rehydrate tool runs', async () => {

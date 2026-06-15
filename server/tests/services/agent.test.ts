@@ -16,6 +16,7 @@ const streamMock = vi.fn().mockImplementation(() => {
       return {
         stop_reason: 'end_turn',
         content: [{ type: 'text', text: 'Hello! How can I help?' }],
+        usage: { input_tokens: 10, output_tokens: 10 },
       };
     },
   };
@@ -153,6 +154,7 @@ describe('agent', () => {
         },
         finalMessage: async () => ({
           stop_reason: 'tool_use',
+          usage: { input_tokens: 10, output_tokens: 5 },
           content: [{ type: 'tool_use', id: 'tool-1', name: 'git_op', input: { project_id: projectId, op: 'status' } }],
         }),
       };
@@ -168,6 +170,7 @@ describe('agent', () => {
           for (const cb of listeners.text ?? []) cb('done');
           return {
             stop_reason: 'end_turn',
+            usage: { input_tokens: 10, output_tokens: 10 },
             content: [{ type: 'text', text: 'done' }],
           };
         },
@@ -207,6 +210,7 @@ describe('agent', () => {
         },
         finalMessage: async () => ({
           stop_reason: 'tool_use',
+          usage: { input_tokens: 10, output_tokens: 5 },
           content: [{ type: 'tool_use', id: 'tool-2', name: 'invoke_claude_code', input: { project_id: projectId, prompt: 'fix bug' } }],
         }),
       };
@@ -222,6 +226,7 @@ describe('agent', () => {
           for (const cb of listeners.text ?? []) cb('done');
           return {
             stop_reason: 'end_turn',
+            usage: { input_tokens: 10, output_tokens: 10 },
             content: [{ type: 'text', text: 'done' }],
           };
         },
@@ -319,6 +324,7 @@ describe('agent', () => {
         },
         finalMessage: async () => ({
           stop_reason: 'tool_use',
+          usage: { input_tokens: 10, output_tokens: 5 },
           content: [{
             type: 'tool_use',
             id: 'tool-artifact',
@@ -345,6 +351,7 @@ describe('agent', () => {
           for (const cb of listeners.text ?? []) cb('created');
           return {
             stop_reason: 'end_turn',
+            usage: { input_tokens: 10, output_tokens: 10 },
             content: [{ type: 'text', text: 'created' }],
           };
         },
@@ -392,6 +399,7 @@ describe('agent', () => {
       on: () => ({ on: () => ({ finalMessage: async () => ({}) }) }),
       finalMessage: async () => ({
         stop_reason: 'tool_use',
+        usage: { input_tokens: 10, output_tokens: 5 },
         content: [
           { type: 'tool_use', id: 'tool-add', name: 'git_op', input: { project_id: projectId, op: 'add' } },
           { type: 'tool_use', id: 'tool-commit', name: 'git_op', input: { project_id: projectId, op: 'commit', message: 'test' } },
@@ -407,7 +415,7 @@ describe('agent', () => {
         },
         finalMessage: async () => {
           for (const cb of listeners.text ?? []) cb('done');
-          return { stop_reason: 'end_turn', content: [{ type: 'text', text: 'done' }] };
+          return { stop_reason: 'end_turn', usage: { input_tokens: 10, output_tokens: 10 }, content: [{ type: 'text', text: 'done' }] };
         },
       };
     });
@@ -446,6 +454,7 @@ describe('agent', () => {
       on: () => ({ on: () => ({ finalMessage: async () => ({}) }) }),
       finalMessage: async () => ({
         stop_reason: 'tool_use',
+        usage: { input_tokens: 10, output_tokens: 5 },
         content: [
           { type: 'tool_use', id: 'tool-read-a', name: 'read_file', input: { project_id: projectId, path: 'a.txt' } },
           { type: 'tool_use', id: 'tool-read-b', name: 'read_file', input: { project_id: projectId, path: 'b.txt' } },
@@ -461,7 +470,7 @@ describe('agent', () => {
         },
         finalMessage: async () => {
           for (const cb of listeners.text ?? []) cb('done');
-          return { stop_reason: 'end_turn', content: [{ type: 'text', text: 'done' }] };
+          return { stop_reason: 'end_turn', usage: { input_tokens: 10, output_tokens: 10 }, content: [{ type: 'text', text: 'done' }] };
         },
       };
     });
@@ -489,6 +498,7 @@ describe('agent', () => {
         },
         finalMessage: async () => ({
           stop_reason: 'tool_use',
+          usage: { input_tokens: 10, output_tokens: 5 },
           content: [{ type: 'tool_use', id: 'tool-3', name: 'forget', input: { type: 'user', key: 'scratch_note' } }],
         }),
       };
@@ -504,6 +514,7 @@ describe('agent', () => {
           for (const cb of listeners.text ?? []) cb('done');
           return {
             stop_reason: 'end_turn',
+            usage: { input_tokens: 10, output_tokens: 10 },
             content: [{ type: 'text', text: 'done' }],
           };
         },
@@ -545,6 +556,7 @@ describe('agent', () => {
       on: () => ({ on: () => ({ finalMessage: async () => ({}) }) }),
       finalMessage: async () => ({
         stop_reason: 'tool_use',
+        usage: { input_tokens: 10, output_tokens: 5 },
         content: [{ type: 'tool_use', id: 'tool-bk', name: 'git_op', input: { project_id: projectId, op: 'add' } }],
       }),
     }));
@@ -557,7 +569,7 @@ describe('agent', () => {
         },
         finalMessage: async () => {
           for (const cb of listeners.text ?? []) cb('done');
-          return { stop_reason: 'end_turn', content: [{ type: 'text', text: 'done' }] };
+          return { stop_reason: 'end_turn', usage: { input_tokens: 10, output_tokens: 10 }, content: [{ type: 'text', text: 'done' }] };
         },
       };
     });
@@ -571,6 +583,50 @@ describe('agent', () => {
     // The bookkeeping failure is swallowed but logged, not silently dropped.
     expect(errSpy).toHaveBeenCalledWith('emitSessionEvent failed (non-fatal):', expect.anything());
     errSpy.mockRestore();
+  });
+
+  it('passes onSessionId callback to invokeClaudeCode which fires eagerly', async () => {
+    const db = getDb();
+    const projectId = newId();
+    db.prepare('INSERT INTO projects (id, user_id, name, description, repo_path, enabled_connection_ids) VALUES (?,?,?,?,?,?)')
+      .run(projectId, userId, 'eager-session', 'Eager session test', '/tmp/repo', '[]');
+
+    const capturedIds: string[] = [];
+    invokeClaudeCodeMock.mockImplementationOnce(
+      async (_input: unknown, ctx: { onSessionId?: (id: string) => void }) => {
+        if (ctx.onSessionId) {
+          ctx.onSessionId('eager-session-abc');
+          capturedIds.push('eager-session-abc');
+        }
+        return { result: 'done', sessionId: 'eager-session-abc', costUsd: 0 };
+      }
+    );
+
+    streamMock.mockImplementationOnce(() => ({
+      on: () => ({ on: () => ({ finalMessage: async () => ({}) }) }),
+      finalMessage: async () => ({
+        stop_reason: 'tool_use',
+        usage: { input_tokens: 10, output_tokens: 5 },
+        content: [{ type: 'tool_use', id: 'tool-cc', name: 'invoke_claude_code', input: { project_id: projectId, prompt: 'fix bug' } }],
+      }),
+    }));
+    streamMock.mockImplementationOnce(() => {
+      const listeners: Record<string, ((...args: unknown[]) => void)[]> = {};
+      return {
+        on: (event: string, cb: (...args: unknown[]) => void) => { (listeners[event] ??= []).push(cb); return { on: () => ({ finalMessage: async () => ({}) }) }; },
+        finalMessage: async () => {
+          for (const cb of listeners.text ?? []) cb('done');
+          return { stop_reason: 'end_turn', usage: { input_tokens: 10, output_tokens: 10 }, content: [{ type: 'text', text: 'done' }] };
+        },
+      };
+    });
+
+    const msgId = newId();
+    db.prepare('INSERT INTO messages (id, session_id, role, content) VALUES (?,?,?,?)').run(msgId, sessionId, 'user', 'fix the bug');
+    await runAgentTurn(userId, sessionId, msgId);
+
+    // Verify the onSessionId callback was passed and called with the session ID
+    expect(capturedIds).toEqual(['eager-session-abc']);
   });
 
   it('returns the create_artifact success result even when its session event fails', async () => {
@@ -588,6 +644,7 @@ describe('agent', () => {
       on: () => ({ on: () => ({ finalMessage: async () => ({}) }) }),
       finalMessage: async () => ({
         stop_reason: 'tool_use',
+        usage: { input_tokens: 10, output_tokens: 5 },
         content: [{
           type: 'tool_use',
           id: 'tool-artifact-bk',
@@ -605,7 +662,7 @@ describe('agent', () => {
         },
         finalMessage: async () => {
           for (const cb of listeners.text ?? []) cb('done');
-          return { stop_reason: 'end_turn', content: [{ type: 'text', text: 'done' }] };
+          return { stop_reason: 'end_turn', usage: { input_tokens: 10, output_tokens: 10 }, content: [{ type: 'text', text: 'done' }] };
         },
       };
     });

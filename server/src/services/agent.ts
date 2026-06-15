@@ -1,7 +1,7 @@
 import Anthropic from '@anthropic-ai/sdk';
 import { exec as execCallback } from 'child_process';
 import { promisify } from 'util';
-import { createSessionEvent, getDb, getProjectForUser, linkSessionProject, setAgentWorktreeSession, updateCampaignTaskStatus, maybeCompleteCampaign, getCampaignForTask, getCampaignSummaries, getCampaignById, getCampaignTasks, getExecutionById, getScheduledTasksForUser, createScheduledTask, updateScheduledTask, deleteScheduledTask, resumeCampaign, getPermissionProfile, createPipeline, getPipelineById, getPipelineTasks, listPipelinesForUser, createCampaign, type DbCampaign, type DbCampaignTask } from '../db/index.js';
+import { createSessionEvent, getDb, getProjectForUser, linkSessionProject, setAgentWorktreeSession, updateCampaignTaskStatus, maybeCompleteCampaign, getCampaignForTask, getCampaignSummaries, getCampaignById, getCampaignTasks, getExecutionById, getScheduledTasksForUser, createScheduledTask, updateScheduledTask, deleteScheduledTask, resumeCampaign, getPermissionProfile, createPipeline, getPipelineById, getPipelineTasks, listPipelinesForUser, createCampaign, recordAgentUsage, type DbCampaign, type DbCampaignTask } from '../db/index.js';
 
 const execAsync = promisify(execCallback);
 import { runAgentPipeline, type AgentPipelineCtx } from './agent_pipeline.js';
@@ -16,13 +16,13 @@ import { runProjectQuery } from '../tools/project_query.js';
 import { buildGraph } from './graphify.js';
 import { remember, recall, forget } from '../tools/memory_tools.js';
 import { readFile, listDir, writeFile, searchFiles } from '../tools/file_ops.js';
-import { runCommand } from '../tools/run_command.js';
+import { runCommand, isBlocked } from '../tools/run_command.js';
 import { readChat } from '../tools/read_chat.js';
 import { createProject, updateProject, deleteProject } from '../tools/project_ops.js';
 import { runCreateCampaign } from '../tools/create_campaign.js';
 import { broadcast } from './socket.js';
 import { newId } from '../lib/ids.js';
-import { DEFAULT_EFFORT, getAnthropicKey, resolveModelForTurn, listClaudeModels, type EffortLevel } from './anthropic.js';
+import { DEFAULT_EFFORT, getAnthropicKey, resolveModelForTurn, listClaudeModels, tokensToUsd, type EffortLevel } from './anthropic.js';
 import { classifyIntent } from './intent.js';
 import { buildContext } from './context.js';
 import { toolDefinitions } from '../tools/definitions.js';
@@ -207,6 +207,7 @@ async function runSubAgent(
   parentExecutionId: string,
   parentMessageId: string,
   parentSessionId: string,
+  campaignId?: string | null,
 ): Promise<string> {
   let apiKey: string;
   try { apiKey = getAnthropicKey(userId); }
@@ -221,24 +222,53 @@ async function runSubAgent(
 
   const messages: Anthropic.MessageParam[] = [{ role: 'user', content: instructions }];
   const MAX_TURNS = 15;
+  const SUB_MODEL = 'claude-sonnet-4-6';
+  let totalInputTokens = 0;
+  let totalOutputTokens = 0;
+
+  emitSessionEvent(userId, {
+    sessionId: parentSessionId,
+    type: 'subagent_started',
+    title: 'Sub-agent started',
+    body: instructions.slice(0, 120),
+    executionId: parentExecutionId,
+    metadata: { projectId: projectId ?? undefined },
+  });
 
   for (let turn = 0; turn < MAX_TURNS; turn++) {
+    if (campaignId && getCampaignById(campaignId)?.status === 'cancelled') {
+      recordAgentUsage(userId, 'subagent', tokensToUsd(SUB_MODEL, totalInputTokens, totalOutputTokens));
+      return 'Sub-agent cancelled.';
+    }
+
     const response = await client.messages.create({
-      model: 'claude-sonnet-4-6',
+      model: SUB_MODEL,
       max_tokens: 8192,
       system: systemPrompt,
       tools: subtools as Anthropic.Tool[],
       messages,
     });
 
+    totalInputTokens += response.usage.input_tokens;
+    totalOutputTokens += response.usage.output_tokens;
     messages.push({ role: 'assistant', content: response.content });
     appendOutput(parentExecutionId, userId, `[sub-agent turn ${turn + 1}]\n`);
 
     if (response.stop_reason === 'end_turn') {
-      return response.content
+      const summary = response.content
         .filter((b): b is Anthropic.TextBlock => b.type === 'text')
         .map(b => b.text)
         .join('');
+      recordAgentUsage(userId, 'subagent', tokensToUsd(SUB_MODEL, totalInputTokens, totalOutputTokens));
+      emitSessionEvent(userId, {
+        sessionId: parentSessionId,
+        type: 'subagent_completed',
+        title: 'Sub-agent completed',
+        body: summary.slice(0, 120),
+        executionId: parentExecutionId,
+        metadata: { projectId: projectId ?? undefined, turns: turn + 1 },
+      });
+      return summary;
     }
 
     if (response.stop_reason === 'tool_use') {
@@ -248,6 +278,7 @@ async function runSubAgent(
     }
   }
 
+  recordAgentUsage(userId, 'subagent', tokensToUsd(SUB_MODEL, totalInputTokens, totalOutputTokens));
   return 'Sub-agent reached max turns limit without producing a final response.';
 }
 
@@ -284,9 +315,8 @@ async function executeCampaignTask(
         await runAgentPipeline(ctx, async () => {
           const r = await invokeClaudeCode(
             { prompt: fullPrompt },
-            { userId, executionId, repoPath: worktree.worktree_path, apiKey, resumeSessionId: worktree.claude_session_id, mcpServers: getMcpServersForUser(userId), permissionProfile: getPermissionProfile(userId) },
+            { userId, executionId, repoPath: worktree.worktree_path, apiKey, resumeSessionId: worktree.claude_session_id, mcpServers: getMcpServersForUser(userId), permissionProfile: getPermissionProfile(userId), onSessionId: (id) => setAgentWorktreeSession(worktree.id, 'claude', id) },
           );
-          if (r.sessionId) setAgentWorktreeSession(worktree.id, 'claude', r.sessionId);
           ctx.result = r.result;
           ctx.costUsd = r.costUsd;
         });
@@ -312,9 +342,8 @@ async function executeCampaignTask(
         await runAgentPipeline(cCtx, async () => {
           const cr = await invokeCodex(
             { prompt: fullPrompt },
-            { userId, executionId, repoPath: cWorktree.worktree_path, apiKey: codexKey, resumeSessionId: cWorktree.codex_session_id, mcpServers: getMcpServersForUser(userId), permissionProfile: getPermissionProfile(userId) },
+            { userId, executionId, repoPath: cWorktree.worktree_path, apiKey: codexKey, resumeSessionId: cWorktree.codex_session_id, mcpServers: getMcpServersForUser(userId), permissionProfile: getPermissionProfile(userId), onSessionId: (id) => setAgentWorktreeSession(cWorktree.id, 'codex', id) },
           );
-          if (cr.sessionId) setAgentWorktreeSession(cWorktree.id, 'codex', cr.sessionId);
           cCtx.result = cr.result;
           cCtx.costUsd = cr.costUsd;
         });
@@ -323,12 +352,18 @@ async function executeCampaignTask(
       }
       case 'eval': {
         if (!project.repo_path) throw new Error(`Project '${project.name}' has no repo for eval`);
+        const evalBlocked = isBlocked(prompt);
+        if (evalBlocked) throw new Error(evalBlocked);
+        const evalWorktree = await ensureWorktree(project, sessionId);
+        const evalDecision = await requestApproval(executionId, userId, 'eval', { command: prompt, cwd: evalWorktree.worktree_path }, 'agent');
+        if (evalDecision === 'rejected') { result = 'eval cancelled'; break; }
         try {
-          const { stdout, stderr } = await execAsync(prompt, { cwd: project.repo_path, timeout: 120_000 });
+          const { stdout, stderr } = await execAsync(prompt, { cwd: evalWorktree.worktree_path, timeout: 60_000 });
           result = [stdout, stderr].filter(Boolean).join('\n') || 'Command completed successfully';
           appendOutput(executionId, userId, result);
         } catch (err: unknown) {
-          const e = err as { code?: number; stdout?: string; stderr?: string; message?: string };
+          const e = err as { code?: number; stdout?: string; stderr?: string; message?: string; killed?: boolean };
+          if (e.killed) throw new Error(`eval timed out after 60s`);
           const output = [e.stdout, e.stderr].filter(Boolean).join('\n');
           appendOutput(executionId, userId, output);
           throw new Error(`Exit ${e.code ?? 1}: ${output || e.message}`);
@@ -336,7 +371,7 @@ async function executeCampaignTask(
         break;
       }
       case 'subagent': {
-        result = await runSubAgent(fullPrompt, campaign.project_id, userId, executionId, messageId, sessionId);
+        result = await runSubAgent(fullPrompt, campaign.project_id, userId, executionId, messageId, sessionId, campaign.id);
         break;
       }
       case 'git': {
@@ -429,9 +464,7 @@ export async function runCampaignAutoDispatch(
           db.prepare("UPDATE campaign_tasks SET status = 'error', completed_at = unixepoch() WHERE id = ?").run(t.id);
           broadcast(userId, { type: 'campaign_task_updated', taskId: t.id, status: 'error' });
         }
-        const taskRow = waitingTasks[0];
-        const campRow = db.prepare('SELECT campaign_id FROM campaign_tasks WHERE id = ?').get(taskRow.id) as { campaign_id: string } | undefined;
-        if (campRow) maybeCompleteCampaign(campRow.campaign_id);
+        maybeCompleteCampaign(campaignId);
       }
       break;
     }
@@ -500,7 +533,6 @@ async function dispatchTool(
 
   try {
     let result: string;
-    let asyncExecution = false;
 
     switch (toolName) {
       case 'invoke_claude_code': {
@@ -532,9 +564,8 @@ async function dispatchTool(
         await runAgentPipeline(ccCtx, async () => {
           const ccResult = await invokeClaudeCode(
             { prompt: ccPrompt, model: toolInput.model as string | undefined },
-            { userId, executionId, repoPath: ccWorktree.worktree_path, apiKey: ccApiKey, resumeSessionId: ccWorktree.claude_session_id, mcpServers: getMcpServersForUser(userId), permissionProfile: getPermissionProfile(userId) }
+            { userId, executionId, repoPath: ccWorktree.worktree_path, apiKey: ccApiKey, resumeSessionId: ccWorktree.claude_session_id, mcpServers: getMcpServersForUser(userId), permissionProfile: getPermissionProfile(userId), onSessionId: (id) => setAgentWorktreeSession(ccWorktree.id, 'claude', id) }
           );
-          if (ccResult.sessionId) setAgentWorktreeSession(ccWorktree.id, 'claude', ccResult.sessionId);
           ccCtx.result = ccResult.result;
           ccCtx.costUsd = ccResult.costUsd;
         });
@@ -570,9 +601,8 @@ async function dispatchTool(
         await runAgentPipeline(codexCtx, async () => {
           const codexResult = await invokeCodex(
             { prompt: codexPrompt, model: toolInput.model as string | undefined },
-            { userId, executionId, repoPath: codexWorktree.worktree_path, apiKey: codexApiKey, resumeSessionId: codexWorktree.codex_session_id, mcpServers: getMcpServersForUser(userId), permissionProfile: getPermissionProfile(userId) }
+            { userId, executionId, repoPath: codexWorktree.worktree_path, apiKey: codexApiKey, resumeSessionId: codexWorktree.codex_session_id, mcpServers: getMcpServersForUser(userId), permissionProfile: getPermissionProfile(userId), onSessionId: (id) => setAgentWorktreeSession(codexWorktree.id, 'codex', id) }
           );
-          if (codexResult.sessionId) setAgentWorktreeSession(codexWorktree.id, 'codex', codexResult.sessionId);
           codexCtx.result = codexResult.result;
           codexCtx.costUsd = codexResult.costUsd;
         });
@@ -1053,7 +1083,9 @@ async function dispatchTool(
       case 'delegate_to_agent': {
         const daInstructions = toolInput.instructions as string;
         const daProjectId = toolInput.project_id as string | undefined ?? null;
-        result = await runSubAgent(daInstructions, daProjectId, userId, executionId, messageId, sessionId);
+        const daTaskId = toolInput.campaign_task_id as string | undefined;
+        const daCampaignId = daTaskId ? getCampaignForTask(daTaskId)?.id ?? null : null;
+        result = await runSubAgent(daInstructions, daProjectId, userId, executionId, messageId, sessionId, daCampaignId);
         break;
       }
       case 'generate_video': {
@@ -1074,18 +1106,14 @@ async function dispatchTool(
             completeExecution(executionId, userId, 'error', msg);
             if (videoTaskId) finishCampaignTask(userId, videoTaskId, `Error: ${msg}`);
           });
-
-        result = `Video render started (execution ${executionId}). It will appear in the project's Artifacts tab when done.`;
-        asyncExecution = true;
-        break;
+        // Return early — completeExecution is handled by the fire-and-forget above
+        return `Video render started (execution ${executionId}). It will appear in the project's Artifacts tab when done.`;
       }
       default:
         result = `Unknown tool: ${toolName}`;
     }
 
-    if (!asyncExecution) {
-      completeExecution(executionId, userId, 'done', result);
-    }
+    completeExecution(executionId, userId, result.startsWith('Error') ? 'error' : 'done', result);
     return result;
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err);
@@ -1152,6 +1180,8 @@ export async function runAgentTurn(userId: string, sessionId: string, userMessag
   const replyId = newId();
   let fullText = '';
   let started = false;
+  let totalInputTokens = 0;
+  let totalOutputTokens = 0;
 
   try {
     while (true) {
@@ -1178,6 +1208,8 @@ export async function runAgentTurn(userId: string, sessionId: string, userMessag
       });
 
       const response = await stream.finalMessage();
+      totalInputTokens += response.usage.input_tokens;
+      totalOutputTokens += response.usage.output_tokens;
 
       if (response.stop_reason === 'tool_use') {
         const toolUseBlocks = response.content.filter(b => b.type === 'tool_use') as Anthropic.ToolUseBlock[];
@@ -1217,6 +1249,8 @@ export async function runAgentTurn(userId: string, sessionId: string, userMessag
     .prepare('UPDATE sessions SET updated_at = unixepoch() WHERE id = ?')
     .run(sessionId);
   broadcast(userId, { type: 'turn_complete', sessionId });
+
+  recordAgentUsage(userId, 'lead_agent', tokensToUsd(model, totalInputTokens, totalOutputTokens));
 
   // Fire-and-forget: generate title after first turn
   maybeGenerateSessionTitle(userId, sessionId).catch(() => {});

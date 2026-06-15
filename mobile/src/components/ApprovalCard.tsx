@@ -23,10 +23,10 @@ export default function ApprovalCard({ approval }: Props) {
         )}
       </View>
 
-      {approval.payload && (
+      {approval.payload != null && (
         <View className="bg-black/20 rounded-lg p-2">
           <Text className="text-xs font-mono text-muted-foreground" numberOfLines={4}>
-            {JSON.stringify(approval.payload, null, 2)}
+            {JSON.stringify(approval.payload as object, null, 2)}
           </Text>
         </View>
       )}

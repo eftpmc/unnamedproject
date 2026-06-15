@@ -19,6 +19,7 @@ interface ToolContext {
   resumeSessionId?: string | null;
   mcpServers?: Record<string, McpServerConfig>;
   permissionProfile?: PermissionProfile;
+  onSessionId?: (id: string) => void;
 }
 
 export interface CodexResult {
@@ -96,6 +97,7 @@ export async function invokeCodex(input: CodexInput, ctx: ToolContext): Promise<
 
     let buffer = '';
     let sessionId: string | null = null;
+    let sessionIdFired = false;
     let resultText = '';
     let costUsd = 0;
     let stderrText = '';
@@ -119,7 +121,14 @@ export async function invokeCodex(input: CodexInput, ctx: ToolContext): Promise<
         let event: Record<string, unknown>;
         try { event = JSON.parse(line); } catch { continue; }
 
-        if (event.type === 'thread.started') sessionId = (event.thread_id as string) ?? sessionId;
+        if (event.type === 'thread.started') {
+          const threadId = (event.thread_id as string) ?? sessionId;
+          sessionId = threadId;
+          if (!sessionIdFired && threadId && ctx.onSessionId) {
+            sessionIdFired = true;
+            ctx.onSessionId(threadId);
+          }
+        }
         if (event.type === 'item.completed') {
           const item = event.item as { type?: string; text?: string } | undefined;
           if (item?.type === 'agent_message' && item.text) {

@@ -1,4 +1,4 @@
-import { useEffect, useRef } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import { ArrowRight, FileText, GitMerge, Image, Pencil, Plug, Sparkles, Target } from 'lucide-react';
@@ -6,7 +6,8 @@ import { Link } from 'react-router-dom';
 import ExecutionCard from './ExecutionCard.js';
 import CampaignCard from './CampaignCard.js';
 import ArtifactPreviewCard from './ArtifactPreviewCard.js';
-import type { Message, SessionEvent } from '../types.js';
+import { getToken } from '../lib/auth.js';
+import type { Message, MessageAttachment, SessionEvent } from '../types.js';
 
 interface InlineExecution {
   executionId: string;
@@ -222,16 +223,9 @@ export default function MessageList({ messages, executions, streamingIds, sessio
                     {msg.content && <div className="whitespace-pre-wrap">{msg.content}</div>}
                     {attachments.length > 0 && (
                       <div className={msg.content ? 'mt-2 flex flex-wrap gap-1.5' : 'flex flex-wrap gap-1.5'}>
-                        {attachments.map(attachment => {
-                          const Icon = attachment.mimeType.startsWith('image/') ? Image : FileText;
-                          return (
-                            <div key={attachment.id} className="flex max-w-full items-center gap-1.5 rounded-lg border border-border-soft bg-background/70 px-2 py-1 text-xs text-muted-foreground">
-                              <Icon size={13} className="shrink-0" />
-                              <span className="max-w-44 truncate">{attachment.filename}</span>
-                              <span className="shrink-0 text-faint-fg">{formatFileSize(attachment.sizeBytes)}</span>
-                            </div>
-                          );
-                        })}
+                        {attachments.map(attachment => (
+                          <AttachmentChip key={attachment.id} attachment={attachment} />
+                        ))}
                       </div>
                     )}
                   </div>
@@ -264,4 +258,76 @@ function formatFileSize(bytes: number): string {
   if (bytes < 1024) return `${bytes} B`;
   if (bytes < 1024 * 1024) return `${Math.round(bytes / 1024)} KB`;
   return `${(bytes / 1024 / 1024).toFixed(1)} MB`;
+}
+
+function AttachmentChip({ attachment }: { attachment: MessageAttachment }) {
+  const [previewUrl, setPreviewUrl] = useState<string | null>(null);
+  const [downloadError, setDownloadError] = useState(false);
+  const isImage = attachment.mimeType.startsWith('image/');
+  const Icon = isImage ? Image : FileText;
+
+  useEffect(() => {
+    if (!isImage) return;
+    let objectUrl: string | null = null;
+    let cancelled = false;
+    const token = getToken();
+    fetch(attachment.url, {
+      headers: token ? { Authorization: `Bearer ${token}` } : {},
+    })
+      .then(res => {
+        if (!res.ok) throw new Error(`HTTP ${res.status}`);
+        return res.blob();
+      })
+      .then(blob => {
+        if (cancelled) return;
+        objectUrl = URL.createObjectURL(blob);
+        setPreviewUrl(objectUrl);
+      })
+      .catch(() => {
+        if (!cancelled) setPreviewUrl(null);
+      });
+    return () => {
+      cancelled = true;
+      if (objectUrl) URL.revokeObjectURL(objectUrl);
+    };
+  }, [attachment.url, isImage]);
+
+  async function downloadAttachment() {
+    setDownloadError(false);
+    try {
+      const token = getToken();
+      const res = await fetch(attachment.url, {
+        headers: token ? { Authorization: `Bearer ${token}` } : {},
+      });
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      const blob = await res.blob();
+      const objectUrl = URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = objectUrl;
+      link.download = attachment.filename;
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+      URL.revokeObjectURL(objectUrl);
+    } catch {
+      setDownloadError(true);
+    }
+  }
+
+  return (
+    <button
+      type="button"
+      onClick={downloadAttachment}
+      className="flex max-w-full items-center gap-1.5 rounded-lg border border-border-soft bg-background/70 px-2 py-1 text-left text-xs text-muted-foreground transition-colors hover:border-border hover:bg-background hover:text-foreground"
+      title={downloadError ? `Could not download ${attachment.filename}` : `Download ${attachment.filename}`}
+    >
+      {previewUrl ? (
+        <img src={previewUrl} alt="" className="size-7 shrink-0 rounded object-cover" />
+      ) : (
+        <Icon size={13} className="shrink-0" />
+      )}
+      <span className="max-w-44 truncate">{attachment.filename}</span>
+      <span className="shrink-0 text-faint-fg">{formatFileSize(attachment.sizeBytes)}</span>
+    </button>
+  );
 }

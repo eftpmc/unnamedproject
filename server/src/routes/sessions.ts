@@ -54,14 +54,14 @@ router.get('/:id/status', (req, res) => {
 
   const activeExecution = getDb()
     .prepare(`
-      SELECT id, status, created_at as createdAt
+      SELECT id, status, tool, created_at as createdAt
       FROM executions
       WHERE message_id IN (SELECT id FROM messages WHERE session_id = ?)
         AND status IN ('running','awaiting_approval')
       ORDER BY created_at DESC
       LIMIT 1
     `)
-    .get(req.params.id) as { id: string; status: string; createdAt: number } | undefined;
+    .get(req.params.id) as { id: string; status: string; tool: string; createdAt: number } | undefined;
 
   res.json({
     active: !!activeTurn || !!activeExecution,

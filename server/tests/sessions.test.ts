@@ -90,6 +90,24 @@ describe('sessions', () => {
     expect(res.body.turn.userMessageId).toBe(messageId);
   });
 
+  it('includes active execution tool in chat status', async () => {
+    const messageId = newId();
+    getDb()
+      .prepare('INSERT INTO messages (id, session_id, role, content) VALUES (?,?,?,?)')
+      .run(messageId, sessionId, 'assistant', 'working');
+    getDb()
+      .prepare('INSERT INTO executions (id, message_id, project_id, tool, status) VALUES (?,?,?,?,?)')
+      .run(newId(), messageId, null, 'invoke_claude_code', 'running');
+
+    const res = await request(app)
+      .get(`/sessions/${sessionId}/status`)
+      .set('Authorization', `Bearer ${token}`);
+
+    expect(res.status).toBe(200);
+    expect(res.body.active).toBe(true);
+    expect(res.body.execution.tool).toBe('invoke_claude_code');
+  });
+
   it('DELETE /sessions/:id deletes the session', async () => {
     const create = await request(app)
       .post('/sessions')

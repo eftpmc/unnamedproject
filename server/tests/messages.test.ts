@@ -82,6 +82,44 @@ describe('messages', () => {
     expect(message?.attachments).toHaveLength(1);
   });
 
+  it('rejects unsupported attachment types', async () => {
+    const res = await request(app)
+      .post(`/sessions/${sessionId}/messages`)
+      .set('Authorization', `Bearer ${token}`)
+      .field('content', 'Run this')
+      .attach('attachments', Buffer.from('not actually executable'), {
+        filename: 'program.exe',
+        contentType: 'application/x-msdownload',
+      });
+
+    expect(res.status).toBe(415);
+    expect(res.body.error).toContain('Unsupported attachment type');
+  });
+
+  it('removes attachment files when truncating messages', async () => {
+    const create = await request(app)
+      .post(`/sessions/${sessionId}/messages`)
+      .set('Authorization', `Bearer ${token}`)
+      .field('content', 'Temporary attachment')
+      .attach('attachments', Buffer.from('delete me'), {
+        filename: 'temporary.txt',
+        contentType: 'text/plain',
+      });
+
+    expect(create.status).toBe(201);
+    const attachment = getDb()
+      .prepare('SELECT storage_path as storagePath FROM message_attachments WHERE message_id = ?')
+      .get(create.body.id) as { storagePath: string };
+    expect(fs.existsSync(attachment.storagePath)).toBe(true);
+
+    const del = await request(app)
+      .delete(`/sessions/${sessionId}/messages/from/${create.body.id}`)
+      .set('Authorization', `Bearer ${token}`);
+
+    expect(del.status).toBe(200);
+    expect(fs.existsSync(attachment.storagePath)).toBe(false);
+  });
+
   it('embeds executions linked to a message so a reload can rehydrate tool runs', async () => {
     const assistant = getDb()
       .prepare("SELECT id FROM messages WHERE session_id = ? AND role = 'assistant' LIMIT 1")

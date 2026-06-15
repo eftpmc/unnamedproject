@@ -133,6 +133,13 @@ export default function ChatView({ chatId }: ChatViewProps) {
   );
   const agentActive = sending || !!chatStatus?.active || streamingIds.size > 0 || hasActiveExecution;
   const agentStarting = !!chatStatus?.active && streamingIds.size === 0 && !hasActiveExecution;
+  const [statusNow, setStatusNow] = useState(() => Math.floor(Date.now() / 1000));
+  const agentStatusText = getAgentStatusText({
+    sending,
+    agentStarting,
+    chatStatus,
+    now: statusNow,
+  });
 
   const pendingApproval = Object.values(executions).flat().find(
     e => e.status === 'awaiting_approval' && e.needsApproval
@@ -381,6 +388,13 @@ export default function ChatView({ chatId }: ChatViewProps) {
     return unsub;
   }, [handleWsEvent]);
 
+  useEffect(() => {
+    if (!agentActive) return;
+    setStatusNow(Math.floor(Date.now() / 1000));
+    const interval = window.setInterval(() => setStatusNow(Math.floor(Date.now() / 1000)), 15000);
+    return () => window.clearInterval(interval);
+  }, [agentActive]);
+
   if (isLoading) {
     return (
       <div className="flex flex-1 flex-col gap-4 p-6">
@@ -497,7 +511,7 @@ export default function ChatView({ chatId }: ChatViewProps) {
       {agentActive && !pendingApproval && (
         <div className="flex shrink-0 items-center gap-2 border-t border-border-soft bg-muted/35 px-5 py-2 text-xs text-muted-foreground">
           <Loader2 size={13} className="animate-spin" />
-          <span>{agentStarting ? 'Agent is getting started…' : 'Agent is working…'}</span>
+          <span>{agentStatusText}</span>
         </div>
       )}
 
@@ -525,6 +539,45 @@ export default function ChatView({ chatId }: ChatViewProps) {
       />
     </div>
   );
+}
+
+function getAgentStatusText({
+  sending,
+  agentStarting,
+  chatStatus,
+  now,
+}: {
+  sending: boolean;
+  agentStarting: boolean;
+  chatStatus: Awaited<ReturnType<typeof getChatStatus>> | undefined;
+  now: number;
+}): string {
+  if (sending) return 'Sending message...';
+  const elapsedFrom = chatStatus?.execution?.createdAt ?? chatStatus?.turn?.startedAt ?? null;
+  const elapsed = elapsedFrom ? ` for ${formatElapsedSeconds(now - elapsedFrom)}` : '';
+  if (chatStatus?.execution) {
+    const tool = formatToolName(chatStatus.execution.tool);
+    if (chatStatus.execution.status === 'awaiting_approval') return `${tool} is waiting for approval${elapsed}`;
+    return `Running ${tool}${elapsed}`;
+  }
+  if (agentStarting) return `Agent is getting started${elapsed}`;
+  return `Agent is working${elapsed}`;
+}
+
+function formatElapsedSeconds(seconds: number): string {
+  const safeSeconds = Math.max(0, seconds);
+  if (safeSeconds < 60) return `${safeSeconds}s`;
+  const minutes = Math.floor(safeSeconds / 60);
+  if (minutes < 60) return `${minutes}m`;
+  const hours = Math.floor(minutes / 60);
+  return `${hours}h ${minutes % 60}m`;
+}
+
+function formatToolName(tool: string): string {
+  return tool
+    .replace(/^invoke_/, '')
+    .replace(/_/g, ' ')
+    .replace(/\b\w/g, char => char.toUpperCase());
 }
 
 function EmptyChatState({

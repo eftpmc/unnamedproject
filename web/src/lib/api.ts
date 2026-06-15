@@ -49,7 +49,7 @@ export function getChatEvents(chatId: string): Promise<{ events: SessionEvent[];
 export interface ChatStatus {
   active: boolean;
   turn: { id: string; userMessageId: string; startedAt: number } | null;
-  execution: { id: string; status: 'running' | 'awaiting_approval'; createdAt: number } | null;
+  execution: { id: string; status: 'running' | 'awaiting_approval'; tool: string; createdAt: number } | null;
 }
 
 export function getChatStatus(chatId: string): Promise<ChatStatus> {

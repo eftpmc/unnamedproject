@@ -13,6 +13,26 @@ router.use(requireAuth);
 
 const MAX_ATTACHMENTS = 8;
 const MAX_ATTACHMENT_BYTES = 10 * 1024 * 1024;
+const ALLOWED_MIME_TYPES = new Set([
+  'application/json',
+  'application/pdf',
+  'application/sql',
+  'application/xml',
+  'application/x-sh',
+  'application/x-yaml',
+  'text/csv',
+  'text/html',
+  'text/markdown',
+  'text/plain',
+  'text/xml',
+]);
+const ALLOWED_MIME_PREFIXES = ['image/'];
+const ALLOWED_EXTENSIONS = new Set([
+  '.c', '.cc', '.cpp', '.css', '.csv', '.env', '.gif', '.go', '.h', '.hpp',
+  '.html', '.java', '.jpeg', '.jpg', '.js', '.json', '.jsx', '.kt', '.md',
+  '.pdf', '.png', '.py', '.rb', '.rs', '.sh', '.sql', '.swift', '.toml',
+  '.ts', '.tsx', '.txt', '.webp', '.xml', '.yaml', '.yml', '.zsh',
+]);
 const upload = multer({
   storage: multer.memoryStorage(),
   limits: { files: MAX_ATTACHMENTS, fileSize: MAX_ATTACHMENT_BYTES },
@@ -31,6 +51,39 @@ interface DbAttachment {
 function sanitizeFilename(filename: string): string {
   const base = path.basename(filename).replace(/[^\w.\- ()[\]]+/g, '_').trim();
   return base || 'attachment';
+}
+
+function isAllowedAttachment(file: Express.Multer.File): boolean {
+  const mimeType = file.mimetype || 'application/octet-stream';
+  if (ALLOWED_MIME_TYPES.has(mimeType)) return true;
+  if (ALLOWED_MIME_PREFIXES.some(prefix => mimeType.startsWith(prefix))) return true;
+  return ALLOWED_EXTENSIONS.has(path.extname(file.originalname).toLowerCase());
+}
+
+function removeAttachmentFilesForMessages(messageIds: string[]): void {
+  if (messageIds.length === 0) return;
+  const attachmentsRoot = path.resolve(getDataDir(), 'attachments');
+  const rows = getDb()
+    .prepare(`SELECT storage_path as storagePath FROM message_attachments WHERE message_id IN (${messageIds.map(() => '?').join(',')})`)
+    .all(...messageIds) as { storagePath: string }[];
+  const dirs = new Set<string>();
+  for (const row of rows) {
+    const storagePath = path.resolve(row.storagePath);
+    if (!storagePath.startsWith(`${attachmentsRoot}${path.sep}`)) continue;
+    try {
+      fs.rmSync(storagePath, { force: true });
+      dirs.add(path.dirname(storagePath));
+    } catch (err) {
+      console.warn('[attachment cleanup]', err);
+    }
+  }
+  for (const dir of dirs) {
+    try {
+      fs.rmSync(dir, { recursive: true, force: true });
+    } catch (err) {
+      console.warn('[attachment cleanup]', err);
+    }
+  }
 }
 
 function getAttachmentsForMessages(messageIds: string[]): Map<string, DbAttachment[]> {
@@ -143,6 +196,11 @@ router.post('/:sessionId/messages', upload.array('attachments', MAX_ATTACHMENTS)
   const { content } = req.body as { content?: string };
   const files = (req.files ?? []) as Express.Multer.File[];
   if (!content?.trim() && files.length === 0) { res.status(400).json({ error: 'content or attachment required' }); return; }
+  const unsupported = files.find(file => !isAllowedAttachment(file));
+  if (unsupported) {
+    res.status(415).json({ error: `Unsupported attachment type for ${sanitizeFilename(unsupported.originalname)}` });
+    return;
+  }
 
   const session = getDb()
     .prepare('SELECT id FROM sessions WHERE id = ? AND user_id = ?')
@@ -224,6 +282,11 @@ router.delete('/:sessionId/messages/from/:messageId', (req, res) => {
     .prepare('SELECT rowid FROM messages WHERE id = ? AND session_id = ?')
     .get(messageId, sessionId) as { rowid: number } | undefined;
   if (!message) { res.status(404).json({ error: 'Message not found' }); return; }
+
+  const deletedMessages = getDb()
+    .prepare('SELECT id FROM messages WHERE session_id = ? AND rowid >= ?')
+    .all(sessionId, message.rowid) as { id: string }[];
+  removeAttachmentFilesForMessages(deletedMessages.map(m => m.id));
 
   const result = getDb()
     .prepare('DELETE FROM messages WHERE session_id = ? AND rowid >= ?')

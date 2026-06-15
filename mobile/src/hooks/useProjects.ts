@@ -10,7 +10,7 @@ export function useProjects() {
 }
 
 export function useProject(id: string) {
-  return useQuery({
+  return useQuery<{ capabilities: string[] }>({
     queryKey: ['project', id],
     queryFn: () => apiFetch<{ capabilities: string[] }>(`/projects/${id}/capabilities`),
     enabled: !!id,

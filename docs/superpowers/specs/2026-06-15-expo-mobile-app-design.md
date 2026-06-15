@@ -17,6 +17,7 @@ A full-parity mobile companion to the Unnamed web app, built with Expo SDK 55. M
 | Token storage | `expo-secure-store` |
 | Push notifications | `expo-notifications` |
 | Attachments | `expo-document-picker` + `expo-image-picker` |
+| File downloads | `expo-file-system` (authenticated fetch) |
 | Styling | NativeWind (Tailwind syntax on RN) |
 
 ---
@@ -31,8 +32,8 @@ mobile/
     connect.tsx                     # Server URL / quick-connect
     (drawer)/
       _layout.tsx                   # Drawer nav (mirrors web sidebar)
-      index.tsx                     # Empty state or active chat
-      c/[chatId].tsx                # Full-screen chat
+      index.tsx                     # Empty state (no chat selected)
+      c/[chatId].tsx                # Full-screen chat (pushed from drawer or new chat)
       chats.tsx                     # Full searchable chat list
       activity.tsx                  # Activity + approvals
       projects/
@@ -75,7 +76,7 @@ Main content area renders the active chat or selected page. No persistent tab ba
 2. Connect screen offers three paths:
    - **Scan QR** — camera scans QR from web settings, extracts `{ url, token }`, instantly connected
    - **Manual entry** — type server URL → `login.tsx` → `POST /auth/login` → token saved
-   - **Saved host chips** — tap a previously used host to reconnect
+   - **Saved host chips** — tap a previously used host; reuses the stored token if still valid (skips login), otherwise prompts for login
 3. App validates the URL with `GET /auth/me` before proceeding
 
 ### Subsequent launches
@@ -173,7 +174,7 @@ Composer supports text + attachments, matching the web's multipart upload:
 |---|---|---|
 | Connect | `connect.tsx` | QR scan, manual URL, saved hosts |
 | Login | `login.tsx` | Email + password |
-| Home | `(drawer)/index.tsx` | Empty state or active chat |
+| Home | `(drawer)/index.tsx` | Empty state (no chat selected) |
 | Chat | `(drawer)/c/[chatId].tsx` | Messages, streaming, executions, composer |
 | Chats | `(drawer)/chats.tsx` | Full searchable list |
 | Activity | `(drawer)/activity.tsx` | Approvals (top, prominent) + events |

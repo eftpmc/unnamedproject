@@ -301,6 +301,9 @@ function applySchema(): void {
   if (!userSettingsCols.some(c => c.name === 'permission_profile')) {
     db.exec("ALTER TABLE user_settings ADD COLUMN permission_profile TEXT NOT NULL DEFAULT 'fast' CHECK(permission_profile IN ('fast','trusted','strict'))");
   }
+  if (!userSettingsCols.some(c => c.name === 'expo_push_token')) {
+    db.exec('ALTER TABLE user_settings ADD COLUMN expo_push_token TEXT');
+  }
 
   const sessionCols = db.prepare("SELECT name FROM pragma_table_info('sessions')").all() as { name: string }[];
   if (!sessionCols.some(c => c.name === 'effort')) {
@@ -1273,4 +1276,19 @@ export function getExecutionById(id: string): DbExecution | undefined {
   return getDb()
     .prepare('SELECT * FROM executions WHERE id = ?')
     .get(id) as DbExecution | undefined;
+}
+
+export function getExpoPushToken(userId: string): string | null {
+  const row = getDb()
+    .prepare('SELECT expo_push_token FROM user_settings WHERE user_id = ?')
+    .get(userId) as { expo_push_token: string | null } | undefined;
+  return row?.expo_push_token ?? null;
+}
+
+export function setExpoPushToken(userId: string, token: string | null): void {
+  getDb().prepare(`
+    INSERT INTO user_settings (user_id, expo_push_token)
+    VALUES (?, ?)
+    ON CONFLICT(user_id) DO UPDATE SET expo_push_token = excluded.expo_push_token
+  `).run(userId, token);
 }

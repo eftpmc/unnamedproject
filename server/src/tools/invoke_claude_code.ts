@@ -22,6 +22,7 @@ interface ToolContext {
   resumeSessionId?: string | null;
   mcpServers?: Record<string, McpServerConfig>;
   permissionProfile?: PermissionProfile;
+  onSessionId?: (id: string) => void;
 }
 
 export interface ClaudeCodeResult {
@@ -73,6 +74,7 @@ export async function invokeClaudeCode(input: ClaudeCodeInput, ctx: ToolContext)
 
     let buffer = '';
     let sessionId: string | null = null;
+    let sessionIdFired = false;
     let resultText = '';
     let costUsd = 0;
     let stderrText = '';
@@ -96,7 +98,13 @@ export async function invokeClaudeCode(input: ClaudeCodeInput, ctx: ToolContext)
         let event: Record<string, unknown>;
         try { event = JSON.parse(line); } catch { continue; }
 
-        if (typeof event.session_id === 'string') sessionId = event.session_id;
+        if (typeof event.session_id === 'string') {
+          sessionId = event.session_id;
+          if (!sessionIdFired && ctx.onSessionId) {
+            sessionIdFired = true;
+            ctx.onSessionId(event.session_id);
+          }
+        }
 
         if (event.type === 'assistant') {
           const msg = event.message as { content?: Array<{ type: string; name?: string; input?: Record<string, unknown>; text?: string }> } | undefined;

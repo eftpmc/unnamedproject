@@ -1,8 +1,7 @@
 import { View, Text, TouchableOpacity } from 'react-native';
-import { useNavigation } from 'expo-router';
+import { useNavigation, useRouter } from 'expo-router';
 import { DrawerActions } from '@react-navigation/native';
 import { useCreateChat } from '../../hooks/useChats';
-import { useRouter } from 'expo-router';
 
 export default function HomeScreen() {
   const navigation = useNavigation();

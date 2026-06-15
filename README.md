@@ -21,9 +21,23 @@ npm install --prefix web
 npm install --prefix remotion
 ```
 
-Create `server/.env` from `server/.env.example` and set the values needed for your environment. At minimum, production-like runs should set `JWT_SECRET`.
+Copy `.env.example` to `.env` and fill in the required values:
 
-`DATA_DIR` is optional. If omitted, the server stores runtime data in the repo-level `data/` directory. Tests override this with `/tmp/unnamedproject-test`.
+```sh
+cp .env.example .env
+```
+
+Required env vars:
+
+- `JWT_SECRET` — long random string used to sign auth tokens
+- `ANTHROPIC_API_KEY` — your Anthropic API key
+
+Optional:
+
+- `DATA_DIR` — where the server stores SQLite and project files. Defaults to the repo-level `data/` directory. Tests override this with `/tmp/unnamedproject-test`.
+- `DEFAULT_CLAUDE_MODEL`, `CLAUDE_MODEL_LOW/MEDIUM/HIGH` — override which Claude models are used
+- `ALLOW_REGISTRATION` — set to `true` to allow new user sign-ups
+- `PORT` — port to expose the web UI on when running via Docker (default: `80`)
 
 ## Development
 
@@ -37,6 +51,18 @@ Default local ports:
 
 - API: `http://localhost:3000`
 - Web: `http://localhost:5173`
+
+## Docker
+
+Build and run the full stack in containers:
+
+```sh
+docker compose up --build
+```
+
+The web UI will be available at `http://localhost` (or `http://localhost:$PORT` if you set `PORT` in `.env`). SQLite data is persisted in a named Docker volume (`app-data`).
+
+> **Note:** The `generate_video` tool requires Chromium inside the server container. Video rendering will fail without it. Add `chromium` to the server image and set `PUPPETEER_EXECUTABLE_PATH` if you need that feature.
 
 ## Verification
 

@@ -10,7 +10,11 @@ const MAX_RECONNECT_DELAY = 30_000;
 
 function getWsUrl(token: string): string {
   const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
-  const host = window.location.host;
+  // In dev the page is served by Vite (e.g. :5177) but the WS server lives on
+  // the Express port. Use VITE_API_PORT when set, fall back to 3000.
+  const host = import.meta.env.DEV
+    ? `localhost:${import.meta.env.VITE_API_PORT ?? 3000}`
+    : window.location.host;
   return `${protocol}//${host}?token=${token}`;
 }
 

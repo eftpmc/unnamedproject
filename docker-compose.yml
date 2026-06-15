@@ -1,0 +1,37 @@
+services:
+  server:
+    build:
+      context: ./server
+      dockerfile: Dockerfile
+    environment:
+      NODE_ENV: production
+      JWT_SECRET: ${JWT_SECRET}
+      DATA_DIR: /data
+      ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY}
+      DEFAULT_CLAUDE_MODEL: ${DEFAULT_CLAUDE_MODEL:-}
+      CLAUDE_MODEL_LOW: ${CLAUDE_MODEL_LOW:-}
+      CLAUDE_MODEL_MEDIUM: ${CLAUDE_MODEL_MEDIUM:-}
+      CLAUDE_MODEL_HIGH: ${CLAUDE_MODEL_HIGH:-}
+      ALLOW_REGISTRATION: ${ALLOW_REGISTRATION:-}
+    volumes:
+      - app-data:/data
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "node", "-e", "require('http').get('http://localhost:3000/auth/me', r => process.exit(r.statusCode === 401 ? 0 : 1)).on('error', () => process.exit(1))"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+
+  web:
+    build:
+      context: ./web
+      dockerfile: Dockerfile
+    ports:
+      - "${PORT:-80}:80"
+    depends_on:
+      server:
+        condition: service_healthy
+    restart: unless-stopped
+
+volumes:
+  app-data:

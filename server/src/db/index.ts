@@ -76,7 +76,7 @@ function applySchema(): void {
     CREATE TABLE IF NOT EXISTS agent_usage (
       id TEXT PRIMARY KEY,
       user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
-      tool TEXT NOT NULL CHECK(tool IN ('claude_code','codex')),
+      tool TEXT NOT NULL CHECK(tool IN ('claude_code','codex','lead_agent','subagent')),
       cost_usd REAL NOT NULL,
       created_at INTEGER NOT NULL DEFAULT (unixepoch())
     );
@@ -109,7 +109,7 @@ function applySchema(): void {
     CREATE TABLE IF NOT EXISTS session_events (
       id TEXT PRIMARY KEY,
       session_id TEXT NOT NULL REFERENCES sessions(id) ON DELETE CASCADE,
-      type TEXT NOT NULL CHECK(type IN ('scope_changed','project_linked','project_created','campaign_created','artifact_created','approval_requested','approval_resolved')),
+      type TEXT NOT NULL CHECK(type IN ('scope_changed','project_linked','project_created','campaign_created','artifact_created','approval_requested','approval_resolved','mcp_required','subagent_started','subagent_completed')),
       title TEXT NOT NULL,
       body TEXT,
       project_id TEXT REFERENCES projects(id) ON DELETE SET NULL,
@@ -444,6 +444,51 @@ function applySchema(): void {
     `);
   }
 
+  // Widen session_events.type CHECK to include subagent event types.
+  const sessionEventsSql2 = (db.prepare("SELECT sql FROM sqlite_master WHERE type='table' AND name='session_events'").get() as { sql: string } | undefined)?.sql;
+  if (sessionEventsSql2 && !sessionEventsSql2.includes("'subagent_started'")) {
+    db.exec(`
+      PRAGMA foreign_keys = OFF;
+      ALTER TABLE session_events RENAME TO session_events_old;
+      CREATE TABLE session_events (
+        id TEXT PRIMARY KEY,
+        session_id TEXT NOT NULL REFERENCES sessions(id) ON DELETE CASCADE,
+        type TEXT NOT NULL CHECK(type IN ('scope_changed','project_linked','project_created','campaign_created','artifact_created','approval_requested','approval_resolved','mcp_required','subagent_started','subagent_completed')),
+        title TEXT NOT NULL,
+        body TEXT,
+        project_id TEXT REFERENCES projects(id) ON DELETE SET NULL,
+        campaign_id TEXT REFERENCES campaigns(id) ON DELETE SET NULL,
+        artifact_id TEXT REFERENCES artifacts(id) ON DELETE SET NULL,
+        execution_id TEXT REFERENCES executions(id) ON DELETE SET NULL,
+        metadata TEXT NOT NULL DEFAULT '{}',
+        created_at INTEGER NOT NULL DEFAULT (unixepoch())
+      );
+      INSERT INTO session_events SELECT * FROM session_events_old;
+      DROP TABLE session_events_old;
+      PRAGMA foreign_keys = ON;
+    `);
+  }
+
+  // Widen agent_usage.tool CHECK to include lead_agent and subagent.
+  const agentUsageSql = (db.prepare("SELECT sql FROM sqlite_master WHERE type='table' AND name='agent_usage'").get() as { sql: string } | undefined)?.sql;
+  if (agentUsageSql && !agentUsageSql.includes("'lead_agent'")) {
+    db.exec(`
+      PRAGMA foreign_keys = OFF;
+      ALTER TABLE agent_usage RENAME TO agent_usage_old;
+      CREATE TABLE agent_usage (
+        id TEXT PRIMARY KEY,
+        user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+        tool TEXT NOT NULL CHECK(tool IN ('claude_code','codex','lead_agent','subagent')),
+        cost_usd REAL NOT NULL,
+        created_at INTEGER NOT NULL DEFAULT (unixepoch())
+      );
+      INSERT INTO agent_usage SELECT * FROM agent_usage_old;
+      DROP TABLE agent_usage_old;
+      CREATE INDEX IF NOT EXISTS idx_agent_usage_user_tool_date ON agent_usage(user_id, tool, created_at);
+      PRAGMA foreign_keys = ON;
+    `);
+  }
+
   // Create pipelines and pipeline_tasks tables for existing DBs (already in CREATE TABLE for new DBs).
   const tableNames2 = db.prepare("SELECT name FROM sqlite_master WHERE type='table'").all() as { name: string }[];
   if (!tableNames2.some(t => t.name === 'pipelines')) {
@@ -466,6 +511,39 @@ function applySchema(): void {
         position INTEGER NOT NULL,
         created_at INTEGER NOT NULL DEFAULT (unixepoch())
       );
+    `);
+  }
+
+  // Fix dangling FK: when the campaign_tasks migration renamed the table to
+  // campaign_tasks_old2, SQLite auto-updated artifacts.source_task_id to
+  // reference "campaign_tasks_old2". After the migration dropped that temp
+  // table the FK became dangling, causing every INSERT into artifacts to fail
+  // with "no such table: main.campaign_tasks_old2". Rebuild artifacts so the
+  // FK points to campaign_tasks again.
+  const artifactsSql = (db.prepare("SELECT sql FROM sqlite_master WHERE type='table' AND name='artifacts'").get() as { sql: string } | undefined)?.sql;
+  if (artifactsSql?.includes('campaign_tasks_old2')) {
+    db.exec(`
+      PRAGMA foreign_keys = OFF;
+      ALTER TABLE artifacts RENAME TO artifacts_old_fk_fix;
+      CREATE TABLE artifacts (
+        id TEXT PRIMARY KEY,
+        project_id TEXT NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
+        kind TEXT NOT NULL,
+        title TEXT NOT NULL,
+        description TEXT,
+        status TEXT NOT NULL DEFAULT 'ready'
+          CHECK(status IN ('ready','review','running','error')),
+        mime_type TEXT NOT NULL DEFAULT 'application/octet-stream',
+        path TEXT,
+        url TEXT,
+        metadata TEXT NOT NULL DEFAULT '{}',
+        source_campaign_id TEXT REFERENCES campaigns(id) ON DELETE SET NULL,
+        source_task_id TEXT REFERENCES campaign_tasks(id) ON DELETE SET NULL,
+        created_at INTEGER NOT NULL DEFAULT (unixepoch())
+      );
+      INSERT INTO artifacts SELECT * FROM artifacts_old_fk_fix;
+      DROP TABLE artifacts_old_fk_fix;
+      PRAGMA foreign_keys = ON;
     `);
   }
 
@@ -566,7 +644,9 @@ export type SessionEventType =
   | 'artifact_created'
   | 'approval_requested'
   | 'approval_resolved'
-  | 'mcp_required';
+  | 'mcp_required'
+  | 'subagent_started'
+  | 'subagent_completed';
 
 export interface DbSessionEvent {
   id: string;
@@ -665,12 +745,9 @@ export function setProjectsRoot(userId: string, projectsRoot: string): void {
     .run(userId, projectsRoot);
 }
 
-export type AgentUsageTool = 'claude_code' | 'codex';
+export type AgentUsageTool = 'claude_code' | 'codex' | 'lead_agent' | 'subagent';
 
-export interface AgentBudgets {
-  claude_code: number | null;
-  codex: number | null;
-}
+export type AgentBudgets = Record<AgentUsageTool, number | null>;
 
 export function getAgentBudgets(userId: string): AgentBudgets {
   const row = getDb()
@@ -679,6 +756,8 @@ export function getAgentBudgets(userId: string): AgentBudgets {
   return {
     claude_code: row?.claude_code_budget_usd ?? null,
     codex: row?.codex_budget_usd ?? null,
+    lead_agent: null,
+    subagent: null,
   };
 }
 

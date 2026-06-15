@@ -74,7 +74,7 @@ export default function Composer({ onSend, disabled }: Props) {
         <ScrollView horizontal showsHorizontalScrollIndicator={false} className="gap-2">
           {attachments.map((att, i) => (
             <TouchableOpacity
-              key={i}
+              key={`${att.uri}-${att.name}`}
               className="bg-muted rounded-lg px-3 py-1.5 flex-row items-center gap-1.5 mr-2"
               onPress={() => removeAttachment(i)}
             >

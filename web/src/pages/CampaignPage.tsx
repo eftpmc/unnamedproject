@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useState } from 'react';
 import type { ReactNode } from 'react';
 import { useParams, Link, useNavigate } from 'react-router-dom';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
@@ -79,15 +79,22 @@ export default function CampaignPage() {
   const queryClient = useQueryClient();
   const [taskStatuses, setTaskStatuses] = useState<Record<string, CampaignTask['status']>>({});
   const [campaignStatus, setCampaignStatus] = useState<Campaign['status'] | null>(null);
-  const hydratedRef = useRef(false);
-
   useEffect(() => {
-    if (!data || hydratedRef.current) return;
-    hydratedRef.current = true;
-    const initial: Record<string, CampaignTask['status']> = {};
-    data.tasks.forEach(t => { initial[t.id] = t.status; });
-    setTaskStatuses(initial);
-    setCampaignStatus(data.campaign.status);
+    if (!data) return;
+    setTaskStatuses(prev => {
+      const updates: Record<string, CampaignTask['status']> = {};
+      for (const t of data.tasks) {
+        // Seed tasks not yet known; always accept terminal statuses to recover WS gaps
+        if (!(t.id in prev) || t.status === 'done' || t.status === 'error') {
+          updates[t.id] = t.status;
+        }
+      }
+      return Object.keys(updates).length ? { ...prev, ...updates } : prev;
+    });
+    setCampaignStatus(prev => {
+      const terminal = data.campaign.status === 'done' || data.campaign.status === 'error' || data.campaign.status === 'cancelled';
+      return (prev === null || terminal) ? data.campaign.status : prev;
+    });
   }, [data]);
 
   useEffect(() => {

@@ -142,7 +142,7 @@
   /* Borders */
   --border:      oklch(1 0 0 / 8%);
   --border-soft: oklch(1 0 0 / 4.5%);
-  --input:       oklch(1 0 0 / 10%);
+  --input:       oklch(1 0 0 / 18%);
 
   /* Interactive blue */
   --primary:             oklch(0.7 0.1 256);

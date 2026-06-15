@@ -174,18 +174,22 @@ export default function ChatView({ chatId }: ChatViewProps) {
     setAgentError(null);
     setInputValue('');
 
-    if (editingMessageId) {
-      const eid = editingMessageId;
-      setEditingMessageId(null);
-      await truncateMessagesFrom(chatId, eid);
-      queryClient.setQueryData<Message[]>(['messages', chatId], prev => {
-        if (!prev) return prev;
-        const idx = prev.findIndex(x => x.id === eid);
-        return idx === -1 ? prev : prev.slice(0, idx);
-      });
-    }
+    try {
+      if (editingMessageId) {
+        const eid = editingMessageId;
+        setEditingMessageId(null);
+        await truncateMessagesFrom(chatId, eid);
+        queryClient.setQueryData<Message[]>(['messages', chatId], prev => {
+          if (!prev) return prev;
+          const idx = prev.findIndex(x => x.id === eid);
+          return idx === -1 ? prev : prev.slice(0, idx);
+        });
+      }
 
-    mutation.mutate(content);
+      mutation.mutate(content);
+    } catch {
+      setSending(false);
+    }
   }, [inputValue, editingMessageId, chatId, queryClient, mutation]);
 
   const handleWsEvent = useCallback((event: WSEvent) => {

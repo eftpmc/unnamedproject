@@ -34,7 +34,7 @@ export default function MessageInput({ value, onChange, onSend, disabled }: Mess
 
   return (
     <div className="shrink-0 px-4 pb-5 pt-3 sm:px-6">
-      <div className="mx-auto flex max-w-[46rem] items-end gap-2 rounded-[18px] border border-border bg-card px-3 pb-2.5 pt-2.5 shadow-sm">
+      <div className="mx-auto flex max-w-[46rem] items-center gap-2 rounded-[18px] border border-input bg-card px-3 pb-2.5 pt-2.5 shadow-sm">
         <Textarea
           ref={textareaRef}
           value={value}
@@ -43,7 +43,7 @@ export default function MessageInput({ value, onChange, onSend, disabled }: Mess
           placeholder={disabled ? 'Agent is responding…' : 'Message…'}
           disabled={disabled}
           rows={1}
-          className="max-h-44 min-h-[1.5rem] flex-1 resize-none border-0 bg-transparent px-1 py-1 text-[15px] shadow-none placeholder:text-faint-fg focus-visible:ring-0"
+          className="max-h-44 min-h-[1.5rem] flex-1 resize-none border-0 bg-transparent dark:bg-transparent px-1 py-1 text-[15px] shadow-none placeholder:text-faint-fg focus-visible:ring-0"
         />
         <button
           type="button"
@@ -51,7 +51,7 @@ export default function MessageInput({ value, onChange, onSend, disabled }: Mess
           disabled={disabled || !value.trim()}
           title="Send"
           className={cn(
-            'mb-0.5 grid h-9 w-9 shrink-0 place-items-center rounded-lg transition-[filter,transform] active:translate-y-px',
+            'self-end mb-0.5 grid h-9 w-9 shrink-0 place-items-center rounded-lg transition-[filter,transform] active:translate-y-px',
             value.trim() && !disabled
               ? 'bg-primary text-primary-foreground hover:brightness-105'
               : 'bg-muted text-faint-fg cursor-default',

@@ -514,17 +514,23 @@ function applySchema(): void {
     `);
   }
 
-  // Fix dangling FK: when the campaign_tasks migration renamed the table to
-  // campaign_tasks_old2, SQLite auto-updated artifacts.source_task_id to
-  // reference "campaign_tasks_old2". After the migration dropped that temp
-  // table the FK became dangling, causing every INSERT into artifacts to fail
-  // with "no such table: main.campaign_tasks_old2". Rebuild artifacts so the
-  // FK points to campaign_tasks again.
+  // Fix dangling FKs caused by SQLite auto-rewriting FK references when tables
+  // are renamed. Two flavours of the same root bug:
+  //
+  // 1. artifacts.source_task_id → "campaign_tasks_old2" (dropped temp table)
+  // 2. session_events.artifact_id → "artifacts_old_fk_fix" (dropped temp table
+  //    created by a previous version of this very migration that didn't use
+  //    PRAGMA legacy_alter_table)
+  //
+  // Fix: use PRAGMA legacy_alter_table = ON so the rename does NOT rewrite FK
+  // references in other tables, then rebuild only the target table.
   const artifactsSql = (db.prepare("SELECT sql FROM sqlite_master WHERE type='table' AND name='artifacts'").get() as { sql: string } | undefined)?.sql;
   if (artifactsSql?.includes('campaign_tasks_old2')) {
     db.exec(`
       PRAGMA foreign_keys = OFF;
+      PRAGMA legacy_alter_table = ON;
       ALTER TABLE artifacts RENAME TO artifacts_old_fk_fix;
+      PRAGMA legacy_alter_table = OFF;
       CREATE TABLE artifacts (
         id TEXT PRIMARY KEY,
         project_id TEXT NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
@@ -543,6 +549,35 @@ function applySchema(): void {
       );
       INSERT INTO artifacts SELECT * FROM artifacts_old_fk_fix;
       DROP TABLE artifacts_old_fk_fix;
+      PRAGMA foreign_keys = ON;
+    `);
+  }
+
+  // Repair session_events.artifact_id if it was left pointing at
+  // "artifacts_old_fk_fix" by the earlier (broken) version of the migration
+  // above that omitted PRAGMA legacy_alter_table.
+  const sessionEventsSql3 = (db.prepare("SELECT sql FROM sqlite_master WHERE type='table' AND name='session_events'").get() as { sql: string } | undefined)?.sql;
+  if (sessionEventsSql3?.includes('artifacts_old_fk_fix')) {
+    db.exec(`
+      PRAGMA foreign_keys = OFF;
+      PRAGMA legacy_alter_table = ON;
+      ALTER TABLE session_events RENAME TO session_events_old_fk_fix;
+      PRAGMA legacy_alter_table = OFF;
+      CREATE TABLE session_events (
+        id TEXT PRIMARY KEY,
+        session_id TEXT NOT NULL REFERENCES sessions(id) ON DELETE CASCADE,
+        type TEXT NOT NULL CHECK(type IN ('scope_changed','project_linked','project_created','campaign_created','artifact_created','approval_requested','approval_resolved','mcp_required','subagent_started','subagent_completed')),
+        title TEXT NOT NULL,
+        body TEXT,
+        project_id TEXT REFERENCES projects(id) ON DELETE SET NULL,
+        campaign_id TEXT REFERENCES campaigns(id) ON DELETE SET NULL,
+        artifact_id TEXT REFERENCES artifacts(id) ON DELETE SET NULL,
+        execution_id TEXT REFERENCES executions(id) ON DELETE SET NULL,
+        metadata TEXT NOT NULL DEFAULT '{}',
+        created_at INTEGER NOT NULL DEFAULT (unixepoch())
+      );
+      INSERT INTO session_events SELECT * FROM session_events_old_fk_fix;
+      DROP TABLE session_events_old_fk_fix;
       PRAGMA foreign_keys = ON;
     `);
   }

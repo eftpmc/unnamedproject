@@ -110,6 +110,22 @@ const FAMILY_TIER: Record<string, number> = { haiku: 0, sonnet: 1, fable: 2, opu
 const MAX_TIER_BY_EFFORT: Record<EffortLevel, number> = { low: 0, medium: 1, high: 3 };
 const TIER_FAMILY = ['haiku', 'sonnet', 'fable', 'opus'] as const;
 
+// Per-million-token pricing by model family (input, output). Used for in-process SDK calls.
+// Falls back to sonnet rates for unknown models.
+const FAMILY_PRICING: Record<string, [number, number]> = {
+  haiku:  [0.80,  4.00],
+  sonnet: [3.00, 15.00],
+  fable:  [5.00, 25.00],
+  opus:   [15.00, 75.00],
+};
+
+export function tokensToUsd(modelId: string, inputTokens: number, outputTokens: number): number {
+  const id = modelId.toLowerCase();
+  const [inRate, outRate] = Object.entries(FAMILY_PRICING).find(([family]) => id.includes(family))?.[1]
+    ?? FAMILY_PRICING.sonnet;
+  return (inputTokens / 1_000_000) * inRate + (outputTokens / 1_000_000) * outRate;
+}
+
 export async function resolveModelForTurn(
   client: Anthropic,
   intent: { model: string },

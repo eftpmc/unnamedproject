@@ -43,7 +43,10 @@
       "favicon": "./assets/images/favicon.png"
     },
     "experiments": {
-      "typedRoutes": true
+      "typedRoutes": true,
+      "router": {
+        "root": "src/app"
+      }
     }
   }
 }

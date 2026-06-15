@@ -37,6 +37,8 @@ beforeAll(async () => {
   sessionId = sessRes.body.id;
 
   const db = getDb();
+  db.prepare('INSERT INTO messages (id, session_id, role, content) VALUES (?,?,?,?)')
+    .run(newId(), sessionId, 'user', 'keep session active for route tests');
   projectId = newId();
   db.prepare("INSERT INTO projects (id, user_id, name, repo_path) VALUES (?,?,?,?)").run(projectId, userId, 'myproj', '/fake/repo');
 });

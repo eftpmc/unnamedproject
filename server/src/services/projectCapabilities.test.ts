@@ -109,11 +109,9 @@ describe('detectCapabilities', () => {
     fs.rmSync(tmpDir, { recursive: true, force: true });
   });
 
-  it('has_graph is true when graphify-out/graph.json exists', async () => {
+  it('has_graph is true when .project-index.json exists', async () => {
     const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'caps-test-'));
-    const graphDir = path.join(tmpDir, 'graphify-out');
-    fs.mkdirSync(graphDir, { recursive: true });
-    fs.writeFileSync(path.join(graphDir, 'graph.json'), '{}');
+    fs.writeFileSync(path.join(tmpDir, '.project-index.json'), '{}');
 
     vi.doMock('../db/index.js', () => ({
       getDataDir: () => '/tmp/no-media-here',
@@ -125,7 +123,7 @@ describe('detectCapabilities', () => {
     fs.rmSync(tmpDir, { recursive: true, force: true });
   });
 
-  it('has_graph is false when no graphify-out/graph.json', async () => {
+  it('has_graph is false when no .project-index.json', async () => {
     vi.doMock('../db/index.js', () => ({
       getDataDir: () => '/tmp/no-media-here',
     }));

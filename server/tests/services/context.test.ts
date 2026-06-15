@@ -33,8 +33,9 @@ describe('buildContext', () => {
 
   it('always includes research discipline block', () => {
     const ctx = buildContext(userId, sessionId, DEFAULT_INTENT);
-    expect(ctx).toContain('web_fetch');
-    expect(ctx).toContain('web_search');
+    expect(ctx).toContain('Research discipline');
+    expect(ctx).toContain('Web search and fetch are provided by MCP servers');
+    expect(ctx).toContain('mcp_call');
   });
 
   it('includes worktree isolation guidance for code domain', () => {
@@ -149,9 +150,11 @@ describe('getToolSubset', () => {
     expect(names).toContain('git_op');
   });
 
-  it('code domain includes web_search (research tools are universal)', () => {
+  it('code domain includes MCP discovery tools for external research', () => {
     const tools = getToolSubset(codeIntent);
-    expect(tools.map(t => t.name)).toContain('web_search');
+    const names = tools.map(t => t.name);
+    expect(names).toContain('list_connections');
+    expect(names).toContain('mcp_call');
   });
 
   it('writing domain excludes invoke_claude_code', () => {

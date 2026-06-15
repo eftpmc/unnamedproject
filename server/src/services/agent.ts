@@ -436,7 +436,7 @@ export async function runCampaignAutoDispatch(
   messageId: string,
   sessionId: string,
   onError: 'stop' | 'continue' = 'stop',
-): Promise<{ done: number; error: number; total: number }> {
+): Promise<{ done: number; error: number; total: number; errors: Array<{ task_id: string; title: string; error: string }> }> {
   const campaign = getCampaignById(campaignId);
   if (!campaign) throw new Error(`Campaign ${campaignId} not found`);
 
@@ -478,10 +478,21 @@ export async function runCampaignAutoDispatch(
   }
 
   const finalTasks = getCampaignTasks(campaignId);
+  const erroredTasks = finalTasks.filter(t => t.status === 'error');
+  const errors = erroredTasks.map(t => {
+    const ex = t.execution_id ? getExecutionById(t.execution_id) : null;
+    const errorMsg = ex?.result ?? 'Unknown error';
+    return {
+      task_id: t.id,
+      title: t.title,
+      error: errorMsg.length > 500 ? errorMsg.slice(0, 500) + '…' : errorMsg,
+    };
+  });
   return {
     done: finalTasks.filter(t => t.status === 'done').length,
     error: finalTasks.filter(t => t.status === 'error').length,
     total: finalTasks.length,
+    errors,
   };
 }
 

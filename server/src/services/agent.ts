@@ -1086,8 +1086,7 @@ async function dispatchTool(
         const daProjectId = toolInput.project_id as string | undefined ?? null;
         const daTaskId = toolInput.campaign_task_id as string | undefined;
         const daCampaignId = daTaskId ? getCampaignForTask(daTaskId)?.id ?? null : null;
-        const daMaxTurns = typeof toolInput.max_turns === 'number' ? toolInput.max_turns : 15;
-        result = await runSubAgent(daInstructions, daProjectId, userId, executionId, messageId, sessionId, daCampaignId, daMaxTurns);
+        result = await runSubAgent(daInstructions, daProjectId, userId, executionId, messageId, sessionId, daCampaignId, toolInput.max_turns as number | undefined);
         break;
       }
       case 'generate_video': {

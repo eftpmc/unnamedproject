@@ -12,7 +12,7 @@ export async function runDueScheduledTasks(): Promise<void> {
       console.error(`[scheduler] task ${task.id} (${task.type}) failed:`, err);
     }
   });
-  await Promise.allSettled(promises);
+  await Promise.all(promises);
 }
 
 export function startScheduler(): NodeJS.Timeout {

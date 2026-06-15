@@ -1,4 +1,6 @@
 import express from 'express';
+import helmet from 'helmet';
+import { rateLimit } from 'express-rate-limit';
 import { createServer } from 'http';
 import { initDb, reconcileOrphanedExecutions } from './db/index.js';
 import { initSocket } from './services/socket.js';
@@ -24,11 +26,27 @@ if (!JWT_SECRET && NODE_ENV !== 'test') {
 }
 
 const app = express();
+
+app.use(helmet({
+  // API-only server — no HTML is served, so CSP and frame options aren't needed.
+  contentSecurityPolicy: false,
+  crossOriginEmbedderPolicy: false,
+}));
+
 app.use(express.json());
+
+const authLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  limit: 20,
+  standardHeaders: 'draft-8',
+  legacyHeaders: false,
+  message: { error: 'Too many attempts, please try again later.' },
+  skip: () => NODE_ENV === 'test',
+});
 
 initDb();
 reconcileOrphanedExecutions();
-app.use('/auth', authRoutes);
+app.use('/auth', authLimiter, authRoutes);
 app.use('/connections', connectionsRoutes);
 app.use('/projects', projectsRoutes);
 app.use('/settings', settingsRoutes);

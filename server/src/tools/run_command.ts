@@ -10,6 +10,31 @@ const MAX_OUTPUT_BYTES = 10 * 1024;
 const DEFAULT_TIMEOUT_MS = 30_000;
 const MAX_TIMEOUT_MS = 60_000;
 
+// Patterns that are blocked unconditionally regardless of permission profile.
+// These target the specific risk of prompt injection: a manipulated LLM passing
+// a destructive or exfiltrating command that would otherwise be auto-approved.
+const BLOCKED_PATTERNS: RegExp[] = [
+  // Recursive deletion of system or root paths
+  /rm\s+(-\S*r\S*|-\S*f\S*\s+-\S*r\S*)\s+(\/(?!tmp|var\/folders)[^\s]*|~)/i,
+  // Piping remote content directly to a shell interpreter
+  /\|\s*(bash|sh|zsh|python3?|ruby|node|perl)\b/i,
+  /curl\s.*\|\s*\w/i,
+  /wget\s.*-O\s*-/i,
+  // Reading private credential files
+  /cat\s+.*\/(\.ssh\/(id_|known_hosts|authorized)|\.aws\/credentials|\.gnupg|\.netrc)\b/i,
+  // Exfiltrating environment variables to a network address
+  /\benv\b.*\|\s*curl/i,
+  // Fork bomb
+  /:\s*\(\s*\)\s*\{.*:\|:/,
+];
+
+function isBlocked(command: string): string | null {
+  for (const pattern of BLOCKED_PATTERNS) {
+    if (pattern.test(command)) return `Command blocked by security policy: matches pattern ${pattern.source.slice(0, 60)}`;
+  }
+  return null;
+}
+
 interface RunCommandInput {
   command: string;
   project_id?: string;
@@ -24,6 +49,9 @@ interface ToolContext {
 }
 
 export async function runCommand(input: RunCommandInput, ctx: ToolContext): Promise<string> {
+  const blocked = isBlocked(input.command);
+  if (blocked) return `Error: ${blocked}`;
+
   let cwd: string = getDataDir();
   if (input.project_id) {
     const project = getProjectForUser(input.project_id, ctx.userId);

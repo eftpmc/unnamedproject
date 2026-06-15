@@ -208,6 +208,7 @@ async function runSubAgent(
   parentMessageId: string,
   parentSessionId: string,
   campaignId?: string | null,
+  maxTurns = 15,
 ): Promise<string> {
   let apiKey: string;
   try { apiKey = getAnthropicKey(userId); }
@@ -221,8 +222,8 @@ async function runSubAgent(
   const systemPrompt = `You are a focused sub-agent completing a specific task.${projectId ? ` Use project_id "${projectId}" when calling project tools.` : ''} Complete the task fully, then respond with a clear summary of what you accomplished.`;
 
   const messages: Anthropic.MessageParam[] = [{ role: 'user', content: instructions }];
-  const MAX_TURNS = 15;
   const SUB_MODEL = 'claude-sonnet-4-6';
+  const clampedMaxTurns = Math.max(1, Math.min(50, maxTurns));
   let totalInputTokens = 0;
   let totalOutputTokens = 0;
 
@@ -235,7 +236,7 @@ async function runSubAgent(
     metadata: { projectId: projectId ?? undefined },
   });
 
-  for (let turn = 0; turn < MAX_TURNS; turn++) {
+  for (let turn = 0; turn < clampedMaxTurns; turn++) {
     if (campaignId && getCampaignById(campaignId)?.status === 'cancelled') {
       recordAgentUsage(userId, 'subagent', tokensToUsd(SUB_MODEL, totalInputTokens, totalOutputTokens));
       return 'Sub-agent cancelled.';
@@ -279,7 +280,7 @@ async function runSubAgent(
   }
 
   recordAgentUsage(userId, 'subagent', tokensToUsd(SUB_MODEL, totalInputTokens, totalOutputTokens));
-  return 'Sub-agent reached max turns limit without producing a final response.';
+  return `Sub-agent reached max turns limit (${clampedMaxTurns}) without producing a final response.`;
 }
 
 async function executeCampaignTask(
@@ -1085,7 +1086,8 @@ async function dispatchTool(
         const daProjectId = toolInput.project_id as string | undefined ?? null;
         const daTaskId = toolInput.campaign_task_id as string | undefined;
         const daCampaignId = daTaskId ? getCampaignForTask(daTaskId)?.id ?? null : null;
-        result = await runSubAgent(daInstructions, daProjectId, userId, executionId, messageId, sessionId, daCampaignId);
+        const daMaxTurns = typeof toolInput.max_turns === 'number' ? toolInput.max_turns : 15;
+        result = await runSubAgent(daInstructions, daProjectId, userId, executionId, messageId, sessionId, daCampaignId, daMaxTurns);
         break;
       }
       case 'generate_video': {

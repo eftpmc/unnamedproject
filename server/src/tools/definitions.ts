@@ -411,6 +411,7 @@ export const toolDefinitions: Anthropic.Tool[] = [
       properties: {
         instructions: { type: 'string', description: 'Clear instructions for what the sub-agent should do and return' },
         project_id: { type: 'string', description: 'Optional project context for the sub-agent' },
+        max_turns: { type: 'integer', description: 'Maximum turns the sub-agent may take (1–50, default 15). Raise for complex multi-step tasks.', minimum: 1, maximum: 50 },
       },
       required: ['instructions'],
     },

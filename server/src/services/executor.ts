@@ -1,4 +1,4 @@
-import { createSessionEvent, getDb } from '../db/index.js';
+import { createSessionEvent, getDb, getExpoPushToken } from '../db/index.js';
 import { newId } from '../lib/ids.js';
 import { broadcast } from './socket.js';
 import { waitForApproval } from '../lib/approval.js';
@@ -104,6 +104,25 @@ export async function requestApproval(
     });
   }
   broadcast(userId, { type: 'approval_requested', sessionId: executionContext?.sessionId ?? null, executionId, approvalId, action, payload });
+  const pushToken = getExpoPushToken(userId);
+  if (pushToken) {
+    fetch('https://exp.host/--/api/v2/push/send', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        to: pushToken,
+        title: 'Action needed',
+        body: `${action} is waiting for your approval`,
+        data: {
+          sessionId: executionContext?.sessionId ?? null,
+          executionId,
+          approvalId,
+        },
+        sound: 'default',
+        priority: 'high',
+      }),
+    }).catch(err => console.error('[push] Failed to send notification:', err));
+  }
   const decision = await waitForApproval(approvalId);
   getDb()
     .prepare('UPDATE approvals SET status = ?, resolved_at = unixepoch() WHERE id = ?')

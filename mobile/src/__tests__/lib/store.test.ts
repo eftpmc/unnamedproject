@@ -8,15 +8,20 @@ jest.mock('../../lib/storage', () => ({
 }));
 
 import { useAppStore } from '../../lib/store';
+import * as StorageMock from '../../lib/storage';
 
-beforeEach(() => useAppStore.setState({
-  serverUrl: null, token: null,
-  wsStatus: 'disconnected', pendingApprovalCount: 0,
-}));
+beforeEach(() => {
+  jest.clearAllMocks();
+  useAppStore.setState({
+    serverUrl: null, token: null,
+    wsStatus: 'disconnected', pendingApprovalCount: 0,
+  });
+});
 
 it('setToken updates state', async () => {
   await useAppStore.getState().setToken('abc');
   expect(useAppStore.getState().token).toBe('abc');
+  expect(StorageMock.setToken).toHaveBeenCalledWith('abc');
 });
 
 it('signOut clears token and resets counts', async () => {
@@ -24,6 +29,14 @@ it('signOut clears token and resets counts', async () => {
   await useAppStore.getState().signOut();
   expect(useAppStore.getState().token).toBeNull();
   expect(useAppStore.getState().pendingApprovalCount).toBe(0);
+  expect(StorageMock.clearToken).toHaveBeenCalled();
+});
+
+it('setServerUrl updates state and persists', async () => {
+  await useAppStore.getState().setServerUrl('http://192.168.1.5:3000');
+  expect(useAppStore.getState().serverUrl).toBe('http://192.168.1.5:3000');
+  expect(StorageMock.setServerUrl).toHaveBeenCalledWith('http://192.168.1.5:3000');
+  expect(StorageMock.addSavedHost).toHaveBeenCalledWith('http://192.168.1.5:3000');
 });
 
 it('incrementPendingApprovals increments', () => {

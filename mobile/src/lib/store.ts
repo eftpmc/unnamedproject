@@ -1,7 +1,7 @@
 import { create } from 'zustand';
 import { setToken as persistToken, clearToken, setServerUrl as persistUrl, addSavedHost } from './storage';
 
-type WsStatus = 'connected' | 'connecting' | 'disconnected';
+export type WsStatus = 'connected' | 'connecting' | 'disconnected';
 
 interface AppState {
   serverUrl: string | null;

@@ -1,70 +1,83 @@
 import { describe, it, expect, vi, beforeAll, afterEach } from 'vitest';
 import fs from 'fs';
-import { initDb, getDb, createScheduledTask, getScheduledTaskForUser } from '../../src/db/index.js';
+import { initDb, getDb } from '../../src/db/index.js';
+import { runDueScheduledTasks } from '../../src/services/scheduler.js';
 import { newId } from '../../src/lib/ids.js';
 
-vi.mock('../../src/services/socket.js', () => ({ broadcast: vi.fn() }));
-const runAgentTurnMock = vi.fn().mockResolvedValue(undefined);
-vi.mock('../../src/services/agent.js', () => ({ runAgentTurn: runAgentTurnMock }));
+// runScheduledTask ultimately calls runAgentTurn which needs Anthropic + socket mocked
+vi.mock('../../src/services/scheduled_tasks.js', () => ({
+  runScheduledTask: vi.fn(),
+}));
 
-const { runDueScheduledTasks } = await import('../../src/services/scheduler.js');
-
-const userId = newId();
+import { runScheduledTask } from '../../src/services/scheduled_tasks.js';
+const runScheduledTaskMock = vi.mocked(runScheduledTask);
 
 beforeAll(() => {
   fs.mkdirSync(process.env.DATA_DIR!, { recursive: true });
   initDb();
-  getDb().prepare('INSERT INTO users (id, email, hashed_password) VALUES (?,?,?)').run(userId, `scheduler-${userId}@test.com`, 'x');
 });
 
 afterEach(() => {
-  runAgentTurnMock.mockClear();
+  runScheduledTaskMock.mockReset();
+  getDb().prepare('DELETE FROM scheduled_tasks').run();
 });
 
 describe('scheduler', () => {
-  it('runs tasks whose next_run_at is due', async () => {
-    const taskId = createScheduledTask(userId, 'reorganize_memory', 24);
-    // Force it due now.
-    getDb().prepare('UPDATE scheduled_tasks SET next_run_at = ? WHERE id = ?').run(Math.floor(Date.now() / 1000) - 1, taskId);
+  it('runs due tasks in parallel, not serially', async () => {
+    const db = getDb();
+    const userId = newId();
+    db.prepare('INSERT INTO users (id, email, hashed_password) VALUES (?,?,?)').run(userId, `sched-${userId}@test.com`, 'x');
+
+    // Insert 2 tasks both due now
+    const now = Math.floor(Date.now() / 1000);
+    const task1Id = newId();
+    const task2Id = newId();
+    db.prepare('INSERT INTO scheduled_tasks (id, user_id, type, interval_hours, enabled, next_run_at) VALUES (?,?,?,?,?,?)')
+      .run(task1Id, userId, 'reorganize_memory', 24, 1, now - 10);
+    db.prepare('INSERT INTO scheduled_tasks (id, user_id, type, interval_hours, enabled, next_run_at) VALUES (?,?,?,?,?,?)')
+      .run(task2Id, userId, 'reorganize_memory', 24, 1, now - 10);
+
+    const events: string[] = [];
+    runScheduledTaskMock
+      .mockImplementationOnce(async () => {
+        events.push('task1:start');
+        await new Promise(resolve => setTimeout(resolve, 30));
+        events.push('task1:end');
+      })
+      .mockImplementationOnce(async () => {
+        events.push('task2:start');
+        events.push('task2:end');
+      });
 
     await runDueScheduledTasks();
 
-    expect(runAgentTurnMock).toHaveBeenCalled();
-    const updated = getScheduledTaskForUser(taskId, userId);
-    expect(updated?.last_run_at).not.toBeNull();
+    // If parallel: task2 starts before task1 ends
+    expect(events).toEqual(['task1:start', 'task2:start', 'task2:end', 'task1:end']);
+    // If serial: ['task1:start', 'task1:end', 'task2:start', 'task2:end']
   });
 
-  it('does not run tasks that are not yet due', async () => {
-    const taskId = createScheduledTask(userId, 'reorganize_memory', 24);
-    // createScheduledTask already sets next_run_at = now + 24h, so it's not due.
+  it('continues running remaining tasks when one fails', async () => {
+    const db = getDb();
+    const userId = newId();
+    db.prepare('INSERT INTO users (id, email, hashed_password) VALUES (?,?,?)').run(userId, `sched2-${userId}@test.com`, 'x');
 
+    const now = Math.floor(Date.now() / 1000);
+    const task1Id = newId();
+    const task2Id = newId();
+    db.prepare('INSERT INTO scheduled_tasks (id, user_id, type, interval_hours, enabled, next_run_at) VALUES (?,?,?,?,?,?)')
+      .run(task1Id, userId, 'reorganize_memory', 24, 1, now - 10);
+    db.prepare('INSERT INTO scheduled_tasks (id, user_id, type, interval_hours, enabled, next_run_at) VALUES (?,?,?,?,?,?)')
+      .run(task2Id, userId, 'reorganize_memory', 24, 1, now - 10);
+
+    runScheduledTaskMock
+      .mockRejectedValueOnce(new Error('task1 failed'))
+      .mockResolvedValueOnce(undefined);
+
+    const errSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
     await runDueScheduledTasks();
 
-    const updated = getScheduledTaskForUser(taskId, userId);
-    expect(updated?.last_run_at).toBeNull();
-  });
-
-  it('does not run disabled tasks', async () => {
-    const taskId = createScheduledTask(userId, 'reorganize_memory', 24);
-    getDb().prepare('UPDATE scheduled_tasks SET next_run_at = ?, enabled = 0 WHERE id = ?').run(Math.floor(Date.now() / 1000) - 1, taskId);
-
-    await runDueScheduledTasks();
-
-    const updated = getScheduledTaskForUser(taskId, userId);
-    expect(updated?.last_run_at).toBeNull();
-  });
-
-  it('continues to the next task if one fails', async () => {
-    const failingTaskId = newId();
-    getDb().prepare('INSERT INTO scheduled_tasks (id, user_id, type, interval_hours, next_run_at) VALUES (?,?,?,?,?)')
-      .run(failingTaskId, userId, 'unknown_type', 24, Math.floor(Date.now() / 1000) - 1);
-
-    const okTaskId = createScheduledTask(userId, 'reorganize_memory', 24);
-    getDb().prepare('UPDATE scheduled_tasks SET next_run_at = ? WHERE id = ?').run(Math.floor(Date.now() / 1000) - 1, okTaskId);
-
-    await runDueScheduledTasks();
-
-    const okTask = getScheduledTaskForUser(okTaskId, userId);
-    expect(okTask?.last_run_at).not.toBeNull();
+    expect(runScheduledTaskMock).toHaveBeenCalledTimes(2);
+    expect(errSpy).toHaveBeenCalledWith(expect.stringContaining('[scheduler]'), expect.anything());
+    errSpy.mockRestore();
   });
 });

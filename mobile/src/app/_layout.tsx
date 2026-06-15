@@ -6,6 +6,7 @@ import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { useAppStore } from '../lib/store';
 import { getServerUrl, getToken } from '../lib/storage';
 import { connect, disconnect, startAppStateListener, stopAppStateListener } from '../lib/ws';
+import { registerPushToken, configurePushHandlers } from '../lib/notifications';
 import '../../global.css';
 
 const queryClient = new QueryClient({
@@ -49,6 +50,21 @@ function AuthGate() {
       stopAppStateListener();
     }
     return () => { disconnect(); stopAppStateListener(); };
+  }, [token, serverUrl]);
+
+  useEffect(() => {
+    if (!token || !serverUrl) return;
+    registerPushToken().catch(console.error);
+
+    const unsub = configurePushHandlers(({ sessionId }) => {
+      if (sessionId) {
+        router.push(`/(drawer)/c/${sessionId}`);
+      } else {
+        router.push('/(drawer)/activity');
+      }
+    });
+
+    return unsub;
   }, [token, serverUrl]);
 
   if (!hydrated) return null;

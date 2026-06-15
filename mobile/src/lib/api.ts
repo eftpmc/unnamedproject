@@ -1,7 +1,21 @@
 import { useAppStore } from './store';
 
 class AuthError extends Error {
-  constructor() { super('Unauthorized'); }
+  constructor() {
+    super('Unauthorized');
+    this.name = 'AuthError';
+  }
+}
+
+function toPlainHeaders(h: HeadersInit | undefined): Record<string, string> {
+  if (!h) return {};
+  if (h instanceof Headers) {
+    const obj: Record<string, string> = {};
+    h.forEach((v, k) => { obj[k] = v; });
+    return obj;
+  }
+  if (Array.isArray(h)) return Object.fromEntries(h);
+  return h as Record<string, string>;
 }
 
 export async function apiFetch<T = unknown>(
@@ -13,11 +27,12 @@ export async function apiFetch<T = unknown>(
 
   const headers: Record<string, string> = {
     'Content-Type': 'application/json',
-    ...(init.headers as Record<string, string>),
+    ...toPlainHeaders(init.headers),
     ...(token ? { Authorization: `Bearer ${token}` } : {}),
   };
 
-  const res = await fetch(`${serverUrl}${path}`, { ...init, headers });
+  const base = serverUrl.replace(/\/$/, '');
+  const res = await fetch(`${base}${path}`, { ...init, headers });
 
   if (res.status === 401) {
     signOut();
@@ -29,6 +44,9 @@ export async function apiFetch<T = unknown>(
     throw new Error(`${res.status}: ${text}`);
   }
 
+  if (res.status === 204 || res.headers.get('content-length') === '0') {
+    return undefined as unknown as T;
+  }
   return res.json() as Promise<T>;
 }
 
@@ -47,13 +65,14 @@ export async function uploadMessage(
     form.append('attachments', { uri: att.uri, name: att.name, type: att.type } as unknown as Blob);
   }
 
-  const res = await fetch(`${serverUrl}/sessions/${sessionId}/messages`, {
+  const base = serverUrl.replace(/\/$/, '');
+  const res = await fetch(`${base}/sessions/${sessionId}/messages`, {
     method: 'POST',
     headers: token ? { Authorization: `Bearer ${token}` } : {},
     body: form,
   });
 
-  if (res.status === 401) { signOut(); throw new Error('Unauthorized'); }
+  if (res.status === 401) { signOut(); throw new AuthError(); }
   if (!res.ok) { const t = await res.text(); throw new Error(`${res.status}: ${t}`); }
   return res.json();
 }

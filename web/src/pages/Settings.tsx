@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Check, Play, Plus, Trash2 } from 'lucide-react';
+import { QRCodeSVG } from 'qrcode.react';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
@@ -26,7 +27,7 @@ import {
   updateScheduledTask,
   updateSettings,
 } from '../lib/api.js';
-import { clearToken } from '../lib/auth.js';
+import { clearToken, getToken } from '../lib/auth.js';
 import type { Connection, Memory, PermissionProfile, Project, ScheduledTask, UserSettings } from '../types.js';
 
 type Tab = 'agents' | 'tools' | 'mcp' | 'workspace' | 'memory' | 'account';
@@ -148,6 +149,33 @@ function SettingRowInfo({ title, description, mono }: { title: string; descripti
 
 function HintText({ children }: { children: React.ReactNode }) {
   return <p className="mt-2 max-w-2xl text-xs leading-relaxed text-muted-foreground/70">{children}</p>;
+}
+
+function ConnectMobileSection() {
+  const [showQr, setShowQr] = useState(false);
+  const token = getToken() ?? '';
+  const url = window.location.origin.replace(/:\d+$/, ':3000');
+  const qrValue = JSON.stringify({ url, token });
+
+  return (
+    <div className="flex flex-col gap-3">
+      <div className="flex items-center justify-between">
+        <div>
+          <div className="text-sm font-medium text-foreground">Connect Mobile</div>
+          <div className="text-xs text-muted-foreground">Scan from the Unnamed mobile app to connect instantly</div>
+        </div>
+        <Button variant="outline" size="sm" onClick={() => setShowQr(v => !v)}>
+          {showQr ? 'Hide QR' : 'Show QR'}
+        </Button>
+      </div>
+      {showQr && (
+        <div className="flex flex-col items-center gap-2 rounded-xl border border-border p-6 bg-white">
+          <QRCodeSVG value={qrValue} size={200} />
+          <p className="text-xs text-muted-foreground">Open the mobile app and tap "Scan QR code"</p>
+        </div>
+      )}
+    </div>
+  );
 }
 
 export default function Settings() {
@@ -722,6 +750,7 @@ export default function Settings() {
           {tab === 'account' && (
             <div className="flex flex-col gap-3">
               <SectionLabel>Account</SectionLabel>
+              <ConnectMobileSection />
               <div className="flex items-center justify-between gap-4 rounded-lg border border-destructive/20 bg-destructive/5 px-4 py-4">
                 <div>
                   <div className="text-sm font-medium text-foreground">Sign out</div>

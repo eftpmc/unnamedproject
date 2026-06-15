@@ -4,7 +4,7 @@ Unnamed uses a soft minimal product language: warm canvas, quiet borders, low sh
 
 ## Tokens
 
-- Typography: Geist via `web/src/index.css`.
+- Typography: Hanken Grotesk via `@fontsource-variable/hanken-grotesk` in `web/src/index.css`.
 - Canvas: `background` is the page color. Prefer translucent `background/*` or `muted/*` for surfaces instead of pure white blocks.
 - Borders: use `border-border/40` to `border-border/70` for structure. Avoid heavy boxed sections.
 - Shadows: default to none or `shadow-xs`; use `shadow-sm` only for active overlays or important floating surfaces.

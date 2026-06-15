@@ -7,7 +7,7 @@ Local agent workspace for coordinating chats, projects, campaigns, tool executio
 - `server/`: Express API, SQLite data model, agent/tool orchestration, executions, campaigns, artifacts, memory, scheduled tasks.
 - `web/`: React/Vite client for chats, projects, files, campaigns, settings, and artifact review.
 - `remotion/`: Shared Remotion composition used by the `generate_video` tool.
-- `docs/`: product specs, implementation plans, and current architecture notes.
+- `docs/`: current architecture, design-system, and mobile-readiness notes. Historical specs and implementation plans live under `docs/superpowers/archive/`.
 - `data/`: local runtime data. This is ignored by git.
 
 ## Setup
@@ -50,7 +50,7 @@ npm run dev
 Default local ports:
 
 - API: `http://localhost:3000`
-- Web: `http://localhost:5173`
+- Web: usually `http://localhost:5173`; Vite will choose the next open port if 5173 is occupied.
 
 ## Docker
 
@@ -94,4 +94,3 @@ After starting the app:
 3. Start a chat from that project.
 4. Ask the agent to produce a durable output.
 5. Open the project **Artifacts** tab and verify the output appears and previews correctly.
-

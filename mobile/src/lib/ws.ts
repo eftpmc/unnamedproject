@@ -6,10 +6,12 @@ type Listener = (event: WSEvent) => void;
 
 let ws: WebSocket | null = null;
 let reconnectTimer: ReturnType<typeof setTimeout> | null = null;
+let intentionallyDisconnected = false;
 const listeners = new Set<Listener>();
 let appStateSub: ReturnType<typeof AppState.addEventListener> | null = null;
 
 export function connect(): void {
+  intentionallyDisconnected = false;
   const { serverUrl, token } = useAppStore.getState();
   if (!serverUrl || !token) return;
   if (ws && (ws.readyState === WebSocket.OPEN || ws.readyState === WebSocket.CONNECTING)) return;
@@ -41,7 +43,7 @@ export function connect(): void {
 }
 
 function scheduleReconnect(): void {
-  if (reconnectTimer) return;
+  if (intentionallyDisconnected || reconnectTimer) return;
   reconnectTimer = setTimeout(() => {
     reconnectTimer = null;
     connect();
@@ -49,6 +51,7 @@ function scheduleReconnect(): void {
 }
 
 export function disconnect(): void {
+  intentionallyDisconnected = true;
   if (reconnectTimer) { clearTimeout(reconnectTimer); reconnectTimer = null; }
   ws?.close();
   ws = null;

@@ -679,7 +679,9 @@ async function dispatchTool(
         break;
       }
       case 'list_artifacts': {
-        const artifacts = listProjectArtifacts(toolInput.project_id as string);
+        const pid = toolInput.project_id as string;
+        if (!getProjectForUser(pid, userId)) { result = `Error: project ${pid} not found`; break; }
+        const artifacts = listProjectArtifacts(pid);
         result = JSON.stringify(artifacts.map(a => ({
           id: a.id, kind: a.kind, title: a.title, description: a.description,
           status: a.status, mime_type: a.mime_type, created_at: a.created_at,
@@ -865,7 +867,9 @@ async function dispatchTool(
         result = await deleteProject({ project_id: toolInput.project_id as string, delete_files: toolInput.delete_files as boolean }, userId, executionId);
         break;
       case 'list_campaigns': {
-        const summaries = getCampaignSummaries(toolInput.project_id as string);
+        const lcPid = toolInput.project_id as string;
+        if (!getProjectForUser(lcPid, userId)) { result = `Error: project ${lcPid} not found`; break; }
+        const summaries = getCampaignSummaries(lcPid);
         result = JSON.stringify(summaries.map(c => ({
           id: c.id,
           title: c.title,

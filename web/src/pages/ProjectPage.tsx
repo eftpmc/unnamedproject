@@ -24,12 +24,12 @@ const TABS = [
   { id: 'settings', label: 'Settings' },
 ];
 
+const KNOWN_TABS = new Set(TABS.map(t => t.id));
+
 function tabFromPath(pathname: string): Tab {
   const segments = pathname.split('/').filter(Boolean);
   const last = segments[segments.length - 1];
-  if (last === 'campaigns' || last === 'files' || last === 'settings') return last;
-  // Any other trailing segment after the project id is treated as an extra tab id.
-  if (segments.length >= 3 && segments[0] === 'projects') return last;
+  if (KNOWN_TABS.has(last) && last !== 'overview') return last;
   return 'overview';
 }
 

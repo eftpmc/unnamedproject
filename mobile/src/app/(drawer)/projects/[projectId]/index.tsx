@@ -6,6 +6,8 @@ import ScreenHeader from '../../../../components/ScreenHeader';
 import Surface from '../../../../components/Surface';
 import EmptyState from '../../../../components/EmptyState';
 import ErrorState from '../../../../components/ErrorState';
+import ProjectFiles from '../../../../components/ProjectFiles';
+import ProjectSettings from '../../../../components/ProjectSettings';
 import { useProjects, useProjectCampaigns, useArtifacts } from '../../../../hooks/useProjects';
 import { useColors } from '../../../../lib/colors';
 import type { Campaign, Artifact } from '../../../../../types';
@@ -52,24 +54,25 @@ export default function ProjectDetailScreen() {
         </ScrollView>
       </View>
 
-      <ScrollView className="flex-1" contentContainerStyle={{ padding: 16, gap: 10 }}>
-        {tab === 'campaigns' && (
-          <CampaignList campaigns={campaigns} loading={loadingCampaigns} isError={campaignsError} onRetry={refetchCampaigns} />
-        )}
-        {tab === 'artifacts' && (
-          <ArtifactList artifacts={artifacts} loading={loadingArtifacts} isError={artifactsError} onRetry={refetchArtifacts} iconColor={c.mutedForeground} />
-        )}
-        {tab === 'files' && (
-          <View className="mt-24">
-            <EmptyState icon="file-text" title="Files coming soon" description="Browse this project's files here once it's ready." />
-          </View>
-        )}
-        {tab === 'settings' && (
-          <View className="mt-24">
-            <EmptyState icon="settings" title="Project settings coming soon" description="Manage this project's configuration here once it's ready." />
-          </View>
-        )}
-      </ScrollView>
+      {tab === 'files' ? (
+        <ProjectFiles projectId={projectId} />
+      ) : (
+        <ScrollView className="flex-1" contentContainerStyle={{ padding: 16, gap: 10 }} keyboardShouldPersistTaps="handled">
+          {tab === 'campaigns' && (
+            <CampaignList campaigns={campaigns} loading={loadingCampaigns} isError={campaignsError} onRetry={refetchCampaigns} />
+          )}
+          {tab === 'artifacts' && (
+            <ArtifactList artifacts={artifacts} loading={loadingArtifacts} isError={artifactsError} onRetry={refetchArtifacts} iconColor={c.mutedForeground} />
+          )}
+          {tab === 'settings' && (
+            project ? (
+              <ProjectSettings project={project} />
+            ) : (
+              <ActivityIndicator className="mt-8" color={c.primary} />
+            )
+          )}
+        </ScrollView>
+      )}
     </View>
   );
 }

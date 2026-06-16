@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { View, Text, TextInput, TouchableOpacity, Alert, KeyboardAvoidingView, Platform } from 'react-native';
+import { View, Text, TextInput, TouchableOpacity, ActivityIndicator, KeyboardAvoidingView, Platform } from 'react-native';
 import { useRouter } from 'expo-router';
 import Icon from '../components/icon';
 import { useAppStore } from '../lib/store';
@@ -9,12 +9,14 @@ export default function LoginScreen() {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [loading, setLoading] = useState(false);
+  const [error, setError] = useState('');
   const { serverUrl, setToken } = useAppStore();
   const router = useRouter();
   const c = useColors();
 
   async function handleLogin() {
-    if (!email || !password) { Alert.alert('Enter email and password'); return; }
+    setError('');
+    if (!email || !password) { setError('Enter your email and password.'); return; }
     setLoading(true);
     try {
       const res = await fetch(`${serverUrl}/auth/login`, {
@@ -23,15 +25,15 @@ export default function LoginScreen() {
         body: JSON.stringify({ email, password }),
       });
       if (!res.ok) {
-        const { error } = await res.json() as { error?: string };
-        Alert.alert('Login failed', error ?? 'Invalid credentials');
+        const { error: serverError } = await res.json() as { error?: string };
+        setError(serverError ?? 'Invalid email or password.');
         return;
       }
       const { token } = await res.json() as { token: string };
       await setToken(token);
       router.replace('/(drawer)');
     } catch {
-      Alert.alert('Login failed', 'Could not reach the server.');
+      setError('Could not reach the server.');
     } finally {
       setLoading(false);
     }
@@ -78,12 +80,16 @@ export default function LoginScreen() {
               onSubmitEditing={handleLogin}
             />
           </View>
+          {error ? (
+            <Text className="text-destructive text-sm px-1">{error}</Text>
+          ) : null}
           <TouchableOpacity
-            className="bg-primary rounded-lg h-12 items-center justify-center"
+            className="bg-primary rounded-lg h-12 flex-row items-center justify-center gap-2"
             onPress={handleLogin}
             disabled={loading}
             activeOpacity={0.85}
           >
+            {loading && <ActivityIndicator size="small" color={c.primaryForeground} />}
             <Text className="text-primary-foreground font-semibold text-[15px]">
               {loading ? 'Signing in…' : 'Sign in'}
             </Text>

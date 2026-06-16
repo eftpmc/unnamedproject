@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from 'react';
-import { View, Text, TextInput, TouchableOpacity, FlatList, Alert } from 'react-native';
+import { View, Text, TextInput, TouchableOpacity, FlatList, Alert, ActivityIndicator, KeyboardAvoidingView, Platform } from 'react-native';
 import { useRouter } from 'expo-router';
 import { CameraView, useCameraPermissions } from 'expo-camera';
 import Icon from '../components/icon';
@@ -13,6 +13,7 @@ export default function ConnectScreen() {
   const [scanning, setScanning] = useState(false);
   const [permission, requestPermission] = useCameraPermissions();
   const [loading, setLoading] = useState(false);
+  const [error, setError] = useState('');
   const scannedRef = useRef(false);
   const { setServerUrl, setToken } = useAppStore();
   const router = useRouter();
@@ -23,6 +24,7 @@ export default function ConnectScreen() {
   }, []);
 
   async function connect(targetUrl: string) {
+    setError('');
     setLoading(true);
     try {
       const normalized = targetUrl.replace(/\/$/, '');
@@ -38,10 +40,10 @@ export default function ConnectScreen() {
         await setServerUrl(normalized);
         router.replace('/(drawer)');
       } else {
-        Alert.alert('Connection failed', `Server returned ${res.status}`);
+        setError(`Server returned ${res.status}. Check the address and try again.`);
       }
     } catch {
-      Alert.alert('Connection failed', 'Could not reach that address. Check the URL and try again.');
+      setError('Could not reach that address. Check the URL and try again.');
     } finally {
       setLoading(false);
     }
@@ -95,72 +97,81 @@ export default function ConnectScreen() {
   }
 
   return (
-    <View className="flex-1 bg-background px-6 justify-center gap-8">
-      <View className="items-center gap-3">
-        <View className="w-14 h-14 rounded-2xl bg-primary items-center justify-center">
-          <Text className="text-primary-foreground text-xl font-bold">u</Text>
+    <KeyboardAvoidingView
+      className="flex-1 bg-background"
+      behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+    >
+      <View className="flex-1 px-6 justify-center gap-8">
+        <View className="items-center gap-3">
+          <View className="w-14 h-14 rounded-2xl bg-primary items-center justify-center">
+            <Text className="text-primary-foreground text-xl font-bold">u</Text>
+          </View>
+          <View className="items-center gap-1">
+            <Text className="text-xl font-semibold tracking-tight text-foreground">Connect to server</Text>
+            <Text className="text-muted-foreground text-sm text-center">Enter your server address or scan a QR code</Text>
+          </View>
         </View>
-        <View className="items-center gap-1">
-          <Text className="text-xl font-semibold tracking-tight text-foreground">Connect to server</Text>
-          <Text className="text-muted-foreground text-sm text-center">Enter your server address or scan a QR code</Text>
-        </View>
-      </View>
 
-      <View className="gap-3">
-        <View className="flex-row items-center gap-2 rounded-lg border border-border-soft bg-card px-3.5 h-12">
-          <Icon name="globe" size={16} color={c.faintFg} />
-          <TextInput
-            className="flex-1 text-foreground text-[15px] h-full"
-            value={url}
-            onChangeText={setUrl}
-            autoCapitalize="none"
-            autoCorrect={false}
-            keyboardType="url"
-            placeholder="http://192.168.1.x:3000"
-            placeholderTextColor={c.faintFg}
-            onSubmitEditing={() => connect(url)}
-          />
+        <View className="gap-3">
+          <View className="flex-row items-center gap-2 rounded-lg border border-border-soft bg-card px-3.5 h-12">
+            <Icon name="globe" size={16} color={c.faintFg} />
+            <TextInput
+              className="flex-1 text-foreground text-[15px] h-full"
+              value={url}
+              onChangeText={setUrl}
+              autoCapitalize="none"
+              autoCorrect={false}
+              keyboardType="url"
+              placeholder="http://192.168.1.x:3000"
+              placeholderTextColor={c.faintFg}
+              onSubmitEditing={() => connect(url)}
+            />
+          </View>
+          {error ? (
+            <Text className="text-destructive text-sm px-1">{error}</Text>
+          ) : null}
+          <TouchableOpacity
+            className="bg-primary rounded-lg h-12 flex-row items-center justify-center gap-2"
+            onPress={() => connect(url)}
+            disabled={loading}
+            activeOpacity={0.85}
+          >
+            {loading && <ActivityIndicator size="small" color={c.primaryForeground} />}
+            <Text className="text-primary-foreground font-semibold text-[15px]">
+              {loading ? 'Connecting…' : 'Connect'}
+            </Text>
+          </TouchableOpacity>
+          <TouchableOpacity
+            className="flex-row items-center justify-center gap-2 rounded-lg border border-border-soft bg-card h-12"
+            onPress={handleScanPress}
+            activeOpacity={0.7}
+          >
+            <Icon name="qr-code" size={16} color={c.fgSoft} />
+            <Text className="text-foreground font-medium text-[15px]">Scan QR code</Text>
+          </TouchableOpacity>
         </View>
-        <TouchableOpacity
-          className="bg-primary rounded-lg h-12 items-center justify-center"
-          onPress={() => connect(url)}
-          disabled={loading}
-          activeOpacity={0.85}
-        >
-          <Text className="text-primary-foreground font-semibold text-[15px]">
-            {loading ? 'Connecting…' : 'Connect'}
-          </Text>
-        </TouchableOpacity>
-        <TouchableOpacity
-          className="flex-row items-center justify-center gap-2 rounded-lg border border-border-soft bg-card h-12"
-          onPress={handleScanPress}
-          activeOpacity={0.7}
-        >
-          <Icon name="qr-code" size={16} color={c.fgSoft} />
-          <Text className="text-foreground font-medium text-[15px]">Scan QR code</Text>
-        </TouchableOpacity>
-      </View>
 
-      {savedHosts.length > 0 && (
-        <View className="gap-2">
-          <Text className="text-[13px] font-semibold text-faint-fg px-1">Recent</Text>
-          <FlatList
-            data={savedHosts}
-            keyExtractor={item => item}
-            renderItem={({ item }) => (
-              <TouchableOpacity
-                className="flex-row items-center gap-2 rounded-lg border border-border-soft bg-card px-4 py-3 mb-2"
-                onPress={() => connect(item)}
-                activeOpacity={0.7}
-              >
-                <Icon name="clock" size={14} color={c.faintFg} />
-                <Text className="text-foreground text-sm flex-1" numberOfLines={1}>{item}</Text>
-                <Icon name="chevron-right" size={15} color={c.faintFg} />
-              </TouchableOpacity>
-            )}
-          />
-        </View>
-      )}
-    </View>
+        {savedHosts.length > 0 && (
+          <View className="gap-2">
+            <Text className="text-[13px] font-semibold text-faint-fg px-1">Recent</Text>
+            <FlatList
+              data={savedHosts}
+              keyExtractor={item => item}
+              renderItem={({ item }) => (
+                <TouchableOpacity
+                  className="flex-row items-center gap-2 rounded-lg border border-border-soft bg-card px-4 py-3 mb-2"
+                  onPress={() => connect(item)}
+                  activeOpacity={0.7}
+                >
+                  <Icon name="clock" size={14} color={c.faintFg} />
+                  <Text className="text-foreground text-sm flex-1" numberOfLines={1}>{item}</Text>
+                  <Icon name="chevron-right" size={15} color={c.faintFg} />
+                </TouchableOpacity>
+              )}
+            />
+          </View>
+        )}
+      </View>
+    </KeyboardAvoidingView>
   );
 }

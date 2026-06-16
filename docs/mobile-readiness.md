@@ -98,10 +98,10 @@ Message payloads include persisted `executions`, so mobile can rebuild execution
 
 ## Mobile Client Defaults
 
-- Prefer React Native/Expo for the first version to reuse TypeScript models and API logic.
+- The current mobile client is a native iOS app under `mobile/ios/` (Swift, UIKit).
 - Use a single shared API client with token injection and `401` handling.
-- Persist the token in secure storage, not ordinary async storage.
+- Persist the token in the iOS Keychain, not UserDefaults.
 - Refresh messages/status when the app returns to foreground.
 - Upload mobile images as compressed JPEG/PNG under 10 MB.
-- Keep attachment downloads inside an authenticated fetch pipeline; plain browser-style links will not include the bearer token.
+- Keep attachment downloads inside an authenticated fetch pipeline; plain URL loads will not include the bearer token.
 - Show approval requests prominently because long-running agent work can block until the user responds.

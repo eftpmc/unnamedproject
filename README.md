@@ -6,6 +6,7 @@ Local agent workspace for coordinating chats, projects, campaigns, tool executio
 
 - `server/`: Express API, SQLite data model, agent/tool orchestration, executions, campaigns, artifacts, memory, scheduled tasks.
 - `web/`: React/Vite client for chats, projects, files, campaigns, settings, and artifact review.
+- `mobile/`: Native iOS app (Swift/UIKit) under `mobile/ios/`.
 - `remotion/`: Shared Remotion composition used by the `generate_video` tool.
 - `docs/`: current architecture, design-system, and mobile-readiness notes. Historical specs and implementation plans live under `docs/superpowers/archive/`.
 - `data/`: local runtime data. This is ignored by git.

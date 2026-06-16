@@ -458,8 +458,8 @@ function applySchema(): void {
         created_at INTEGER NOT NULL DEFAULT (unixepoch()),
         completed_at INTEGER
       );
-      INSERT INTO campaign_tasks (id, campaign_id, title, agent, status, execution_id, position, prompt, depends_on, tool_args, created_at, completed_at)
-        SELECT id, campaign_id, title, agent, status, execution_id, position, prompt, depends_on, tool_args, created_at, completed_at
+      INSERT INTO campaign_tasks (id, campaign_id, title, agent, status, execution_id, position, created_at, completed_at)
+        SELECT id, campaign_id, title, agent, status, execution_id, position, created_at, completed_at
         FROM campaign_tasks_old2;
       DROP TABLE campaign_tasks_old2;
       PRAGMA foreign_keys = ON;

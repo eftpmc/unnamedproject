@@ -26,7 +26,13 @@ router.put('/', (req, res) => {
     res.status(400).json({ error: 'permission_profile must be one of fast, trusted, strict' });
     return;
   }
-  setProjectsRoot(userId, projects_root?.trim() ?? '');
+  if (expoPushToken !== undefined && expoPushToken !== null) {
+    if (typeof expoPushToken !== 'string' || expoPushToken.length > 512 || !expoPushToken.startsWith('ExponentPushToken[')) {
+      res.status(400).json({ error: 'expoPushToken must be a valid Expo push token' });
+      return;
+    }
+  }
+  if (projects_root !== undefined) setProjectsRoot(userId, projects_root.trim());
   if (permission_profile !== undefined) setPermissionProfile(userId, permission_profile);
   if (expoPushToken !== undefined) setExpoPushToken(userId, expoPushToken ?? null);
   res.json({

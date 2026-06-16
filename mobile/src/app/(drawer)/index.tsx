@@ -1,12 +1,18 @@
 import { View, Text, TouchableOpacity } from 'react-native';
 import { useNavigation, useRouter } from 'expo-router';
 import { DrawerActions } from '@react-navigation/native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import Icon from '../../components/icon';
 import { useCreateChat } from '../../hooks/useChats';
+import EmptyState from '../../components/EmptyState';
+import { useColors } from '../../lib/colors';
 
 export default function HomeScreen() {
   const navigation = useNavigation();
-  const createChat = useCreateChat();
   const router = useRouter();
+  const insets = useSafeAreaInsets();
+  const c = useColors();
+  const createChat = useCreateChat();
 
   async function handleNewChat() {
     const { id } = await createChat.mutateAsync();
@@ -15,33 +21,33 @@ export default function HomeScreen() {
 
   return (
     <View className="flex-1 bg-background">
-      {/* Mobile top bar */}
-      <View className="border-b border-border px-4 py-2.5 flex-row items-center justify-between">
-        <TouchableOpacity
-          className="w-9 h-9 bg-muted rounded-lg items-center justify-center"
-          onPress={() => navigation.dispatch(DrawerActions.openDrawer())}
-        >
-          <Text className="text-foreground text-lg">☰</Text>
-        </TouchableOpacity>
-        <View className="w-7 h-7 rounded-lg bg-primary items-center justify-center">
-          <Text className="text-primary-foreground text-xs font-semibold">u</Text>
+      <View style={{ paddingTop: insets.top }} className="bg-background border-b border-border-soft">
+        <View className="px-3 pr-4 h-14 flex-row items-center">
+          <TouchableOpacity
+            className="h-9 w-9 items-center justify-center rounded-md"
+            onPress={() => navigation.dispatch(DrawerActions.openDrawer())}
+            activeOpacity={0.6}
+            accessibilityLabel="Open menu"
+          >
+            <Icon name="menu" size={21} color={c.fgSoft} />
+          </TouchableOpacity>
+          <View className="flex-1 flex-row items-center justify-center gap-2">
+            <View className="w-6 h-6 rounded-md bg-primary items-center justify-center">
+              <Text className="text-primary-foreground text-[11px] font-bold">u</Text>
+            </View>
+            <Text className="text-foreground text-[15px] font-semibold tracking-tight">unnamed</Text>
+          </View>
+          <View className="w-9" />
         </View>
-        <View className="w-9" />
       </View>
 
-      <View className="flex-1 items-center justify-center gap-4 px-8">
-        <Text className="text-2xl font-bold text-foreground">unnamed</Text>
-        <Text className="text-muted-foreground text-center text-sm">
-          Start a new conversation or open an existing one from the menu.
-        </Text>
-        <TouchableOpacity
-          className="bg-primary rounded-xl px-6 py-3 mt-2"
-          onPress={handleNewChat}
-          disabled={createChat.isPending}
-        >
-          <Text className="text-primary-foreground font-medium">New chat</Text>
-        </TouchableOpacity>
-      </View>
+      <EmptyState
+        icon="message-square"
+        title="Start a conversation"
+        description="Plan work, inspect a project, or make a change — your agent is ready."
+        actionLabel={createChat.isPending ? 'Starting…' : 'New chat'}
+        onAction={handleNewChat}
+      />
     </View>
   );
 }

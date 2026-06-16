@@ -16,12 +16,16 @@ export interface Attachment {
 }
 
 export interface Execution {
-  id: string
+  executionId: string
   tool: string
+  projectName?: string
   status: 'pending' | 'running' | 'done' | 'error' | 'awaiting_approval' | 'cancelled'
-  input?: unknown
-  output?: string
-  error?: string
+  outputLog?: string
+  result?: string | null
+  createdAt: number
+  needsApproval?: boolean
+  approvalId?: string | null
+  action?: string | null
 }
 
 export interface Message {

@@ -1,7 +1,9 @@
 import { useState } from 'react';
 import { View, Text, TextInput, TouchableOpacity, ScrollView, Alert } from 'react-native';
+import Icon from './icon';
 import * as ImagePicker from 'expo-image-picker';
 import * as DocumentPicker from 'expo-document-picker';
+import { useColors } from '../lib/colors';
 
 export interface AttachmentItem {
   uri: string;
@@ -18,6 +20,7 @@ const MAX_ATTACHMENTS = 8;
 const MAX_BYTES = 10 * 1024 * 1024;
 
 export default function Composer({ onSend, disabled }: Props) {
+  const c = useColors();
   const [text, setText] = useState('');
   const [attachments, setAttachments] = useState<AttachmentItem[]>([]);
   const [sending, setSending] = useState(false);
@@ -69,46 +72,49 @@ export default function Composer({ onSend, disabled }: Props) {
   const canSend = (text.trim().length > 0 || attachments.length > 0) && !disabled && !sending;
 
   return (
-    <View className="border-t border-border px-3 pt-2 pb-4 gap-2">
+    <View className="border-t border-border-soft bg-background px-3 pt-2 pb-4 gap-2">
       {attachments.length > 0 && (
-        <ScrollView horizontal showsHorizontalScrollIndicator={false} className="gap-2">
+        <ScrollView horizontal showsHorizontalScrollIndicator={false}>
           {attachments.map((att, i) => (
             <TouchableOpacity
               key={`${att.uri}-${att.name}`}
-              className="bg-muted rounded-lg px-3 py-1.5 flex-row items-center gap-1.5 mr-2"
+              className="flex-row items-center gap-1.5 rounded-md border border-border-soft bg-card px-2.5 py-1.5 mr-2"
               onPress={() => removeAttachment(i)}
+              activeOpacity={0.7}
             >
+              <Icon name="paperclip" size={12} color={c.faintFg} />
               <Text className="text-xs text-muted-foreground" numberOfLines={1}>
-                📎 {att.name.length > 20 ? att.name.slice(0, 17) + '…' : att.name}
+                {att.name.length > 20 ? att.name.slice(0, 17) + '…' : att.name}
               </Text>
-              <Text className="text-xs text-muted-foreground">×</Text>
+              <Icon name="x" size={12} color={c.faintFg} />
             </TouchableOpacity>
           ))}
         </ScrollView>
       )}
 
-      <View className="flex-row items-end gap-2">
-        <TouchableOpacity className="mb-1" onPress={pickImage} disabled={disabled}>
-          <Text className="text-muted-foreground text-xl">🖼</Text>
+      <View className="flex-row items-end gap-1">
+        <TouchableOpacity className="h-9 w-9 items-center justify-center" onPress={pickImage} disabled={disabled} activeOpacity={0.6}>
+          <Icon name="image" size={20} color={c.faintFg} />
         </TouchableOpacity>
-        <TouchableOpacity className="mb-1" onPress={pickDocument} disabled={disabled}>
-          <Text className="text-muted-foreground text-xl">📎</Text>
+        <TouchableOpacity className="h-9 w-9 items-center justify-center" onPress={pickDocument} disabled={disabled} activeOpacity={0.6}>
+          <Icon name="paperclip" size={20} color={c.faintFg} />
         </TouchableOpacity>
         <TextInput
-          className="flex-1 bg-muted rounded-2xl px-4 py-2.5 text-foreground text-sm max-h-32"
+          className="flex-1 bg-card border border-border-soft rounded-2xl px-4 py-2.5 text-foreground text-[15px] max-h-32"
           value={text}
           onChangeText={setText}
           placeholder="Message…"
-          placeholderTextColor="#666"
+          placeholderTextColor={c.faintFg}
           multiline
           editable={!disabled && !sending}
         />
         <TouchableOpacity
-          className={`w-9 h-9 rounded-full items-center justify-center mb-0.5 ${canSend ? 'bg-primary' : 'bg-muted'}`}
+          className={`w-9 h-9 rounded-full items-center justify-center ${canSend ? 'bg-primary' : 'bg-muted'}`}
           onPress={handleSend}
           disabled={!canSend}
+          activeOpacity={0.85}
         >
-          <Text className={`text-base ${canSend ? 'text-primary-foreground' : 'text-muted-foreground'}`}>↑</Text>
+          <Icon name="arrow-up" size={18} color={canSend ? c.primaryForeground : c.faintFg} />
         </TouchableOpacity>
       </View>
     </View>

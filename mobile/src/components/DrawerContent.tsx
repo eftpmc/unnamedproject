@@ -1,8 +1,11 @@
 import { View, Text, TouchableOpacity } from 'react-native';
 import { useRouter, usePathname } from 'expo-router';
 import { DrawerContentScrollView } from '@react-navigation/drawer';
+import Icon, { type IconName } from './icon';
 import { useChats, useCreateChat } from '../hooks/useChats';
 import { useAppStore } from '../lib/store';
+import { useColors } from '../lib/colors';
+import { timeAgo } from '../lib/format';
 import type { Chat } from '../../types';
 
 interface Props {
@@ -10,16 +13,18 @@ interface Props {
   [key: string]: any;
 }
 
-const NAV_ITEMS = [
-  { label: 'Activity', href: '/(drawer)/activity', showBadge: true },
-  { label: 'Chats', href: '/(drawer)/chats' },
-  { label: 'Projects', href: '/(drawer)/projects' },
-  { label: 'Pipelines', href: '/(drawer)/pipelines' },
+
+const NAV_ITEMS: { label: string; href: string; icon: IconName; showBadge?: boolean }[] = [
+  { label: 'Activity', href: '/(drawer)/activity', icon: 'activity', showBadge: true },
+  { label: 'Chats', href: '/(drawer)/chats', icon: 'message-square' },
+  { label: 'Projects', href: '/(drawer)/projects', icon: 'grid' },
+  { label: 'Pipelines', href: '/(drawer)/pipelines', icon: 'git-merge' },
 ];
 
 export default function DrawerContent(props: Props) {
   const router = useRouter();
   const pathname = usePathname();
+  const c = useColors();
   const { data: chats = [] } = useChats();
   const createChat = useCreateChat();
   const { pendingApprovalCount, signOut } = useAppStore();
@@ -38,41 +43,49 @@ export default function DrawerContent(props: Props) {
   const recentChats = chats.slice(0, 5);
 
   return (
-    <DrawerContentScrollView {...props} contentContainerStyle={{ flex: 1 }}>
-      <View className="flex-1 px-3 py-4 gap-4">
-        {/* Header */}
-        <View className="flex-row items-center gap-2 px-2">
+    <DrawerContentScrollView {...props} contentContainerStyle={{ flex: 1 }} className="bg-background">
+      <View className="flex-1 px-3 py-3 gap-4">
+        {/* Brand */}
+        <View className="flex-row items-center gap-2 px-1">
           <View className="w-7 h-7 rounded-lg bg-primary items-center justify-center">
             <Text className="text-primary-foreground text-xs font-bold">u</Text>
           </View>
-          <Text className="text-foreground font-semibold">unnamed</Text>
+          <Text className="text-foreground text-sm font-semibold">unnamed</Text>
         </View>
 
-        {/* New Chat */}
+        {/* New chat */}
         <TouchableOpacity
-          className="bg-primary rounded-xl py-2.5 items-center"
+          className="flex-row items-center justify-center gap-1.5 bg-primary rounded-xl py-2.5"
           onPress={handleNewChat}
           disabled={createChat.isPending}
+          activeOpacity={0.85}
         >
-          <Text className="text-primary-foreground font-medium">+ New chat</Text>
+          <Icon name="plus" size={15} color={c.primaryForeground} />
+          <Text className="text-primary-foreground text-sm font-medium">New chat</Text>
         </TouchableOpacity>
 
         {/* Nav */}
-        <View className="gap-1">
+        <View className="gap-0.5">
           {NAV_ITEMS.map(item => {
             const active = pathname === item.href || pathname.startsWith(item.href + '/');
             return (
               <TouchableOpacity
                 key={item.href}
-                className={`flex-row items-center justify-between rounded-lg px-3 py-2.5 ${active ? 'bg-muted' : ''}`}
+                className={`flex-row items-center gap-2.5 rounded-lg px-2.5 h-10 ${active ? 'bg-muted' : ''}`}
                 onPress={() => go(item.href)}
+                activeOpacity={0.7}
               >
-                <Text className={`text-sm font-medium ${active ? 'text-foreground' : 'text-muted-foreground'}`}>
+                <Icon
+                  name={item.icon}
+                  size={16}
+                  color={active ? c.foreground : c.mutedForeground}
+                />
+                <Text className={`flex-1 text-sm font-medium ${active ? 'text-foreground' : 'text-muted-foreground'}`}>
                   {item.label}
                 </Text>
                 {item.showBadge && pendingApprovalCount > 0 && (
-                  <View className="bg-yellow-500 rounded-full min-w-[18px] h-[18px] items-center justify-center px-1">
-                    <Text className="text-white text-[10px] font-bold">{pendingApprovalCount}</Text>
+                  <View className="h-4 min-w-4 items-center justify-center rounded-full px-1" style={{ backgroundColor: c.warning }}>
+                    <Text className="text-[10px] font-bold" style={{ color: '#1f1306' }}>{pendingApprovalCount}</Text>
                   </View>
                 )}
               </TouchableOpacity>
@@ -80,10 +93,10 @@ export default function DrawerContent(props: Props) {
           })}
         </View>
 
-        {/* Recent chats */}
+        {/* Recent */}
         {recentChats.length > 0 && (
-          <View className="gap-1">
-            <Text className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground px-2">Recent</Text>
+          <View className="gap-0.5 flex-1 min-h-0">
+            <Text className="text-[11px] font-semibold uppercase tracking-wider text-faint-fg px-2.5 pb-1">Recent</Text>
             {recentChats.map((chat: Chat) => {
               const active = pathname === `/(drawer)/c/${chat.id}`;
               return (
@@ -91,10 +104,12 @@ export default function DrawerContent(props: Props) {
                   key={chat.id}
                   className={`rounded-lg px-2.5 py-2 ${active ? 'bg-muted' : ''}`}
                   onPress={() => go(`/(drawer)/c/${chat.id}`)}
+                  activeOpacity={0.7}
                 >
-                  <Text className="text-xs font-medium text-foreground truncate" numberOfLines={1}>
+                  <Text className="text-xs font-medium text-foreground" numberOfLines={1}>
                     {chat.title ?? 'Untitled chat'}
                   </Text>
+                  <Text className="text-[11px] text-faint-fg mt-0.5">{timeAgo(chat.updated_at)}</Text>
                 </TouchableOpacity>
               );
             })}
@@ -102,18 +117,22 @@ export default function DrawerContent(props: Props) {
         )}
 
         {/* Footer */}
-        <View className="mt-auto border-t border-border pt-3 gap-1">
+        <View className="mt-auto border-t border-border-soft pt-2 gap-0.5">
           <TouchableOpacity
-            className="flex-row items-center gap-2 px-2 py-2.5"
+            className="flex-row items-center gap-2.5 px-2.5 h-10"
             onPress={() => go('/(drawer)/settings')}
+            activeOpacity={0.7}
           >
-            <Text className="text-sm text-muted-foreground">Settings</Text>
+            <Icon name="settings" size={16} color={c.mutedForeground} />
+            <Text className="text-sm font-medium text-muted-foreground">Settings</Text>
           </TouchableOpacity>
           <TouchableOpacity
-            className="flex-row items-center gap-2 px-2 py-2.5"
+            className="flex-row items-center gap-2.5 px-2.5 h-10"
             onPress={() => signOut()}
+            activeOpacity={0.7}
           >
-            <Text className="text-sm text-muted-foreground">Sign out</Text>
+            <Icon name="log-out" size={16} color={c.mutedForeground} />
+            <Text className="text-sm font-medium text-muted-foreground">Sign out</Text>
           </TouchableOpacity>
         </View>
       </View>

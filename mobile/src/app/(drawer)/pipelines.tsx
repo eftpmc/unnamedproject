@@ -1,43 +1,43 @@
-import { View, Text, FlatList, TouchableOpacity, ActivityIndicator } from 'react-native';
-import { useNavigation } from 'expo-router';
-import { DrawerActions } from '@react-navigation/native';
+import { View, Text, FlatList, ActivityIndicator } from 'react-native';
+import Icon from '../../components/icon';
 import { usePipelines } from '../../hooks/usePipelines';
+import ScreenHeader from '../../components/ScreenHeader';
+import Surface from '../../components/Surface';
+import EmptyState from '../../components/EmptyState';
+import { useColors } from '../../lib/colors';
 import type { Pipeline } from '../../../types';
 
 export default function PipelinesScreen() {
-  const navigation = useNavigation();
+  const c = useColors();
   const { data: pipelines = [], isLoading } = usePipelines();
 
   return (
     <View className="flex-1 bg-background">
-      <View className="border-b border-border px-4 py-2.5 flex-row items-center gap-3">
-        <TouchableOpacity
-          className="w-9 h-9 bg-muted rounded-lg items-center justify-center"
-          onPress={() => navigation.dispatch(DrawerActions.openDrawer())}
-        >
-          <Text className="text-foreground">☰</Text>
-        </TouchableOpacity>
-        <Text className="text-foreground font-bold text-lg flex-1">Pipelines</Text>
-      </View>
+      <ScreenHeader title="Pipelines" />
 
       {isLoading ? (
-        <ActivityIndicator className="mt-8" />
+        <ActivityIndicator className="mt-8" color={c.primary} />
       ) : (
         <FlatList
           data={pipelines}
           keyExtractor={p => p.id}
           contentContainerStyle={{ padding: 16, gap: 10 }}
           renderItem={({ item }: { item: Pipeline }) => (
-            <View className="bg-muted rounded-xl p-4 gap-1">
-              <Text className="text-foreground font-semibold">{item.name}</Text>
-              {item.description && (
-                <Text className="text-muted-foreground text-sm" numberOfLines={2}>{item.description}</Text>
-              )}
-            </View>
+            <Surface className="flex-row items-center gap-3 p-4">
+              <View className="h-9 w-9 items-center justify-center rounded-md bg-muted">
+                <Icon name="git-merge" size={16} color={c.mutedForeground} />
+              </View>
+              <View className="flex-1">
+                <Text className="text-sm font-medium text-foreground" numberOfLines={1}>{item.name}</Text>
+                {item.description ? (
+                  <Text className="text-xs text-muted-foreground mt-0.5" numberOfLines={2}>{item.description}</Text>
+                ) : null}
+              </View>
+            </Surface>
           )}
           ListEmptyComponent={
-            <View className="items-center mt-12">
-              <Text className="text-muted-foreground text-sm">No pipelines</Text>
+            <View className="mt-24">
+              <EmptyState icon="git-merge" title="No pipelines" description="Automated pipelines will appear here once configured." />
             </View>
           }
         />

@@ -1,47 +1,46 @@
-import { View, Text, FlatList, TouchableOpacity, ActivityIndicator } from 'react-native';
-import { useNavigation, useRouter } from 'expo-router';
-import { DrawerActions } from '@react-navigation/native';
+import { View, Text, FlatList, ActivityIndicator } from 'react-native';
+import { useRouter } from 'expo-router';
+import Icon from '../../../components/icon';
 import { useProjects } from '../../../hooks/useProjects';
+import ScreenHeader from '../../../components/ScreenHeader';
+import Surface from '../../../components/Surface';
+import EmptyState from '../../../components/EmptyState';
+import { useColors } from '../../../lib/colors';
 import type { Project } from '../../../../types';
 
 export default function ProjectsScreen() {
-  const navigation = useNavigation();
   const router = useRouter();
+  const c = useColors();
   const { data: projects = [], isLoading } = useProjects();
 
   return (
     <View className="flex-1 bg-background">
-      <View className="border-b border-border px-4 py-2.5 flex-row items-center gap-3">
-        <TouchableOpacity
-          className="w-9 h-9 bg-muted rounded-lg items-center justify-center"
-          onPress={() => navigation.dispatch(DrawerActions.openDrawer())}
-        >
-          <Text className="text-foreground">☰</Text>
-        </TouchableOpacity>
-        <Text className="text-foreground font-bold text-lg flex-1">Projects</Text>
-      </View>
+      <ScreenHeader title="Projects" />
 
       {isLoading ? (
-        <ActivityIndicator className="mt-8" />
+        <ActivityIndicator className="mt-8" color={c.primary} />
       ) : (
         <FlatList
           data={projects}
           keyExtractor={p => p.id}
           contentContainerStyle={{ padding: 16, gap: 10 }}
           renderItem={({ item }: { item: Project }) => (
-            <TouchableOpacity
-              className="bg-muted rounded-xl p-4 gap-1"
-              onPress={() => router.push(`/(drawer)/projects/${item.id}`)}
-            >
-              <Text className="text-foreground font-semibold">{item.name}</Text>
-              {item.description && (
-                <Text className="text-muted-foreground text-sm" numberOfLines={2}>{item.description}</Text>
-              )}
-            </TouchableOpacity>
+            <Surface className="flex-row items-center gap-3 p-4" onPress={() => router.push(`/(drawer)/projects/${item.id}`)}>
+              <View className="h-9 w-9 items-center justify-center rounded-md bg-muted">
+                <Icon name="grid" size={16} color={c.mutedForeground} />
+              </View>
+              <View className="flex-1">
+                <Text className="text-sm font-medium text-foreground" numberOfLines={1}>{item.name}</Text>
+                {item.description ? (
+                  <Text className="text-xs text-muted-foreground mt-0.5" numberOfLines={2}>{item.description}</Text>
+                ) : null}
+              </View>
+              <Icon name="chevron-right" size={16} color={c.faintFg} />
+            </Surface>
           )}
           ListEmptyComponent={
-            <View className="items-center mt-12">
-              <Text className="text-muted-foreground text-sm">No projects yet</Text>
+            <View className="mt-24">
+              <EmptyState icon="grid" title="No projects yet" description="Projects you create will show up here." />
             </View>
           }
         />

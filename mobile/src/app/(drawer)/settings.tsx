@@ -1,13 +1,16 @@
 import { useState, useEffect } from 'react';
 import { View, Text, TouchableOpacity, Alert } from 'react-native';
-import { useNavigation, useRouter } from 'expo-router';
-import { DrawerActions } from '@react-navigation/native';
+import { useRouter } from 'expo-router';
+import Icon from '../../components/icon';
 import { useAppStore } from '../../lib/store';
 import { getSavedHosts } from '../../lib/storage';
+import ScreenHeader from '../../components/ScreenHeader';
+import Surface from '../../components/Surface';
+import { useColors } from '../../lib/colors';
 
 export default function SettingsScreen() {
-  const navigation = useNavigation();
   const router = useRouter();
+  const c = useColors();
   const { serverUrl, signOut } = useAppStore();
   const [savedHosts, setSavedHosts] = useState<string[]>([]);
 
@@ -24,47 +27,40 @@ export default function SettingsScreen() {
 
   return (
     <View className="flex-1 bg-background">
-      <View className="border-b border-border px-4 py-2.5 flex-row items-center gap-3">
-        <TouchableOpacity
-          className="w-9 h-9 bg-muted rounded-lg items-center justify-center"
-          onPress={() => navigation.dispatch(DrawerActions.openDrawer())}
-        >
-          <Text className="text-foreground">☰</Text>
-        </TouchableOpacity>
-        <Text className="text-foreground font-bold text-lg">Settings</Text>
-      </View>
+      <ScreenHeader title="Settings" />
 
       <View className="p-4 gap-6">
         <View className="gap-2">
-          <Text className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Server</Text>
-          <View className="bg-muted rounded-xl p-4 flex-row items-center justify-between">
+          <Text className="text-[13px] font-semibold text-faint-fg px-1">SERVER</Text>
+          <Surface className="p-4 flex-row items-center gap-3">
+            <View className="h-9 w-9 items-center justify-center rounded-md bg-muted">
+              <Icon name="server" size={16} color={c.mutedForeground} />
+            </View>
             <Text className="text-foreground text-sm flex-1" numberOfLines={1}>{serverUrl}</Text>
-            <TouchableOpacity onPress={() => router.push('/connect')}>
+            <TouchableOpacity onPress={() => router.push('/connect')} activeOpacity={0.6}>
               <Text className="text-primary text-sm font-medium">Change</Text>
             </TouchableOpacity>
-          </View>
+          </Surface>
         </View>
 
         {savedHosts.length > 1 && (
           <View className="gap-2">
-            <Text className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Saved servers</Text>
+            <Text className="text-[13px] font-semibold text-faint-fg px-1">SAVED SERVERS</Text>
             {savedHosts.map(host => (
-              <TouchableOpacity
-                key={host}
-                className="bg-muted rounded-xl p-4"
-                onPress={() => router.push('/connect')}
-              >
-                <Text className="text-foreground text-sm">{host}</Text>
-              </TouchableOpacity>
+              <Surface key={host} className="p-4" onPress={() => router.push('/connect')}>
+                <Text className="text-foreground text-sm" numberOfLines={1}>{host}</Text>
+              </Surface>
             ))}
           </View>
         )}
 
         <TouchableOpacity
-          className="bg-red-500/10 border border-red-500/30 rounded-xl p-4 items-center"
+          className="flex-row items-center justify-center gap-2 rounded-lg border border-border-soft bg-card p-4"
           onPress={handleSignOut}
+          activeOpacity={0.7}
         >
-          <Text className="text-red-400 font-medium">Sign out</Text>
+          <Icon name="log-out" size={16} color={c.destructive} />
+          <Text className="font-medium text-destructive">Sign out</Text>
         </TouchableOpacity>
       </View>
     </View>

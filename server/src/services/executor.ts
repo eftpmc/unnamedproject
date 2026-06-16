@@ -1,4 +1,4 @@
-import { createSessionEvent, getDb, getExpoPushToken } from '../db/index.js';
+import { createSessionEvent, getDb, getExpoPushToken, setExpoPushToken } from '../db/index.js';
 import { newId } from '../lib/ids.js';
 import { broadcast } from './socket.js';
 import { waitForApproval } from '../lib/approval.js';
@@ -113,14 +113,16 @@ export async function requestApproval(
         to: pushToken,
         title: 'Action needed',
         body: `${action} is waiting for your approval`,
-        data: {
-          sessionId: executionContext?.sessionId ?? null,
-          executionId,
-          approvalId,
-        },
+        data: { sessionId: executionContext?.sessionId ?? null, executionId, approvalId },
         sound: 'default',
         priority: 'high',
       }),
+    }).then(async r => {
+      const json = await r.json() as { data?: Array<{ status: string; message?: string }> };
+      const ticket = json.data?.[0];
+      if (ticket?.status === 'error' && ticket.message === 'DeviceNotRegistered') {
+        setExpoPushToken(userId, null);
+      }
     }).catch(err => console.error('[push] Failed to send notification:', err));
   }
   const decision = await waitForApproval(approvalId);

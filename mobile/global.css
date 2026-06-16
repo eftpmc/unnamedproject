@@ -1,3 +1,62 @@
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
+
+/* Design tokens mirrored from the web app (web/src/index.css), converted
+   from oklch to hex/rgba for the React Native color engine. */
+:root {
+  --color-background: #f7fafc;
+  --color-card: #ffffff;
+  --color-muted: #f3f5f8;
+  --color-popover: #ffffff;
+  --color-foreground: #2c3137;
+  --color-fg-soft: #4b5058;
+  --color-muted-foreground: #727880;
+  --color-faint-fg: #979ca3;
+  --color-border: #e3e7ea;
+  --color-border-soft: #eef0f3;
+  --color-input: #e3e7ea;
+  --color-primary: #547dab;
+  --color-primary-foreground: #fafcfe;
+  --color-accent-tint: #e3f0ff;
+  --color-on-accent-soft: #3b6695;
+  --color-secondary: #f3f5f8;
+  --color-success: #459173;
+  --color-warning: #c69356;
+  --color-warning-foreground: #282017;
+  --color-destructive: #d73337;
+  /* Status pill tints (~12-18% over light surfaces) */
+  --color-tint-primary: #547dab26;
+  --color-tint-success: #45917326;
+  --color-tint-warning: #c693562e;
+  --color-tint-destructive: #d7333720;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --color-background: #111419;
+    --color-card: #1a1e24;
+    --color-muted: #16191f;
+    --color-popover: #1f232a;
+    --color-foreground: #e5e8ec;
+    --color-fg-soft: #c4c7cd;
+    --color-muted-foreground: #90969d;
+    --color-faint-fg: #6d7279;
+    --color-border: rgba(255, 255, 255, 0.08);
+    --color-border-soft: rgba(255, 255, 255, 0.045);
+    --color-input: rgba(255, 255, 255, 0.18);
+    --color-primary: #75a1dc;
+    --color-primary-foreground: #0c121a;
+    --color-accent-tint: #3b649b33;
+    --color-on-accent-soft: #91baf1;
+    --color-secondary: #16191f;
+    --color-success: #68bf9b;
+    --color-warning: #e1ac6e;
+    --color-warning-foreground: #1f1306;
+    --color-destructive: #f75d5c;
+    --color-tint-primary: #75a1dc2e;
+    --color-tint-success: #68bf9b2e;
+    --color-tint-warning: #e1ac6e2e;
+    --color-tint-destructive: #f75d5c2e;
+  }
+}

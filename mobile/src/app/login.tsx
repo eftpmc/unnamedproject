@@ -1,7 +1,9 @@
 import { useState } from 'react';
 import { View, Text, TextInput, TouchableOpacity, Alert, KeyboardAvoidingView, Platform } from 'react-native';
 import { useRouter } from 'expo-router';
+import Icon from '../components/icon';
 import { useAppStore } from '../lib/store';
+import { useColors } from '../lib/colors';
 
 export default function LoginScreen() {
   const [email, setEmail] = useState('');
@@ -9,6 +11,7 @@ export default function LoginScreen() {
   const [loading, setLoading] = useState(false);
   const { serverUrl, setToken } = useAppStore();
   const router = useRouter();
+  const c = useColors();
 
   async function handleLogin() {
     if (!email || !password) { Alert.alert('Enter email and password'); return; }
@@ -40,42 +43,52 @@ export default function LoginScreen() {
       behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
     >
       <View className="flex-1 px-6 justify-center gap-8">
-        <View className="gap-1">
-          <Text className="text-2xl font-bold text-foreground">Sign in</Text>
-          <Text className="text-muted-foreground text-sm">{serverUrl}</Text>
+        <View className="items-center gap-3">
+          <View className="w-14 h-14 rounded-2xl bg-primary items-center justify-center">
+            <Text className="text-primary-foreground text-xl font-bold">u</Text>
+          </View>
+          <View className="items-center gap-1">
+            <Text className="text-xl font-semibold tracking-tight text-foreground">Sign in</Text>
+            <Text className="text-muted-foreground text-sm" numberOfLines={1}>{serverUrl}</Text>
+          </View>
         </View>
+
         <View className="gap-3">
-          <TextInput
-            className="bg-muted rounded-xl px-4 py-3 text-foreground text-base"
-            value={email}
-            onChangeText={setEmail}
-            autoCapitalize="none"
-            keyboardType="email-address"
-            placeholder="Email"
-            placeholderTextColor="#666"
-          />
-          <TextInput
-            className="bg-muted rounded-xl px-4 py-3 text-foreground text-base"
-            value={password}
-            onChangeText={setPassword}
-            secureTextEntry
-            placeholder="Password"
-            placeholderTextColor="#666"
-            onSubmitEditing={handleLogin}
-          />
+          <View className="flex-row items-center gap-2 rounded-lg border border-border-soft bg-card px-3.5 h-12">
+            <Icon name="mail" size={16} color={c.faintFg} />
+            <TextInput
+              className="flex-1 text-foreground text-[15px] h-full"
+              value={email}
+              onChangeText={setEmail}
+              autoCapitalize="none"
+              keyboardType="email-address"
+              placeholder="Email"
+              placeholderTextColor={c.faintFg}
+            />
+          </View>
+          <View className="flex-row items-center gap-2 rounded-lg border border-border-soft bg-card px-3.5 h-12">
+            <Icon name="lock" size={16} color={c.faintFg} />
+            <TextInput
+              className="flex-1 text-foreground text-[15px] h-full"
+              value={password}
+              onChangeText={setPassword}
+              secureTextEntry
+              placeholder="Password"
+              placeholderTextColor={c.faintFg}
+              onSubmitEditing={handleLogin}
+            />
+          </View>
           <TouchableOpacity
-            className="bg-primary rounded-xl py-3 items-center"
+            className="bg-primary rounded-lg h-12 items-center justify-center"
             onPress={handleLogin}
             disabled={loading}
+            activeOpacity={0.85}
           >
-            <Text className="text-primary-foreground font-semibold">
+            <Text className="text-primary-foreground font-semibold text-[15px]">
               {loading ? 'Signing in…' : 'Sign in'}
             </Text>
           </TouchableOpacity>
-          <TouchableOpacity
-            className="py-3 items-center"
-            onPress={() => router.replace('/connect')}
-          >
+          <TouchableOpacity className="py-2 items-center" onPress={() => router.replace('/connect')} activeOpacity={0.6}>
             <Text className="text-muted-foreground text-sm">Change server</Text>
           </TouchableOpacity>
         </View>

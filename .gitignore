@@ -9,3 +9,6 @@ data/
 *.jpg
 *.jpeg
 .vite/
+
+# macOS
+.DS_Store

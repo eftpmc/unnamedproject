@@ -64,6 +64,8 @@ export default function Composer({ onSend, disabled }: Props) {
       await onSend(text.trim(), attachments);
       setText('');
       setAttachments([]);
+    } catch {
+      Alert.alert('Message not sent', 'Could not reach the server. Your message was kept — try again.');
     } finally {
       setSending(false);
     }

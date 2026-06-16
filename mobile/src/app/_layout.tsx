@@ -4,6 +4,7 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { useColorScheme } from 'nativewind';
+import { StatusBar } from 'expo-status-bar';
 import { useFonts } from 'expo-font';
 import {
   HankenGrotesk_400Regular,
@@ -84,13 +85,13 @@ function AuthGate() {
 
 function ThemeController() {
   const themePreference = useAppStore(s => s.themePreference);
-  const { setColorScheme } = useColorScheme();
+  const { colorScheme, setColorScheme } = useColorScheme();
 
   useEffect(() => {
     setColorScheme(themePreference);
   }, [setColorScheme, themePreference]);
 
-  return null;
+  return <StatusBar style={colorScheme === 'dark' ? 'light' : 'dark'} />;
 }
 
 export default function RootLayout() {

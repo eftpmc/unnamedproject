@@ -1,4 +1,4 @@
-import { View, Text, TouchableOpacity, ScrollView } from 'react-native';
+import { View, Text, TouchableOpacity, ScrollView, RefreshControl } from 'react-native';
 import { useRouter, usePathname } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import Icon, { type IconName } from './icon';
@@ -26,7 +26,7 @@ export default function DrawerContent(props: Props) {
   const pathname = usePathname();
   const insets = useSafeAreaInsets();
   const c = useColors();
-  const { data: chats = [] } = useChats();
+  const { data: chats = [], refetch, isFetching } = useChats();
   const createChat = useCreateChat();
   const { pendingApprovalCount, signOut } = useAppStore();
 
@@ -97,7 +97,11 @@ export default function DrawerContent(props: Props) {
         {recentChats.length > 0 && (
           <View className="flex-1 min-h-0">
             <Text className="text-xs font-semibold text-faint-fg px-3 pb-1.5">Recent</Text>
-            <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={{ gap: 2 }}>
+            <ScrollView
+              showsVerticalScrollIndicator={false}
+              contentContainerStyle={{ gap: 2 }}
+              refreshControl={<RefreshControl refreshing={isFetching} onRefresh={refetch} tintColor={c.mutedForeground} />}
+            >
               {recentChats.map((chat: Chat) => {
                 const active = pathname === `/(drawer)/c/${chat.id}`;
                 return (

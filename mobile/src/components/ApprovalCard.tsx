@@ -8,6 +8,33 @@ interface Props {
   approval: PendingApproval;
 }
 
+/** Renders an approval payload as readable key/value rows, falling back to
+ *  formatted JSON for primitives and arrays. */
+function PayloadView({ payload }: { payload: unknown }) {
+  if (payload && typeof payload === 'object' && !Array.isArray(payload)) {
+    const entries = Object.entries(payload as Record<string, unknown>);
+    return (
+      <View className="rounded-md bg-muted p-3 gap-2">
+        {entries.map(([key, value]) => (
+          <View key={key} className="flex-row gap-3">
+            <Text className="text-[11px] font-medium text-faint-fg w-24 shrink-0" numberOfLines={1}>{key}</Text>
+            <Text className="text-xs text-muted-foreground flex-1" numberOfLines={4}>
+              {typeof value === 'string' ? value : JSON.stringify(value)}
+            </Text>
+          </View>
+        ))}
+      </View>
+    );
+  }
+  return (
+    <View className="rounded-md bg-muted p-2.5">
+      <Text className="text-xs font-mono text-muted-foreground" numberOfLines={4}>
+        {typeof payload === 'string' ? payload : JSON.stringify(payload, null, 2)}
+      </Text>
+    </View>
+  );
+}
+
 export default function ApprovalCard({ approval }: Props) {
   const c = useColors();
   const approve = useApproveExecution();
@@ -27,13 +54,7 @@ export default function ApprovalCard({ approval }: Props) {
           </View>
         </View>
 
-        {approval.payload != null && (
-          <View className="rounded-md bg-muted p-2.5">
-            <Text className="text-xs font-mono text-muted-foreground" numberOfLines={4}>
-              {JSON.stringify(approval.payload as object, null, 2)}
-            </Text>
-          </View>
-        )}
+        {approval.payload != null && <PayloadView payload={approval.payload} />}
 
         <View className="flex-row gap-2">
           <TouchableOpacity

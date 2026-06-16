@@ -1,5 +1,5 @@
 import { useEffect, useRef, useCallback } from 'react';
-import { View, FlatList, ActivityIndicator, KeyboardAvoidingView, Platform } from 'react-native';
+import { View, FlatList, ActivityIndicator, KeyboardAvoidingView, Platform, RefreshControl } from 'react-native';
 import { useLocalSearchParams } from 'expo-router';
 import { useQueryClient } from '@tanstack/react-query';
 import { useMessages, useSendMessage } from '../../../hooks/useMessages';
@@ -20,7 +20,7 @@ export default function ChatScreen() {
   const c = useColors();
   const listRef = useRef<FlatList>(null);
 
-  const { data: messages = [], isLoading } = useMessages(chatId);
+  const { data: messages = [], isLoading, isFetching, refetch } = useMessages(chatId);
   const { data: status } = useChatStatus(chatId);
   const { data: chats = [] } = useChats();
   const sendMessage = useSendMessage(chatId);
@@ -88,6 +88,7 @@ export default function ChatScreen() {
           renderItem={renderItem}
           contentContainerStyle={messages.length === 0 ? { flexGrow: 1 } : { paddingVertical: 8 }}
           keyboardDismissMode="interactive"
+          refreshControl={<RefreshControl refreshing={isFetching && !isLoading} onRefresh={refetch} tintColor={c.mutedForeground} />}
           onContentSizeChange={() => listRef.current?.scrollToEnd({ animated: false })}
           ListEmptyComponent={
             <EmptyState

@@ -73,7 +73,7 @@ export default function ProjectSettings({ project }: { project: Project }) {
         disabled={del.isPending}
         activeOpacity={0.7}
       >
-        <Icon name="x" size={16} color={c.destructive} />
+        <Icon name="trash" size={16} color={c.destructive} />
         <Text className="font-medium text-destructive">Delete project</Text>
       </TouchableOpacity>
     </View>

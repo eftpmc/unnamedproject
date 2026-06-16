@@ -1,8 +1,9 @@
-import { useState } from 'react';
-import { View, Text, TextInput, TouchableOpacity, FlatList, ActivityIndicator, RefreshControl } from 'react-native';
+import { useState, useRef } from 'react';
+import { View, Text, TextInput, TouchableOpacity, FlatList, ActivityIndicator, RefreshControl, Alert } from 'react-native';
 import { useRouter } from 'expo-router';
+import ReanimatedSwipeable, { type SwipeableMethods } from 'react-native-gesture-handler/ReanimatedSwipeable';
 import Icon from '../../components/icon';
-import { useChats } from '../../hooks/useChats';
+import { useChats, useDeleteChat } from '../../hooks/useChats';
 import ScreenHeader from '../../components/ScreenHeader';
 import Surface from '../../components/Surface';
 import EmptyState from '../../components/EmptyState';
@@ -10,6 +11,50 @@ import ErrorState from '../../components/ErrorState';
 import { useColors } from '../../lib/colors';
 import { timeAgo } from '../../lib/format';
 import type { Chat } from '../../../types';
+
+function ChatRow({ chat, onOpen }: { chat: Chat; onOpen: () => void }) {
+  const c = useColors();
+  const del = useDeleteChat();
+  const swipeRef = useRef<SwipeableMethods>(null);
+
+  function confirmDelete() {
+    Alert.alert('Delete chat', 'Delete this conversation? This cannot be undone.', [
+      { text: 'Cancel', style: 'cancel', onPress: () => swipeRef.current?.close() },
+      { text: 'Delete', style: 'destructive', onPress: () => del.mutate(chat.id) },
+    ]);
+  }
+
+  return (
+    <ReanimatedSwipeable
+      ref={swipeRef}
+      friction={2}
+      rightThreshold={40}
+      overshootRight={false}
+      renderRightActions={() => (
+        <TouchableOpacity
+          className="bg-destructive items-center justify-center rounded-lg ml-2"
+          style={{ width: 76 }}
+          onPress={confirmDelete}
+          activeOpacity={0.85}
+          accessibilityLabel={`Delete chat: ${chat.title ?? 'Untitled chat'}`}
+        >
+          <Icon name="trash" size={18} color="#fff" />
+          <Text className="text-white text-xs font-medium mt-1">Delete</Text>
+        </TouchableOpacity>
+      )}
+    >
+      <Surface className="flex-row items-center gap-3 px-4 py-3.5" onPress={onOpen}>
+        <View className="flex-1">
+          <Text className="text-sm font-medium text-foreground" numberOfLines={1}>
+            {chat.title ?? 'Untitled chat'}
+          </Text>
+          <Text className="text-xs text-faint-fg mt-0.5">{timeAgo(chat.updated_at)}</Text>
+        </View>
+        <Icon name="chevron-right" size={16} color={c.faintFg} />
+      </Surface>
+    </ReanimatedSwipeable>
+  );
+}
 
 export default function ChatsScreen() {
   const router = useRouter();
@@ -54,15 +99,7 @@ export default function ChatsScreen() {
           refreshControl={<RefreshControl refreshing={isFetching && !isLoading} onRefresh={refetch} tintColor={c.mutedForeground} />}
           contentContainerStyle={{ padding: 16, paddingTop: 8, gap: 8 }}
           renderItem={({ item }: { item: Chat }) => (
-            <Surface className="flex-row items-center gap-3 px-4 py-3.5" onPress={() => router.push(`/(drawer)/c/${item.id}`)}>
-              <View className="flex-1">
-                <Text className="text-sm font-medium text-foreground" numberOfLines={1}>
-                  {item.title ?? 'Untitled chat'}
-                </Text>
-                <Text className="text-xs text-faint-fg mt-0.5">{timeAgo(item.updated_at)}</Text>
-              </View>
-              <Icon name="chevron-right" size={16} color={c.faintFg} />
-            </Surface>
+            <ChatRow chat={item} onOpen={() => router.push(`/(drawer)/c/${item.id}`)} />
           )}
           ListEmptyComponent={
             <View className="mt-24">

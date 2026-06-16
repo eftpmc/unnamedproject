@@ -38,6 +38,7 @@ import {
   Settings,
   Sun,
   Terminal,
+  Trash2,
   X,
   type LucideIcon,
 } from 'lucide-react-native';
@@ -83,6 +84,7 @@ const ICONS = {
   settings: Settings,
   sun: Sun,
   terminal: Terminal,
+  trash: Trash2,
   x: X,
 } satisfies Record<string, LucideIcon>;
 

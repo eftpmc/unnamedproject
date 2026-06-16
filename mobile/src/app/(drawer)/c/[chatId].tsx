@@ -1,5 +1,5 @@
 import { useEffect, useRef, useCallback } from 'react';
-import { View, FlatList, ActivityIndicator } from 'react-native';
+import { View, FlatList, ActivityIndicator, KeyboardAvoidingView, Platform } from 'react-native';
 import { useLocalSearchParams } from 'expo-router';
 import { useQueryClient } from '@tanstack/react-query';
 import { useMessages, useSendMessage } from '../../../hooks/useMessages';
@@ -65,7 +65,10 @@ export default function ChatScreen() {
   }
 
   return (
-    <View className="flex-1 bg-background">
+    <KeyboardAvoidingView
+      className="flex-1 bg-background"
+      behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+    >
       <ScreenHeader title="Chat" subtitle={status?.active ? 'Agent running…' : undefined} />
 
       {isLoading ? (
@@ -79,11 +82,12 @@ export default function ChatScreen() {
           keyExtractor={m => m.id}
           renderItem={renderItem}
           contentContainerStyle={{ paddingVertical: 8 }}
+          keyboardDismissMode="interactive"
           onContentSizeChange={() => listRef.current?.scrollToEnd({ animated: false })}
         />
       )}
 
       <Composer onSend={handleSend} disabled={status?.active} />
-    </View>
+    </KeyboardAvoidingView>
   );
 }

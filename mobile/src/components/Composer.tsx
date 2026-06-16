@@ -28,7 +28,7 @@ export default function Composer({ onSend, disabled }: Props) {
   async function pickImage() {
     if (attachments.length >= MAX_ATTACHMENTS) { Alert.alert('Max 8 attachments'); return; }
     const result = await ImagePicker.launchImageLibraryAsync({
-      mediaTypes: ImagePicker.MediaTypeOptions.Images,
+      mediaTypes: ['images'],
       allowsMultipleSelection: true,
       quality: 0.8,
     });
@@ -93,10 +93,10 @@ export default function Composer({ onSend, disabled }: Props) {
       )}
 
       <View className="flex-row items-end gap-1">
-        <TouchableOpacity className="h-9 w-9 items-center justify-center" onPress={pickImage} disabled={disabled} activeOpacity={0.6}>
+        <TouchableOpacity className="h-10 w-10 items-center justify-center" hitSlop={6} onPress={pickImage} disabled={disabled} activeOpacity={0.6}>
           <Icon name="image" size={20} color={c.faintFg} />
         </TouchableOpacity>
-        <TouchableOpacity className="h-9 w-9 items-center justify-center" onPress={pickDocument} disabled={disabled} activeOpacity={0.6}>
+        <TouchableOpacity className="h-10 w-10 items-center justify-center" hitSlop={6} onPress={pickDocument} disabled={disabled} activeOpacity={0.6}>
           <Icon name="paperclip" size={20} color={c.faintFg} />
         </TouchableOpacity>
         <TextInput
@@ -109,7 +109,8 @@ export default function Composer({ onSend, disabled }: Props) {
           editable={!disabled && !sending}
         />
         <TouchableOpacity
-          className={`w-9 h-9 rounded-full items-center justify-center ${canSend ? 'bg-primary' : 'bg-muted'}`}
+          className={`w-10 h-10 rounded-full items-center justify-center ${canSend ? 'bg-primary' : 'bg-muted'}`}
+          hitSlop={6}
           onPress={handleSend}
           disabled={!canSend}
           activeOpacity={0.85}

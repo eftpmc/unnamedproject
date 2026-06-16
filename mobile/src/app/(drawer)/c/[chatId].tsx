@@ -4,11 +4,13 @@ import { useLocalSearchParams } from 'expo-router';
 import { useQueryClient } from '@tanstack/react-query';
 import { useMessages, useSendMessage } from '../../../hooks/useMessages';
 import { useChatStatus } from '../../../hooks/useChatStatus';
+import { useChats } from '../../../hooks/useChats';
 import { subscribe } from '../../../lib/ws';
 import ChatBubble from '../../../components/ChatBubble';
 import ExecutionCard from '../../../components/ExecutionCard';
 import Composer from '../../../components/Composer';
 import ScreenHeader from '../../../components/ScreenHeader';
+import EmptyState from '../../../components/EmptyState';
 import { useColors } from '../../../lib/colors';
 import type { Message, WSEvent } from '../../../../types';
 
@@ -20,7 +22,10 @@ export default function ChatScreen() {
 
   const { data: messages = [], isLoading } = useMessages(chatId);
   const { data: status } = useChatStatus(chatId);
+  const { data: chats = [] } = useChats();
   const sendMessage = useSendMessage(chatId);
+
+  const title = chats.find(ch => ch.id === chatId)?.title?.trim() || 'New chat';
 
   useEffect(() => {
     const unsub = subscribe((event: WSEvent) => {
@@ -69,7 +74,7 @@ export default function ChatScreen() {
       className="flex-1 bg-background"
       behavior={Platform.OS === 'ios' ? 'padding' : undefined}
     >
-      <ScreenHeader title="Chat" subtitle={status?.active ? 'Agent running…' : undefined} />
+      <ScreenHeader title={title} subtitle={status?.active ? 'Agent running…' : undefined} />
 
       {isLoading ? (
         <View className="flex-1 items-center justify-center">
@@ -81,9 +86,16 @@ export default function ChatScreen() {
           data={messages}
           keyExtractor={m => m.id}
           renderItem={renderItem}
-          contentContainerStyle={{ paddingVertical: 8 }}
+          contentContainerStyle={messages.length === 0 ? { flexGrow: 1 } : { paddingVertical: 8 }}
           keyboardDismissMode="interactive"
           onContentSizeChange={() => listRef.current?.scrollToEnd({ animated: false })}
+          ListEmptyComponent={
+            <EmptyState
+              icon="message-square"
+              title="No messages yet"
+              description="Send a message to start the conversation."
+            />
+          }
         />
       )}
 

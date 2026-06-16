@@ -7,13 +7,14 @@ import { useAppStore } from '../../lib/store';
 import ApprovalCard from '../../components/ApprovalCard';
 import ScreenHeader from '../../components/ScreenHeader';
 import EmptyState from '../../components/EmptyState';
+import ErrorState from '../../components/ErrorState';
 import { useColors } from '../../lib/colors';
 import type { PendingApproval, WSEvent } from '../../../types';
 
 export default function ActivityScreen() {
   const qc = useQueryClient();
   const c = useColors();
-  const { data: approvals = [], isLoading, isFetching, refetch } = useActivity();
+  const { data: approvals = [], isLoading, isFetching, isError, refetch } = useActivity();
   const { setPendingApprovalCount } = useAppStore();
 
   useEffect(() => {
@@ -35,6 +36,8 @@ export default function ActivityScreen() {
 
       {isLoading ? (
         <ActivityIndicator className="mt-8" color={c.primary} />
+      ) : isError ? (
+        <ErrorState onRetry={refetch} />
       ) : (
         <FlatList
           data={approvals}

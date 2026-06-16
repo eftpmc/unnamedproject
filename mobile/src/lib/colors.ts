@@ -1,4 +1,4 @@
-import { useColorScheme } from 'react-native';
+import { useColorScheme } from 'nativewind';
 
 /**
  * Resolved theme colors for use where a hex value is required (e.g. icon
@@ -22,6 +22,7 @@ const palette = {
     success: '#459173',
     warning: '#c69356',
     destructive: '#d73337',
+    warningForeground: '#282017',
   },
   dark: {
     background: '#111419',
@@ -39,12 +40,13 @@ const palette = {
     success: '#68bf9b',
     warning: '#e1ac6e',
     destructive: '#f75d5c',
+    warningForeground: '#1f1306',
   },
 };
 
 export type ThemeColors = typeof palette.light;
 
 export function useColors(): ThemeColors {
-  const scheme = useColorScheme();
-  return scheme === 'dark' ? palette.dark : palette.light;
+  const { colorScheme } = useColorScheme();
+  return colorScheme === 'dark' ? palette.dark : palette.light;
 }

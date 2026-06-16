@@ -1,11 +1,12 @@
 import { useState } from 'react';
-import { View, Text, TextInput, TouchableOpacity, FlatList, ActivityIndicator } from 'react-native';
+import { View, Text, TextInput, TouchableOpacity, FlatList, ActivityIndicator, RefreshControl } from 'react-native';
 import { useRouter } from 'expo-router';
 import Icon from '../../components/icon';
 import { useChats } from '../../hooks/useChats';
 import ScreenHeader from '../../components/ScreenHeader';
 import Surface from '../../components/Surface';
 import EmptyState from '../../components/EmptyState';
+import ErrorState from '../../components/ErrorState';
 import { useColors } from '../../lib/colors';
 import { timeAgo } from '../../lib/format';
 import type { Chat } from '../../../types';
@@ -14,7 +15,7 @@ export default function ChatsScreen() {
   const router = useRouter();
   const c = useColors();
   const [query, setQuery] = useState('');
-  const { data: chats = [], isLoading } = useChats();
+  const { data: chats = [], isLoading, isError, refetch, isFetching } = useChats();
 
   const filtered = query.trim()
     ? chats.filter(ch => (ch.title ?? '').toLowerCase().includes(query.toLowerCase()))
@@ -44,10 +45,13 @@ export default function ChatsScreen() {
 
       {isLoading ? (
         <ActivityIndicator className="mt-8" color={c.primary} />
+      ) : isError ? (
+        <ErrorState onRetry={refetch} />
       ) : (
         <FlatList
           data={filtered}
           keyExtractor={ch => ch.id}
+          refreshControl={<RefreshControl refreshing={isFetching && !isLoading} onRefresh={refetch} tintColor={c.mutedForeground} />}
           contentContainerStyle={{ padding: 16, paddingTop: 8, gap: 8 }}
           renderItem={({ item }: { item: Chat }) => (
             <Surface className="flex-row items-center gap-3 px-4 py-3.5" onPress={() => router.push(`/(drawer)/c/${item.id}`)}>

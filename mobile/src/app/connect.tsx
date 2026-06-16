@@ -56,7 +56,8 @@ export default function ConnectScreen() {
       if (!parsed.url || !parsed.token) throw new Error('Invalid QR');
       // Sync both into store atomically before navigation to avoid intermediate state
       // triggering the auth-gate routing effect with mismatched serverUrl/token
-      useAppStore.getState().hydrate(parsed.url, parsed.token);
+      const { themePreference } = useAppStore.getState();
+      useAppStore.getState().hydrate(parsed.url, parsed.token, themePreference);
       const { setServerUrl: persistUrl, setToken: persistToken, addSavedHost } = await import('../lib/storage');
       await Promise.all([persistUrl(parsed.url), persistToken(parsed.token), addSavedHost(parsed.url)]);
       router.replace('/(drawer)');
@@ -142,7 +143,7 @@ export default function ConnectScreen() {
 
       {savedHosts.length > 0 && (
         <View className="gap-2">
-          <Text className="text-[13px] font-semibold text-faint-fg px-1">RECENT</Text>
+          <Text className="text-[13px] font-semibold text-faint-fg px-1">Recent</Text>
           <FlatList
             data={savedHosts}
             keyExtractor={item => item}

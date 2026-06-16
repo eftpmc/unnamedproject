@@ -23,14 +23,14 @@ export default function ScreenHeader({ title, subtitle, right }: Props) {
 
   return (
     <View style={{ paddingTop: insets.top }} className="bg-background border-b border-border-soft">
-      <View className="px-3 pr-4 h-14 flex-row items-center gap-1">
+      <View className="pl-1 pr-4 h-14 flex-row items-center gap-1">
         <TouchableOpacity
-          className="h-9 w-9 items-center justify-center rounded-md"
+          className="h-11 w-11 items-center justify-center rounded-lg"
           onPress={() => navigation.dispatch(DrawerActions.openDrawer())}
           accessibilityLabel="Open menu"
           activeOpacity={0.6}
         >
-          <Icon name="menu" size={21} color={c.fgSoft} />
+          <Icon name="menu" size={22} color={c.fgSoft} />
         </TouchableOpacity>
         <View className="flex-1">
           <Text className="text-[17px] font-semibold tracking-tight text-foreground" numberOfLines={1}>

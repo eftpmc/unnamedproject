@@ -1,5 +1,12 @@
 import { create } from 'zustand';
-import { setToken as persistToken, clearToken, setServerUrl as persistUrl, addSavedHost } from './storage';
+import {
+  setToken as persistToken,
+  clearToken,
+  setServerUrl as persistUrl,
+  addSavedHost,
+  setThemePreference as persistThemePreference,
+  type ThemePreference,
+} from './storage';
 
 export type WsStatus = 'connected' | 'connecting' | 'disconnected';
 
@@ -8,10 +15,12 @@ interface AppState {
   token: string | null;
   wsStatus: WsStatus;
   pendingApprovalCount: number;
+  themePreference: ThemePreference;
   setServerUrl: (url: string) => Promise<void>;
   setToken: (token: string) => Promise<void>;
+  setThemePreference: (preference: ThemePreference) => Promise<void>;
   signOut: () => Promise<void>;
-  hydrate: (serverUrl: string | null, token: string | null) => void;
+  hydrate: (serverUrl: string | null, token: string | null, themePreference: ThemePreference) => void;
   setWsStatus: (status: WsStatus) => void;
   setPendingApprovalCount: (n: number) => void;
   incrementPendingApprovals: () => void;
@@ -23,6 +32,7 @@ export const useAppStore = create<AppState>((set, get) => ({
   token: null,
   wsStatus: 'disconnected',
   pendingApprovalCount: 0,
+  themePreference: 'system',
 
   setServerUrl: async (url) => {
     await persistUrl(url);
@@ -35,12 +45,17 @@ export const useAppStore = create<AppState>((set, get) => ({
     set({ token });
   },
 
+  setThemePreference: async (themePreference) => {
+    await persistThemePreference(themePreference);
+    set({ themePreference });
+  },
+
   signOut: async () => {
     await clearToken();
     set({ token: null, pendingApprovalCount: 0, wsStatus: 'disconnected' });
   },
 
-  hydrate: (serverUrl, token) => set({ serverUrl, token }),
+  hydrate: (serverUrl, token, themePreference) => set({ serverUrl, token, themePreference }),
 
   setWsStatus: (wsStatus) => set({ wsStatus }),
 

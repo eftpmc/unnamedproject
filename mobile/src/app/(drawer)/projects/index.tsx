@@ -1,17 +1,18 @@
-import { View, Text, FlatList, ActivityIndicator } from 'react-native';
+import { View, Text, FlatList, ActivityIndicator, RefreshControl } from 'react-native';
 import { useRouter } from 'expo-router';
 import Icon from '../../../components/icon';
 import { useProjects } from '../../../hooks/useProjects';
 import ScreenHeader from '../../../components/ScreenHeader';
 import Surface from '../../../components/Surface';
 import EmptyState from '../../../components/EmptyState';
+import ErrorState from '../../../components/ErrorState';
 import { useColors } from '../../../lib/colors';
 import type { Project } from '../../../../types';
 
 export default function ProjectsScreen() {
   const router = useRouter();
   const c = useColors();
-  const { data: projects = [], isLoading } = useProjects();
+  const { data: projects = [], isLoading, isError, refetch, isFetching } = useProjects();
 
   return (
     <View className="flex-1 bg-background">
@@ -19,10 +20,13 @@ export default function ProjectsScreen() {
 
       {isLoading ? (
         <ActivityIndicator className="mt-8" color={c.primary} />
+      ) : isError ? (
+        <ErrorState onRetry={refetch} />
       ) : (
         <FlatList
           data={projects}
           keyExtractor={p => p.id}
+          refreshControl={<RefreshControl refreshing={isFetching && !isLoading} onRefresh={refetch} tintColor={c.mutedForeground} />}
           contentContainerStyle={{ padding: 16, gap: 10 }}
           renderItem={({ item }: { item: Project }) => (
             <Surface className="flex-row items-center gap-3 p-4" onPress={() => router.push(`/(drawer)/projects/${item.id}`)}>

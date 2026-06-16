@@ -22,14 +22,14 @@ export default function HomeScreen() {
   return (
     <View className="flex-1 bg-background">
       <View style={{ paddingTop: insets.top }} className="bg-background border-b border-border-soft">
-        <View className="px-3 pr-4 h-14 flex-row items-center">
+        <View className="pl-1 pr-4 h-14 flex-row items-center">
           <TouchableOpacity
-            className="h-9 w-9 items-center justify-center rounded-md"
+            className="h-11 w-11 items-center justify-center rounded-lg"
             onPress={() => navigation.dispatch(DrawerActions.openDrawer())}
             activeOpacity={0.6}
             accessibilityLabel="Open menu"
           >
-            <Icon name="menu" size={21} color={c.fgSoft} />
+            <Icon name="menu" size={22} color={c.fgSoft} />
           </TouchableOpacity>
           <View className="flex-1 flex-row items-center justify-center gap-2">
             <View className="w-6 h-6 rounded-md bg-primary items-center justify-center">
@@ -37,7 +37,7 @@ export default function HomeScreen() {
             </View>
             <Text className="text-foreground text-[15px] font-semibold tracking-tight">unnamed</Text>
           </View>
-          <View className="w-9" />
+          <View className="w-11" />
         </View>
       </View>
 

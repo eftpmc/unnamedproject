@@ -1,15 +1,16 @@
-import { View, Text, FlatList, ActivityIndicator } from 'react-native';
+import { View, Text, FlatList, ActivityIndicator, RefreshControl } from 'react-native';
 import Icon from '../../components/icon';
 import { usePipelines } from '../../hooks/usePipelines';
 import ScreenHeader from '../../components/ScreenHeader';
 import Surface from '../../components/Surface';
 import EmptyState from '../../components/EmptyState';
+import ErrorState from '../../components/ErrorState';
 import { useColors } from '../../lib/colors';
 import type { Pipeline } from '../../../types';
 
 export default function PipelinesScreen() {
   const c = useColors();
-  const { data: pipelines = [], isLoading } = usePipelines();
+  const { data: pipelines = [], isLoading, isError, refetch, isFetching } = usePipelines();
 
   return (
     <View className="flex-1 bg-background">
@@ -17,10 +18,13 @@ export default function PipelinesScreen() {
 
       {isLoading ? (
         <ActivityIndicator className="mt-8" color={c.primary} />
+      ) : isError ? (
+        <ErrorState onRetry={refetch} />
       ) : (
         <FlatList
           data={pipelines}
           keyExtractor={p => p.id}
+          refreshControl={<RefreshControl refreshing={isFetching && !isLoading} onRefresh={refetch} tintColor={c.mutedForeground} />}
           contentContainerStyle={{ padding: 16, gap: 10 }}
           renderItem={({ item }: { item: Pipeline }) => (
             <Surface className="flex-row items-center gap-3 p-4">

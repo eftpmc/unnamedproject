@@ -22,7 +22,7 @@ export default function ApprovalCard({ approval }: Props) {
             <Icon name="bell" size={14} color={c.warning} />
           </View>
           <View className="flex-1">
-            <Text className="text-[11px] font-semibold uppercase tracking-wider text-warning">Needs approval</Text>
+            <Text className="text-[11px] font-semibold text-warning">Needs approval</Text>
             <Text className="text-sm font-medium text-foreground" numberOfLines={1}>{approval.action}</Text>
           </View>
         </View>

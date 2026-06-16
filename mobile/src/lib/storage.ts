@@ -4,7 +4,10 @@ const KEYS = {
   TOKEN: 'auth_token',
   SERVER_URL: 'server_url',
   SAVED_HOSTS: 'saved_hosts',
+  THEME_PREFERENCE: 'theme_preference',
 } as const;
+
+export type ThemePreference = 'system' | 'light' | 'dark';
 
 export async function getToken(): Promise<string | null> {
   return SecureStore.getItemAsync(KEYS.TOKEN);
@@ -36,4 +39,13 @@ export async function addSavedHost(url: string): Promise<void> {
   const existing = await getSavedHosts();
   const deduped = [url, ...existing.filter(h => h !== url)].slice(0, 3);
   await SecureStore.setItemAsync(KEYS.SAVED_HOSTS, JSON.stringify(deduped));
+}
+
+export async function getThemePreference(): Promise<ThemePreference> {
+  const stored = await SecureStore.getItemAsync(KEYS.THEME_PREFERENCE);
+  return stored === 'light' || stored === 'dark' || stored === 'system' ? stored : 'system';
+}
+
+export async function setThemePreference(preference: ThemePreference): Promise<void> {
+  await SecureStore.setItemAsync(KEYS.THEME_PREFERENCE, preference);
 }

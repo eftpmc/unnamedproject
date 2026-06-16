@@ -3,6 +3,7 @@ import { Slot, useRouter, useSegments } from 'expo-router';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
+import { useColorScheme } from 'nativewind';
 import { useFonts } from 'expo-font';
 import {
   HankenGrotesk_400Regular,
@@ -11,7 +12,7 @@ import {
   HankenGrotesk_700Bold,
 } from '@expo-google-fonts/hanken-grotesk';
 import { useAppStore } from '../lib/store';
-import { getServerUrl, getToken } from '../lib/storage';
+import { getServerUrl, getThemePreference, getToken } from '../lib/storage';
 import { connect, disconnect, startAppStateListener, stopAppStateListener } from '../lib/ws';
 import { registerPushToken, configurePushHandlers } from '../lib/notifications';
 import { patchTextFont } from '../lib/fonts';
@@ -31,8 +32,8 @@ function AuthGate() {
 
   useEffect(() => {
     async function hydrate() {
-      const [url, tok] = await Promise.all([getServerUrl(), getToken()]);
-      useAppStore.getState().hydrate(url, tok);
+      const [url, tok, themePreference] = await Promise.all([getServerUrl(), getToken(), getThemePreference()]);
+      useAppStore.getState().hydrate(url, tok, themePreference);
       setHydrated(true);
     }
     hydrate();
@@ -81,6 +82,17 @@ function AuthGate() {
   return <Slot />;
 }
 
+function ThemeController() {
+  const themePreference = useAppStore(s => s.themePreference);
+  const { setColorScheme } = useColorScheme();
+
+  useEffect(() => {
+    setColorScheme(themePreference);
+  }, [setColorScheme, themePreference]);
+
+  return null;
+}
+
 export default function RootLayout() {
   const [fontsLoaded] = useFonts({
     HankenGrotesk_400Regular,
@@ -95,6 +107,7 @@ export default function RootLayout() {
     <GestureHandlerRootView style={{ flex: 1 }}>
       <SafeAreaProvider>
         <QueryClientProvider client={queryClient}>
+          <ThemeController />
           <AuthGate />
         </QueryClientProvider>
       </SafeAreaProvider>

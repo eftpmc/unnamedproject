@@ -1,14 +1,14 @@
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { Plus, FolderGit2, FileText, Search, Video, GitGraph } from 'lucide-react';
-import { getProjects, createProject, getProjectPlans, getProjectCapabilities } from '../lib/api.js';
+import { Plus, FolderGit2, FileText, MessagesSquare, Search, Video, GitGraph } from 'lucide-react';
+import { getProjects, createProject, getProjectPlans, getProjectCapabilities, getProjectArtifacts, getChats } from '../lib/api.js';
 import { usePageTitle } from '../lib/usePageTitle.js';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
 import { CenteredEmptyState, ContentColumn, PageBody, PageHeader, PageLoading, PageShell, Surface } from '@/components/ui/app-layout';
-import type { Project } from '../types.js';
+import type { Project, Session } from '../types.js';
 
 function ProjectCard({ project }: { project: Project }) {
   const navigate = useNavigate();
@@ -22,6 +22,17 @@ function ProjectCard({ project }: { project: Project }) {
     queryFn: () => getProjectCapabilities(project.id),
     staleTime: 30_000,
   });
+  const { data: artifacts = [] } = useQuery({
+    queryKey: ['project-artifacts', project.id],
+    queryFn: async () => { const r = await getProjectArtifacts(project.id); return r.artifacts; },
+    staleTime: 60_000,
+  });
+  const { data: allChats = [] } = useQuery<Session[]>({
+    queryKey: ['chats'],
+    queryFn: getChats,
+    staleTime: 60_000,
+  });
+  const chatCount = allChats.filter(c => c.pinned_project_id === project.id).length;
   const runningCount = plans.filter(p => p.status === 'running').length;
 
   return (
@@ -61,8 +72,26 @@ function ProjectCard({ project }: { project: Project }) {
               videos
             </span>
           )}
-          <span className="text-border">·</span>
-          <span>{plans.length} plan{plans.length !== 1 ? 's' : ''}</span>
+          {chatCount > 0 && (
+            <span className="flex items-center gap-1">
+              <span className="text-border">·</span>
+              <MessagesSquare size={10} className="shrink-0" />
+              {chatCount} chat{chatCount !== 1 ? 's' : ''}
+            </span>
+          )}
+          {plans.length > 0 && (
+            <span className="flex items-center gap-1">
+              <span className="text-border">·</span>
+              {plans.length} plan{plans.length !== 1 ? 's' : ''}
+            </span>
+          )}
+          {artifacts.length > 0 && (
+            <span className="flex items-center gap-1">
+              <span className="text-border">·</span>
+              <FileText size={10} className="shrink-0" />
+              {artifacts.length} artifact{artifacts.length !== 1 ? 's' : ''}
+            </span>
+          )}
         </div>
       </Surface>
     </button>

@@ -2,10 +2,11 @@ import { useState, useEffect, useCallback, useRef } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useNavigate } from 'react-router-dom';
 import { Bell, Check, ChevronDown, Folder, GitBranch, Loader2, PanelRight, Square, Target, X } from 'lucide-react';
+import { Sheet, SheetContent, SheetHeader, SheetTitle } from '@/components/ui/sheet';
 import ContextPanel from './ContextPanel.js';
 import MessageList from './MessageList.js';
 import MessageInput from './MessageInput.js';
-import { getMessages, sendMessage, getChats, updateChatConfig, getModelsForEffort, getSessionWorktree, mergeSessionBranch, getProjects, truncateMessagesFrom, approveExecution, rejectExecution, getChatEvents, getChatStatus, stopChat } from '../lib/api.js';
+import { getMessages, sendMessage, getChats, updateChatConfig, getModelsForEffort, getSessionWorktree, mergeSessionBranch, getWorktreeDiff, getProjects, truncateMessagesFrom, approveExecution, rejectExecution, getChatEvents, getChatStatus, stopChat } from '../lib/api.js';
 import { subscribe } from '../lib/ws.js';
 import { cn } from '../lib/utils.js';
 import { usePageTitle } from '../lib/usePageTitle.js';
@@ -84,6 +85,15 @@ export default function ChatView({ chatId }: ChatViewProps) {
   const refetchWorktree = useCallback(() => refetchWorktreeRef.current(), []);
 
   const [mergeState, setMergeState] = useState<'idle' | 'merging' | 'done' | 'error'>('idle');
+  const [lastInputTokens, setLastInputTokens] = useState<number | null>(null);
+  const [diffOpen, setDiffOpen] = useState(false);
+
+  const { data: diffData } = useQuery({
+    queryKey: ['worktree-diff', chatId],
+    queryFn: () => getWorktreeDiff(chatId),
+    enabled: diffOpen,
+    staleTime: 10_000,
+  });
 
   const mergeMutation = useMutation({
     mutationFn: () => mergeSessionBranch(chatId),
@@ -113,6 +123,7 @@ export default function ChatView({ chatId }: ChatViewProps) {
     setStreamingIds(new Set());
     setSending(false);
     setAgentError(null);
+    setLastInputTokens(null);
   }, [chatId]);
 
   useEffect(() => {
@@ -149,6 +160,30 @@ export default function ChatView({ chatId }: ChatViewProps) {
     e => e.status === 'awaiting_approval' && e.needsApproval
   ) ?? null;
 
+  const [dropFiles, setDropFiles] = useState<File[]>([]);
+  const dragCounterRef = useRef(0);
+  const [isDragging, setIsDragging] = useState(false);
+
+  function handleDragEnter(e: React.DragEvent) {
+    if (!e.dataTransfer.types.includes('Files')) return;
+    dragCounterRef.current++;
+    setIsDragging(true);
+  }
+  function handleDragLeave() {
+    dragCounterRef.current--;
+    if (dragCounterRef.current === 0) setIsDragging(false);
+  }
+  function handleDragOver(e: React.DragEvent) {
+    if (e.dataTransfer.types.includes('Files')) e.preventDefault();
+  }
+  function handleDrop(e: React.DragEvent) {
+    e.preventDefault();
+    dragCounterRef.current = 0;
+    setIsDragging(false);
+    const files = Array.from(e.dataTransfer.files);
+    if (files.length) setDropFiles(files);
+  }
+
   const [ctxOpen, setCtxOpen] = useState<boolean>(() => {
     if (window.innerWidth <= 768) return false;
     return localStorage.getItem('ctx_panel') !== 'closed';
@@ -171,17 +206,33 @@ export default function ChatView({ chatId }: ChatViewProps) {
 
   const mutation = useMutation({
     mutationFn: ({ content, attachments }: { content: string; attachments: File[] }) => sendMessage(chatId, content, attachments),
-    onSuccess: (newMsg) => {
+    onMutate: async ({ content }) => {
+      await queryClient.cancelQueries({ queryKey: ['messages', chatId] });
+      const previous = queryClient.getQueryData<Message[]>(['messages', chatId]);
+      const optimisticId = `opt-${Date.now()}`;
+      queryClient.setQueryData<Message[]>(['messages', chatId], prev => [
+        ...(prev ?? []),
+        { id: optimisticId, role: 'user' as const, content, created_at: Math.floor(Date.now() / 1000) },
+      ]);
+      return { previous, optimisticId };
+    },
+    onSuccess: (newMsg, _, context) => {
       queryClient.setQueryData<Message[]>(['messages', chatId], prev => {
         if (!prev) return [newMsg];
-        if (prev.some(m => m.id === newMsg.id)) return prev.map(m => m.id === newMsg.id ? newMsg : m);
-        return [...prev, newMsg];
+        const filtered = prev.filter(m => m.id !== context?.optimisticId);
+        if (filtered.some(m => m.id === newMsg.id)) return filtered.map(m => m.id === newMsg.id ? newMsg : m);
+        return [...filtered, newMsg];
       });
       queryClient.setQueryData(['chat-status', chatId], {
         active: true,
         turn: { id: `pending-${newMsg.id}`, userMessageId: newMsg.id, startedAt: Math.floor(Date.now() / 1000) },
         execution: null,
       });
+    },
+    onError: (_, __, context) => {
+      if (context?.previous !== undefined) {
+        queryClient.setQueryData(['messages', chatId], context.previous);
+      }
     },
   });
 
@@ -193,9 +244,12 @@ export default function ChatView({ chatId }: ChatViewProps) {
   const sendPrompt = useCallback(async (overrideContent?: string, attachments: File[] = []): Promise<boolean> => {
     const content = (overrideContent ?? inputValue).trim();
     if (!content && attachments.length === 0) return false;
-    const previousInput = inputValue;
     setSending(true);
     setAgentError(null);
+
+    // Clear input immediately so it feels instant
+    setInputValue('');
+    localStorage.removeItem(draftKey);
 
     try {
       if (editingMessageId) {
@@ -210,12 +264,12 @@ export default function ChatView({ chatId }: ChatViewProps) {
       }
 
       await mutation.mutateAsync({ content, attachments });
-      setInputValue('');
-      localStorage.removeItem(draftKey);
       setSending(false);
       return true;
     } catch {
-      setInputValue(previousInput);
+      // Restore input on failure so user doesn't lose their message
+      setInputValue(content);
+      if (content) localStorage.setItem(draftKey, content);
       setSending(false);
       setAgentError('Message could not be sent. Please try again.');
       return false;
@@ -284,6 +338,7 @@ export default function ChatView({ chatId }: ChatViewProps) {
       const ev = event as WSTurnComplete;
       queryClient.setQueryData(['chat-status', chatId], { active: false, turn: null, execution: null });
       if (ev.status === 'error') queryClient.invalidateQueries({ queryKey: ['messages', chatId] });
+      if (ev.status === 'done' && ev.inputTokens) setLastInputTokens(ev.inputTokens);
     }
 
     if (event.type === 'execution_update') {
@@ -344,7 +399,7 @@ export default function ChatView({ chatId }: ChatViewProps) {
         for (const [msgId, list] of Object.entries(prev)) {
           const existing = list.find(e => e.executionId === ev.executionId);
           if (existing) {
-            const updated = { ...existing, status: 'awaiting_approval' as const, needsApproval: true, approvalId: ev.approvalId, action: ev.action };
+            const updated = { ...existing, status: 'awaiting_approval' as const, needsApproval: true, approvalId: ev.approvalId, action: ev.action, payload: ev.payload };
             return { ...prev, [msgId]: list.map(e => e.executionId === ev.executionId ? updated : e) };
           }
         }
@@ -425,13 +480,28 @@ export default function ChatView({ chatId }: ChatViewProps) {
   }
 
   return (
-    <div className="flex min-h-0 flex-1 overflow-hidden">
+    <div
+      className="flex min-h-0 flex-1 overflow-hidden"
+      onDragEnter={handleDragEnter}
+      onDragLeave={handleDragLeave}
+      onDragOver={handleDragOver}
+      onDrop={handleDrop}
+    >
+      {isDragging && (
+        <div className="pointer-events-none absolute inset-0 z-50 flex items-center justify-center rounded-lg border-2 border-dashed border-primary/50 bg-primary/5 backdrop-blur-[1px]">
+          <div className="rounded-xl border border-primary/20 bg-card px-6 py-4 text-center shadow-lg">
+            <p className="text-sm font-medium text-foreground">Drop files to attach</p>
+            <p className="mt-0.5 text-xs text-muted-foreground">Images, PDFs, text files</p>
+          </div>
+        </div>
+      )}
       <div className="flex min-w-0 flex-1 flex-col">
       <PageHeader
         title={<EditableTitle title={chat?.title ?? 'Untitled chat'} onSave={(t) => configMutation.mutate({ title: t })} />}
         className="border-b border-border-soft px-5 py-4"
         description={
-          <div className="flex items-center gap-2">
+          <div className="flex flex-col gap-1.5">
+            <div className="flex items-center gap-2">
             <ScopePopover
               projects={projects}
               pinnedProject={pinnedProject}
@@ -441,13 +511,22 @@ export default function ChatView({ chatId }: ChatViewProps) {
               onScopeChange={(projectId) => configMutation.mutate({ pinned_project_id: projectId })}
             />
             {worktree && (
-              <span className="flex items-center gap-1 rounded-md border border-border-soft bg-muted/60 px-1.5 py-0.5 font-mono text-[11px] text-muted-foreground">
+              <button
+                type="button"
+                onClick={() => setDiffOpen(true)}
+                title={worktree.files_changed > 0 ? `${worktree.files_changed} uncommitted file${worktree.files_changed !== 1 ? 's' : ''} — click to view diff` : worktree.branch}
+                className="flex items-center gap-1 rounded-md border border-border-soft bg-muted/60 px-1.5 py-0.5 font-mono text-[11px] text-muted-foreground transition-colors hover:border-border hover:bg-muted"
+              >
                 <GitBranch size={10} className="shrink-0" />
                 {worktree.branch}
                 {worktree.files_changed > 0 && (
                   <span className="text-warning">·{worktree.files_changed}</span>
                 )}
-              </span>
+              </button>
+            )}
+          </div>
+            {lastInputTokens !== null && (
+              <ContextBar inputTokens={lastInputTokens} />
             )}
           </div>
         }
@@ -561,8 +640,35 @@ export default function ChatView({ chatId }: ChatViewProps) {
         disabled={agentActive}
         isEditing={!!editingMessageId}
         onCancelEdit={() => { setEditingMessageId(null); setInputValue(''); }}
+        pendingFiles={dropFiles}
+        onPendingFilesConsumed={() => setDropFiles([])}
       />
       </div>
+      <Sheet open={diffOpen} onOpenChange={setDiffOpen}>
+        <SheetContent side="right" className="flex w-full flex-col gap-0 p-0 sm:max-w-2xl">
+          <SheetHeader className="border-b border-border-soft px-5 py-4">
+            <SheetTitle className="flex items-center gap-2 text-sm font-semibold">
+              <GitBranch size={14} className="text-muted-foreground" />
+              {worktree?.branch ?? 'Worktree diff'}
+              {worktree?.files_changed ? (
+                <span className="rounded-md bg-warning/15 px-1.5 py-0.5 text-[11px] font-medium text-warning">
+                  {worktree.files_changed} file{worktree.files_changed !== 1 ? 's' : ''} changed
+                </span>
+              ) : null}
+            </SheetTitle>
+          </SheetHeader>
+          <div className="flex-1 overflow-y-auto">
+            {!diffData ? (
+              <div className="flex items-center justify-center py-16 text-sm text-muted-foreground">Loading diff…</div>
+            ) : !diffData.diff ? (
+              <div className="flex items-center justify-center py-16 text-sm text-muted-foreground">No uncommitted changes</div>
+            ) : (
+              <WorktreeDiff diff={diffData.diff} />
+            )}
+          </div>
+        </SheetContent>
+      </Sheet>
+
       <ContextPanel
         open={ctxOpen}
         onClose={() => { setCtxOpen(false); localStorage.setItem('ctx_panel', 'closed'); }}
@@ -654,6 +760,55 @@ function EditableTitle({ title, onSave }: { title: string; onSave: (t: string) =
     >
       {title}
     </button>
+  );
+}
+
+function WorktreeDiff({ diff }: { diff: string }) {
+  const files = diff.split(/^(?=diff --git )/m).filter(Boolean);
+  return (
+    <div className="divide-y divide-border-soft">
+      {files.map((fileDiff, i) => {
+        const header = fileDiff.split('\n')[0] ?? '';
+        const filename = header.replace('diff --git a/', '').split(' b/')[0] ?? header;
+        const lines = fileDiff.split('\n');
+        return (
+          <details key={i} open className="group">
+            <summary className="flex cursor-pointer items-center gap-2 bg-muted/30 px-4 py-2.5 text-xs font-mono font-medium text-foreground hover:bg-muted/50 list-none">
+              <span className="min-w-0 flex-1 truncate">{filename}</span>
+            </summary>
+            <div className="overflow-x-auto bg-[#0d1117] font-mono text-[12px] leading-relaxed">
+              {lines.slice(4).map((line, j) => {
+                let cls = 'block px-4 text-muted-foreground/60';
+                if (line.startsWith('+') && !line.startsWith('+++')) cls = 'block px-4 bg-success/10 text-success';
+                else if (line.startsWith('-') && !line.startsWith('---')) cls = 'block px-4 bg-destructive/10 text-destructive';
+                else if (line.startsWith('@@')) cls = 'block px-4 text-primary/60 bg-primary/5';
+                return <span key={j} className={cls}>{line || ' '}</span>;
+              })}
+            </div>
+          </details>
+        );
+      })}
+    </div>
+  );
+}
+
+const CONTEXT_WINDOW = 200_000;
+
+function ContextBar({ inputTokens }: { inputTokens: number }) {
+  const pct = Math.min(inputTokens / CONTEXT_WINDOW, 1);
+  const used = pct * 100;
+  const color = pct > 0.85 ? 'bg-destructive' : pct > 0.6 ? 'bg-warning' : 'bg-primary/50';
+  const label = `${Math.round(used)}% of context used · ${inputTokens.toLocaleString()} / ${CONTEXT_WINDOW.toLocaleString()} tokens`;
+
+  return (
+    <div title={label} className="flex items-center gap-2 group/ctx cursor-default">
+      <div className="h-1 w-28 overflow-hidden rounded-full bg-muted">
+        <div className={cn('h-full rounded-full transition-all duration-500', color)} style={{ width: `${used}%` }} />
+      </div>
+      <span className="text-[10px] text-faint-fg opacity-0 transition-opacity group-hover/ctx:opacity-100">
+        {Math.round(used)}% context
+      </span>
+    </div>
   );
 }
 

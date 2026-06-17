@@ -54,12 +54,14 @@ interface MessageInputProps {
   disabled?: boolean;
   isEditing?: boolean;
   onCancelEdit?: () => void;
+  pendingFiles?: File[];
+  onPendingFilesConsumed?: () => void;
 }
 
 const MAX_ATTACHMENTS = 8;
 const MAX_ATTACHMENT_BYTES = 10 * 1024 * 1024;
 
-export default function MessageInput({ value, onChange, onSend, disabled, isEditing, onCancelEdit }: MessageInputProps) {
+export default function MessageInput({ value, onChange, onSend, disabled, isEditing, onCancelEdit, pendingFiles, onPendingFilesConsumed }: MessageInputProps) {
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const recognitionRef = useRef<SpeechRecognition | null>(null);
@@ -83,6 +85,14 @@ export default function MessageInput({ value, onChange, onSend, disabled, isEdit
       recognitionRef.current = null;
     };
   }, []);
+
+  useEffect(() => {
+    if (!pendingFiles?.length) return;
+    const available = MAX_ATTACHMENTS - attachments.length;
+    const accepted = pendingFiles.filter(f => f.size <= MAX_ATTACHMENT_BYTES).slice(0, Math.max(available, 0));
+    if (accepted.length) setAttachments(prev => [...prev, ...accepted]);
+    onPendingFilesConsumed?.();
+  }, [pendingFiles]); // eslint-disable-line react-hooks/exhaustive-deps
 
   function handleKeyDown(e: KeyboardEvent<HTMLTextAreaElement>) {
     if (e.key === 'Enter' && !e.shiftKey) {

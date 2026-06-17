@@ -1,4 +1,5 @@
 import { Router } from 'express';
+import Anthropic from '@anthropic-ai/sdk';
 import { getDb } from '../db/index.js';
 import { newId } from '../lib/ids.js';
 import { encrypt, decrypt, deriveKey } from '../lib/crypto.js';
@@ -56,6 +57,40 @@ router.post('/', (req, res) => {
     return;
   }
   res.status(201).json({ id });
+});
+
+router.get('/:id/test', async (req, res) => {
+  const { userId } = req as unknown as AuthedRequest;
+  const row = getDb()
+    .prepare('SELECT type, encrypted_config FROM connections WHERE id = ? AND user_id = ?')
+    .get(req.params.id, userId) as { type: string; encrypted_config: string } | undefined;
+  if (!row) { res.status(404).json({ error: 'Not found' }); return; }
+
+  const config = JSON.parse(decrypt(row.encrypted_config, deriveKey())) as Record<string, string>;
+  const start = Date.now();
+
+  try {
+    if (row.type === 'anthropic') {
+      const client = new Anthropic({ apiKey: config.api_key });
+      await client.models.list();
+    } else if (row.type === 'openai') {
+      const r = await fetch('https://api.openai.com/v1/models', {
+        headers: { Authorization: `Bearer ${config.api_key}` },
+      });
+      if (!r.ok) throw new Error(`HTTP ${r.status}`);
+    } else if (row.type === 'github') {
+      const r = await fetch('https://api.github.com/user', {
+        headers: { Authorization: `Bearer ${config.token ?? config.api_key}`, 'User-Agent': 'unnamed-app' },
+      });
+      if (!r.ok) throw new Error(`HTTP ${r.status}`);
+    } else {
+      res.json({ ok: null }); // MCP — not testable via HTTP
+      return;
+    }
+    res.json({ ok: true, latencyMs: Date.now() - start });
+  } catch (err) {
+    res.json({ ok: false, error: (err as Error).message, latencyMs: Date.now() - start });
+  }
 });
 
 router.delete('/:id', (req, res) => {

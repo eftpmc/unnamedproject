@@ -7,11 +7,32 @@ import { cn } from '@/lib/utils';
 
 const COLLAPSED_LINES = 6;
 
+function looksLikeDiff(text: string): boolean {
+  return /^@@\s+-\d/m.test(text) || (/^---\s/m.test(text) && /^\+\+\+\s/m.test(text));
+}
+
+function DiffView({ text }: { text: string }) {
+  const lines = text.split('\n');
+  return (
+    <div className="max-h-72 overflow-y-auto px-0 py-2 font-mono text-[12px] leading-relaxed">
+      {lines.map((line, i) => {
+        let cls = 'block px-3.5 text-muted-foreground/70';
+        if (line.startsWith('+') && !line.startsWith('+++')) cls = 'block px-3.5 bg-success/10 text-success';
+        else if (line.startsWith('-') && !line.startsWith('---')) cls = 'block px-3.5 bg-destructive/10 text-destructive';
+        else if (line.startsWith('@@')) cls = 'block px-3.5 text-primary/70';
+        else if (line.startsWith('---') || line.startsWith('+++')) cls = 'block px-3.5 text-muted-foreground/50';
+        return <span key={i} className={cls}>{line || ' '}</span>;
+      })}
+    </div>
+  );
+}
+
 function OutputLog({ outputLog, result }: { outputLog: string; result: string | null }) {
   const [showAll, setShowAll] = useState(false);
   const text = outputLog || result || '(no output)';
+  const isDiff = useMemo(() => looksLikeDiff(text), [text]);
   const lines = useMemo(() => text.split('\n'), [text]);
-  const truncated = !showAll && lines.length > COLLAPSED_LINES;
+  const truncated = !isDiff && !showAll && lines.length > COLLAPSED_LINES;
   const displayed = truncated ? lines.slice(-COLLAPSED_LINES).join('\n') : text;
 
   return (
@@ -25,12 +46,16 @@ function OutputLog({ outputLog, result }: { outputLog: string; result: string | 
           Show all {lines.length} lines
         </button>
       )}
-      <div
-        role="log"
-        className="max-h-44 overflow-y-auto px-3.5 py-3 font-mono text-[12px] leading-relaxed text-muted-foreground whitespace-pre-wrap"
-      >
-        {displayed}
-      </div>
+      {isDiff ? (
+        <DiffView text={text} />
+      ) : (
+        <div
+          role="log"
+          className="max-h-44 overflow-y-auto px-3.5 py-3 font-mono text-[12px] leading-relaxed text-muted-foreground whitespace-pre-wrap"
+        >
+          {displayed}
+        </div>
+      )}
     </div>
   );
 }
@@ -47,6 +72,26 @@ interface ExecutionCardProps {
   needsApproval: boolean;
   approvalId: string | null;
   action: string | null;
+  payload?: Record<string, unknown>;
+}
+
+function getExecutionHint(payload?: Record<string, unknown>, outputLog?: string): string | null {
+  if (payload) {
+    const path = payload.path ?? payload.file_path ?? payload.filename ?? payload.target;
+    if (typeof path === 'string' && path) {
+      const parts = path.split('/').filter(Boolean);
+      return parts.slice(-2).join('/');
+    }
+    const cmd = payload.command ?? payload.cmd ?? payload.script;
+    if (typeof cmd === 'string' && cmd) return cmd.length > 56 ? `${cmd.slice(0, 53)}…` : cmd;
+    const url = payload.url ?? payload.repo ?? payload.query;
+    if (typeof url === 'string' && url) return url.length > 56 ? `${url.slice(0, 53)}…` : url;
+  }
+  if (outputLog) {
+    const first = outputLog.split('\n').find(l => l.trim().length > 3 && l.trim().length < 72);
+    if (first) return first.trim();
+  }
+  return null;
 }
 
 const TOOL_ICON: Array<[RegExp, typeof Bot]> = [
@@ -79,6 +124,7 @@ export default function ExecutionCard({
   needsApproval,
   approvalId: _approvalId,
   action,
+  payload,
 }: ExecutionCardProps) {
   const [expanded, setExpanded] = useState(false);
   const [decided, setDecided] = useState<'approved' | 'rejected' | null>(null);
@@ -86,6 +132,7 @@ export default function ExecutionCard({
   const [cancelling, setCancelling] = useState(false);
 
   const ToolIcon = getToolIcon(tool);
+  const hint = getExecutionHint(payload, outputLog || undefined);
 
   async function handleApprove() {
     setActing(true);
@@ -129,7 +176,9 @@ export default function ExecutionCard({
         </div>
         <div className="flex min-w-0 flex-1 flex-col">
           <span className="text-xs font-medium text-foreground">{formatToolName(tool)}</span>
-          {projectName && <span className="text-[11px] text-faint-fg">{projectName}</span>}
+          {(hint ?? projectName) && (
+            <span className="truncate text-[11px] text-faint-fg font-mono">{hint ?? projectName}</span>
+          )}
         </div>
         <StatusPill status={decided === 'approved' ? 'done' : decided === 'rejected' ? 'error' : status} />
 

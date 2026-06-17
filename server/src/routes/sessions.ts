@@ -243,6 +243,26 @@ router.get('/:id/worktree', async (req, res) => {
   }
 });
 
+router.get('/:id/worktree/diff', async (req, res) => {
+  const { userId } = req as unknown as AuthedRequest;
+  const wt = getDb().prepare(`
+    SELECT w.worktree_path, p.user_id
+    FROM agent_worktrees w
+    JOIN projects p ON p.id = w.project_id
+    WHERE w.session_id = ? AND p.user_id = ?
+  `).get(req.params.id, userId) as { worktree_path: string } | undefined;
+
+  if (!wt) { res.status(404).json({ error: 'No worktree for this session' }); return; }
+
+  try {
+    const git = simpleGit(wt.worktree_path);
+    const diff = await git.diff(['HEAD']);
+    res.json({ diff: diff || '' });
+  } catch {
+    res.json({ diff: '' });
+  }
+});
+
 router.post('/:id/merge', async (req, res) => {
   const { userId } = req as unknown as AuthedRequest;
   const wt = getDb().prepare(`

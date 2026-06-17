@@ -23,6 +23,7 @@ interface InlineExecution {
   needsApproval: boolean;
   approvalId: string | null;
   action: string | null;
+  payload?: Record<string, unknown>;
 }
 
 type TimelineItem =

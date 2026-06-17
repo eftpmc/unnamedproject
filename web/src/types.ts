@@ -28,6 +28,7 @@ export interface MessageExecution {
   needsApproval: boolean;
   approvalId: string | null;
   action: string | null;
+  payload?: Record<string, unknown>;
 }
 
 export interface MessageAttachment {
@@ -204,6 +205,7 @@ export interface WSTurnComplete extends WSEvent {
   type: 'turn_complete';
   sessionId: string;
   status?: 'done' | 'error' | 'stopped';
+  inputTokens?: number;
 }
 
 export interface WSSessionTitleUpdated extends WSEvent {

@@ -1416,7 +1416,7 @@ export async function runAgentTurn(userId: string, sessionId: string, userMessag
   getDb()
     .prepare('UPDATE sessions SET updated_at = unixepoch() WHERE id = ?')
     .run(sessionId);
-  broadcast(userId, { type: 'turn_complete', sessionId, status: 'done' });
+  broadcast(userId, { type: 'turn_complete', sessionId, status: 'done', inputTokens: totalInputTokens });
 
   recordAgentUsage(userId, 'lead_agent', tokensToUsd(model, totalInputTokens, totalOutputTokens));
 

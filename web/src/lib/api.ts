@@ -88,6 +88,10 @@ export function mergeSessionBranch(chatId: string): Promise<{ ok: boolean }> {
   return request(`/sessions/${chatId}/merge`, { method: 'POST' });
 }
 
+export function getWorktreeDiff(chatId: string): Promise<{ diff: string }> {
+  return request(`/sessions/${chatId}/worktree/diff`);
+}
+
 export function getMe(): Promise<{ email: string }> {
   return request('/auth/me');
 }
@@ -175,6 +179,10 @@ export function createConnection(body: { name: string; type: string; purpose?: s
 
 export function deleteConnection(id: string): Promise<void> {
   return request(`/connections/${id}`, { method: 'DELETE' });
+}
+
+export function testConnection(id: string): Promise<{ ok: boolean | null; latencyMs?: number; error?: string }> {
+  return request(`/connections/${id}/test`);
 }
 
 export function getMemory(): Promise<Memory[]> {

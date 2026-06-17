@@ -23,6 +23,7 @@ import {
   getScheduledTasks,
   getSettings,
   runScheduledTask,
+  testConnection,
   updateAgentBudgets,
   updateScheduledTask,
   updateSettings,
@@ -344,10 +345,27 @@ export default function Settings() {
   function ConnectionRow({ kind }: { kind: SetupKind }) {
     const meta = SETUP_META[kind];
     const connection = connections.find(c => c.purpose === kind);
+    const { data: health } = useQuery({
+      queryKey: ['connection-health', connection?.id],
+      queryFn: () => testConnection(connection!.id),
+      enabled: !!connection && connection.type !== 'mcp',
+      staleTime: 60_000,
+      retry: false,
+    });
+    const healthDot = connection && health !== undefined
+      ? health.ok === true ? 'bg-success' : health.ok === false ? 'bg-destructive' : null
+      : null;
+    const healthTitle = health?.ok === true
+      ? `Connected · ${health.latencyMs}ms`
+      : health?.ok === false ? `Error: ${health.error}` : undefined;
+
     return (
       <SettingRow>
         <SettingRowInfo title={meta.title} description={connection ? connection.name : meta.description} />
         <div className="flex items-center gap-2 shrink-0">
+          {healthDot && (
+            <span title={healthTitle} className={cn('size-2 shrink-0 rounded-full', healthDot)} />
+          )}
           {connection ? <ConnectedBadge /> : <NotSetBadge />}
           <Button size="sm" variant={connection ? 'ghost' : 'default'} onClick={() => openSetupModal(kind)}>
             {connection ? 'Edit' : 'Connect'}

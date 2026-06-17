@@ -193,6 +193,169 @@ final class IconBadgeView: UIView {
   }
 }
 
+// MARK: - Markdown Rendering
+
+func markdownAttributedString(_ raw: String, baseFont: UIFont, textColor: UIColor) -> NSAttributedString {
+  let output = NSMutableAttributedString()
+  var codeBuffer = ""
+  var inFence = false
+  let monoFont = UIFont.monospacedSystemFont(ofSize: baseFont.pointSize * 0.88, weight: .regular)
+  let codeBg = UIColor.label.withAlphaComponent(0.08)
+  let lines = raw.components(separatedBy: "\n")
+
+  for (i, line) in lines.enumerated() {
+    if line.hasPrefix("```") {
+      if inFence {
+        output.append(NSAttributedString(string: codeBuffer, attributes: [
+          .font: monoFont, .foregroundColor: textColor, .backgroundColor: codeBg,
+        ]))
+        codeBuffer = ""
+        inFence = false
+      } else {
+        inFence = true
+      }
+    } else if inFence {
+      codeBuffer += (codeBuffer.isEmpty ? "" : "\n") + line
+    } else {
+      var lineText = line
+      var lineFont = baseFont
+      if line.hasPrefix("### ")      { lineText = String(line.dropFirst(4)); lineFont = .systemFont(ofSize: baseFont.pointSize + 1, weight: .semibold) }
+      else if line.hasPrefix("## ") { lineText = String(line.dropFirst(3)); lineFont = .systemFont(ofSize: baseFont.pointSize + 2, weight: .bold) }
+      else if line.hasPrefix("# ")  { lineText = String(line.dropFirst(2)); lineFont = .systemFont(ofSize: baseFont.pointSize + 4, weight: .bold) }
+      output.append(applyInlineMarkdown(lineText, font: lineFont, color: textColor, codeBg: codeBg))
+      if i < lines.count - 1 {
+        output.append(NSAttributedString(string: "\n", attributes: [.font: baseFont, .foregroundColor: textColor]))
+      }
+    }
+  }
+  if inFence && !codeBuffer.isEmpty {
+    output.append(applyInlineMarkdown(codeBuffer, font: baseFont, color: textColor, codeBg: codeBg))
+  }
+  return output
+}
+
+private func applyInlineMarkdown(_ text: String, font: UIFont, color: UIColor, codeBg: UIColor) -> NSAttributedString {
+  let boldFont = UIFont.boldSystemFont(ofSize: font.pointSize)
+  let italicDesc = font.fontDescriptor.withSymbolicTraits(.traitItalic) ?? font.fontDescriptor
+  let italicFont = UIFont(descriptor: italicDesc, size: font.pointSize)
+  let monoFont = UIFont.monospacedSystemFont(ofSize: font.pointSize * 0.9, weight: .regular)
+
+  struct Span {
+    let fullRange: Range<String.Index>
+    let contentRange: Range<String.Index>
+    let extraAttrs: [NSAttributedString.Key: Any]
+  }
+
+  let rules: [(String, [NSAttributedString.Key: Any])] = [
+    ("`([^`\n]+)`",           [.font: monoFont, .backgroundColor: codeBg]),
+    ("\\*\\*([^*\n]+)\\*\\*", [.font: boldFont]),
+    ("__([^\n]+?)__",          [.font: boldFont]),
+    ("\\*([^*\n]+)\\*",        [.font: italicFont]),
+    ("_([^_\n]+)_",            [.font: italicFont]),
+  ]
+
+  var spans: [Span] = []
+  for (pattern, attrs) in rules {
+    guard let regex = try? NSRegularExpression(pattern: pattern) else { continue }
+    let matches = regex.matches(in: text, range: NSRange(text.startIndex..., in: text))
+    for m in matches {
+      guard let full = Range(m.range, in: text) else { continue }
+      let content: Range<String.Index>
+      if m.numberOfRanges > 1, let r = Range(m.range(at: 1), in: text) { content = r }
+      else { content = full }
+      spans.append(Span(fullRange: full, contentRange: content, extraAttrs: attrs))
+    }
+  }
+
+  spans.sort { $0.fullRange.lowerBound < $1.fullRange.lowerBound }
+  var filtered: [Span] = []
+  var lastEnd = text.startIndex
+  for span in spans where span.fullRange.lowerBound >= lastEnd {
+    filtered.append(span)
+    lastEnd = span.fullRange.upperBound
+  }
+
+  let result = NSMutableAttributedString()
+  var cursor = text.startIndex
+  let base: [NSAttributedString.Key: Any] = [.font: font, .foregroundColor: color]
+
+  for span in filtered {
+    if cursor < span.fullRange.lowerBound {
+      result.append(NSAttributedString(string: String(text[cursor..<span.fullRange.lowerBound]), attributes: base))
+    }
+    var spanAttrs = base
+    for (k, v) in span.extraAttrs { spanAttrs[k] = v }
+    result.append(NSAttributedString(string: String(text[span.contentRange]), attributes: spanAttrs))
+    cursor = span.fullRange.upperBound
+  }
+  if cursor < text.endIndex {
+    result.append(NSAttributedString(string: String(text[cursor...]), attributes: base))
+  }
+  return result
+}
+
+// MARK: - Skeleton Loading
+
+final class SkeletonCell: UITableViewCell {
+  static let reuseID = "SkeletonCell"
+
+  override init(style: UITableViewCell.CellStyle, reuseIdentifier: String?) {
+    super.init(style: style, reuseIdentifier: reuseIdentifier)
+    backgroundColor = .clear
+    selectionStyle = .none
+
+    let skeletonColor = UIColor.secondarySystemFill
+
+    let icon = UIView()
+    icon.backgroundColor = skeletonColor
+    icon.layer.cornerRadius = 16
+    icon.layer.cornerCurve = .continuous
+
+    let title = UIView()
+    title.backgroundColor = skeletonColor
+    title.layer.cornerRadius = 4
+
+    let subtitle = UIView()
+    subtitle.backgroundColor = skeletonColor
+    subtitle.layer.cornerRadius = 4
+
+    let textStack = UIStackView(arrangedSubviews: [title, subtitle])
+    textStack.axis = .vertical
+    textStack.spacing = 8
+
+    let row = UIStackView(arrangedSubviews: [icon, textStack])
+    row.axis = .horizontal
+    row.spacing = 12
+    row.alignment = .center
+    row.isLayoutMarginsRelativeArrangement = true
+    row.directionalLayoutMargins = NSDirectionalEdgeInsets(top: 12, leading: 16, bottom: 12, trailing: 16)
+
+    contentView.addSubview(row)
+    row.translatesAutoresizingMaskIntoConstraints = false
+    NSLayoutConstraint.activate([
+      row.leadingAnchor.constraint(equalTo: contentView.leadingAnchor),
+      row.trailingAnchor.constraint(equalTo: contentView.trailingAnchor),
+      row.topAnchor.constraint(equalTo: contentView.topAnchor),
+      row.bottomAnchor.constraint(equalTo: contentView.bottomAnchor),
+      icon.widthAnchor.constraint(equalToConstant: 32),
+      icon.heightAnchor.constraint(equalToConstant: 32),
+      title.heightAnchor.constraint(equalToConstant: 14),
+      subtitle.heightAnchor.constraint(equalToConstant: 11),
+      subtitle.widthAnchor.constraint(equalTo: textStack.widthAnchor, multiplier: 0.55),
+    ])
+
+    let anim = CABasicAnimation(keyPath: "opacity")
+    anim.fromValue = 0.4
+    anim.toValue = 1.0
+    anim.duration = 0.85
+    anim.autoreverses = true
+    anim.repeatCount = .infinity
+    contentView.layer.add(anim, forKey: "shimmer")
+  }
+
+  required init?(coder: NSCoder) { fatalError() }
+}
+
 final class ComposerTextView: UITextView {
   private let placeholderLabel = UILabel()
   var placeholder: String = "" {

@@ -247,6 +247,7 @@ final class ChatViewController: UIViewController {
     Task {
       do {
         _ = try await client.sendMessage(sessionId: chatSession.id, content: text)
+        UIImpactFeedbackGenerator(style: .light).impactOccurred()
         // Brief pause to catch fast agent responses before first reload
         try? await Task.sleep(nanoseconds: 800_000_000)
         await reloadMessages()
@@ -256,11 +257,26 @@ final class ChatViewController: UIViewController {
           messages.remove(at: idx)
           tableView.deleteRows(at: [IndexPath(row: idx, section: 0)], with: .automatic)
         }
+        UINotificationFeedbackGenerator().notificationOccurred(.error)
         textView.text = text
         showError(error)
       }
       setSending(false)
     }
+  }
+
+  private func showMessageActions(_ text: String) {
+    UIImpactFeedbackGenerator(style: .light).impactOccurred()
+    let sheet = UIAlertController(title: nil, message: nil, preferredStyle: .actionSheet)
+    sheet.addAction(UIAlertAction(title: "Copy", style: .default) { _ in
+      UIPasteboard.general.string = text
+    })
+    sheet.addAction(UIAlertAction(title: "Share", style: .default) { [weak self] _ in
+      let vc = UIActivityViewController(activityItems: [text], applicationActivities: nil)
+      self?.present(vc, animated: true)
+    })
+    sheet.addAction(UIAlertAction(title: "Cancel", style: .cancel))
+    present(sheet, animated: true)
   }
 
   private func setSending(_ active: Bool) {
@@ -278,6 +294,7 @@ extension ChatViewController: UITableViewDataSource {
   func tableView(_ tableView: UITableView, cellForRowAt indexPath: IndexPath) -> UITableViewCell {
     let cell = tableView.dequeueReusableCell(withIdentifier: MessageCell.reuseID, for: indexPath) as! MessageCell
     cell.configure(with: messages[indexPath.row])
+    cell.onLongPress = { [weak self] text in self?.showMessageActions(text) }
     return cell
   }
 }
@@ -286,6 +303,8 @@ extension ChatViewController: UITableViewDataSource {
 
 private final class MessageCell: UITableViewCell {
   static let reuseID = "MessageCell"
+  var onLongPress: ((String) -> Void)?
+  private var rawContent = ""
 
   private let bubbleStack = UIStackView()
   private let bubble = UIView()
@@ -298,6 +317,9 @@ private final class MessageCell: UITableViewCell {
     super.init(style: style, reuseIdentifier: reuseIdentifier)
     backgroundColor = .clear
     selectionStyle = .none
+
+    let longPress = UILongPressGestureRecognizer(target: self, action: #selector(handleLongPress))
+    contentView.addGestureRecognizer(longPress)
 
     bubble.layer.cornerRadius = 18
     bubble.layer.cornerCurve = .continuous
@@ -339,11 +361,17 @@ private final class MessageCell: UITableViewCell {
 
   required init?(coder: NSCoder) { fatalError() }
 
+  @objc private func handleLongPress(_ gesture: UILongPressGestureRecognizer) {
+    guard gesture.state == .began else { return }
+    onLongPress?(rawContent)
+  }
+
   func configure(with message: ChatMessage) {
-    label.text = message.content
+    rawContent = message.content
     let isUser = message.role == "user"
+    let textColor: UIColor = isUser ? AppTheme.primaryText : .label
+    label.attributedText = markdownAttributedString(message.content, baseFont: label.font, textColor: textColor)
     bubble.backgroundColor = isUser ? AppTheme.primary : AppTheme.secondarySurface
-    label.textColor = isUser ? AppTheme.primaryText : .label
 
     if let epoch = message.createdAt {
       timeLabel.text = messageTime(epoch)

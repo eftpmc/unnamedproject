@@ -7,6 +7,7 @@ final class ChatsListViewController: UIViewController {
   private lazy var client = APIClient(session: appSession)
   private var chats: [ChatSession] = []
   private var activeIds: Set<String> = []
+  private var isLoading = true
 
   private let tableView = UITableView(frame: .zero, style: .plain)
   private let refreshControl = UIRefreshControl()
@@ -26,6 +27,7 @@ final class ChatsListViewController: UIViewController {
     tableView.backgroundColor = AppTheme.canvas
     tableView.separatorInset = UIEdgeInsets(top: 0, left: 56, bottom: 0, right: 0)
     tableView.register(UITableViewCell.self, forCellReuseIdentifier: "cell")
+    tableView.register(SkeletonCell.self, forCellReuseIdentifier: SkeletonCell.reuseID)
     tableView.dataSource = self
     tableView.delegate = self
     tableView.refreshControl = refreshControl
@@ -52,8 +54,10 @@ final class ChatsListViewController: UIViewController {
         async let active = client.activeSessions()
         chats = try await sessions
         activeIds = Set(try await active)
+        isLoading = false
         tableView.reloadData()
       } catch {
+        isLoading = false
         showError(error)
       }
       refreshControl.endRefreshing()
@@ -65,6 +69,7 @@ final class ChatsListViewController: UIViewController {
     Task {
       do {
         try await client.deleteSession(id: chat.id)
+        UIImpactFeedbackGenerator(style: .medium).impactOccurred()
         chats.remove(at: indexPath.row)
         tableView.deleteRows(at: [indexPath], with: .automatic)
       } catch {
@@ -75,9 +80,14 @@ final class ChatsListViewController: UIViewController {
 }
 
 extension ChatsListViewController: UITableViewDataSource, UITableViewDelegate {
-  func tableView(_ tableView: UITableView, numberOfRowsInSection section: Int) -> Int { chats.count }
+  func tableView(_ tableView: UITableView, numberOfRowsInSection section: Int) -> Int {
+    isLoading ? 6 : chats.count
+  }
 
   func tableView(_ tableView: UITableView, cellForRowAt indexPath: IndexPath) -> UITableViewCell {
+    if isLoading {
+      return tableView.dequeueReusableCell(withIdentifier: SkeletonCell.reuseID, for: indexPath)
+    }
     let cell = tableView.dequeueReusableCell(withIdentifier: "cell", for: indexPath)
     let chat = chats[indexPath.row]
     let isActive = activeIds.contains(chat.id)

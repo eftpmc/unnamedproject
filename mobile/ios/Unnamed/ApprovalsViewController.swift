@@ -158,9 +158,11 @@ final class ApprovalsViewController: UIViewController {
     Task {
       do {
         try await client.approveExecution(id: approval.executionId)
+        UIImpactFeedbackGenerator(style: .medium).impactOccurred()
         approvals.remove(at: index)
         updateUI()
       } catch {
+        UINotificationFeedbackGenerator().notificationOccurred(.error)
         showError(error)
       }
     }
@@ -171,9 +173,11 @@ final class ApprovalsViewController: UIViewController {
     Task {
       do {
         try await client.rejectExecution(id: approval.executionId)
+        UIImpactFeedbackGenerator(style: .medium).impactOccurred()
         approvals.remove(at: index)
         updateUI()
       } catch {
+        UINotificationFeedbackGenerator().notificationOccurred(.error)
         showError(error)
       }
     }

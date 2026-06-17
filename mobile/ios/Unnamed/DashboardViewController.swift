@@ -16,6 +16,7 @@ final class DashboardViewController: UIViewController {
   private var chats: [ChatSession] = []
   private var projects: [Project] = []
   private var approvalCount = 0
+  private var lastNotifiedApprovalCount = 0
   private var activeIds: Set<String> = []
   private let inboxBadge = UILabel()
 
@@ -46,7 +47,7 @@ final class DashboardViewController: UIViewController {
     navigationController?.navigationBar.prefersLargeTitles = false
     navigationItem.rightBarButtonItem = UIBarButtonItem(image: UIImage(systemName: "gearshape"), style: .plain, target: self, action: #selector(settingsTapped))
 
-    UNUserNotificationCenter.current().requestAuthorization(options: [.badge]) { _, _ in }
+    UNUserNotificationCenter.current().requestAuthorization(options: [.badge, .sound, .alert]) { _, _ in }
     NotificationCenter.default.addObserver(self, selector: #selector(appWillForeground), name: UIApplication.willEnterForegroundNotification, object: nil)
 
     configureScrollView()
@@ -366,6 +367,10 @@ final class DashboardViewController: UIViewController {
     } else {
       UIApplication.shared.applicationIconBadgeNumber = approvalCount
     }
+    if approvalCount > lastNotifiedApprovalCount {
+      scheduleApprovalNotification(count: approvalCount)
+    }
+    lastNotifiedApprovalCount = approvalCount
     renderRecent()
     renderProjects()
   }
@@ -442,6 +447,21 @@ final class DashboardViewController: UIViewController {
   @objc private func refreshPulled() { load() }
 
   @objc private func appWillForeground() { load() }
+
+  private func scheduleApprovalNotification(count: Int) {
+    let content = UNMutableNotificationContent()
+    content.title = count == 1 ? "1 Pending Approval" : "\(count) Pending Approvals"
+    content.body = "An agent is waiting for your response."
+    content.sound = .default
+    content.badge = NSNumber(value: count)
+    content.categoryIdentifier = "APPROVALS"
+    let request = UNNotificationRequest(
+      identifier: "approvals-\(count)",
+      content: content,
+      trigger: UNTimeIntervalNotificationTrigger(timeInterval: 1, repeats: false)
+    )
+    UNUserNotificationCenter.current().add(request)
+  }
 
   @objc private func settingsTapped() {
     let vc = SettingsViewController(email: profile?.email ?? "—", serverURL: session.serverURL)

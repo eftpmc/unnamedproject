@@ -44,8 +44,10 @@ final class AppCoordinator {
   }
 
   func showDashboard() {
+    WebSocketService.shared.connect()
     let controller = DashboardViewController(session: session)
     controller.onSignedOut = { [weak self] in
+      WebSocketService.shared.disconnect()
       self?.session.clearToken()
       self?.showLogin()
     }

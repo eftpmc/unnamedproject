@@ -6,6 +6,7 @@ final class ChatViewController: UIViewController {
   private lazy var client = APIClient(session: appSession)
 
   private var messages: [ChatMessage] = []
+  private var wsSubscriptionId: UUID?
 
   private let tableView = UITableView(frame: .zero, style: .plain)
   private let refreshControl = UIRefreshControl()
@@ -28,11 +29,13 @@ final class ChatViewController: UIViewController {
   override func viewDidAppear(_ animated: Bool) {
     super.viewDidAppear(animated)
     startPolling()
+    subscribeWebSocket()
   }
 
   override func viewWillDisappear(_ animated: Bool) {
     super.viewWillDisappear(animated)
     stopPolling()
+    unsubscribeWebSocket()
   }
 
   override func viewDidLoad() {
@@ -55,6 +58,7 @@ final class ChatViewController: UIViewController {
 
   deinit {
     pollTimer?.invalidate()
+    if let id = wsSubscriptionId { WebSocketService.shared.unsubscribe(id) }
     NotificationCenter.default.removeObserver(self)
   }
 
@@ -69,6 +73,58 @@ final class ChatViewController: UIViewController {
   private func stopPolling() {
     pollTimer?.invalidate()
     pollTimer = nil
+  }
+
+  // MARK: - WebSocket
+
+  private func subscribeWebSocket() {
+    guard wsSubscriptionId == nil else { return }
+    wsSubscriptionId = WebSocketService.shared.subscribe { [weak self] event in
+      self?.handleWSEvent(event)
+    }
+  }
+
+  private func unsubscribeWebSocket() {
+    if let id = wsSubscriptionId {
+      WebSocketService.shared.unsubscribe(id)
+      wsSubscriptionId = nil
+    }
+  }
+
+  private func handleWSEvent(_ event: WSEvent) {
+    switch event {
+    case .messageStarted(let sid, let message) where sid == chatSession.id:
+      guard !messages.contains(where: { $0.id == message.id }) else { return }
+      messages.append(message)
+      let ip = IndexPath(row: messages.count - 1, section: 0)
+      tableView.insertRows(at: [ip], with: .none)
+      if isNearBottom() { scrollToBottom(animated: true) }
+
+    case .messageDelta(let sid, let messageId, let delta) where sid == chatSession.id:
+      guard let idx = messages.firstIndex(where: { $0.id == messageId }) else { return }
+      let old = messages[idx]
+      messages[idx] = ChatMessage(id: old.id, role: old.role, content: old.content + delta, createdAt: old.createdAt)
+      tableView.reloadRows(at: [IndexPath(row: idx, section: 0)], with: .none)
+      if isNearBottom() { scrollToBottom(animated: false) }
+
+    case .messageCreated(let sid, let message) where sid == chatSession.id:
+      if let idx = messages.firstIndex(where: { $0.id == message.id }) {
+        messages[idx] = message
+        tableView.reloadRows(at: [IndexPath(row: idx, section: 0)], with: .none)
+      } else {
+        messages.append(message)
+        let ip = IndexPath(row: messages.count - 1, section: 0)
+        tableView.insertRows(at: [ip], with: .none)
+        if isNearBottom() { scrollToBottom(animated: true) }
+      }
+
+    case .turnComplete(let sid, _) where sid == chatSession.id:
+      setSending(false)
+      Task { await reloadMessages() }
+
+    default:
+      break
+    }
   }
 
   // MARK: - Layout

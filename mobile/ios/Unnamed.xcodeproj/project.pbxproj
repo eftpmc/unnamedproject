@@ -25,6 +25,7 @@
 		AC1F48422D0307B40044C1D9 /* ProjectsViewController.swift in Sources */ = {isa = PBXBuildFile; fileRef = FC1748412D0307B40044C1D9 /* ProjectsViewController.swift */; };
 		AD1F48422D0307B40044C1D9 /* ProjectDetailViewController.swift in Sources */ = {isa = PBXBuildFile; fileRef = FD1748412D0307B40044C1D9 /* ProjectDetailViewController.swift */; };
 		AE1F48422D0307B40044C1D9 /* SettingsViewController.swift in Sources */ = {isa = PBXBuildFile; fileRef = FE1748412D0307B40044C1D9 /* SettingsViewController.swift */; };
+		AF1F48422D0307B40044C1D9 /* WebSocketService.swift in Sources */ = {isa = PBXBuildFile; fileRef = FF1748412D0307B40044C1D9 /* WebSocketService.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
@@ -48,6 +49,7 @@
 		FC1748412D0307B40044C1D9 /* ProjectsViewController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = ProjectsViewController.swift; path = Unnamed/ProjectsViewController.swift; sourceTree = "<group>"; };
 		FD1748412D0307B40044C1D9 /* ProjectDetailViewController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = ProjectDetailViewController.swift; path = Unnamed/ProjectDetailViewController.swift; sourceTree = "<group>"; };
 		FE1748412D0307B40044C1D9 /* SettingsViewController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = SettingsViewController.swift; path = Unnamed/SettingsViewController.swift; sourceTree = "<group>"; };
+		FF1748412D0307B40044C1D9 /* WebSocketService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = WebSocketService.swift; path = Unnamed/WebSocketService.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -79,6 +81,7 @@
 				FC1748412D0307B40044C1D9 /* ProjectsViewController.swift */,
 				FD1748412D0307B40044C1D9 /* ProjectDetailViewController.swift */,
 				FE1748412D0307B40044C1D9 /* SettingsViewController.swift */,
+				FF1748412D0307B40044C1D9 /* WebSocketService.swift */,
 				13B07FB51A68108700A75B9A /* Images.xcassets */,
 				13B07FB61A68108700A75B9A /* Info.plist */,
 				AA286B85B6C04FC6940260E9 /* SplashScreen.storyboard */,
@@ -206,6 +209,7 @@
 				AC1F48422D0307B40044C1D9 /* ProjectsViewController.swift in Sources */,
 				AD1F48422D0307B40044C1D9 /* ProjectDetailViewController.swift in Sources */,
 				AE1F48422D0307B40044C1D9 /* SettingsViewController.swift in Sources */,
+				AF1F48422D0307B40044C1D9 /* WebSocketService.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};

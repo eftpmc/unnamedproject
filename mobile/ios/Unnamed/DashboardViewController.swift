@@ -18,6 +18,7 @@ final class DashboardViewController: UIViewController {
   private var approvalCount = 0
   private var lastNotifiedApprovalCount = 0
   private var activeIds: Set<String> = []
+  private var wsSubscriptionId: UUID?
   private let inboxBadge = UILabel()
 
   private let scrollView = UIScrollView()
@@ -40,6 +41,11 @@ final class DashboardViewController: UIViewController {
     fatalError("init(coder:) has not been implemented")
   }
 
+  deinit {
+    if let id = wsSubscriptionId { WebSocketService.shared.unsubscribe(id) }
+    NotificationCenter.default.removeObserver(self)
+  }
+
   override func viewDidLoad() {
     super.viewDidLoad()
     title = "Unnamed"
@@ -49,6 +55,15 @@ final class DashboardViewController: UIViewController {
 
     UNUserNotificationCenter.current().requestAuthorization(options: [.badge, .sound, .alert]) { _, _ in }
     NotificationCenter.default.addObserver(self, selector: #selector(appWillForeground), name: UIApplication.willEnterForegroundNotification, object: nil)
+
+    wsSubscriptionId = WebSocketService.shared.subscribe { [weak self] event in
+      guard let self else { return }
+      if case .approvalRequested = event {
+        self.approvalCount += 1
+        self.lastNotifiedApprovalCount = self.approvalCount - 1
+        self.renderData()
+      }
+    }
 
     configureScrollView()
     configureHero()

@@ -3,6 +3,8 @@ import UIKit
 final class DashboardViewController: UIViewController {
   var onSignedOut: (() -> Void)?
   var onChangeServer: (() -> Void)?
+  var onShowChats: (() -> Void)?
+  var onShowChat: ((ChatSession) -> Void)?
 
   private let session: AppSession
   private lazy var client = APIClient(session: session)
@@ -181,7 +183,7 @@ final class DashboardViewController: UIViewController {
     grid.spacing = 10
 
     grid.addArrangedSubview(actionCard(icon: "bell.badge", title: "Activity", subtitle: "Approvals and agent events", tint: AppTheme.warning))
-    grid.addArrangedSubview(actionCard(icon: "message", title: "Chats", subtitle: "Recent conversations", tint: AppTheme.accent))
+    grid.addArrangedSubview(actionCard(icon: "message", title: "Chats", subtitle: "Recent conversations", tint: AppTheme.accent, action: { [weak self] in self?.onShowChats?() }))
     grid.addArrangedSubview(actionCard(icon: "folder", title: "Projects", subtitle: "Repos and artifacts", tint: .systemGreen))
 
     contentStack.addArrangedSubview(grid)
@@ -212,7 +214,7 @@ final class DashboardViewController: UIViewController {
     return wrapper
   }
 
-  private func actionCard(icon: String, title: String, subtitle: String, tint: UIColor) -> UIView {
+  private func actionCard(icon: String, title: String, subtitle: String, tint: UIColor, action: (() -> Void)? = nil) -> UIView {
     let card = SurfaceView()
     let row = UIStackView()
     row.axis = .horizontal
@@ -253,6 +255,19 @@ final class DashboardViewController: UIViewController {
       row.topAnchor.constraint(equalTo: card.topAnchor),
       row.bottomAnchor.constraint(equalTo: card.bottomAnchor)
     ])
+
+    if let action {
+      let hit = UIControl()
+      hit.addAction(UIAction { _ in action() }, for: .touchUpInside)
+      hit.translatesAutoresizingMaskIntoConstraints = false
+      card.addSubview(hit)
+      NSLayoutConstraint.activate([
+        hit.leadingAnchor.constraint(equalTo: card.leadingAnchor),
+        hit.trailingAnchor.constraint(equalTo: card.trailingAnchor),
+        hit.topAnchor.constraint(equalTo: card.topAnchor),
+        hit.bottomAnchor.constraint(equalTo: card.bottomAnchor),
+      ])
+    }
     return card
   }
 
@@ -307,12 +322,18 @@ final class DashboardViewController: UIViewController {
     }
 
     for chat in chats.prefix(5) {
-      recentStack.addArrangedSubview(listRow(
-        icon: "message",
-        title: chat.title ?? "Untitled chat",
-        subtitle: chat.model ?? chat.effort,
-        tint: AppTheme.accent
-      ))
+      let row = listRow(icon: "message", title: chat.title ?? "Untitled chat", subtitle: chat.model ?? chat.effort, tint: AppTheme.accent)
+      let hit = UIControl()
+      hit.addAction(UIAction { [weak self] _ in self?.onShowChat?(chat) }, for: .touchUpInside)
+      hit.translatesAutoresizingMaskIntoConstraints = false
+      row.addSubview(hit)
+      NSLayoutConstraint.activate([
+        hit.leadingAnchor.constraint(equalTo: row.leadingAnchor),
+        hit.trailingAnchor.constraint(equalTo: row.trailingAnchor),
+        hit.topAnchor.constraint(equalTo: row.topAnchor),
+        hit.bottomAnchor.constraint(equalTo: row.bottomAnchor),
+      ])
+      recentStack.addArrangedSubview(row)
     }
   }
 
@@ -362,10 +383,12 @@ final class DashboardViewController: UIViewController {
     setSending(true)
     Task {
       do {
-        let session = try await client.createSession(title: String(prompt.prefix(80)))
-        _ = try await client.sendMessage(sessionId: session.id, content: prompt)
+        let created = try await client.createSession(title: String(prompt.prefix(80)))
+        _ = try await client.sendMessage(sessionId: created.id, content: prompt)
         promptTextView.text = ""
-        showNotice(title: "Chat started", message: "The agent is working. Pull to refresh recent chats while live updates are added.")
+        // Navigate into the new chat so the user can see its messages
+        let chatSession = ChatSession(id: created.id, title: String(prompt.prefix(80)), effort: nil, model: nil, pinnedProjectId: nil, createdAt: nil, updatedAt: nil)
+        onShowChat?(chatSession)
         load()
       } catch APIError.unauthorized {
         onSignedOut?()

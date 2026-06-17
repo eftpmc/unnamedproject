@@ -19,6 +19,8 @@
 		A61F48422D0307B40044C1D9 /* LoginViewController.swift in Sources */ = {isa = PBXBuildFile; fileRef = F61748412D0307B40044C1D9 /* LoginViewController.swift */; };
 		A71F48422D0307B40044C1D9 /* Models.swift in Sources */ = {isa = PBXBuildFile; fileRef = F71748412D0307B40044C1D9 /* Models.swift */; };
 		A81F48422D0307B40044C1D9 /* UIHelpers.swift in Sources */ = {isa = PBXBuildFile; fileRef = F81748412D0307B40044C1D9 /* UIHelpers.swift */; };
+		A91F48422D0307B40044C1D9 /* ChatViewController.swift in Sources */ = {isa = PBXBuildFile; fileRef = F91748412D0307B40044C1D9 /* ChatViewController.swift */; };
+		AA1F48422D0307B40044C1D9 /* ChatsListViewController.swift in Sources */ = {isa = PBXBuildFile; fileRef = FA1748412D0307B40044C1D9 /* ChatsListViewController.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
@@ -36,6 +38,8 @@
 		F61748412D0307B40044C1D9 /* LoginViewController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = LoginViewController.swift; path = Unnamed/LoginViewController.swift; sourceTree = "<group>"; };
 		F71748412D0307B40044C1D9 /* Models.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = Models.swift; path = Unnamed/Models.swift; sourceTree = "<group>"; };
 		F81748412D0307B40044C1D9 /* UIHelpers.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = UIHelpers.swift; path = Unnamed/UIHelpers.swift; sourceTree = "<group>"; };
+		F91748412D0307B40044C1D9 /* ChatViewController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = ChatViewController.swift; path = Unnamed/ChatViewController.swift; sourceTree = "<group>"; };
+		FA1748412D0307B40044C1D9 /* ChatsListViewController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = ChatsListViewController.swift; path = Unnamed/ChatsListViewController.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -61,6 +65,8 @@
 				F61748412D0307B40044C1D9 /* LoginViewController.swift */,
 				F71748412D0307B40044C1D9 /* Models.swift */,
 				F81748412D0307B40044C1D9 /* UIHelpers.swift */,
+				F91748412D0307B40044C1D9 /* ChatViewController.swift */,
+				FA1748412D0307B40044C1D9 /* ChatsListViewController.swift */,
 				13B07FB51A68108700A75B9A /* Images.xcassets */,
 				13B07FB61A68108700A75B9A /* Info.plist */,
 				AA286B85B6C04FC6940260E9 /* SplashScreen.storyboard */,
@@ -182,6 +188,8 @@
 				A61F48422D0307B40044C1D9 /* LoginViewController.swift in Sources */,
 				A71F48422D0307B40044C1D9 /* Models.swift in Sources */,
 				A81F48422D0307B40044C1D9 /* UIHelpers.swift in Sources */,
+				A91F48422D0307B40044C1D9 /* ChatViewController.swift in Sources */,
+				AA1F48422D0307B40044C1D9 /* ChatsListViewController.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};

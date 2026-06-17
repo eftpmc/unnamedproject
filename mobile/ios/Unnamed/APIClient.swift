@@ -48,6 +48,10 @@ final class APIClient {
     try await request(path: "/sessions", method: "POST", body: CreateSessionRequest(title: title))
   }
 
+  func messages(sessionId: String) async throws -> [ChatMessage] {
+    try await request(path: "/sessions/\(sessionId)/messages")
+  }
+
   func sendMessage(sessionId: String, content: String) async throws -> ChatMessage {
     try await request(path: "/sessions/\(sessionId)/messages", method: "POST", body: SendMessageRequest(content: content))
   }

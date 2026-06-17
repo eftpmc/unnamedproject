@@ -21,6 +21,7 @@
 		A81F48422D0307B40044C1D9 /* UIHelpers.swift in Sources */ = {isa = PBXBuildFile; fileRef = F81748412D0307B40044C1D9 /* UIHelpers.swift */; };
 		A91F48422D0307B40044C1D9 /* ChatViewController.swift in Sources */ = {isa = PBXBuildFile; fileRef = F91748412D0307B40044C1D9 /* ChatViewController.swift */; };
 		AA1F48422D0307B40044C1D9 /* ChatsListViewController.swift in Sources */ = {isa = PBXBuildFile; fileRef = FA1748412D0307B40044C1D9 /* ChatsListViewController.swift */; };
+		AB1F48422D0307B40044C1D9 /* ApprovalsViewController.swift in Sources */ = {isa = PBXBuildFile; fileRef = FB1748412D0307B40044C1D9 /* ApprovalsViewController.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
@@ -40,6 +41,7 @@
 		F81748412D0307B40044C1D9 /* UIHelpers.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = UIHelpers.swift; path = Unnamed/UIHelpers.swift; sourceTree = "<group>"; };
 		F91748412D0307B40044C1D9 /* ChatViewController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = ChatViewController.swift; path = Unnamed/ChatViewController.swift; sourceTree = "<group>"; };
 		FA1748412D0307B40044C1D9 /* ChatsListViewController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = ChatsListViewController.swift; path = Unnamed/ChatsListViewController.swift; sourceTree = "<group>"; };
+		FB1748412D0307B40044C1D9 /* ApprovalsViewController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = ApprovalsViewController.swift; path = Unnamed/ApprovalsViewController.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -67,6 +69,7 @@
 				F81748412D0307B40044C1D9 /* UIHelpers.swift */,
 				F91748412D0307B40044C1D9 /* ChatViewController.swift */,
 				FA1748412D0307B40044C1D9 /* ChatsListViewController.swift */,
+				FB1748412D0307B40044C1D9 /* ApprovalsViewController.swift */,
 				13B07FB51A68108700A75B9A /* Images.xcassets */,
 				13B07FB61A68108700A75B9A /* Info.plist */,
 				AA286B85B6C04FC6940260E9 /* SplashScreen.storyboard */,
@@ -190,6 +193,7 @@
 				A81F48422D0307B40044C1D9 /* UIHelpers.swift in Sources */,
 				A91F48422D0307B40044C1D9 /* ChatViewController.swift in Sources */,
 				AA1F48422D0307B40044C1D9 /* ChatsListViewController.swift in Sources */,
+				AB1F48422D0307B40044C1D9 /* ApprovalsViewController.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};

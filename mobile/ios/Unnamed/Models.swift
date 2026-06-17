@@ -63,6 +63,37 @@ struct ChatSession: Decodable {
   }
 }
 
+struct PendingApproval: Decodable {
+  let approvalId: String
+  let executionId: String
+  let action: String
+  let payload: ApprovalPayload?
+
+  enum CodingKeys: String, CodingKey {
+    case approvalId = "approval_id"
+    case executionId = "execution_id"
+    case action
+    case payload
+  }
+}
+
+struct ApprovalPayload: Decodable {
+  private let path: String?
+  private let filePath: String?
+  private let command: String?
+  private let cmd: String?
+  private let description: String?
+
+  var summary: String? { path ?? filePath ?? command ?? cmd ?? description }
+
+  enum CodingKeys: String, CodingKey {
+    case path, command, cmd, description
+    case filePath = "file_path"
+  }
+}
+
+struct ApprovalDecision: Decodable { let status: String }
+
 struct Project: Decodable {
   let id: String
   let name: String

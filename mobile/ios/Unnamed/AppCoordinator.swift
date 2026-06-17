@@ -43,7 +43,13 @@ final class AppCoordinator {
     controller.onChangeServer = { [weak self] in self?.showConnect() }
     controller.onShowChats = { [weak self] in self?.showChats() }
     controller.onShowChat = { [weak self] chat in self?.showChat(chatSession: chat) }
+    controller.onShowInbox = { [weak self] in self?.showInbox() }
     navigationController.setViewControllers([controller], animated: true)
+  }
+
+  func showInbox() {
+    let controller = ApprovalsViewController(appSession: session)
+    navigationController.pushViewController(controller, animated: true)
   }
 
   func showChats() {

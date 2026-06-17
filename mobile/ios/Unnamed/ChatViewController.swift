@@ -13,6 +13,7 @@ final class ChatViewController: UIViewController {
   private let sendButton = UIButton(type: .system)
   private let sendActivity = UIActivityIndicatorView(style: .medium)
   private var composeBarBottom: NSLayoutConstraint!
+  private var pollTimer: Timer?
 
   init(appSession: AppSession, chatSession: ChatSession) {
     self.appSession = appSession
@@ -22,6 +23,16 @@ final class ChatViewController: UIViewController {
   }
 
   required init?(coder: NSCoder) { fatalError() }
+
+  override func viewDidAppear(_ animated: Bool) {
+    super.viewDidAppear(animated)
+    startPolling()
+  }
+
+  override func viewWillDisappear(_ animated: Bool) {
+    super.viewWillDisappear(animated)
+    stopPolling()
+  }
 
   override func viewDidLoad() {
     super.viewDidLoad()
@@ -42,7 +53,21 @@ final class ChatViewController: UIViewController {
   }
 
   deinit {
+    pollTimer?.invalidate()
     NotificationCenter.default.removeObserver(self)
+  }
+
+  private func startPolling() {
+    pollTimer?.invalidate()
+    pollTimer = Timer.scheduledTimer(withTimeInterval: 3.0, repeats: true) { [weak self] _ in
+      guard let self else { return }
+      Task { await self.pollMessages() }
+    }
+  }
+
+  private func stopPolling() {
+    pollTimer?.invalidate()
+    pollTimer = nil
   }
 
   // MARK: - Layout
@@ -160,10 +185,29 @@ final class ChatViewController: UIViewController {
   private func reloadMessages() async {
     do {
       let updated = try await client.messages(sessionId: chatSession.id)
-      messages = updated
-      tableView.reloadData()
-      scrollToBottom(animated: true)
+      applyMessages(updated, scrollAnimated: true)
     } catch {}
+  }
+
+  @MainActor
+  private func pollMessages() async {
+    do {
+      let updated = try await client.messages(sessionId: chatSession.id)
+      guard updated.count != messages.count || updated.last?.id != messages.last?.id else { return }
+      let nearBottom = isNearBottom()
+      applyMessages(updated, scrollAnimated: nearBottom)
+    } catch {}
+  }
+
+  private func applyMessages(_ updated: [ChatMessage], scrollAnimated: Bool) {
+    messages = updated
+    tableView.reloadData()
+    if scrollAnimated { scrollToBottom(animated: true) }
+  }
+
+  private func isNearBottom() -> Bool {
+    let bottom = tableView.contentSize.height - tableView.frame.height
+    return tableView.contentOffset.y >= bottom - 80
   }
 
   private func scrollToBottom(animated: Bool) {

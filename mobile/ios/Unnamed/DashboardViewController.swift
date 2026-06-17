@@ -5,6 +5,7 @@ final class DashboardViewController: UIViewController {
   var onChangeServer: (() -> Void)?
   var onShowChats: (() -> Void)?
   var onShowChat: ((ChatSession) -> Void)?
+  var onShowInbox: (() -> Void)?
 
   private let session: AppSession
   private lazy var client = APIClient(session: session)
@@ -182,7 +183,7 @@ final class DashboardViewController: UIViewController {
     grid.axis = .vertical
     grid.spacing = 10
 
-    grid.addArrangedSubview(actionCard(icon: "bell.badge", title: "Activity", subtitle: "Approvals and agent events", tint: AppTheme.warning))
+    grid.addArrangedSubview(actionCard(icon: "bell.badge", title: "Inbox", subtitle: "Approvals and agent requests", tint: AppTheme.warning, action: { [weak self] in self?.onShowInbox?() }))
     grid.addArrangedSubview(actionCard(icon: "message", title: "Chats", subtitle: "Recent conversations", tint: AppTheme.accent, action: { [weak self] in self?.onShowChats?() }))
     grid.addArrangedSubview(actionCard(icon: "folder", title: "Projects", subtitle: "Repos and artifacts", tint: .systemGreen))
 

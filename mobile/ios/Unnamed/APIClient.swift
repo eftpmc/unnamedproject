@@ -56,6 +56,20 @@ final class APIClient {
     try await request(path: "/sessions/\(sessionId)/messages", method: "POST", body: SendMessageRequest(content: content))
   }
 
+  func pendingApprovals() async throws -> [PendingApproval] {
+    try await request(path: "/executions/pending-approvals")
+  }
+
+  @discardableResult
+  func approveExecution(id: String) async throws -> ApprovalDecision {
+    try await request(path: "/executions/\(id)/approve", method: "POST")
+  }
+
+  @discardableResult
+  func rejectExecution(id: String) async throws -> ApprovalDecision {
+    try await request(path: "/executions/\(id)/reject", method: "POST")
+  }
+
   func projects() async throws -> [Project] {
     try await request(path: "/projects")
   }

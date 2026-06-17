@@ -7,12 +7,12 @@ import {
   getPipelineTasks,
   listPipelinesForUser,
   getProjectForUser,
-  createCampaign,
+  createPlan,
   getDb,
-  type DbCampaignTask,
+  type DbPlanStep,
 } from '../db/index.js';
 import { newId } from '../lib/ids.js';
-import { runCampaignAutoDispatch } from '../services/agent.js';
+import { runPlanAutoDispatch } from '../services/agent.js';
 
 const router = Router();
 router.use(requireAuth);
@@ -72,24 +72,24 @@ router.post('/:id/run', (req, res) => {
     messageId, sessionId, 'user', `Run pipeline: ${pipeline.title} on project ${project.name}`,
   );
 
-  const { campaign } = createCampaign(
+  const { plan } = createPlan(
     project_id,
     sessionId,
     title ?? pipeline.title,
     ptasks.map(pt => ({
       title: pt.title,
-      agent: pt.agent as DbCampaignTask['agent'],
+      agent: pt.agent as DbPlanStep['agent'],
       prompt: pt.prompt,
       depends_on: pt.depends_on ? (JSON.parse(pt.depends_on) as number[]) : [],
       tool_args: pt.tool_args ? JSON.parse(pt.tool_args) : undefined,
     })),
   );
 
-  res.json({ campaign_id: campaign.id, project_id: campaign.project_id });
+  res.json({ plan_id: plan.id, project_id: plan.project_id });
 
-  // Fire-and-forget: run campaign tasks in background
-  runCampaignAutoDispatch(campaign.id, userId, messageId, sessionId, on_error ?? 'stop').catch(err => {
-    console.error(`Pipeline run failed (campaign ${campaign.id}):`, err);
+  // Fire-and-forget: run plan steps in background
+  runPlanAutoDispatch(plan.id, userId, messageId, sessionId, on_error ?? 'stop').catch(err => {
+    console.error(`Pipeline run failed (plan ${plan.id}):`, err);
   });
 });
 

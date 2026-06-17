@@ -7,9 +7,7 @@ import Settings from './pages/Settings.js';
 import ChatsPage from './pages/ChatsPage.js';
 import ProjectsPage from './pages/ProjectsPage.js';
 import ProjectPage from './pages/ProjectPage.js';
-import CampaignPage from './pages/CampaignPage.js';
-import ActivityPage from './pages/ActivityPage.js';
-import PipelinesPage from './pages/PipelinesPage.js';
+import PlanPage from './pages/PlanPage.js';
 import { TooltipProvider } from '@/components/ui/tooltip';
 
 const queryClient = new QueryClient({
@@ -28,15 +26,15 @@ const router = createBrowserRouter([
       { path: 'c', element: null },
       { path: 'c/:chatId', element: null },
       { path: 'chats', element: <ChatsPage /> },
-      { path: 'activity', element: <ActivityPage /> },
+      { path: 'activity', element: <Navigate to="/" replace /> },
       { path: 'projects', element: <ProjectsPage /> },
       { path: 'projects/:projectId', element: <ProjectPage /> },
-      { path: 'projects/:projectId/campaigns', element: <ProjectPage /> },
+      { path: 'projects/:projectId/plans', element: <ProjectPage /> },
       { path: 'projects/:projectId/files', element: <ProjectPage /> },
       { path: 'projects/:projectId/settings', element: <ProjectPage /> },
       { path: 'projects/:projectId/:tab', element: <ProjectPage /> },
-      { path: 'projects/:projectId/campaigns/:campaignId', element: <CampaignPage /> },
-      { path: 'pipelines', element: <PipelinesPage /> },
+      { path: 'projects/:projectId/plans/:planId', element: <PlanPage /> },
+      { path: 'pipelines', element: <Navigate to="/projects" replace /> },
       { path: 'settings', element: <Settings /> },
     ],
   },

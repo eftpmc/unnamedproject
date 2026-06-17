@@ -9,8 +9,8 @@ vi.mock('./ExecutionCard.js', () => ({
   default: ({ tool }: { tool: string }) => <div>{tool}</div>,
 }));
 
-vi.mock('./CampaignCard.js', () => ({
-  default: () => <div>Campaign card</div>,
+vi.mock('./PlanCard.js', () => ({
+  default: () => <div>Plan card</div>,
 }));
 
 describe('MessageList', () => {

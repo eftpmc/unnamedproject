@@ -2,25 +2,27 @@ import { useState } from 'react';
 import type { ReactNode } from 'react';
 import { useParams, useNavigate, Link, useLocation } from 'react-router-dom';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { Check, ChevronDown, ChevronRight, FileText, GitGraph, MessageSquare, Sparkles, Video } from 'lucide-react';
-import { getProjects, getProjectCampaigns, getProjectCapabilities, createChat, updateChatConfig, deleteProject, updateProject, getChats, getProjectFile, getProjectArtifacts } from '../lib/api.js';
+import { Check, ChevronDown, ChevronRight, FileText, GitGraph, MessageSquare, Play, Sparkles, Trash2, Video, Workflow } from 'lucide-react';
+import { getProjects, getProjectPlans, getProjectCapabilities, createChat, updateChatConfig, deleteProject, updateProject, getChats, getProjectFile, getProjectArtifacts, getPipelines, deletePipeline, runPipeline } from '../lib/api.js';
 import { Button } from '@/components/ui/button';
+import { ConfirmDialog } from '@/components/ui/confirm-dialog';
 import { EmptyPanel, PageHeader, PageLoading, PageShell } from '@/components/ui/app-layout';
 import { StatusPill } from '@/components/ui/status-pill';
 import { cn } from '@/lib/utils';
 import FileBrowser from '../components/FileBrowser.js';
 import ArtifactsTab from '../components/ArtifactsTab.js';
 import { timeAgo } from '../lib/utils.js';
-import type { Project, Campaign, Session, ProjectArtifact } from '../types.js';
+import type { Project, Plan, Session, ProjectArtifact, Pipeline } from '../types.js';
 
 type Tab = string;
 
 const TABS = [
   { id: 'overview', label: 'Overview' },
-  { id: 'campaigns', label: 'Campaigns' },
+  { id: 'plans', label: 'Plans' },
   { id: 'chats', label: 'Chats' },
   { id: 'artifacts', label: 'Artifacts' },
   { id: 'files', label: 'Files' },
+  { id: 'pipelines', label: 'Pipelines' },
   { id: 'settings', label: 'Settings' },
 ];
 
@@ -52,9 +54,9 @@ export default function ProjectPage() {
   });
   const project = projects.find(p => p.id === projectId) ?? null;
 
-  const { data: campaigns = [] } = useQuery<Campaign[]>({
-    queryKey: ['project-campaigns', projectId],
-    queryFn: () => getProjectCampaigns(projectId!),
+  const { data: plans = [] } = useQuery<Plan[]>({
+    queryKey: ['project-plans', projectId],
+    queryFn: () => getProjectPlans(projectId!),
     enabled: !!projectId,
     staleTime: 20_000,
   });
@@ -70,6 +72,25 @@ export default function ProjectPage() {
     queryFn: () => getProjectArtifacts(projectId!),
     enabled: !!projectId,
     staleTime: 20_000,
+  });
+
+  const { data: pipelinesData, isLoading: pipelinesLoading } = useQuery({
+    queryKey: ['pipelines'],
+    queryFn: getPipelines,
+    staleTime: 30_000,
+    enabled: tab === 'pipelines',
+  });
+
+  const [runningPipeline, setRunningPipeline] = useState<Pipeline | null>(null);
+  const [pendingDeletePipeline, setPendingDeletePipeline] = useState<string | null>(null);
+
+  const deletePipelineMutation = useMutation({
+    mutationFn: deletePipeline,
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['pipelines'] });
+      setPendingDeletePipeline(null);
+    },
+    onError: () => setPendingDeletePipeline(null),
   });
 
   const startChatMutation = useMutation({
@@ -120,17 +141,17 @@ export default function ProjectPage() {
     );
   }
 
-  const runningCampaigns = campaigns.filter(c => c.status === 'running');
-  const runningCount = runningCampaigns.length;
-  const activeCampaign = runningCampaigns[0] ?? null;
-  const recentActivityCampaigns = campaigns
-    .filter(c => c.id !== activeCampaign?.id)
-    .slice(0, Math.max(1, 4 - (activeCampaign ? 1 : 0)));
+  const runningPlans = plans.filter(p => p.status === 'running');
+  const runningCount = runningPlans.length;
+  const activePlan = runningPlans[0] ?? null;
+  const recentActivityPlans = plans
+    .filter(p => p.id !== activePlan?.id)
+    .slice(0, Math.max(1, 4 - (activePlan ? 1 : 0)));
   const artifactsCount = artifactData?.artifacts.length ?? 0;
 
-  const countsForCampaign = (campaign: Campaign) => ({
-    artifactCount: (artifactData?.artifacts ?? []).filter(a => a.source_campaign_id === campaign.id).length,
-    chatCount: campaign.session_id && allChats.some(ch => ch.id === campaign.session_id) ? 1 : 0,
+  const countsForPlan = (plan: Plan) => ({
+    artifactCount: (artifactData?.artifacts ?? []).filter(a => a.source_plan_id === plan.id).length,
+    chatCount: plan.session_id && allChats.some(ch => ch.id === plan.session_id) ? 1 : 0,
   });
 
   return (
@@ -154,7 +175,7 @@ export default function ProjectPage() {
             disabled={startChatMutation.isPending}
           >
             <Sparkles size={14} />
-            New campaign
+            New plan
           </Button>
         }
       />
@@ -200,7 +221,7 @@ export default function ProjectPage() {
 
             <div className="grid grid-cols-2 gap-5 sm:grid-cols-3">
               {[
-                { label: 'Campaigns', value: campaigns.length, onClick: () => navigate(tabHref(projectId!, 'campaigns')) },
+                { label: 'Plans', value: plans.length, onClick: () => navigate(tabHref(projectId!, 'plans')) },
                 { label: 'Artifacts', value: artifactsCount, onClick: () => navigate(tabHref(projectId!, 'artifacts')) },
                 { label: 'Running now', value: runningCount, onClick: undefined },
               ].map(s => (
@@ -217,11 +238,11 @@ export default function ProjectPage() {
               ))}
             </div>
 
-            {runningCampaigns.length > 0 && (
+            {runningPlans.length > 0 && (
               <ProjectSection title="Active now">
                 <div className="flex flex-col gap-2.5">
-                  {runningCampaigns.map(c => (
-                    <CampaignRow key={c.id} campaign={c} projectId={projectId!} {...countsForCampaign(c)} />
+                  {runningPlans.map(p => (
+                    <PlanRow key={p.id} plan={p} projectId={projectId!} {...countsForPlan(p)} />
                   ))}
                 </div>
               </ProjectSection>
@@ -229,23 +250,23 @@ export default function ProjectPage() {
 
             <ProjectSection title="Recent activity">
               <div className="flex flex-col gap-2.5">
-                {activeCampaign && (
+                {activePlan && (
                   <ActivityRow
                     icon={<Sparkles size={17} />}
-                    title={activeCampaign.title}
-                    subtitle={`Campaign started ${timeAgo(activeCampaign.created_at)}`}
-                    trailing={<StatusPill status={activeCampaign.status} />}
-                    onClick={() => navigate(`/projects/${projectId}/campaigns/${activeCampaign.id}`)}
+                    title={activePlan.title}
+                    subtitle={`Plan started ${timeAgo(activePlan.created_at)}`}
+                    trailing={<StatusPill status={activePlan.status} />}
+                    onClick={() => navigate(`/projects/${projectId}/plans/${activePlan.id}`)}
                   />
                 )}
-                {recentActivityCampaigns.map(campaign => (
+                {recentActivityPlans.map(plan => (
                   <ActivityRow
-                    key={campaign.id}
+                    key={plan.id}
                     icon={<Sparkles size={17} />}
-                    title={campaign.title}
-                    subtitle={`Campaign · ${timeAgo(campaign.created_at)}`}
-                    trailing={<StatusPill status={campaign.status} />}
-                    onClick={() => navigate(`/projects/${projectId}/campaigns/${campaign.id}`)}
+                    title={plan.title}
+                    subtitle={`Plan · ${timeAgo(plan.created_at)}`}
+                    trailing={<StatusPill status={plan.status} />}
+                    onClick={() => navigate(`/projects/${projectId}/plans/${plan.id}`)}
                   />
                 ))}
                 {pinnedChats.slice(0, 2).map(chat => (
@@ -285,10 +306,10 @@ export default function ProjectPage() {
               </div>
             </ProjectSection>
 
-            {campaigns.length === 0 && pinnedChats.length === 0 && (
+            {plans.length === 0 && pinnedChats.length === 0 && (
               <EmptyPanel
                 title="Nothing here yet"
-                description="Start a chat and ask the agent to get to work. Campaigns and activity will appear here."
+                description="Start a chat and ask the agent to get to work. Plans and activity will appear here."
                 action={
                   <Button
                     size="sm"
@@ -304,12 +325,12 @@ export default function ProjectPage() {
           </div>
         )}
 
-        {tab === 'campaigns' && (
+        {tab === 'plans' && (
           <div className="mx-auto max-w-5xl p-4 sm:p-6">
-            {campaigns.length === 0 ? (
+            {plans.length === 0 ? (
               <EmptyPanel
-                title="No campaigns yet"
-                description="Start a chat and ask the agent to plan or execute work — it will create a campaign to track progress."
+                title="No plans yet"
+                description="Start a chat and ask the agent to plan or execute work — it will create a plan to track progress."
                 action={
                   <Button
                     size="sm"
@@ -323,8 +344,8 @@ export default function ProjectPage() {
               />
             ) : (
               <div className="flex flex-col gap-2">
-                {campaigns.map(c => (
-                  <CampaignRow key={c.id} campaign={c} projectId={projectId!} {...countsForCampaign(c)} />
+                {plans.map(p => (
+                  <PlanRow key={p.id} plan={p} projectId={projectId!} {...countsForPlan(p)} />
                 ))}
               </div>
             )}
@@ -383,6 +404,48 @@ export default function ProjectPage() {
           </div>
         )}
 
+        {tab === 'pipelines' && (
+          <div className="mx-auto max-w-2xl p-4 sm:p-6">
+            {pipelinesLoading ? (
+              <PageLoading rows={3} />
+            ) : (pipelinesData?.pipelines ?? []).length === 0 ? (
+              <EmptyPanel
+                title="No pipelines yet"
+                description='Create a pipeline by asking the agent — e.g. "Create a pipeline that runs tests, fixes issues, then opens a PR."'
+              />
+            ) : (
+              <div className="flex flex-col gap-2">
+                {(pipelinesData?.pipelines ?? []).map((pipeline: Pipeline) => (
+                  <PipelineRow
+                    key={pipeline.id}
+                    pipeline={pipeline}
+                    onRun={() => setRunningPipeline(pipeline)}
+                    onDelete={() => setPendingDeletePipeline(pipeline.id)}
+                  />
+                ))}
+              </div>
+            )}
+          </div>
+        )}
+
+        {pendingDeletePipeline && (
+          <ConfirmDialog
+            title="Delete pipeline?"
+            description="This removes the pipeline template. Plans already created from it are not affected."
+            confirmLabel="Delete"
+            onConfirm={() => deletePipelineMutation.mutate(pendingDeletePipeline)}
+            onCancel={() => setPendingDeletePipeline(null)}
+          />
+        )}
+
+        {runningPipeline && (
+          <RunPipelineDialog
+            pipeline={runningPipeline}
+            projectId={projectId!}
+            onClose={() => setRunningPipeline(null)}
+          />
+        )}
+
         {tab === 'settings' && (
           <div className="mx-auto max-w-2xl p-4 sm:p-6">
             <ProjectSettingsForm project={project} onDelete={() => deleteMutation.mutate()} />
@@ -402,26 +465,26 @@ function ProjectSection({ title, children }: { title: string; children: ReactNod
   );
 }
 
-function CampaignRow({
-  campaign,
+function PlanRow({
+  plan,
   projectId,
   chatCount = 0,
   artifactCount = 0,
 }: {
-  campaign: Campaign;
+  plan: Plan;
   projectId: string;
   chatCount?: number;
   artifactCount?: number;
 }) {
   return (
     <Link
-      to={`/projects/${projectId}/campaigns/${campaign.id}`}
+      to={`/projects/${projectId}/plans/${plan.id}`}
       className="flex w-full items-center gap-3 rounded-lg border border-border-soft bg-card p-4 text-left transition-[transform,box-shadow,border-color] hover:-translate-y-px hover:border-border hover:shadow-sm"
     >
       <div className="min-w-0 flex-1">
         <div className="flex flex-wrap items-center gap-2">
-          <span className="text-sm font-semibold tracking-[-0.01em] text-foreground">{campaign.title}</span>
-          <StatusPill status={campaign.status} />
+          <span className="text-sm font-semibold tracking-[-0.01em] text-foreground">{plan.title}</span>
+          <StatusPill status={plan.status} />
         </div>
         <div className="mt-1.5 flex flex-wrap items-center gap-2 text-[11px] text-faint-fg">
           {chatCount > 0 && (
@@ -438,7 +501,7 @@ function CampaignRow({
             {artifactCount} artifact{artifactCount !== 1 ? 's' : ''}
           </span>
           <span className="text-border">·</span>
-          <span>{campaign.completed_at ? `completed ${timeAgo(campaign.completed_at)}` : `started ${timeAgo(campaign.created_at)}`}</span>
+          <span>{plan.completed_at ? `completed ${timeAgo(plan.completed_at)}` : `started ${timeAgo(plan.created_at)}`}</span>
         </div>
       </div>
       <ChevronRight size={16} className="shrink-0 text-faint-fg" />
@@ -501,7 +564,7 @@ function ProjectSettingsForm({ project, onDelete }: { project: Project; onDelete
   });
 
   function handleDelete() {
-    if (!window.confirm('Delete this project and all its campaigns? This cannot be undone.')) return;
+    if (!window.confirm('Delete this project and all its plans? This cannot be undone.')) return;
     onDelete();
   }
 
@@ -574,7 +637,7 @@ function ProjectSettingsForm({ project, onDelete }: { project: Project; onDelete
       <section className="flex items-center justify-between gap-4 rounded-lg border border-destructive/25 bg-destructive/5 p-4">
         <div className="min-w-0">
           <div className="text-sm font-medium text-foreground">Delete project</div>
-          <div className="mt-0.5 text-xs text-muted-foreground">Permanently remove this project and all its campaigns.</div>
+          <div className="mt-0.5 text-xs text-muted-foreground">Permanently remove this project and all its plans.</div>
         </div>
         <Button
           type="button"
@@ -586,6 +649,101 @@ function ProjectSettingsForm({ project, onDelete }: { project: Project; onDelete
           Delete
         </Button>
       </section>
+    </div>
+  );
+}
+
+function RunPipelineDialog({
+  pipeline,
+  projectId,
+  onClose,
+}: {
+  pipeline: Pipeline;
+  projectId: string;
+  onClose: () => void;
+}) {
+  const navigate = useNavigate();
+
+  const runMutation = useMutation({
+    mutationFn: () => runPipeline(pipeline.id, projectId),
+    onSuccess: ({ plan_id, project_id }: { plan_id: string; project_id: string }) => {
+      navigate(`/projects/${project_id}/plans/${plan_id}`);
+      onClose();
+    },
+  });
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4 backdrop-blur-sm">
+      <div className="w-full max-w-sm rounded-xl border border-border bg-background shadow-lg">
+        <div className="border-b border-border-soft px-5 py-4">
+          <h2 className="text-sm font-semibold text-foreground">Run pipeline</h2>
+          <p className="mt-0.5 text-xs text-muted-foreground">{pipeline.title}</p>
+        </div>
+        <div className="px-5 py-4">
+          <p className="text-sm text-muted-foreground">This will start a new plan in the current project.</p>
+          {runMutation.isError && (
+            <p className="mt-2 text-xs text-destructive">Failed to start pipeline run.</p>
+          )}
+        </div>
+        <div className="flex items-center justify-end gap-2 border-t border-border-soft px-5 py-3">
+          <Button variant="ghost" size="sm" onClick={onClose}>Cancel</Button>
+          <Button
+            size="sm"
+            disabled={runMutation.isPending}
+            onClick={() => runMutation.mutate()}
+            className="gap-1.5"
+          >
+            <Play size={12} />
+            {runMutation.isPending ? 'Starting…' : 'Run now'}
+          </Button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function PipelineRow({
+  pipeline,
+  onRun,
+  onDelete,
+}: {
+  pipeline: Pipeline;
+  onRun: () => void;
+  onDelete: () => void;
+}) {
+  return (
+    <div className="group flex items-center gap-3 rounded-lg border border-border-soft bg-card px-4 py-3.5 transition-[transform,box-shadow,border-color] hover:-translate-y-px hover:border-border hover:shadow-sm">
+      <div className="grid size-9 shrink-0 place-items-center rounded-lg bg-muted">
+        <Workflow size={15} className="text-muted-foreground" />
+      </div>
+      <div className="min-w-0 flex-1">
+        <div className="truncate text-sm font-medium text-foreground">{pipeline.title}</div>
+        <div className="mt-0.5 text-xs text-muted-foreground">
+          {pipeline.description ?? `${pipeline.task_count ?? 0} steps`}
+        </div>
+      </div>
+      <div className="flex shrink-0 items-center gap-1">
+        <Button
+          size="sm"
+          onClick={onRun}
+          className="gap-1.5 text-xs opacity-0 transition-opacity group-hover:opacity-100"
+        >
+          <Play size={11} />
+          Run
+        </Button>
+        <Button
+          variant="ghost"
+          size="icon-sm"
+          aria-label="Delete pipeline"
+          className={cn(
+            'shrink-0 text-faint-fg opacity-0 transition-[opacity,color]',
+            'hover:text-destructive group-hover:opacity-100',
+          )}
+          onClick={onDelete}
+        >
+          <Trash2 size={14} />
+        </Button>
+      </div>
     </div>
   );
 }

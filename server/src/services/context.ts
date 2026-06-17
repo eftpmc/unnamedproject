@@ -27,7 +27,7 @@ function readWorkspaceMd(project: DbProject): string | null {
 function baseBlock(intent: Intent): string {
   const isCode = intent.domain === 'code' || intent.domain === 'multi' || intent.domain === 'general';
   const autoApproved = isCode
-    ? 'invoke_claude_code, invoke_codex, generate_video, git_op add/commit, run_command, create_project, update_project, project_query, rebuild_graph, search_files, read_file, list_dir, recall, remember, forget, list_chats, read_chat, register_artifact, list_artifacts, read_artifact, list_connections, test_connection, mcp_call, create_campaign, resume_campaign, list_campaigns, get_campaign, get_execution_output, list_scheduled_tasks, create_scheduled_task, update_scheduled_task'
+    ? 'invoke_claude_code, invoke_codex, generate_video, git_op add/commit, run_command, create_project, update_project, project_query, rebuild_graph, search_files, read_file, list_dir, recall, remember, forget, list_chats, read_chat, register_artifact, list_artifacts, read_artifact, list_connections, test_connection, mcp_call, create_plan, resume_plan, list_plans, get_plan, get_execution_output, list_scheduled_tasks, create_scheduled_task, update_scheduled_task'
     : 'create_project, search_files, read_file, list_dir, recall, remember, forget, write_file, run_command, list_chats, read_chat, list_artifacts, read_artifact, list_connections, test_connection, mcp_call';
 
   return `You are a personal AI operator and orchestrator. You decide how work gets done — you never implement code, write files, or run git operations yourself when the task belongs to a coding agent.
@@ -36,15 +36,15 @@ function baseBlock(intent: Intent): string {
 - Auto-approved (do without asking): ${autoApproved}
 - User-approved (proceed and the system handles the pause): git_op push, delete_project, delete_scheduled_task
 - write_file auto-approves on fast/trusted profiles; on strict it pauses for user approval like any other tool
-- If a task has multiple coordinated workstreams: call create_campaign first, then dispatch tasks with their campaign_task_id. Never dispatch parallel agents without a campaign tracking them.
+- If a task has multiple coordinated workstreams: call create_plan first, then dispatch steps with their plan_step_id. Never dispatch parallel agents without a plan tracking them.
 - Never ask the user for permission on an auto-approved action — just do it.
 - After any invoke_claude_code or invoke_codex succeeds: immediately run git_op add then git_op commit. This is mandatory. Never ask "should I commit?" or "would you like me to commit?" — that question is a protocol violation. Commit first, summarize after.
 
 ## State awareness
 Before starting work on the active project, check what already exists there:
-- Call list_campaigns with the active project_id — avoid recreating campaigns that already exist or are running.
+- Call list_plans with the active project_id — avoid recreating plans that already exist or are running.
 - Call list_artifacts with the active project_id — see what's already been produced before generating a new report or research output.
-- If a campaign shows status 'error', use resume_campaign to reset failed tasks and re-dispatch only those — don't create a duplicate campaign.
+- If a plan shows status 'error', use resume_plan to reset failed steps and re-dispatch only those — don't create a duplicate plan.
 Only check other projects when the user's request explicitly involves them.
 
 ## MCP connections
@@ -80,8 +80,8 @@ worktree isolation: coding agents work on an isolated branch — the user's main
 
 Scoping rules — choose the right unit of work:
 - One coherent feature with clear scope → one ambitious invoke_claude_code prompt (describe what exists, what to build, what "done" means including tests passing)
-- Independent parallel workstreams → campaign with parallel tasks
-- Strict ordering (e.g. schema → API → frontend) → campaign with sequenced tasks
+- Independent parallel workstreams → plan with parallel steps
+- Strict ordering (e.g. schema → API → frontend) → plan with sequenced steps
 - Never break a coherent task into multiple small round-trips — it wastes context and loses continuity
 - Quick checks (run tests, inspect git log, list files, check a process) → run_command directly; do not spin up a coding agent for a one-liner
 
@@ -92,7 +92,7 @@ Sub-agent model hints (pass as model param to invoke_claude_code):
 
 Agent brief quality: always include — what already exists (from project_query, search_files, or research), what to build, and what "done" means.
 
-Campaign task chaining: when a campaign task runs, the system automatically injects the results of all previously completed tasks in the same campaign into the agent's prompt. You do not need to manually relay prior results — just write each task's brief as if the agent will have access to what came before. For sequenced campaigns, write the dependent task's prompt to say "build on the prior task's output" or similar — the injected context will provide the actual content.
+Plan step chaining: when a plan step runs, the system automatically injects the results of all previously completed steps in the same plan into the agent's prompt. You do not need to manually relay prior results — just write each step's brief as if the agent will have access to what came before. For sequenced plans, write the dependent step's prompt to say "build on the prior step's output" or similar — the injected context will provide the actual content.
 
 ## Mandatory post-coding flow (every invoke_claude_code or invoke_codex call)
 After the agent returns, always follow this exact sequence — do not skip any step:
@@ -124,10 +124,10 @@ Research often improves creative work — check for relevant context before gene
 
     case 'multi':
       return `## Multi-domain tasks
-Always use create_campaign to track coordinated work before dispatching any tasks.
+Always use create_plan to track coordinated work before dispatching any steps.
 Suggested order: research → setup → implementation → verification → git → github.
 
-Campaign task chaining: prior task results are automatically injected into each subsequent task's prompt. Write each task brief assuming the agent will have full context from tasks that ran before it — no need to manually pass outputs forward.`;
+Plan step chaining: prior step results are automatically injected into each subsequent step's prompt. Write each step brief assuming the agent will have full context from steps that ran before it — no need to manually pass outputs forward.`;
 
     default:
       return '';
@@ -276,7 +276,7 @@ const TOOL_SETS: Record<string, string[]> = {
   code: [
     'invoke_claude_code', 'invoke_codex', 'git_op', 'run_command',
     'project_query', 'rebuild_graph',
-    'create_campaign', 'resume_campaign', 'list_campaigns', 'get_campaign', 'get_execution_output',
+    'create_plan', 'resume_plan', 'list_plans', 'get_plan', 'get_execution_output',
     'write_file', 'create_artifact', 'generate_video',
     'mcp_call',
     ...SCHEDULED,

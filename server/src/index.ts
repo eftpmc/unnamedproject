@@ -14,7 +14,7 @@ import messagesRoutes from './routes/messages.js';
 import executionsRoutes from './routes/executions.js';
 import memoryRoutes from './routes/memory.js';
 import scheduledTasksRoutes from './routes/scheduled_tasks.js';
-import campaignsRoutes from './routes/campaigns.js';
+import plansRoutes from './routes/plans.js';
 import pipelinesRoutes from './routes/pipelines.js';
 
 const PORT = process.env.PORT ?? '3000';
@@ -55,7 +55,7 @@ app.use('/sessions', messagesRoutes);
 app.use('/executions', executionsRoutes);
 app.use('/memory', memoryRoutes);
 app.use('/scheduled-tasks', scheduledTasksRoutes);
-app.use('/campaigns', campaignsRoutes);
+app.use('/plans', plansRoutes);
 app.use('/pipelines', pipelinesRoutes);
 
 const server = createServer(app);

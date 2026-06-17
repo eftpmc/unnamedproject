@@ -1,5 +1,5 @@
 import { getToken, setToken, clearToken } from './auth.js';
-import type { Session, Message, Project, ProjectArtifact, Connection, EffortLevel, ClaudeModelInfo, UserSettings, AgentBudgets, Memory, ScheduledTask, SessionWorktree, Campaign, CampaignTask, Pipeline, PipelineTask, PermissionProfile, SessionEvent, SessionProjectLink } from '../types.js';
+import type { Session, Message, Project, ProjectArtifact, Connection, EffortLevel, ClaudeModelInfo, UserSettings, AgentBudgets, Memory, ScheduledTask, SessionWorktree, Plan, PlanStep, Pipeline, PipelineTask, PermissionProfile, SessionEvent, SessionProjectLink } from '../types.js';
 
 async function request<T>(path: string, init: RequestInit = {}): Promise<T> {
   const token = getToken();
@@ -189,24 +189,24 @@ export function runScheduledTask(id: string): Promise<void> {
   return request(`/scheduled-tasks/${id}/run`, { method: 'POST' });
 }
 
-export function getProjectCampaigns(projectId: string): Promise<Campaign[]> {
-  return request(`/projects/${projectId}/campaigns`);
+export function getProjectPlans(projectId: string): Promise<Plan[]> {
+  return request(`/projects/${projectId}/plans`);
 }
 
-export function getAllCampaigns(): Promise<{ campaigns: (Campaign & { project_name: string })[] }> {
-  return request('/campaigns');
+export function getAllPlans(): Promise<{ plans: (Plan & { project_name: string })[] }> {
+  return request('/plans');
 }
 
-export function getCampaign(campaignId: string): Promise<{ campaign: Campaign; tasks: CampaignTask[] }> {
-  return request(`/campaigns/${campaignId}`);
+export function getPlan(planId: string): Promise<{ plan: Plan; steps: PlanStep[] }> {
+  return request(`/plans/${planId}`);
 }
 
-export function cancelCampaign(campaignId: string): Promise<{ campaign: Campaign }> {
-  return request(`/campaigns/${campaignId}/cancel`, { method: 'POST' });
+export function cancelPlan(planId: string): Promise<{ plan: Plan }> {
+  return request(`/plans/${planId}/cancel`, { method: 'POST' });
 }
 
-export function resumeCampaign(campaignId: string): Promise<{ campaign: Campaign; tasks: CampaignTask[] }> {
-  return request(`/campaigns/${campaignId}/resume`, { method: 'POST' });
+export function resumePlan(planId: string): Promise<{ plan: Plan; steps: PlanStep[] }> {
+  return request(`/plans/${planId}/resume`, { method: 'POST' });
 }
 
 export function getPipelines(): Promise<{ pipelines: Pipeline[] }> {
@@ -225,7 +225,7 @@ export function runPipeline(
   id: string,
   projectId: string,
   opts?: { title?: string; on_error?: 'stop' | 'continue' }
-): Promise<{ campaign_id: string; project_id: string }> {
+): Promise<{ plan_id: string; project_id: string }> {
   return request(`/pipelines/${id}/run`, {
     method: 'POST',
     body: JSON.stringify({ project_id: projectId, ...opts }),

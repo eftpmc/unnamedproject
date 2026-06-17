@@ -3,7 +3,7 @@ export interface Intent {
   complexity: 'low' | 'medium' | 'high';
   model: 'haiku' | 'sonnet' | 'fable' | 'opus';
   tools: string[];
-  scope: 'inline' | 'delegate' | 'campaign';
+  scope: 'inline' | 'delegate' | 'plan';
   needs_research: boolean;
   ambiguous: boolean;
 }
@@ -23,8 +23,8 @@ const RESEARCH_RE = /\b(what is|what are|how does|how do|explain|compare|find|re
 const WRITING_RE = /\b(write|draft|email|document|spec|essay|blog|article|proposal|readme|changelog|release.?notes|cover.?letter|announcement)\b/i;
 const CREATIVE_RE = /\b(story|poem|creative|brainstorm|idea|fiction|imagine|design|concept|name|slogan|tagline)\b/i;
 const IMAGE_RE = /\b(generate.{0,10}image|draw|illustrate|render.{0,10}image|dalle|midjourney)\b/i;
-const HIGH_COMPLEXITY_RE = /\b(architecture|migrate|redesign|overhaul|comprehensive|entire|refactor.{0,20}(all|whole|entire)|multiple.{0,20}(file|system|service)|campaign|parallel|series|sequence)\b/i;
-const CAMPAIGN_RE = /\b(campaign|multiple.{0,20}task|parallel.{0,20}task|series.{0,20}(of|task)|batch|pipeline)\b/i;
+const HIGH_COMPLEXITY_RE = /\b(architecture|migrate|redesign|overhaul|comprehensive|entire|refactor.{0,20}(all|whole|entire)|multiple.{0,20}(file|system|service)|plan|parallel|series|sequence)\b/i;
+const CAMPAIGN_RE = /\b(plan|multiple.{0,20}(task|step)|parallel.{0,20}(task|step)|series.{0,20}(of|task|step)|batch|pipeline)\b/i;
 
 export function classifyIntent(userMessage: string): Intent {
   const msg = userMessage;
@@ -52,7 +52,7 @@ export function classifyIntent(userMessage: string): Intent {
   const complexity: Intent['complexity'] = isHighComplexity ? 'high' : isLowComplexity ? 'low' : 'medium';
   const model: Intent['model'] = isHighComplexity ? 'opus' : isLowComplexity ? 'haiku' : 'sonnet';
 
-  const scope: Intent['scope'] = CAMPAIGN_RE.test(msg) ? 'campaign'
+  const scope: Intent['scope'] = CAMPAIGN_RE.test(msg) ? 'plan'
     : (isCode && !isLowComplexity) ? 'delegate'
     : 'inline';
 

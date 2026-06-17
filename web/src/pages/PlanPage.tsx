@@ -3,7 +3,7 @@ import type { ReactNode } from 'react';
 import { useParams, Link, useNavigate } from 'react-router-dom';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { ArrowDown, Bot, Check, ChevronRight, Cpu, FileEdit, FileText, GitBranch, GitPullRequest, MessageSquare, Plus, RotateCcw, Sparkles, Terminal, X, Zap } from 'lucide-react';
-import { getCampaign, cancelCampaign, resumeCampaign, createChat, updateChatConfig, getChats, getProjectArtifacts, getSessionWorktree, getProjects } from '../lib/api.js';
+import { getPlan, cancelPlan, resumePlan, createChat, updateChatConfig, getChats, getProjectArtifacts, getSessionWorktree, getProjects } from '../lib/api.js';
 import ArtifactPreviewCard from '../components/ArtifactPreviewCard.js';
 import { subscribe } from '../lib/ws.js';
 import { cn } from '@/lib/utils';
@@ -12,9 +12,9 @@ import { getToken } from '../lib/auth.js';
 import { PageBody, PageHeader, PageLoading, PageShell } from '@/components/ui/app-layout';
 import { Button } from '@/components/ui/button';
 import { StatusPill } from '@/components/ui/status-pill';
-import type { Campaign, CampaignTask, Project, ProjectArtifact, Session, WSCampaignTaskUpdated, WSCampaignUpdated } from '../types.js';
+import type { Plan, PlanStep, Project, ProjectArtifact, Session, WSPlanStepUpdated, WSPlanUpdated } from '../types.js';
 
-const AGENT_LABEL: Record<CampaignTask['agent'], string> = {
+const AGENT_LABEL: Record<PlanStep['agent'], string> = {
   claude_code: 'Claude Code',
   codex: 'Codex',
   mcp: 'MCP',
@@ -25,7 +25,7 @@ const AGENT_LABEL: Record<CampaignTask['agent'], string> = {
   subagent: 'Sub-agent',
 };
 
-const AGENT_ICON: Record<CampaignTask['agent'], typeof Bot> = {
+const AGENT_ICON: Record<PlanStep['agent'], typeof Bot> = {
   claude_code: Bot,
   codex: Bot,
   mcp: Bot,
@@ -36,25 +36,25 @@ const AGENT_ICON: Record<CampaignTask['agent'], typeof Bot> = {
   subagent: Cpu,
 };
 
-function buildWaves(tasks: CampaignTask[]): CampaignTask[][] {
-  const waves: CampaignTask[][] = [];
+function buildWaves(steps: PlanStep[]): PlanStep[][] {
+  const waves: PlanStep[][] = [];
   const assigned = new Set<string>();
-  let remaining = tasks.filter(t => !assigned.has(t.id));
+  let remaining = steps.filter(s => !assigned.has(s.id));
   while (remaining.length > 0) {
-    const wave = remaining.filter(t => {
-      const deps: string[] = t.depends_on ? JSON.parse(t.depends_on) : [];
+    const wave = remaining.filter(s => {
+      const deps: string[] = s.depends_on ? JSON.parse(s.depends_on) : [];
       return deps.every(depId => assigned.has(depId));
     });
     if (wave.length === 0) { waves.push(remaining); break; }
-    wave.forEach(t => assigned.add(t.id));
+    wave.forEach(s => assigned.add(s.id));
     waves.push(wave);
-    remaining = tasks.filter(t => !assigned.has(t.id));
+    remaining = steps.filter(s => !assigned.has(s.id));
   }
   return waves;
 }
 
-function StatusDot({ status }: { status: CampaignTask['status'] }) {
-  const cls: Record<CampaignTask['status'], string> = {
+function StatusDot({ status }: { status: PlanStep['status'] }) {
+  const cls: Record<PlanStep['status'], string> = {
     waiting: 'bg-faint-fg',
     running: 'bg-primary animate-pulse',
     done:    'bg-success',
@@ -63,61 +63,61 @@ function StatusDot({ status }: { status: CampaignTask['status'] }) {
   return <span className={cn('size-1.5 shrink-0 rounded-full', cls[status])} />;
 }
 
-export default function CampaignPage() {
-  const { projectId, campaignId } = useParams<{ projectId: string; campaignId: string }>();
+export default function PlanPage() {
+  const { projectId, planId } = useParams<{ projectId: string; planId: string }>();
   const navigate = useNavigate();
 
   const { data, isLoading, isError } = useQuery({
-    queryKey: ['campaign', campaignId],
-    queryFn: () => getCampaign(campaignId!),
-    enabled: !!campaignId,
+    queryKey: ['plan', planId],
+    queryFn: () => getPlan(planId!),
+    enabled: !!planId,
     refetchInterval: (query) => {
-      return query.state.data?.campaign.status === 'running' ? 10_000 : false;
+      return query.state.data?.plan.status === 'running' ? 10_000 : false;
     },
   });
 
   const queryClient = useQueryClient();
-  const [taskStatuses, setTaskStatuses] = useState<Record<string, CampaignTask['status']>>({});
-  const [campaignStatus, setCampaignStatus] = useState<Campaign['status'] | null>(null);
+  const [stepStatuses, setStepStatuses] = useState<Record<string, PlanStep['status']>>({});
+  const [planStatus, setPlanStatus] = useState<Plan['status'] | null>(null);
   useEffect(() => {
     if (!data) return;
-    setTaskStatuses(prev => {
-      const updates: Record<string, CampaignTask['status']> = {};
-      for (const t of data.tasks) {
-        // Seed tasks not yet known; always accept terminal statuses to recover WS gaps
-        if (!(t.id in prev) || t.status === 'done' || t.status === 'error') {
-          updates[t.id] = t.status;
+    setStepStatuses(prev => {
+      const updates: Record<string, PlanStep['status']> = {};
+      for (const s of data.steps) {
+        // Seed steps not yet known; always accept terminal statuses to recover WS gaps
+        if (!(s.id in prev) || s.status === 'done' || s.status === 'error') {
+          updates[s.id] = s.status;
         }
       }
       return Object.keys(updates).length ? { ...prev, ...updates } : prev;
     });
-    setCampaignStatus(prev => {
-      const terminal = data.campaign.status === 'done' || data.campaign.status === 'error' || data.campaign.status === 'cancelled';
-      return (prev === null || terminal) ? data.campaign.status : prev;
+    setPlanStatus(prev => {
+      const terminal = data.plan.status === 'done' || data.plan.status === 'error' || data.plan.status === 'cancelled';
+      return (prev === null || terminal) ? data.plan.status : prev;
     });
   }, [data]);
 
   useEffect(() => {
     return subscribe((event) => {
-      if (event.type === 'campaign_task_updated') {
-        const e = event as WSCampaignTaskUpdated;
-        setTaskStatuses(prev => ({ ...prev, [e.taskId]: e.status }));
+      if (event.type === 'plan_step_updated') {
+        const e = event as WSPlanStepUpdated;
+        setStepStatuses(prev => ({ ...prev, [e.stepId]: e.status }));
       }
-      if (event.type === 'campaign_updated') {
-        const e = event as WSCampaignUpdated;
-        if (e.campaignId === campaignId) setCampaignStatus(e.status);
+      if (event.type === 'plan_updated') {
+        const e = event as WSPlanUpdated;
+        if (e.planId === planId) setPlanStatus(e.status);
       }
     });
-  }, [campaignId]);
+  }, [planId]);
 
   const cancelMutation = useMutation({
-    mutationFn: () => cancelCampaign(campaignId!),
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['campaign', campaignId] }),
+    mutationFn: () => cancelPlan(planId!),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['plan', planId] }),
   });
 
   const resumeMutation = useMutation({
-    mutationFn: () => resumeCampaign(campaignId!),
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['campaign', campaignId] }),
+    mutationFn: () => resumePlan(planId!),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['plan', planId] }),
   });
 
   const { data: projects = [] } = useQuery<Project[]>({
@@ -139,7 +139,7 @@ export default function CampaignPage() {
     staleTime: 20_000,
   });
 
-  const originatingSessionId = data?.campaign.session_id ?? null;
+  const originatingSessionId = data?.plan.session_id ?? null;
   const { data: worktree } = useQuery({
     queryKey: ['worktree', originatingSessionId],
     queryFn: () => getSessionWorktree(originatingSessionId!),
@@ -167,23 +167,23 @@ export default function CampaignPage() {
   if (isError || !data) {
     return (
       <PageShell>
-        <PageHeader title="Campaign not found" />
+        <PageHeader title="Plan not found" />
       </PageShell>
     );
   }
 
-  const { campaign, tasks } = data;
-  const effectiveCampaignStatus = campaignStatus ?? campaign.status;
-  const effectiveStatuses = tasks.map(t => taskStatuses[t.id] ?? t.status);
+  const { plan, steps } = data;
+  const effectivePlanStatus = planStatus ?? plan.status;
+  const effectiveStatuses = steps.map(s => stepStatuses[s.id] ?? s.status);
   const doneCount = effectiveStatuses.filter(s => s === 'done').length;
-  const progressPct = tasks.length > 0 ? (doneCount / tasks.length) * 100 : 0;
-  const hasDeps = tasks.some(t => t.depends_on && t.depends_on !== '[]');
-  const waves = hasDeps ? buildWaves(tasks) : null;
-  const relatedChat = campaign.session_id ? chats.find(chat => chat.id === campaign.session_id) : null;
-  const relatedArtifacts = (artifactData?.artifacts ?? []).filter(a => a.source_campaign_id === campaign.id);
+  const progressPct = steps.length > 0 ? (doneCount / steps.length) * 100 : 0;
+  const hasDeps = steps.some(s => s.depends_on && s.depends_on !== '[]');
+  const waves = hasDeps ? buildWaves(steps) : null;
+  const relatedChat = plan.session_id ? chats.find(chat => chat.id === plan.session_id) : null;
+  const relatedArtifacts = (artifactData?.artifacts ?? []).filter(a => a.source_plan_id === plan.id);
   const branchName = worktree?.branch ?? null;
-  const taskEvents = tasks
-    .filter(task => (taskStatuses[task.id] ?? task.status) !== 'waiting')
+  const stepEvents = steps
+    .filter(step => (stepStatuses[step.id] ?? step.status) !== 'waiting')
     .slice(0, 4);
 
   return (
@@ -199,23 +199,23 @@ export default function CampaignPage() {
               {project?.name ?? 'Project'}
             </Link>
             <ChevronRight size={12} className="text-faint-fg" />
-            <Link to={`/projects/${projectId}/campaigns`} className="text-xs text-muted-foreground hover:text-foreground transition-colors">
-              Campaigns
+            <Link to={`/projects/${projectId}/plans`} className="text-xs text-muted-foreground hover:text-foreground transition-colors">
+              Plans
             </Link>
             <ChevronRight size={12} className="text-faint-fg" />
-            <span className="text-foreground">{campaign.title}</span>
+            <span className="text-foreground">{plan.title}</span>
           </nav>
         )}
-        title={campaign.title}
+        title={plan.title}
         description={(
           <>
-            Started {timeAgo(campaign.created_at)}
-            {campaign.completed_at && ` · completed ${timeAgo(campaign.completed_at)}`}
+            Started {timeAgo(plan.created_at)}
+            {plan.completed_at && ` · completed ${timeAgo(plan.completed_at)}`}
           </>
         )}
         actions={(
           <div className="flex items-center gap-2">
-            <StatusPill status={effectiveCampaignStatus} />
+            <StatusPill status={effectivePlanStatus} />
             <Button
               size="sm"
               onClick={() => startChatMutation.mutate()}
@@ -225,7 +225,7 @@ export default function CampaignPage() {
               <Plus size={14} />
               New chat
             </Button>
-            {effectiveCampaignStatus === 'error' && (
+            {effectivePlanStatus === 'error' && (
               <Button
                 variant="outline"
                 size="sm"
@@ -237,7 +237,7 @@ export default function CampaignPage() {
                 Resume
               </Button>
             )}
-            {effectiveCampaignStatus === 'running' && (
+            {effectivePlanStatus === 'running' && (
               <Button
                 variant="outline"
                 size="sm"
@@ -259,7 +259,7 @@ export default function CampaignPage() {
             <section>
               <div className="mb-3 flex items-center gap-3">
                 <h2 className="text-sm font-semibold text-foreground">Progress</h2>
-                <span className="ml-auto text-xs text-muted-foreground">{doneCount} of {tasks.length} done</span>
+                <span className="ml-auto text-xs text-muted-foreground">{doneCount} of {steps.length} done</span>
               </div>
               <div className="mb-4 h-2 overflow-hidden rounded-full border border-border-soft bg-muted">
                 <div
@@ -275,17 +275,17 @@ export default function CampaignPage() {
                         <div className="mb-2 flex items-center gap-2">
                           <Zap size={11} className="shrink-0 text-primary" />
                           <span className="text-[11px] font-medium text-primary">
-                            {wave.length} tasks in parallel
+                            {wave.length} steps in parallel
                           </span>
                           <div className="flex-1 border-t border-dashed border-border-soft" />
                         </div>
                       )}
                       <div className={wave.length > 1 ? 'grid grid-cols-1 gap-1 sm:grid-cols-2' : 'flex flex-col'}>
-                        {wave.map(task => {
-                          const status = taskStatuses[task.id] ?? task.status;
+                        {wave.map(step => {
+                          const status = stepStatuses[step.id] ?? step.status;
                           return (
-                            <div key={task.id} className={wave.length > 1 ? 'rounded-lg border border-border-soft bg-muted/30 px-3 py-1' : ''}>
-                              <TaskRow task={task} status={status} />
+                            <div key={step.id} className={wave.length > 1 ? 'rounded-lg border border-border-soft bg-muted/30 px-3 py-1' : ''}>
+                              <StepRow step={step} status={status} />
                             </div>
                           );
                         })}
@@ -300,9 +300,9 @@ export default function CampaignPage() {
                 </div>
               ) : (
                 <div className="flex flex-col">
-                  {tasks.map(task => {
-                    const status = taskStatuses[task.id] ?? task.status;
-                    return <TaskRow key={task.id} task={task} status={status} />;
+                  {steps.map(step => {
+                    const status = stepStatuses[step.id] ?? step.status;
+                    return <StepRow key={step.id} step={step} status={status} />;
                   })}
                 </div>
               )}
@@ -332,7 +332,7 @@ export default function CampaignPage() {
                 </button>
               ) : (
                 <div className="rounded-lg border border-dashed border-border bg-muted/30 p-4 text-sm text-muted-foreground">
-                  No originating chat is attached to this campaign yet.
+                  No originating chat is attached to this plan yet.
                 </div>
               )}
             </section>
@@ -359,7 +359,7 @@ export default function CampaignPage() {
                 </div>
               ) : (
                 <div className="rounded-lg border border-dashed border-border bg-muted/30 p-4 text-sm text-muted-foreground">
-                  Artifacts produced by this campaign will appear here.
+                  Artifacts produced by this plan will appear here.
                 </div>
               )}
             </section>
@@ -367,37 +367,37 @@ export default function CampaignPage() {
 
           <aside className="flex flex-col gap-4 lg:sticky lg:top-0">
             <div className="flex flex-col gap-3 rounded-lg border border-border-soft bg-card p-4">
-              <InfoRow label="Status" value={<StatusPill status={effectiveCampaignStatus} />} />
+              <InfoRow label="Status" value={<StatusPill status={effectivePlanStatus} />} />
               {branchName && (
                 <InfoRow label="Branch" value={<code className="max-w-32 truncate font-mono text-[11px] text-fg-soft">{branchName}</code>} />
               )}
-              <InfoRow label="Started" value={<span className="text-xs font-medium text-foreground">{timeAgo(campaign.created_at)}</span>} />
-              {campaign.completed_at && (
-                <InfoRow label="Completed" value={<span className="text-xs font-medium text-foreground">{timeAgo(campaign.completed_at)}</span>} />
+              <InfoRow label="Started" value={<span className="text-xs font-medium text-foreground">{timeAgo(plan.created_at)}</span>} />
+              {plan.completed_at && (
+                <InfoRow label="Completed" value={<span className="text-xs font-medium text-foreground">{timeAgo(plan.completed_at)}</span>} />
               )}
             </div>
 
             <div className="flex flex-col gap-3 rounded-lg border border-border-soft bg-card p-4">
               <div className="text-xs font-semibold text-muted-foreground">Recent activity</div>
               <div className="flex flex-col gap-4">
-                {taskEvents.length > 0 ? taskEvents.map((task, index) => {
-                  const status = taskStatuses[task.id] ?? task.status;
-                  const Icon = AGENT_ICON[task.agent];
+                {stepEvents.length > 0 ? stepEvents.map((step, index) => {
+                  const status = stepStatuses[step.id] ?? step.status;
+                  const Icon = AGENT_ICON[step.agent];
                   return (
-                    <div key={task.id} className="relative flex gap-3">
-                      {index < taskEvents.length - 1 && <span className="absolute left-3 top-7 h-[calc(100%+0.5rem)] w-px bg-border-soft" />}
+                    <div key={step.id} className="relative flex gap-3">
+                      {index < stepEvents.length - 1 && <span className="absolute left-3 top-7 h-[calc(100%+0.5rem)] w-px bg-border-soft" />}
                       <span className="z-10 grid size-6 shrink-0 place-items-center rounded-full bg-muted text-muted-foreground">
                         <Icon size={12} />
                       </span>
                       <span className="min-w-0">
-                        <span className="block truncate text-xs font-medium text-foreground">{AGENT_LABEL[task.agent]}</span>
-                        <span className="mt-0.5 block text-[11px] leading-relaxed text-muted-foreground">{task.title}</span>
-                        <span className="mt-0.5 block text-[11px] text-faint-fg">{status === 'running' ? 'running · ' : ''}{timeAgo(task.created_at)}</span>
+                        <span className="block truncate text-xs font-medium text-foreground">{AGENT_LABEL[step.agent]}</span>
+                        <span className="mt-0.5 block text-[11px] leading-relaxed text-muted-foreground">{step.title}</span>
+                        <span className="mt-0.5 block text-[11px] text-faint-fg">{status === 'running' ? 'running · ' : ''}{timeAgo(step.created_at)}</span>
                       </span>
                     </div>
                   );
                 }) : (
-                  <div className="text-xs text-muted-foreground">No task activity yet.</div>
+                  <div className="text-xs text-muted-foreground">No step activity yet.</div>
                 )}
               </div>
             </div>
@@ -417,7 +417,7 @@ function InfoRow({ label, value }: { label: string; value: ReactNode }) {
   );
 }
 
-function TaskRow({ task, status }: { task: CampaignTask; status: CampaignTask['status'] }) {
+function StepRow({ step, status }: { step: PlanStep; status: PlanStep['status'] }) {
   const [expanded, setExpanded] = useState(false);
   const done = status === 'done';
 
@@ -435,13 +435,13 @@ function TaskRow({ task, status }: { task: CampaignTask; status: CampaignTask['s
         )}>
           {done && <Check size={11} strokeWidth={2.5} />}
         </span>
-        <span className={cn('min-w-0 flex-1', done && 'line-through decoration-faint-fg decoration-1')}>{task.title}</span>
+        <span className={cn('min-w-0 flex-1', done && 'line-through decoration-faint-fg decoration-1')}>{step.title}</span>
         <span className="hidden shrink-0 items-center gap-1 text-xs text-muted-foreground sm:flex">
-          {(() => { const Icon = AGENT_ICON[task.agent]; return <Icon className="size-3" />; })()}
-          {AGENT_LABEL[task.agent]}
+          {(() => { const Icon = AGENT_ICON[step.agent]; return <Icon className="size-3" />; })()}
+          {AGENT_LABEL[step.agent]}
         </span>
         <StatusDot status={status} />
-        {(status === 'done' || status === 'running' || status === 'error') && task.execution_id && (
+        {(status === 'done' || status === 'running' || status === 'error') && step.execution_id && (
           <button
             type="button"
             onClick={() => setExpanded(v => !v)}
@@ -451,8 +451,8 @@ function TaskRow({ task, status }: { task: CampaignTask; status: CampaignTask['s
           </button>
         )}
       </div>
-      {expanded && task.execution_id && (
-        <ExecutionOutput executionId={task.execution_id} />
+      {expanded && step.execution_id && (
+        <ExecutionOutput executionId={step.execution_id} />
       )}
     </div>
   );

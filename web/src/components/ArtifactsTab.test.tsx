@@ -33,8 +33,8 @@ const artifacts: ProjectArtifact[] = [
     url: null,
     content_url: '/projects/proj-1/research/market-analysis.md',
     metadata: {},
-    source_campaign_id: null,
-    source_task_id: null,
+    source_plan_id: null,
+    source_step_id: null,
     created_at: Math.floor(Date.now() / 1000) - 60,
   },
   {
@@ -49,8 +49,8 @@ const artifacts: ProjectArtifact[] = [
     url: '/projects/proj-1/media/launch.mp4',
     content_url: '/projects/proj-1/media/launch.mp4',
     metadata: {},
-    source_campaign_id: null,
-    source_task_id: null,
+    source_plan_id: null,
+    source_step_id: null,
     created_at: Math.floor(Date.now() / 1000) - 120,
   },
 ];

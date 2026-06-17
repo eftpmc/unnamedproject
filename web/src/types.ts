@@ -43,7 +43,7 @@ export type SessionEventType =
   | 'scope_changed'
   | 'project_linked'
   | 'project_created'
-  | 'campaign_created'
+  | 'plan_created'
   | 'artifact_created'
   | 'approval_requested'
   | 'approval_resolved'
@@ -56,7 +56,7 @@ export interface SessionEvent {
   title: string;
   body: string | null;
   project_id: string | null;
-  campaign_id: string | null;
+  plan_id: string | null;
   artifact_id: string | null;
   execution_id: string | null;
   metadata: Record<string, unknown>;
@@ -109,8 +109,8 @@ export interface ProjectArtifact {
   url: string | null;
   content_url: string | null;
   metadata: Record<string, unknown>;
-  source_campaign_id: string | null;
-  source_task_id: string | null;
+  source_plan_id: string | null;
+  source_step_id: string | null;
   created_at: number;
 }
 
@@ -243,9 +243,9 @@ export interface ScheduledTask {
   last_run_at: number | null;
 }
 
-export interface CampaignTask {
+export interface PlanStep {
   id: string;
-  campaign_id: string;
+  plan_id: string;
   title: string;
   agent: 'claude_code' | 'codex' | 'mcp' | 'file_write' | 'git' | 'github' | 'eval' | 'subagent';
   status: 'waiting' | 'running' | 'done' | 'error';
@@ -257,7 +257,7 @@ export interface CampaignTask {
   completed_at: number | null;
 }
 
-export interface Campaign {
+export interface Plan {
   id: string;
   project_id: string;
   session_id: string | null;
@@ -274,14 +274,14 @@ export interface Pipeline {
   description: string | null;
   created_at: number;
   task_count?: number;
-  agents?: CampaignTask['agent'][];
+  agents?: PlanStep['agent'][];
 }
 
 export interface PipelineTask {
   id: string;
   pipeline_id: string;
   title: string;
-  agent: CampaignTask['agent'];
+  agent: PlanStep['agent'];
   prompt: string | null;
   tool_args: string | null;
   depends_on: string | null;
@@ -289,14 +289,14 @@ export interface PipelineTask {
   created_at: number;
 }
 
-export interface WSCampaignTaskUpdated extends WSEvent {
-  type: 'campaign_task_updated';
-  taskId: string;
-  status: CampaignTask['status'];
+export interface WSPlanStepUpdated extends WSEvent {
+  type: 'plan_step_updated';
+  stepId: string;
+  status: PlanStep['status'];
 }
 
-export interface WSCampaignUpdated extends WSEvent {
-  type: 'campaign_updated';
-  campaignId: string;
-  status: Campaign['status'];
+export interface WSPlanUpdated extends WSEvent {
+  type: 'plan_updated';
+  planId: string;
+  status: Plan['status'];
 }

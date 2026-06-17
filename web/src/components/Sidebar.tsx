@@ -1,6 +1,6 @@
 import { useNavigate, useLocation, Link } from 'react-router-dom';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
-import { Plus, MessagesSquare, LayoutGrid, Activity, Workflow } from 'lucide-react';
+import { Plus, MessagesSquare, LayoutGrid, Bell } from 'lucide-react';
 import { getChats, createChat } from '../lib/api.js';
 import { timeAgo, cn } from '../lib/utils.js';
 import UserMenu from './UserMenu.js';
@@ -25,9 +25,10 @@ interface SidebarProps {
   className?: string;
   onNavigate?: () => void;
   pendingApprovalCount?: number;
+  onOpenInbox?: () => void;
 }
 
-export default function Sidebar({ className, onNavigate, pendingApprovalCount = 0 }: SidebarProps) {
+export default function Sidebar({ className, onNavigate, pendingApprovalCount = 0, onOpenInbox }: SidebarProps) {
   const navigate = useNavigate();
   const location = useLocation();
   const queryClient = useQueryClient();
@@ -96,14 +97,6 @@ export default function Sidebar({ className, onNavigate, pendingApprovalCount = 
           <SidebarGroupContent>
             <SidebarMenu>
               <NavItem
-                icon={<Activity size={15} strokeWidth={1.75} />}
-                label="Activity"
-                href="/activity"
-                active={isActive('/activity')}
-                onClick={closeSidebar}
-                badge={pendingApprovalCount > 0 ? pendingApprovalCount : undefined}
-              />
-              <NavItem
                 icon={<MessagesSquare size={15} strokeWidth={1.75} />}
                 label="Chats"
                 href="/chats"
@@ -115,13 +108,6 @@ export default function Sidebar({ className, onNavigate, pendingApprovalCount = 
                 label="Projects"
                 href="/projects"
                 active={isActive('/projects')}
-                onClick={closeSidebar}
-              />
-              <NavItem
-                icon={<Workflow size={15} strokeWidth={1.75} />}
-                label="Pipelines"
-                href="/pipelines"
-                active={isActive('/pipelines')}
                 onClick={closeSidebar}
               />
             </SidebarMenu>
@@ -165,9 +151,26 @@ export default function Sidebar({ className, onNavigate, pendingApprovalCount = 
         {recentChats.length === 0 && <div className="flex-1" />}
       </SidebarContent>
 
-      {/* ---- Footer: account menu (settings + theme) ---- */}
+      {/* ---- Footer: inbox bell + account menu ---- */}
       <SidebarFooter className="border-t border-sidebar-border px-2.5 py-2.5">
-        <UserMenu />
+        <div className="flex items-center gap-1">
+          <button
+            type="button"
+            onClick={onOpenInbox}
+            aria-label="Open inbox"
+            className="relative grid h-9 w-9 shrink-0 place-items-center rounded-lg text-muted-foreground transition-colors hover:bg-sidebar-accent hover:text-foreground"
+          >
+            <Bell size={15} strokeWidth={1.75} />
+            {pendingApprovalCount > 0 && (
+              <span className="absolute right-1.5 top-1.5 flex h-3.5 min-w-3.5 items-center justify-center rounded-full bg-warning px-0.5 text-[9px] font-semibold leading-none text-warning-foreground">
+                {pendingApprovalCount}
+              </span>
+            )}
+          </button>
+          <div className="flex-1">
+            <UserMenu />
+          </div>
+        </div>
       </SidebarFooter>
     </SidebarRoot>
   );

@@ -2,7 +2,7 @@ import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { Plus, FolderGit2, FileText, Video, GitGraph } from 'lucide-react';
-import { getProjects, createProject, getProjectCampaigns, getProjectCapabilities } from '../lib/api.js';
+import { getProjects, createProject, getProjectPlans, getProjectCapabilities } from '../lib/api.js';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
@@ -11,9 +11,9 @@ import type { Project } from '../types.js';
 
 function ProjectCard({ project }: { project: Project }) {
   const navigate = useNavigate();
-  const { data: campaigns = [] } = useQuery({
-    queryKey: ['project-campaigns', project.id],
-    queryFn: () => getProjectCampaigns(project.id),
+  const { data: plans = [] } = useQuery({
+    queryKey: ['project-plans', project.id],
+    queryFn: () => getProjectPlans(project.id),
     staleTime: 30_000,
   });
   const { data: caps } = useQuery({
@@ -21,7 +21,7 @@ function ProjectCard({ project }: { project: Project }) {
     queryFn: () => getProjectCapabilities(project.id),
     staleTime: 30_000,
   });
-  const runningCount = campaigns.filter(c => c.status === 'running').length;
+  const runningCount = plans.filter(p => p.status === 'running').length;
 
   return (
     <button type="button" aria-label={`Open project: ${project.name}`} className="block h-full w-full rounded-lg text-left" onClick={() => navigate(`/projects/${project.id}`)}>
@@ -61,7 +61,7 @@ function ProjectCard({ project }: { project: Project }) {
             </span>
           )}
           <span className="text-border">·</span>
-          <span>{campaigns.length} campaign{campaigns.length !== 1 ? 's' : ''}</span>
+          <span>{plans.length} plan{plans.length !== 1 ? 's' : ''}</span>
         </div>
       </Surface>
     </button>

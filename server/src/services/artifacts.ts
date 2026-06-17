@@ -17,8 +17,8 @@ export interface ProjectArtifact {
   url: string | null;
   content_url: string | null;
   metadata: Record<string, unknown>;
-  source_campaign_id: string | null;
-  source_task_id: string | null;
+  source_plan_id: string | null;
+  source_step_id: string | null;
   created_at: number;
 }
 
@@ -33,8 +33,8 @@ interface DbArtifactRow {
   path: string | null;
   url: string | null;
   metadata: string;
-  source_campaign_id: string | null;
-  source_task_id: string | null;
+  source_plan_id: string | null;
+  source_step_id: string | null;
   created_at: number;
 }
 
@@ -48,8 +48,8 @@ export interface CreateArtifactInput {
   path?: string | null;
   url?: string | null;
   metadata?: Record<string, unknown>;
-  source_campaign_id?: string | null;
-  source_task_id?: string | null;
+  source_plan_id?: string | null;
+  source_step_id?: string | null;
 }
 
 const MIME_BY_EXT: Record<string, string> = {
@@ -91,7 +91,7 @@ function dbArtifacts(projectId: string): ProjectArtifact[] {
   const rows = getDb()
     .prepare(`
       SELECT id, project_id, kind, title, description, status, mime_type, path, url, metadata,
-             source_campaign_id, source_task_id, created_at
+             source_plan_id, source_step_id, created_at
       FROM artifacts
       WHERE project_id = ?
     `)
@@ -129,7 +129,7 @@ export function createArtifact(input: CreateArtifactInput): ProjectArtifact {
     .prepare(`
       INSERT INTO artifacts (
         id, project_id, kind, title, description, status, mime_type, path, url, metadata,
-        source_campaign_id, source_task_id
+        source_plan_id, source_step_id
       )
       VALUES (?,?,?,?,?,?,?,?,?,?,?,?)
     `)
@@ -144,14 +144,14 @@ export function createArtifact(input: CreateArtifactInput): ProjectArtifact {
       input.path ?? null,
       input.url ?? null,
       JSON.stringify(input.metadata ?? {}),
-      input.source_campaign_id ?? null,
-      input.source_task_id ?? null,
+      input.source_plan_id ?? null,
+      input.source_step_id ?? null,
     );
 
   const row = getDb()
     .prepare(`
       SELECT id, project_id, kind, title, description, status, mime_type, path, url, metadata,
-             source_campaign_id, source_task_id, created_at
+             source_plan_id, source_step_id, created_at
       FROM artifacts
       WHERE id = ?
     `)
@@ -176,7 +176,7 @@ export async function createTextArtifact(input: Omit<CreateArtifactInput, 'path'
     .prepare(`
       INSERT INTO artifacts (
         id, project_id, kind, title, description, status, mime_type, path, url, metadata,
-        source_campaign_id, source_task_id
+        source_plan_id, source_step_id
       )
       VALUES (?,?,?,?,?,?,?,?,?,?,?,?)
     `)
@@ -191,14 +191,14 @@ export async function createTextArtifact(input: Omit<CreateArtifactInput, 'path'
       relPath,
       null,
       JSON.stringify(input.metadata ?? {}),
-      input.source_campaign_id ?? null,
-      input.source_task_id ?? null,
+      input.source_plan_id ?? null,
+      input.source_step_id ?? null,
     );
 
   const row = getDb()
     .prepare(`
       SELECT id, project_id, kind, title, description, status, mime_type, path, url, metadata,
-             source_campaign_id, source_task_id, created_at
+             source_plan_id, source_step_id, created_at
       FROM artifacts
       WHERE id = ?
     `)
@@ -256,8 +256,8 @@ function filesystemArtifacts(projectId: string): ProjectArtifact[] {
         url,
         content_url: url ?? `/projects/${projectId}/${candidate.dir}/${encodeURIComponent(entry.name)}`,
         metadata: { filename: entry.name, legacy_source: candidate.dir },
-        source_campaign_id: null,
-        source_task_id: null,
+        source_plan_id: null,
+        source_step_id: null,
         created_at: Math.floor((stat.birthtimeMs || stat.mtimeMs) / 1000),
       });
     }
@@ -293,7 +293,7 @@ export async function registerFileAsArtifact(input: {
 
 export function getArtifactById(artifactId: string): ProjectArtifact | undefined {
   const row = getDb()
-    .prepare('SELECT id, project_id, kind, title, description, status, mime_type, path, url, metadata, source_campaign_id, source_task_id, created_at FROM artifacts WHERE id = ?')
+    .prepare('SELECT id, project_id, kind, title, description, status, mime_type, path, url, metadata, source_plan_id, source_step_id, created_at FROM artifacts WHERE id = ?')
     .get(artifactId) as DbArtifactRow | undefined;
   return row ? artifactFromRow(row) : undefined;
 }

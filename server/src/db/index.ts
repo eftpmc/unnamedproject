@@ -129,11 +129,11 @@ function applySchema(): void {
     CREATE TABLE IF NOT EXISTS session_events (
       id TEXT PRIMARY KEY,
       session_id TEXT NOT NULL REFERENCES sessions(id) ON DELETE CASCADE,
-      type TEXT NOT NULL CHECK(type IN ('scope_changed','project_linked','project_created','campaign_created','artifact_created','approval_requested','approval_resolved','mcp_required','subagent_started','subagent_completed')),
+      type TEXT NOT NULL CHECK(type IN ('scope_changed','project_linked','project_created','plan_created','artifact_created','approval_requested','approval_resolved','mcp_required','subagent_started','subagent_completed')),
       title TEXT NOT NULL,
       body TEXT,
       project_id TEXT REFERENCES projects(id) ON DELETE SET NULL,
-      campaign_id TEXT REFERENCES campaigns(id) ON DELETE SET NULL,
+      plan_id TEXT REFERENCES plans(id) ON DELETE SET NULL,
       artifact_id TEXT REFERENCES artifacts(id) ON DELETE SET NULL,
       execution_id TEXT REFERENCES executions(id) ON DELETE SET NULL,
       metadata TEXT NOT NULL DEFAULT '{}',
@@ -629,19 +629,91 @@ function applySchema(): void {
     `);
   }
 
+  // ── Rename campaigns → plans, campaign_tasks → plan_steps ─────────────────
+  // Step 1: rename the tables themselves (if still named campaigns/campaign_tasks)
+  const tableNames3 = db.prepare("SELECT name FROM sqlite_master WHERE type='table'").all() as { name: string }[];
+  const hasCampaigns = tableNames3.some(t => t.name === 'campaigns');
+  const hasPlans = tableNames3.some(t => t.name === 'plans');
+  if (hasCampaigns && !hasPlans) {
+    db.exec(`
+      PRAGMA foreign_keys = OFF;
+      PRAGMA legacy_alter_table = ON;
+      ALTER TABLE campaigns RENAME TO plans;
+      ALTER TABLE campaign_tasks RENAME TO plan_steps;
+      PRAGMA legacy_alter_table = OFF;
+      PRAGMA foreign_keys = ON;
+    `);
+  } else if (hasCampaigns && hasPlans) {
+    // Spurious empty campaigns/campaign_tasks created alongside already-migrated plans — drop them.
+    db.exec(`
+      PRAGMA foreign_keys = OFF;
+      DROP TABLE IF EXISTS campaign_tasks;
+      DROP TABLE IF EXISTS campaigns;
+      PRAGMA foreign_keys = ON;
+    `);
+  }
+
+  // Step 2: rename plan_steps.campaign_id → plan_id (if still named campaign_id)
+  const planStepsCols = db.prepare("SELECT name FROM pragma_table_info('plan_steps')").all() as { name: string }[];
+  if (planStepsCols.some(c => c.name === 'campaign_id')) {
+    db.exec(`ALTER TABLE plan_steps RENAME COLUMN campaign_id TO plan_id;`);
+  }
+
+  // Step 3: rename artifacts.source_campaign_id → source_plan_id and source_task_id → source_step_id
+  const artifactsCols = db.prepare("SELECT name FROM pragma_table_info('artifacts')").all() as { name: string }[];
+  if (artifactsCols.some(c => c.name === 'source_campaign_id')) {
+    db.exec(`
+      ALTER TABLE artifacts RENAME COLUMN source_campaign_id TO source_plan_id;
+      ALTER TABLE artifacts RENAME COLUMN source_task_id TO source_step_id;
+    `);
+  }
+
+  // Step 4: rename session_events.campaign_id → plan_id (if still named campaign_id)
+  const sessionEventsCols = db.prepare("SELECT name FROM pragma_table_info('session_events')").all() as { name: string }[];
+  if (sessionEventsCols.some(c => c.name === 'campaign_id')) {
+    db.exec(`ALTER TABLE session_events RENAME COLUMN campaign_id TO plan_id;`);
+  }
+
+  // Step 5: rebuild session_events to update CHECK constraint from campaign_created → plan_created
+  const sessionEventsSql4 = (db.prepare("SELECT sql FROM sqlite_master WHERE type='table' AND name='session_events'").get() as { sql: string } | undefined)?.sql;
+  if (sessionEventsSql4?.includes('campaign_created')) {
+    db.exec(`
+      PRAGMA foreign_keys = OFF;
+      PRAGMA legacy_alter_table = ON;
+      ALTER TABLE session_events RENAME TO session_events_pre_plan;
+      PRAGMA legacy_alter_table = OFF;
+      CREATE TABLE session_events (
+        id TEXT PRIMARY KEY,
+        session_id TEXT NOT NULL REFERENCES sessions(id) ON DELETE CASCADE,
+        type TEXT NOT NULL CHECK(type IN ('scope_changed','project_linked','project_created','plan_created','artifact_created','approval_requested','approval_resolved','mcp_required','subagent_started','subagent_completed')),
+        title TEXT NOT NULL,
+        body TEXT,
+        project_id TEXT REFERENCES projects(id) ON DELETE SET NULL,
+        plan_id TEXT REFERENCES plans(id) ON DELETE SET NULL,
+        artifact_id TEXT REFERENCES artifacts(id) ON DELETE SET NULL,
+        execution_id TEXT REFERENCES executions(id) ON DELETE SET NULL,
+        metadata TEXT NOT NULL DEFAULT '{}',
+        created_at INTEGER NOT NULL DEFAULT (unixepoch())
+      );
+      INSERT INTO session_events SELECT * FROM session_events_pre_plan;
+      DROP TABLE session_events_pre_plan;
+      PRAGMA foreign_keys = ON;
+    `);
+  }
+
   db.exec(`
     CREATE INDEX IF NOT EXISTS idx_messages_session_id ON messages(session_id);
     CREATE INDEX IF NOT EXISTS idx_message_attachments_message_id ON message_attachments(message_id);
     CREATE INDEX IF NOT EXISTS idx_session_turns_session_status ON session_turns(session_id, status);
     CREATE INDEX IF NOT EXISTS idx_session_events_session_id ON session_events(session_id);
-    CREATE INDEX IF NOT EXISTS idx_campaign_tasks_campaign_id ON campaign_tasks(campaign_id);
+    CREATE INDEX IF NOT EXISTS idx_plan_steps_plan_id ON plan_steps(plan_id);
     CREATE INDEX IF NOT EXISTS idx_agent_usage_user_tool_date ON agent_usage(user_id, tool, created_at);
     CREATE INDEX IF NOT EXISTS idx_scheduled_tasks_enabled_next ON scheduled_tasks(enabled, next_run_at);
   `);
 }
 
 /**
- * Marks executions/campaign tasks left in 'running' from a previous process
+ * Marks executions/plan steps left in 'running' from a previous process
  * (crash or restart) as errored, and removes the empty assistant messages
  * they were streaming into — an empty assistant message would otherwise be
  * sent back to the Anthropic API on the next turn and be rejected.
@@ -664,7 +736,7 @@ export function reconcileOrphanedExecutions(): void {
   }
 
   db.prepare("UPDATE session_turns SET status = 'error', error = 'Interrupted by server restart', completed_at = unixepoch() WHERE status = 'running'").run();
-  db.prepare("UPDATE campaign_tasks SET status = 'error', completed_at = unixepoch() WHERE status = 'running'").run();
+  db.prepare("UPDATE plan_steps SET status = 'error', completed_at = unixepoch() WHERE status = 'running'").run();
   if (stale.length || staleTurns.length) {
     console.log(`Reconciled ${stale.length} orphaned execution(s) and ${staleTurns.length} orphaned turn(s) from a previous run.`);
   }
@@ -727,7 +799,7 @@ export type SessionEventType =
   | 'scope_changed'
   | 'project_linked'
   | 'project_created'
-  | 'campaign_created'
+  | 'plan_created'
   | 'artifact_created'
   | 'approval_requested'
   | 'approval_resolved'
@@ -742,7 +814,7 @@ export interface DbSessionEvent {
   title: string;
   body: string | null;
   project_id: string | null;
-  campaign_id: string | null;
+  plan_id: string | null;
   artifact_id: string | null;
   execution_id: string | null;
   metadata: string;
@@ -755,7 +827,7 @@ export function createSessionEvent(input: {
   title: string;
   body?: string | null;
   projectId?: string | null;
-  campaignId?: string | null;
+  planId?: string | null;
   artifactId?: string | null;
   executionId?: string | null;
   metadata?: Record<string, unknown>;
@@ -763,7 +835,7 @@ export function createSessionEvent(input: {
   const id = newId();
   getDb()
     .prepare(`
-      INSERT INTO session_events (id, session_id, type, title, body, project_id, campaign_id, artifact_id, execution_id, metadata)
+      INSERT INTO session_events (id, session_id, type, title, body, project_id, plan_id, artifact_id, execution_id, metadata)
       VALUES (?,?,?,?,?,?,?,?,?,?)
     `)
     .run(
@@ -773,7 +845,7 @@ export function createSessionEvent(input: {
       input.title,
       input.body ?? null,
       input.projectId ?? null,
-      input.campaignId ?? null,
+      input.planId ?? null,
       input.artifactId ?? null,
       input.executionId ?? null,
       JSON.stringify(input.metadata ?? {}),
@@ -939,18 +1011,17 @@ export function deleteScheduledTask(id: string, userId: string): boolean {
   return result.changes > 0;
 }
 
-export function resumeCampaign(campaignId: string): { campaign: DbCampaign; tasks: DbCampaignTask[] } | undefined {
-  const campaign = getCampaignById(campaignId);
-  if (!campaign) return undefined;
-  if (campaign.status === 'cancelled') return undefined;
-  const now = Math.floor(Date.now() / 1000);
+export function resumePlan(planId: string): { plan: DbPlan; steps: DbPlanStep[] } | undefined {
+  const plan = getPlanById(planId);
+  if (!plan) return undefined;
+  if (plan.status === 'cancelled') return undefined;
   getDb()
-    .prepare("UPDATE campaigns SET status = 'running', completed_at = NULL WHERE id = ? AND status IN ('error')")
-    .run(campaignId);
+    .prepare("UPDATE plans SET status = 'running', completed_at = NULL WHERE id = ? AND status IN ('error')")
+    .run(planId);
   getDb()
-    .prepare("UPDATE campaign_tasks SET status = 'waiting', execution_id = NULL, completed_at = NULL WHERE campaign_id = ? AND status = 'error'")
-    .run(campaignId);
-  return { campaign: getCampaignById(campaignId)!, tasks: getCampaignTasks(campaignId) };
+    .prepare("UPDATE plan_steps SET status = 'waiting', execution_id = NULL, completed_at = NULL WHERE plan_id = ? AND status = 'error'")
+    .run(planId);
+  return { plan: getPlanById(planId)!, steps: getPlanSteps(planId) };
 }
 
 export function getDueScheduledTasks(now: number): (DbScheduledTask & { user_id: string })[] {
@@ -965,7 +1036,7 @@ export function markScheduledTaskRun(id: string, now: number, intervalHours: num
     .run(now, now + intervalHours * 3600, id);
 }
 
-export interface DbCampaign {
+export interface DbPlan {
   id: string;
   project_id: string;
   session_id: string | null;
@@ -975,9 +1046,9 @@ export interface DbCampaign {
   completed_at: number | null;
 }
 
-export interface DbCampaignTask {
+export interface DbPlanStep {
   id: string;
-  campaign_id: string;
+  plan_id: string;
   title: string;
   agent: 'claude_code' | 'codex' | 'mcp' | 'file_write' | 'git' | 'github' | 'eval' | 'subagent';
   status: 'waiting' | 'running' | 'done' | 'error';
@@ -1002,7 +1073,7 @@ export interface DbPipelineTask {
   id: string;
   pipeline_id: string;
   title: string;
-  agent: DbCampaignTask['agent'];
+  agent: DbPlanStep['agent'];
   prompt: string | null;
   tool_args: string | null;
   depends_on: string | null;
@@ -1010,41 +1081,41 @@ export interface DbPipelineTask {
   created_at: number;
 }
 
-export function createCampaign(
+export function createPlan(
   projectId: string,
   sessionId: string | null,
   title: string,
-  tasks: Array<{
+  steps: Array<{
     title: string;
-    agent: DbCampaignTask['agent'];
+    agent: DbPlanStep['agent'];
     prompt?: string | null;
     depends_on?: number[];
     tool_args?: Record<string, unknown> | null;
   }>
-): { campaign: DbCampaign; tasks: DbCampaignTask[] } {
+): { plan: DbPlan; steps: DbPlanStep[] } {
   return getDb().transaction(() => {
     const id = newId();
     getDb()
-      .prepare('INSERT INTO campaigns (id, project_id, session_id, title) VALUES (?,?,?,?)')
+      .prepare('INSERT INTO plans (id, project_id, session_id, title) VALUES (?,?,?,?)')
       .run(id, projectId, sessionId, title);
-    // Pre-assign task IDs so depends_on indices can be resolved to IDs
-    const taskIds = tasks.map(() => newId());
-    const insertTask = getDb().prepare(
-      'INSERT INTO campaign_tasks (id, campaign_id, title, agent, position, prompt, depends_on, tool_args) VALUES (?,?,?,?,?,?,?,?)'
+    // Pre-assign step IDs so depends_on indices can be resolved to IDs
+    const stepIds = steps.map(() => newId());
+    const insertStep = getDb().prepare(
+      'INSERT INTO plan_steps (id, plan_id, title, agent, position, prompt, depends_on, tool_args) VALUES (?,?,?,?,?,?,?,?)'
     );
-    tasks.forEach((t, i) => {
-      const depIds = (t.depends_on ?? []).map(idx => taskIds[idx]).filter(Boolean);
-      insertTask.run(
-        taskIds[i], id, t.title, t.agent, i,
+    steps.forEach((t, i) => {
+      const depIds = (t.depends_on ?? []).map(idx => stepIds[idx]).filter(Boolean);
+      insertStep.run(
+        stepIds[i], id, t.title, t.agent, i,
         t.prompt ?? null,
         depIds.length > 0 ? JSON.stringify(depIds) : null,
         t.tool_args ? JSON.stringify(t.tool_args) : null,
       );
     });
-    const campaign = getDb()
-      .prepare('SELECT * FROM campaigns WHERE id = ?')
-      .get(id) as DbCampaign;
-    return { campaign, tasks: getCampaignTasks(id) };
+    const plan = getDb()
+      .prepare('SELECT * FROM plans WHERE id = ?')
+      .get(id) as DbPlan;
+    return { plan, steps: getPlanSteps(id) };
   })();
 }
 
@@ -1054,7 +1125,7 @@ export function createPipeline(
   description: string | null,
   tasks: Array<{
     title: string;
-    agent: DbCampaignTask['agent'];
+    agent: DbPlanStep['agent'];
     prompt?: string | null;
     depends_on?: number[];
     tool_args?: Record<string, unknown> | null;
@@ -1100,49 +1171,49 @@ export function deletePipeline(id: string, userId: string): boolean {
   return result.changes > 0;
 }
 
-export function getCampaignSummaries(projectId: string): Array<DbCampaign & { total_tasks: number; done_tasks: number; error_tasks: number }> {
+export function getPlanSummaries(projectId: string): Array<DbPlan & { total_tasks: number; done_tasks: number; error_tasks: number }> {
   return getDb()
     .prepare(`
       SELECT c.*,
         COUNT(ct.id) AS total_tasks,
         SUM(CASE WHEN ct.status = 'done' THEN 1 ELSE 0 END) AS done_tasks,
         SUM(CASE WHEN ct.status = 'error' THEN 1 ELSE 0 END) AS error_tasks
-      FROM campaigns c
-      LEFT JOIN campaign_tasks ct ON ct.campaign_id = c.id
+      FROM plans c
+      LEFT JOIN plan_steps ct ON ct.plan_id = c.id
       WHERE c.project_id = ?
       GROUP BY c.id
       ORDER BY c.created_at DESC
     `)
-    .all(projectId) as Array<DbCampaign & { total_tasks: number; done_tasks: number; error_tasks: number }>;
+    .all(projectId) as Array<DbPlan & { total_tasks: number; done_tasks: number; error_tasks: number }>;
 }
 
-export function getRecentCampaignsForUser(userId: string, limit = 30): Array<DbCampaign & { project_name: string }> {
+export function getRecentPlansForUser(userId: string, limit = 30): Array<DbPlan & { project_name: string }> {
   return getDb()
     .prepare(`
       SELECT c.*, p.name AS project_name
-      FROM campaigns c
+      FROM plans c
       JOIN projects p ON p.id = c.project_id
       WHERE p.user_id = ?
       ORDER BY c.created_at DESC
       LIMIT ?
     `)
-    .all(userId, limit) as Array<DbCampaign & { project_name: string }>;
+    .all(userId, limit) as Array<DbPlan & { project_name: string }>;
 }
 
-export function getCampaignsForProject(projectId: string): DbCampaign[] {
+export function getPlansForProject(projectId: string): DbPlan[] {
   return getDb()
-    .prepare('SELECT * FROM campaigns WHERE project_id = ? ORDER BY created_at DESC')
-    .all(projectId) as DbCampaign[];
+    .prepare('SELECT * FROM plans WHERE project_id = ? ORDER BY created_at DESC')
+    .all(projectId) as DbPlan[];
 }
 
-export function getCampaignsWithDetails(projectId: string, limit = 20): Array<DbCampaign & {
-  tasks: Array<DbCampaignTask & { output: string | null; result: string | null }>;
+export function getPlansWithDetails(projectId: string, limit = 20): Array<DbPlan & {
+  steps: Array<DbPlanStep & { output: string | null; result: string | null }>;
 }> {
   type Row = {
     c_id: string; c_project_id: string; c_session_id: string | null; c_title: string;
-    c_status: DbCampaign['status']; c_created_at: number; c_completed_at: number | null;
-    t_id: string | null; t_title: string | null; t_agent: DbCampaignTask['agent'] | null;
-    t_status: DbCampaignTask['status'] | null; t_execution_id: string | null;
+    c_status: DbPlan['status']; c_created_at: number; c_completed_at: number | null;
+    t_id: string | null; t_title: string | null; t_agent: DbPlanStep['agent'] | null;
+    t_status: DbPlanStep['status'] | null; t_execution_id: string | null;
     t_position: number | null; t_created_at: number | null; t_completed_at: number | null;
     output: string | null; task_result: string | null;
   };
@@ -1156,26 +1227,26 @@ export function getCampaignsWithDetails(projectId: string, limit = 20): Array<Db
              ct.position AS t_position, ct.created_at AS t_created_at,
              ct.completed_at AS t_completed_at,
              e.output_log AS output, e.result AS task_result
-      FROM (SELECT * FROM campaigns WHERE project_id = ? ORDER BY created_at DESC LIMIT ?) c
-      LEFT JOIN campaign_tasks ct ON ct.campaign_id = c.id
+      FROM (SELECT * FROM plans WHERE project_id = ? ORDER BY created_at DESC LIMIT ?) c
+      LEFT JOIN plan_steps ct ON ct.plan_id = c.id
       LEFT JOIN executions e ON e.id = ct.execution_id
       ORDER BY c.created_at DESC, ct.position
     `)
     .all(projectId, limit) as Row[];
 
-  const campaignMap = new Map<string, DbCampaign & { tasks: Array<DbCampaignTask & { output: string | null; result: string | null }> }>();
+  const planMap = new Map<string, DbPlan & { steps: Array<DbPlanStep & { output: string | null; result: string | null }> }>();
   for (const row of rows) {
-    if (!campaignMap.has(row.c_id)) {
-      campaignMap.set(row.c_id, {
+    if (!planMap.has(row.c_id)) {
+      planMap.set(row.c_id, {
         id: row.c_id, project_id: row.c_project_id, session_id: row.c_session_id,
         title: row.c_title, status: row.c_status,
         created_at: row.c_created_at, completed_at: row.c_completed_at,
-        tasks: [],
+        steps: [],
       });
     }
     if (row.t_id) {
-      campaignMap.get(row.c_id)!.tasks.push({
-        id: row.t_id, campaign_id: row.c_id, title: row.t_title!,
+      planMap.get(row.c_id)!.steps.push({
+        id: row.t_id, plan_id: row.c_id, title: row.t_title!,
         agent: row.t_agent!, status: row.t_status!, execution_id: row.t_execution_id,
         position: row.t_position!, created_at: row.t_created_at!, completed_at: row.t_completed_at,
         prompt: null, depends_on: null, tool_args: null,
@@ -1183,81 +1254,81 @@ export function getCampaignsWithDetails(projectId: string, limit = 20): Array<Db
       });
     }
   }
-  return Array.from(campaignMap.values());
+  return Array.from(planMap.values());
 }
 
-export function getCampaignById(id: string): DbCampaign | undefined {
+export function getPlanById(id: string): DbPlan | undefined {
   return getDb()
-    .prepare('SELECT * FROM campaigns WHERE id = ?')
-    .get(id) as DbCampaign | undefined;
+    .prepare('SELECT * FROM plans WHERE id = ?')
+    .get(id) as DbPlan | undefined;
 }
 
-export function getCampaignTasks(campaignId: string): DbCampaignTask[] {
+export function getPlanSteps(planId: string): DbPlanStep[] {
   return getDb()
-    .prepare('SELECT * FROM campaign_tasks WHERE campaign_id = ? ORDER BY position')
-    .all(campaignId) as DbCampaignTask[];
+    .prepare('SELECT * FROM plan_steps WHERE plan_id = ? ORDER BY position')
+    .all(planId) as DbPlanStep[];
 }
 
-export function updateCampaignTaskStatus(
-  taskId: string,
-  status: DbCampaignTask['status'],
+export function updatePlanStepStatus(
+  stepId: string,
+  status: DbPlanStep['status'],
   executionId?: string
 ): void {
   const now = Math.floor(Date.now() / 1000);
   const completed = status === 'done' || status === 'error' ? now : null;
   if (executionId) {
     getDb()
-      .prepare('UPDATE campaign_tasks SET status = ?, execution_id = ?, completed_at = ? WHERE id = ?')
-      .run(status, executionId, completed, taskId);
+      .prepare('UPDATE plan_steps SET status = ?, execution_id = ?, completed_at = ? WHERE id = ?')
+      .run(status, executionId, completed, stepId);
   } else {
     getDb()
-      .prepare('UPDATE campaign_tasks SET status = ?, completed_at = ? WHERE id = ?')
-      .run(status, completed, taskId);
+      .prepare('UPDATE plan_steps SET status = ?, completed_at = ? WHERE id = ?')
+      .run(status, completed, stepId);
   }
 }
 
-export function maybeCompleteCampaign(campaignId: string): DbCampaign['status'] {
+export function maybeCompletePlan(planId: string): DbPlan['status'] {
   return getDb().transaction(() => {
-    const campaign = getCampaignById(campaignId)!;
-    if (campaign.status === 'cancelled') return campaign.status;
+    const plan = getPlanById(planId)!;
+    if (plan.status === 'cancelled') return plan.status;
 
-    const tasks = getCampaignTasks(campaignId);
-    const allDone = tasks.every(t => t.status === 'done');
-    const anyError = tasks.some(t => t.status === 'error');
-    const anyRunning = tasks.some(t => t.status === 'running');
-    let newStatus: DbCampaign['status'] | null = null;
+    const steps = getPlanSteps(planId);
+    const allDone = steps.every(t => t.status === 'done');
+    const anyError = steps.some(t => t.status === 'error');
+    const anyRunning = steps.some(t => t.status === 'running');
+    let newStatus: DbPlan['status'] | null = null;
     if (allDone) newStatus = 'done';
     else if (anyError && !anyRunning) newStatus = 'error';
     if (newStatus) {
       const now = Math.floor(Date.now() / 1000);
       getDb()
-        .prepare('UPDATE campaigns SET status = ?, completed_at = ? WHERE id = ?')
-        .run(newStatus, now, campaignId);
+        .prepare('UPDATE plans SET status = ?, completed_at = ? WHERE id = ?')
+        .run(newStatus, now, planId);
       return newStatus;
     }
-    return campaign.status;
+    return plan.status;
   })();
 }
 
-// Cancels a running campaign and marks any tasks still waiting/running as
-// errored so dispatchTool/maybeCompleteCampaign treat them as terminal.
-export function cancelCampaign(campaignId: string): DbCampaign | undefined {
+// Cancels a running plan and marks any steps still waiting/running as
+// errored so dispatchTool/maybeCompletePlan treat them as terminal.
+export function cancelPlan(planId: string): DbPlan | undefined {
   return getDb().transaction(() => {
     const now = Math.floor(Date.now() / 1000);
     getDb()
-      .prepare("UPDATE campaigns SET status = 'cancelled', completed_at = ? WHERE id = ? AND status = 'running'")
-      .run(now, campaignId);
+      .prepare("UPDATE plans SET status = 'cancelled', completed_at = ? WHERE id = ? AND status = 'running'")
+      .run(now, planId);
     getDb()
-      .prepare("UPDATE campaign_tasks SET status = 'error', completed_at = ? WHERE campaign_id = ? AND status IN ('waiting','running')")
-      .run(now, campaignId);
-    return getCampaignById(campaignId);
+      .prepare("UPDATE plan_steps SET status = 'error', completed_at = ? WHERE plan_id = ? AND status IN ('waiting','running')")
+      .run(now, planId);
+    return getPlanById(planId);
   })();
 }
 
-export function getCampaignForTask(taskId: string): DbCampaign | undefined {
+export function getPlanForStep(stepId: string): DbPlan | undefined {
   return getDb()
-    .prepare('SELECT c.* FROM campaigns c JOIN campaign_tasks t ON t.campaign_id = c.id WHERE t.id = ?')
-    .get(taskId) as DbCampaign | undefined;
+    .prepare('SELECT c.* FROM plans c JOIN plan_steps t ON t.plan_id = c.id WHERE t.id = ?')
+    .get(stepId) as DbPlan | undefined;
 }
 
 export interface DbExecution {

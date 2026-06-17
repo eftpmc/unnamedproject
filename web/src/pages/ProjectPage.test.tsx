@@ -14,7 +14,7 @@ vi.mock('../lib/api.js', () => ({
       enabled_connection_ids: [],
     },
   ]),
-  getProjectCampaigns: vi.fn().mockResolvedValue([]),
+  getProjectPlans: vi.fn().mockResolvedValue([]),
   getProjectCapabilities: vi.fn().mockResolvedValue({ has_remotion: false, has_media: false, has_graph: false, has_research: false }),
   getProjectArtifacts: vi.fn().mockResolvedValue({ artifacts: [] }),
   getChats: vi.fn().mockResolvedValue([
@@ -91,9 +91,9 @@ describe('ProjectPage', () => {
     expect(await screen.findByText('No chats yet')).toBeInTheDocument();
   });
 
-  it('shows the active-now section when a campaign is running', async () => {
-    const { getProjectCampaigns } = await import('../lib/api.js');
-    (getProjectCampaigns as ReturnType<typeof vi.fn>).mockResolvedValueOnce([
+  it('shows the active-now section when a plan is running', async () => {
+    const { getProjectPlans } = await import('../lib/api.js');
+    (getProjectPlans as ReturnType<typeof vi.fn>).mockResolvedValueOnce([
       {
         id: 'camp-1',
         project_id: 'proj-1',
@@ -106,13 +106,13 @@ describe('ProjectPage', () => {
     ]);
     renderPage('/projects/proj-1');
     expect(await screen.findByText('Active now')).toBeInTheDocument();
-    // Running campaign appears in both "Active now" and the "Recent activity" feed.
+    // Running plan appears in both "Active now" and the "Recent activity" feed.
     expect(screen.getAllByText('Implement auth flow').length).toBeGreaterThan(0);
   });
 
-  it('shows campaigns in the recent activity feed on overview', async () => {
-    const { getProjectCampaigns } = await import('../lib/api.js');
-    (getProjectCampaigns as ReturnType<typeof vi.fn>).mockResolvedValueOnce([
+  it('shows plans in the recent activity feed on overview', async () => {
+    const { getProjectPlans } = await import('../lib/api.js');
+    (getProjectPlans as ReturnType<typeof vi.fn>).mockResolvedValueOnce([
       {
         id: 'camp-2',
         project_id: 'proj-1',
@@ -134,10 +134,10 @@ describe('ProjectPage', () => {
     expect(screen.getByText('Fix the render bug')).toBeInTheDocument();
   });
 
-  it('shows nothing here yet empty panel when no campaigns and no chats', async () => {
-    const { getChats, getProjectCampaigns } = await import('../lib/api.js');
+  it('shows nothing here yet empty panel when no plans and no chats', async () => {
+    const { getChats, getProjectPlans } = await import('../lib/api.js');
     (getChats as ReturnType<typeof vi.fn>).mockResolvedValueOnce([]);
-    (getProjectCampaigns as ReturnType<typeof vi.fn>).mockResolvedValueOnce([]);
+    (getProjectPlans as ReturnType<typeof vi.fn>).mockResolvedValueOnce([]);
     renderPage('/projects/proj-1');
     expect(await screen.findByText('Nothing here yet')).toBeInTheDocument();
   });

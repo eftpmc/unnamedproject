@@ -4,12 +4,13 @@ import { Menu } from 'lucide-react';
 import Sidebar from '../components/Sidebar.js';
 import ChatView from '../components/ChatView.js';
 import EmptyState from '../components/EmptyState.js';
+import InboxPanel from '../components/InboxPanel.js';
 import { createChat } from '../lib/api.js';
 import { connect, disconnect, subscribe } from '../lib/ws.js';
 import { SidebarInset, SidebarProvider, useSidebar } from '@/components/ui/sidebar';
 import type { WSApprovalRequested, WSExecutionUpdate } from '../types.js';
 
-const PAGE_ROUTES = ['/chats', '/projects', '/settings', '/activity', '/pipelines'];
+const PAGE_ROUTES = ['/chats', '/projects', '/settings'];
 
 /** Mobile-only top bar: hamburger (left) · brand mark (centered) · spacer. */
 function MobileTopbar() {
@@ -41,6 +42,7 @@ export default function AppLayout() {
 
   // executionId → approvalId for pending approvals
   const [pendingApprovals, setPendingApprovals] = useState<Map<string, string>>(new Map());
+  const [inboxOpen, setInboxOpen] = useState(false);
 
   useEffect(() => {
     connect();
@@ -62,6 +64,14 @@ export default function AppLayout() {
     return () => { unsub(); disconnect(); };
   }, []);
 
+  function handleApprovalResolved(executionId: string) {
+    setPendingApprovals(prev => {
+      const next = new Map(prev);
+      next.delete(executionId);
+      return next;
+    });
+  }
+
   async function handleNewChat() {
     const { id } = await createChat();
     navigate(`/c/${id}`);
@@ -80,11 +90,20 @@ export default function AppLayout() {
       className="h-full min-h-0 bg-muted/45 text-foreground"
       style={{ '--sidebar-width': '14rem' } as CSSProperties}
     >
-      <Sidebar pendingApprovalCount={pendingApprovals.size} />
+      <Sidebar
+        pendingApprovalCount={pendingApprovals.size}
+        onOpenInbox={() => setInboxOpen(true)}
+      />
       <SidebarInset className="relative min-h-0 min-w-0 overflow-hidden bg-background/58 backdrop-blur">
         <MobileTopbar />
         {mainContent}
       </SidebarInset>
+      <InboxPanel
+        open={inboxOpen}
+        onOpenChange={setInboxOpen}
+        pendingApprovals={pendingApprovals}
+        onApprovalResolved={handleApprovalResolved}
+      />
     </SidebarProvider>
   );
 }

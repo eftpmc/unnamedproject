@@ -2,7 +2,7 @@ import { Router } from 'express';
 import fs from 'fs/promises';
 import fsSync from 'fs';
 import path from 'path';
-import { getDb, getDataDir, getCampaignsForProject, getProjectForUser } from '../db/index.js';
+import { getDb, getDataDir, getPlansForProject, getProjectForUser } from '../db/index.js';
 import { newId } from '../lib/ids.js';
 import { requireAuthHeaderOrQuery, type AuthedRequest } from '../middleware/auth.js';
 import { detectCapabilities } from '../services/projectCapabilities.js';
@@ -119,13 +119,13 @@ router.get('/:id/file', async (req, res) => {
   }
 });
 
-router.get('/:id/campaigns', (req, res) => {
+router.get('/:id/plans', (req, res) => {
   const { userId } = req as unknown as AuthedRequest;
   const project = getDb()
     .prepare('SELECT id FROM projects WHERE id = ? AND user_id = ?')
     .get(req.params.id, userId);
   if (!project) { res.status(404).json({ error: 'Not found' }); return; }
-  res.json(getCampaignsForProject(req.params.id));
+  res.json(getPlansForProject(req.params.id));
 });
 
 router.get('/:id/capabilities', requireAuthHeaderOrQuery, (req, res) => {

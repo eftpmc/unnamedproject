@@ -4,7 +4,7 @@ import remarkGfm from 'remark-gfm';
 import { ArrowRight, FileText, GitMerge, Image, Pencil, Plug, Sparkles, Target } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import ExecutionCard from './ExecutionCard.js';
-import CampaignCard from './CampaignCard.js';
+import PlanCard from './PlanCard.js';
 import ArtifactPreviewCard from './ArtifactPreviewCard.js';
 import { getToken } from '../lib/auth.js';
 import type { Message, MessageAttachment, SessionEvent } from '../types.js';
@@ -73,11 +73,11 @@ function renderExecutionCard(exec: InlineExecution) {
   if (exec.status === 'done' && exec.result) {
     try {
       const parsed = JSON.parse(exec.result) as Record<string, unknown>;
-      if (exec.tool === 'create_campaign' && parsed.campaign_id && parsed.project_id) {
+      if (exec.tool === 'create_plan' && parsed.plan_id && parsed.project_id) {
         return (
-          <CampaignCard
+          <PlanCard
             key={exec.executionId}
-            campaignId={parsed.campaign_id as string}
+            planId={parsed.plan_id as string}
             projectId={parsed.project_id as string}
           />
         );
@@ -101,7 +101,7 @@ function renderExecutionCard(exec: InlineExecution) {
 
 function eventIcon(type: SessionEvent['type']) {
   if (type === 'scope_changed' || type === 'project_linked') return Target;
-  if (type === 'campaign_created' || type === 'artifact_created' || type === 'project_created') return Sparkles;
+  if (type === 'plan_created' || type === 'artifact_created' || type === 'project_created') return Sparkles;
   return GitMerge;
 }
 

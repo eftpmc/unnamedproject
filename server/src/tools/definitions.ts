@@ -10,7 +10,7 @@ export const toolDefinitions: Anthropic.Tool[] = [
         project_id: { type: 'string', description: 'ID of the project to work in' },
         prompt: { type: 'string', description: 'The task to give Claude Code. Be specific and thorough — it can handle complex, multi-file work. Include context, constraints, and what done looks like.' },
         model: { type: 'string', description: "Optional model override for this run, e.g. 'sonnet', 'opus', 'haiku', 'fable', or a full model ID. Defaults to the CLI's configured default." },
-        campaign_task_id: { type: 'string', description: 'Campaign task ID to link this execution to (from create_campaign response)' },
+        plan_step_id: { type: 'string', description: 'Plan step ID to link this execution to (from create_plan response)' },
       },
       required: ['project_id', 'prompt'],
     },
@@ -24,7 +24,7 @@ export const toolDefinitions: Anthropic.Tool[] = [
         project_id: { type: 'string', description: 'ID of the project to work in' },
         prompt: { type: 'string', description: 'The task to give Codex. Be specific — include codebase context, what to build, and what done looks like.' },
         model: { type: 'string', description: "Optional OpenAI model override for this run, e.g. 'gpt-5'. Defaults to the CLI's configured default." },
-        campaign_task_id: { type: 'string', description: 'Campaign task ID to link this execution to (from create_campaign response)' },
+        plan_step_id: { type: 'string', description: 'Plan step ID to link this execution to (from create_plan response)' },
       },
       required: ['project_id', 'prompt'],
     },
@@ -38,7 +38,7 @@ export const toolDefinitions: Anthropic.Tool[] = [
         connection_id: { type: 'string', description: 'ID of the MCP connection to use' },
         tool_name: { type: 'string', description: 'Name of the MCP tool to call' },
         tool_input: { type: 'object', description: 'Input for the MCP tool', additionalProperties: true },
-        campaign_task_id: { type: 'string', description: 'Campaign task ID to link this execution to (from create_campaign response)' },
+        plan_step_id: { type: 'string', description: 'Plan step ID to link this execution to (from create_plan response)' },
       },
       required: ['connection_id', 'tool_name', 'tool_input'],
     },
@@ -52,7 +52,7 @@ export const toolDefinitions: Anthropic.Tool[] = [
         command: { type: 'string', description: 'Shell command to run, e.g. "npm test", "git log --oneline -10"' },
         project_id: { type: 'string', description: 'Optional project to run the command in. Uses the project repo_path as working directory.' },
         timeout_ms: { type: 'number', description: 'Timeout in milliseconds. Defaults to 30000, max 60000.' },
-        campaign_task_id: { type: 'string', description: 'Campaign task ID to link this execution to (from create_campaign response)' },
+        plan_step_id: { type: 'string', description: 'Plan step ID to link this execution to (from create_plan response)' },
       },
       required: ['command'],
     },
@@ -67,7 +67,7 @@ export const toolDefinitions: Anthropic.Tool[] = [
         op: { type: 'string', enum: ['log', 'diff', 'status', 'add', 'commit', 'push'] },
         message: { type: 'string', description: 'Commit message (for commit op)' },
         branch: { type: 'string', description: "Branch name to push (for push op, defaults to this session's agent branch)" },
-        campaign_task_id: { type: 'string', description: 'Campaign task ID to link this execution to (from create_campaign response)' },
+        plan_step_id: { type: 'string', description: 'Plan step ID to link this execution to (from create_plan response)' },
       },
       required: ['project_id', 'op'],
     },
@@ -221,7 +221,7 @@ export const toolDefinitions: Anthropic.Tool[] = [
         project_id: { type: 'string' },
         path: { type: 'string', description: 'Path relative to the workspace root' },
         content: { type: 'string', description: 'New file contents' },
-        campaign_task_id: { type: 'string', description: 'Campaign task ID to link this execution to (from create_campaign response)' },
+        plan_step_id: { type: 'string', description: 'Plan step ID to link this execution to (from create_plan response)' },
       },
       required: ['project_id', 'path', 'content'],
     },
@@ -239,7 +239,7 @@ export const toolDefinitions: Anthropic.Tool[] = [
         content: { type: 'string', description: 'Text content to store for this artifact' },
         mime_type: { type: 'string', enum: ['text/markdown', 'text/plain', 'application/json'], description: 'Text MIME type for the artifact content. Defaults to text/markdown.' },
         status: { type: 'string', enum: ['ready', 'review', 'running', 'error'], description: "Artifact status. Use 'review' when user review is expected." },
-        campaign_task_id: { type: 'string', description: 'Campaign task ID to link this artifact to, when applicable' },
+        plan_step_id: { type: 'string', description: 'Plan step ID to link this artifact to, when applicable' },
       },
       required: ['project_id', 'kind', 'title', 'content'],
     },
@@ -254,7 +254,7 @@ export const toolDefinitions: Anthropic.Tool[] = [
         file_path: { type: 'string', description: 'Absolute path to the file to register' },
         title: { type: 'string', description: 'Human-readable title (defaults to filename)' },
         kind: { type: 'string', description: "Artifact kind, e.g. 'media', 'report'. Defaults based on file type." },
-        campaign_task_id: { type: 'string', description: 'Campaign task ID to mark done when this step is part of a campaign.' },
+        plan_step_id: { type: 'string', description: 'Plan step ID to mark done when this step is part of a plan.' },
       },
       required: ['project_id', 'file_path'],
     },
@@ -324,42 +324,42 @@ export const toolDefinitions: Anthropic.Tool[] = [
     },
   },
   {
-    name: 'create_campaign',
-    description: 'Create a campaign to track a coordinated multi-task plan. Supports two execution modes:\n\n**Manual dispatch** (existing): Call create_campaign to get task IDs, then call invoke_claude_code / invoke_codex / etc. with campaign_task_id to execute tasks manually — useful when you need to inspect results between steps.\n\n**Auto-dispatch** (recommended for parallel work): Add a `prompt` to each task and `depends_on` (array of 0-based task indices) to declare dependencies, then call run_campaign with the campaign_id. Tasks without dependencies run immediately in parallel; tasks with dependencies wait for their deps to complete.\n\nTask agent types: claude_code/codex = AI coding agents, mcp = MCP tool call, file_write = write a file, git = git operation, github = GitHub API, eval = run a shell command (prompt = the command, e.g. "npm test"), subagent = spawn a focused sub-agent with its own context window.',
+    name: 'create_plan',
+    description: 'Create a plan to track a coordinated multi-step effort. Supports two execution modes:\n\n**Manual dispatch** (existing): Call create_plan to get step IDs, then call invoke_claude_code / invoke_codex / etc. with plan_step_id to execute steps manually — useful when you need to inspect results between steps.\n\n**Auto-dispatch** (recommended for parallel work): Add a `prompt` to each step and `depends_on` (array of 0-based step indices) to declare dependencies, then call run_plan with the plan_id. Steps without dependencies run immediately in parallel; steps with dependencies wait for their deps to complete.\n\nStep agent types: claude_code/codex = AI coding agents, mcp = MCP tool call, file_write = write a file, git = git operation, github = GitHub API, eval = run a shell command (prompt = the command, e.g. "npm test"), subagent = spawn a focused sub-agent with its own context window.',
     input_schema: {
       type: 'object',
       properties: {
-        project_id: { type: 'string', description: 'Project this campaign belongs to' },
-        title: { type: 'string', description: 'Short name for the campaign, e.g. "Auth refactor"' },
-        tasks: {
+        project_id: { type: 'string', description: 'Project this plan belongs to' },
+        title: { type: 'string', description: 'Short name for the plan, e.g. "Auth refactor"' },
+        steps: {
           type: 'array',
-          description: 'Ordered list of planned tasks',
+          description: 'Ordered list of planned steps',
           items: {
             type: 'object',
             properties: {
-              title: { type: 'string', description: 'Short label for this task' },
+              title: { type: 'string', description: 'Short label for this step' },
               agent: { type: 'string', enum: ['claude_code', 'codex', 'mcp', 'file_write', 'git', 'github', 'eval', 'subagent'], description: 'Which executor to use' },
-              prompt: { type: 'string', description: 'Instruction for the agent / command for eval / message for git commit. Required when using run_campaign auto-dispatch.' },
-              depends_on: { type: 'array', items: { type: 'number' }, description: 'Zero-based indices of tasks this task depends on. Tasks with no depends_on run immediately in parallel when using run_campaign.' },
+              prompt: { type: 'string', description: 'Instruction for the agent / command for eval / message for git commit. Required when using run_plan auto-dispatch.' },
+              depends_on: { type: 'array', items: { type: 'number' }, description: 'Zero-based indices of steps this step depends on. Steps with no depends_on run immediately in parallel when using run_plan.' },
               tool_args: { type: 'object', description: 'Additional tool-specific arguments (e.g. {"op":"commit","branch":"main"} for git, {"path":"src/foo.ts","content":"..."} for file_write, {"connection_id":"...","tool_name":"...","tool_input":{}} for mcp)' },
             },
             required: ['title', 'agent'],
           },
         },
       },
-      required: ['project_id', 'title', 'tasks'],
+      required: ['project_id', 'title', 'steps'],
     },
   },
   {
-    name: 'run_campaign',
-    description: 'Auto-dispatch all tasks in a campaign, running dependency-free tasks in parallel and waiting for dependencies before starting dependent tasks. Tasks with no depends_on run immediately in parallel; tasks only start once all their depends_on tasks are done. Stops on first error by default. Use after create_campaign when tasks have prompts set.',
+    name: 'run_plan',
+    description: 'Auto-dispatch all steps in a plan, running dependency-free steps in parallel and waiting for dependencies before starting dependent steps. Steps with no depends_on run immediately in parallel; steps only start once all their depends_on steps are done. Stops on first error by default. Use after create_plan when steps have prompts set.',
     input_schema: {
       type: 'object',
       properties: {
-        campaign_id: { type: 'string', description: 'ID of the campaign to execute (returned by create_campaign)' },
-        on_error: { type: 'string', enum: ['stop', 'continue'], description: 'Whether to stop the entire campaign on first task error (default: stop) or continue with independent tasks.' },
+        plan_id: { type: 'string', description: 'ID of the plan to execute (returned by create_plan)' },
+        on_error: { type: 'string', enum: ['stop', 'continue'], description: 'Whether to stop the entire plan on first step error (default: stop) or continue with independent steps.' },
       },
-      required: ['campaign_id'],
+      required: ['plan_id'],
     },
   },
   {
@@ -391,7 +391,7 @@ export const toolDefinitions: Anthropic.Tool[] = [
   },
   {
     name: 'run_pipeline',
-    description: 'Instantiate a pipeline template as a campaign and auto-dispatch all its tasks. Equivalent to create_campaign + run_campaign for a saved pipeline template.',
+    description: 'Instantiate a pipeline template as a plan and auto-dispatch all its steps. Equivalent to create_plan + run_plan for a saved pipeline template.',
     input_schema: {
       type: 'object',
       properties: {
@@ -417,19 +417,19 @@ export const toolDefinitions: Anthropic.Tool[] = [
     },
   },
   {
-    name: 'resume_campaign',
-    description: 'Resume a failed campaign by resetting errored tasks back to waiting. Returns the full task list with updated statuses so you know which tasks need to be re-dispatched (done tasks are left alone). After calling this, re-dispatch only the waiting tasks with their existing task IDs.',
+    name: 'resume_plan',
+    description: 'Resume a failed plan by resetting errored steps back to waiting. Returns the full step list with updated statuses so you know which steps need to be re-dispatched (done steps are left alone). After calling this, re-dispatch only the waiting steps with their existing step IDs.',
     input_schema: {
       type: 'object',
       properties: {
-        campaign_id: { type: 'string', description: 'ID of the failed campaign to resume' },
+        plan_id: { type: 'string', description: 'ID of the failed plan to resume' },
       },
-      required: ['campaign_id'],
+      required: ['plan_id'],
     },
   },
   {
-    name: 'list_campaigns',
-    description: 'List campaigns for a project — id, title, status, task counts, and timestamps. Use this to survey past campaigns before deciding whether to create a new one or investigate a failed one.',
+    name: 'list_plans',
+    description: 'List plans for a project — id, title, status, step counts, and timestamps. Use this to survey past plans before deciding whether to create a new one or investigate a failed one.',
     input_schema: {
       type: 'object',
       properties: {
@@ -439,19 +439,19 @@ export const toolDefinitions: Anthropic.Tool[] = [
     },
   },
   {
-    name: 'get_campaign',
-    description: 'Get full detail for a single campaign — all tasks with their statuses, execution IDs, and final result strings. Use after list_campaigns to inspect a specific campaign. To read full output logs for a task, use get_execution_output with the task\'s execution_id.',
+    name: 'get_plan',
+    description: 'Get full detail for a single plan — all steps with their statuses, execution IDs, and final result strings. Use after list_plans to inspect a specific plan. To read full output logs for a step, use get_execution_output with the step\'s execution_id.',
     input_schema: {
       type: 'object',
       properties: {
-        campaign_id: { type: 'string', description: 'ID of the campaign' },
+        plan_id: { type: 'string', description: 'ID of the plan' },
       },
-      required: ['campaign_id'],
+      required: ['plan_id'],
     },
   },
   {
     name: 'get_execution_output',
-    description: 'Get the full output log and result for a single execution (a task run). Use this to read error details or full agent output for a specific campaign task. Get the execution_id from get_campaign.',
+    description: 'Get the full output log and result for a single execution (a step run). Use this to read error details or full agent output for a specific plan step. Get the execution_id from get_plan.',
     input_schema: {
       type: 'object',
       properties: {

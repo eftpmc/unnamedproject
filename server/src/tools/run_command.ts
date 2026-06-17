@@ -40,7 +40,7 @@ interface RunCommandInput {
   command: string;
   project_id?: string;
   timeout_ms?: number;
-  campaign_task_id?: string;
+  plan_step_id?: string;
 }
 
 interface ToolContext {

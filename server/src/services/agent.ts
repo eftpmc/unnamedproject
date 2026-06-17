@@ -2,7 +2,7 @@ import Anthropic from '@anthropic-ai/sdk';
 import { exec as execCallback } from 'child_process';
 import fs from 'fs';
 import { promisify } from 'util';
-import { createSessionEvent, getDb, getProjectForUser, linkSessionProject, setAgentWorktreeSession, updateCampaignTaskStatus, maybeCompleteCampaign, getCampaignForTask, getCampaignSummaries, getCampaignById, getCampaignTasks, getExecutionById, getScheduledTasksForUser, createScheduledTask, updateScheduledTask, deleteScheduledTask, resumeCampaign, getPermissionProfile, createPipeline, getPipelineById, getPipelineTasks, listPipelinesForUser, createCampaign, recordAgentUsage, type DbCampaign, type DbCampaignTask } from '../db/index.js';
+import { createSessionEvent, getDb, getProjectForUser, linkSessionProject, setAgentWorktreeSession, updatePlanStepStatus, maybeCompletePlan, getPlanForStep, getPlanSummaries, getPlanById, getPlanSteps, getExecutionById, getScheduledTasksForUser, createScheduledTask, updateScheduledTask, deleteScheduledTask, resumePlan, getPermissionProfile, createPipeline, getPipelineById, getPipelineTasks, listPipelinesForUser, createPlan, recordAgentUsage, type DbPlan, type DbPlanStep } from '../db/index.js';
 
 const execAsync = promisify(execCallback);
 import { runAgentPipeline, type AgentPipelineCtx } from './agent_pipeline.js';
@@ -20,7 +20,7 @@ import { readFile, listDir, writeFile, searchFiles } from '../tools/file_ops.js'
 import { runCommand, isBlocked } from '../tools/run_command.js';
 import { readChat } from '../tools/read_chat.js';
 import { createProject, updateProject, deleteProject } from '../tools/project_ops.js';
-import { runCreateCampaign } from '../tools/create_campaign.js';
+import { runCreatePlan } from '../tools/create_plan.js';
 import { broadcast } from './socket.js';
 import { newId } from '../lib/ids.js';
 import { DEFAULT_EFFORT, getAnthropicKey, resolveModelForTurn, listClaudeModels, tokensToUsd, type EffortLevel } from './anthropic.js';
@@ -33,28 +33,28 @@ import { createTextArtifact, listProjectArtifacts, getArtifactById, readArtifact
 import { listMcpTools } from '../lib/mcp-pool.js';
 import { maybeDistill } from './distill.js';
 
-function buildCampaignPriorContext(campaignTaskId: string): string | null {
-  const campaign = getCampaignForTask(campaignTaskId);
-  if (!campaign) return null;
+function buildPlanPriorContext(planStepId: string): string | null {
+  const plan = getPlanForStep(planStepId);
+  if (!plan) return null;
 
-  const currentTask = getDb()
-    .prepare('SELECT position FROM campaign_tasks WHERE id = ?')
-    .get(campaignTaskId) as { position: number } | undefined;
-  if (!currentTask) return null;
+  const currentStep = getDb()
+    .prepare('SELECT position FROM plan_steps WHERE id = ?')
+    .get(planStepId) as { position: number } | undefined;
+  if (!currentStep) return null;
 
-  const priorTasks = getDb()
+  const priorSteps = getDb()
     .prepare(`
-      SELECT ct.title, ct.execution_id
-      FROM campaign_tasks ct
-      WHERE ct.campaign_id = ? AND ct.position < ? AND ct.status = 'done'
-      ORDER BY ct.position
+      SELECT ps.title, ps.execution_id
+      FROM plan_steps ps
+      WHERE ps.plan_id = ? AND ps.position < ? AND ps.status = 'done'
+      ORDER BY ps.position
     `)
-    .all(campaign.id, currentTask.position) as Array<{ title: string; execution_id: string | null }>;
+    .all(plan.id, currentStep.position) as Array<{ title: string; execution_id: string | null }>;
 
-  if (priorTasks.length === 0) return null;
+  if (priorSteps.length === 0) return null;
 
   const MAX_RESULT_CHARS = 2000;
-  const parts = priorTasks.map(t => {
+  const parts = priorSteps.map(t => {
     if (!t.execution_id) return `### ${t.title}\n(no output recorded)`;
     const ex = getExecutionById(t.execution_id);
     if (!ex?.result) return `### ${t.title}\n(no output recorded)`;
@@ -64,7 +64,7 @@ function buildCampaignPriorContext(campaignTaskId: string): string | null {
     return `### ${t.title}\n${result}`;
   });
 
-  return `## Prior campaign task results\nCampaign: "${campaign.title}"\n\n${parts.join('\n\n')}`;
+  return `## Prior plan step results\nPlan: "${plan.title}"\n\n${parts.join('\n\n')}`;
 }
 
 async function maybeGenerateSessionTitle(userId: string, sessionId: string): Promise<void> {
@@ -139,19 +139,19 @@ function getMcpServersForUser(userId: string): Record<string, McpServerConfig> {
   return servers;
 }
 
-function startCampaignTask(userId: string, taskId: string, executionId: string): void {
-  updateCampaignTaskStatus(taskId, 'running', executionId);
-  broadcast(userId, { type: 'campaign_task_updated', taskId, status: 'running' });
+function startPlanStep(userId: string, stepId: string, executionId: string): void {
+  updatePlanStepStatus(stepId, 'running', executionId);
+  broadcast(userId, { type: 'plan_step_updated', stepId, status: 'running' });
 }
 
-function finishCampaignTask(userId: string, taskId: string, result: string): void {
+function finishPlanStep(userId: string, stepId: string, result: string): void {
   const status = result.startsWith('Error') ? 'error' : 'done';
-  updateCampaignTaskStatus(taskId, status);
-  const taskRow = getDb()
-    .prepare('SELECT campaign_id FROM campaign_tasks WHERE id = ?')
-    .get(taskId) as { campaign_id: string } | undefined;
-  if (taskRow) maybeCompleteCampaign(taskRow.campaign_id);
-  broadcast(userId, { type: 'campaign_task_updated', taskId, status });
+  updatePlanStepStatus(stepId, status);
+  const stepRow = getDb()
+    .prepare('SELECT plan_id FROM plan_steps WHERE id = ?')
+    .get(stepId) as { plan_id: string } | undefined;
+  if (stepRow) maybeCompletePlan(stepRow.plan_id);
+  broadcast(userId, { type: 'plan_step_updated', stepId, status });
 }
 
 const PARALLEL_SAFE_TOOLS = new Set([
@@ -166,8 +166,8 @@ const PARALLEL_SAFE_TOOLS = new Set([
   'read_file',
   'list_dir',
   'project_query',
-  'list_campaigns',
-  'get_campaign',
+  'list_plans',
+  'get_plan',
   'get_execution_output',
   'list_scheduled_tasks',
   'wait_for_execution',
@@ -287,7 +287,7 @@ async function runSubAgent(
   parentExecutionId: string,
   parentMessageId: string,
   parentSessionId: string,
-  campaignId?: string | null,
+  planId?: string | null,
   maxTurns = 15,
 ): Promise<string> {
   let apiKey: string;
@@ -317,7 +317,7 @@ async function runSubAgent(
   });
 
   for (let turn = 0; turn < clampedMaxTurns; turn++) {
-    if (campaignId && getCampaignById(campaignId)?.status === 'cancelled') {
+    if (planId && getPlanById(planId)?.status === 'cancelled') {
       recordAgentUsage(userId, 'subagent', tokensToUsd(SUB_MODEL, totalInputTokens, totalOutputTokens));
       return 'Sub-agent cancelled.';
     }
@@ -363,28 +363,28 @@ async function runSubAgent(
   return `Sub-agent reached max turns limit (${clampedMaxTurns}) without producing a final response.`;
 }
 
-async function executeCampaignTask(
-  task: DbCampaignTask,
-  campaign: DbCampaign,
+async function executePlanStep(
+  step: DbPlanStep,
+  plan: DbPlan,
   userId: string,
   messageId: string,
   sessionId: string,
 ): Promise<void> {
-  const project = getProjectForUser(campaign.project_id, userId);
-  if (!project) throw new Error(`Project ${campaign.project_id} not found`);
+  const project = getProjectForUser(plan.project_id, userId);
+  if (!project) throw new Error(`Project ${plan.project_id} not found`);
 
-  const executionId = createExecution(userId, messageId, project.id, task.agent);
-  startCampaignTask(userId, task.id, executionId);
+  const executionId = createExecution(userId, messageId, project.id, step.agent);
+  startPlanStep(userId, step.id, executionId);
 
-  const toolArgs: Record<string, unknown> = task.tool_args ? JSON.parse(task.tool_args) : {};
-  const prompt = task.prompt ?? '';
-  const priorCtx = buildCampaignPriorContext(task.id);
+  const toolArgs: Record<string, unknown> = step.tool_args ? JSON.parse(step.tool_args) : {};
+  const prompt = step.prompt ?? '';
+  const priorCtx = buildPlanPriorContext(step.id);
   const fullPrompt = priorCtx ? `${prompt}\n\n${priorCtx}` : prompt;
 
   try {
     let result: string;
 
-    switch (task.agent) {
+    switch (step.agent) {
       case 'claude_code': {
         if (!project.repo_path) throw new Error(`Project '${project.name}' has no repo`);
         let apiKey: string | null = null;
@@ -452,7 +452,7 @@ async function executeCampaignTask(
         break;
       }
       case 'subagent': {
-        result = await runSubAgent(fullPrompt, campaign.project_id, userId, executionId, messageId, sessionId, campaign.id);
+        result = await runSubAgent(fullPrompt, plan.project_id, userId, executionId, messageId, sessionId, plan.id);
         break;
       }
       case 'git': {
@@ -469,7 +469,7 @@ async function executeCampaignTask(
         break;
       }
       case 'github': {
-        result = 'Error: github task type is no longer supported. Configure the GitHub MCP server in Settings → MCP and use agent type "mcp" with the appropriate tool_name instead.';
+        result = 'Error: github step type is no longer supported. Configure the GitHub MCP server in Settings → MCP and use agent type "mcp" with the appropriate tool_name instead.';
         break;
       }
       case 'file_write': {
@@ -497,81 +497,81 @@ async function executeCampaignTask(
         break;
       }
       default:
-        throw new Error(`Unknown task agent type: ${task.agent}`);
+        throw new Error(`Unknown step agent type: ${step.agent}`);
     }
 
     completeExecution(executionId, userId, 'done', result);
-    finishCampaignTask(userId, task.id, result);
+    finishPlanStep(userId, step.id, result);
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err);
     completeExecution(executionId, userId, 'error', msg);
-    finishCampaignTask(userId, task.id, `Error: ${msg}`);
+    finishPlanStep(userId, step.id, `Error: ${msg}`);
     throw err;
   }
 }
 
-export async function runCampaignAutoDispatch(
-  campaignId: string,
+export async function runPlanAutoDispatch(
+  planId: string,
   userId: string,
   messageId: string,
   sessionId: string,
   onError: 'stop' | 'continue' = 'stop',
-): Promise<{ done: number; error: number; total: number; errors: Array<{ task_id: string; title: string; error: string }> }> {
-  const campaign = getCampaignById(campaignId);
-  if (!campaign) throw new Error(`Campaign ${campaignId} not found`);
+): Promise<{ done: number; error: number; total: number; errors: Array<{ step_id: string; title: string; error: string }> }> {
+  const plan = getPlanById(planId);
+  if (!plan) throw new Error(`Plan ${planId} not found`);
 
   while (true) {
-    const fresh = getCampaignById(campaignId)!;
+    const fresh = getPlanById(planId)!;
     if (fresh.status === 'cancelled') break;
 
-    const allTasks = getCampaignTasks(campaignId);
-    const doneIds = new Set(allTasks.filter(t => t.status === 'done').map(t => t.id));
-    const hasError = allTasks.some(t => t.status === 'error');
+    const allSteps = getPlanSteps(planId);
+    const doneIds = new Set(allSteps.filter(s => s.status === 'done').map(s => s.id));
+    const hasError = allSteps.some(s => s.status === 'error');
 
     if (hasError && onError === 'stop') break;
-    if (allTasks.every(t => t.status === 'done' || t.status === 'error')) break;
+    if (allSteps.every(s => s.status === 'done' || s.status === 'error')) break;
 
-    const ready = allTasks.filter(t => {
-      if (t.status !== 'waiting') return false;
-      const deps: string[] = t.depends_on ? JSON.parse(t.depends_on) : [];
+    const ready = allSteps.filter(s => {
+      if (s.status !== 'waiting') return false;
+      const deps: string[] = s.depends_on ? JSON.parse(s.depends_on) : [];
       return deps.every(depId => doneIds.has(depId));
     });
 
     if (ready.length === 0) {
-      const waitingTasks = allTasks.filter(t => t.status === 'waiting');
-      if (waitingTasks.length > 0) {
+      const waitingSteps = allSteps.filter(s => s.status === 'waiting');
+      if (waitingSteps.length > 0) {
         const db = getDb();
-        for (const t of waitingTasks) {
-          db.prepare("UPDATE campaign_tasks SET status = 'error', completed_at = unixepoch() WHERE id = ?").run(t.id);
-          broadcast(userId, { type: 'campaign_task_updated', taskId: t.id, status: 'error' });
+        for (const s of waitingSteps) {
+          db.prepare("UPDATE plan_steps SET status = 'error', completed_at = unixepoch() WHERE id = ?").run(s.id);
+          broadcast(userId, { type: 'plan_step_updated', stepId: s.id, status: 'error' });
         }
-        maybeCompleteCampaign(campaignId);
+        maybeCompletePlan(planId);
       }
       break;
     }
 
     const results = await Promise.allSettled(
-      ready.map(task => executeCampaignTask(task, campaign, userId, messageId, sessionId))
+      ready.map(step => executePlanStep(step, plan, userId, messageId, sessionId))
     );
 
     if (onError === 'stop' && results.some(r => r.status === 'rejected')) break;
   }
 
-  const finalTasks = getCampaignTasks(campaignId);
-  const erroredTasks = finalTasks.filter(t => t.status === 'error');
-  const errors = erroredTasks.map(t => {
-    const ex = t.execution_id ? getExecutionById(t.execution_id) : null;
+  const finalSteps = getPlanSteps(planId);
+  const erroredSteps = finalSteps.filter(s => s.status === 'error');
+  const errors = erroredSteps.map(s => {
+    const ex = s.execution_id ? getExecutionById(s.execution_id) : null;
     const errorMsg = ex?.result ?? 'Unknown error';
     return {
-      task_id: t.id,
-      title: t.title,
+      step_id: s.id,
+      title: s.title,
       error: errorMsg.length > 500 ? errorMsg.slice(0, 500) + '…' : errorMsg,
     };
   });
   return {
-    done: finalTasks.filter(t => t.status === 'done').length,
-    error: finalTasks.filter(t => t.status === 'error').length,
-    total: finalTasks.length,
+    done: finalSteps.filter(s => s.status === 'done').length,
+    error: finalSteps.filter(s => s.status === 'error').length,
+    total: finalSteps.length,
     errors,
   };
 }
@@ -614,12 +614,12 @@ async function dispatchTool(
   const executionId = createExecution(userId, messageId, project?.id ?? null, toolName);
   if (project) noteProjectUse(userId, sessionId, project, executionId);
 
-  const campaignTaskId = toolInput.campaign_task_id as string | undefined;
-  if (campaignTaskId) {
-    const campaign = getCampaignForTask(campaignTaskId);
-    if (campaign?.status === 'cancelled') {
-      completeExecution(executionId, userId, 'error', 'Campaign cancelled');
-      return 'Error: Campaign was cancelled';
+  const planStepId = toolInput.plan_step_id as string | undefined;
+  if (planStepId) {
+    const plan = getPlanForStep(planStepId);
+    if (plan?.status === 'cancelled') {
+      completeExecution(executionId, userId, 'error', 'Plan cancelled');
+      return 'Error: Plan was cancelled';
     }
   }
 
@@ -646,12 +646,12 @@ async function dispatchTool(
           if (anthropicConn) ccApiKey = getDecryptedConfig(anthropicConn.id, userId).apiKey;
         }
         const ccWorktree = await ensureWorktree(project, sessionId);
-        const ccTaskId = toolInput.campaign_task_id as string | undefined;
-        if (ccTaskId) startCampaignTask(userId, ccTaskId, executionId);
+        const ccStepId = toolInput.plan_step_id as string | undefined;
+        if (ccStepId) startPlanStep(userId, ccStepId, executionId);
         let ccGraphKey: string | null = null;
         try { ccGraphKey = getAnthropicKey(userId); } catch { /* none configured */ }
         const ccCtx: AgentPipelineCtx = { userId, tool: 'claude_code', repoPath: project.repo_path, projectId: project.id, graphKey: ccGraphKey };
-        const ccPrior = ccTaskId ? buildCampaignPriorContext(ccTaskId) : null;
+        const ccPrior = ccStepId ? buildPlanPriorContext(ccStepId) : null;
         const ccPrompt = ccPrior ? `${toolInput.prompt as string}\n\n${ccPrior}` : toolInput.prompt as string;
         await runAgentPipeline(ccCtx, async () => {
           const ccResult = await invokeClaudeCode(
@@ -662,7 +662,7 @@ async function dispatchTool(
           ccCtx.costUsd = ccResult.costUsd;
         });
         result = ccCtx.result!;
-        if (ccTaskId) finishCampaignTask(userId, ccTaskId, result);
+        if (ccStepId) finishPlanStep(userId, ccStepId, result);
         break;
       }
       case 'invoke_codex': {
@@ -683,12 +683,12 @@ async function dispatchTool(
           if (openaiConn) codexApiKey = getDecryptedConfig(openaiConn.id, userId).apiKey;
         }
         const codexWorktree = await ensureWorktree(project, sessionId);
-        const codexTaskId = toolInput.campaign_task_id as string | undefined;
-        if (codexTaskId) startCampaignTask(userId, codexTaskId, executionId);
+        const codexStepId = toolInput.plan_step_id as string | undefined;
+        if (codexStepId) startPlanStep(userId, codexStepId, executionId);
         let codexGraphKey: string | null = null;
         try { codexGraphKey = getAnthropicKey(userId); } catch { /* none configured */ }
         const codexCtx: AgentPipelineCtx = { userId, tool: 'codex', repoPath: project.repo_path, projectId: project.id, graphKey: codexGraphKey };
-        const codexPrior = codexTaskId ? buildCampaignPriorContext(codexTaskId) : null;
+        const codexPrior = codexStepId ? buildPlanPriorContext(codexStepId) : null;
         const codexPrompt = codexPrior ? `${toolInput.prompt as string}\n\n${codexPrior}` : toolInput.prompt as string;
         await runAgentPipeline(codexCtx, async () => {
           const codexResult = await invokeCodex(
@@ -699,7 +699,7 @@ async function dispatchTool(
           codexCtx.costUsd = codexResult.costUsd;
         });
         result = codexCtx.result!;
-        if (codexTaskId) finishCampaignTask(userId, codexTaskId, result);
+        if (codexStepId) finishPlanStep(userId, codexStepId, result);
         break;
       }
       case 'mcp_call': {
@@ -711,8 +711,8 @@ async function dispatchTool(
           break;
         }
         const mcpConfig = getDecryptedConfig(mcpConn.id, userId);
-        const mcpTaskId = toolInput.campaign_task_id as string | undefined;
-        if (mcpTaskId) startCampaignTask(userId, mcpTaskId, executionId);
+        const mcpStepId = toolInput.plan_step_id as string | undefined;
+        if (mcpStepId) startPlanStep(userId, mcpStepId, executionId);
         result = await callMcpTool(
           toolInput.connection_id as string,
           mcpConfig.command,
@@ -721,7 +721,7 @@ async function dispatchTool(
           toolInput.tool_name as string,
           toolInput.tool_input as Record<string, unknown>,
         );
-        if (mcpTaskId) finishCampaignTask(userId, mcpTaskId, result);
+        if (mcpStepId) finishPlanStep(userId, mcpStepId, result);
         break;
       }
       case 'git_op': {
@@ -734,13 +734,13 @@ async function dispatchTool(
           break;
         }
         const gitWorktree = await ensureWorktree(project, sessionId);
-        const gitTaskId = toolInput.campaign_task_id as string | undefined;
-        if (gitTaskId) startCampaignTask(userId, gitTaskId, executionId);
+        const gitStepId = toolInput.plan_step_id as string | undefined;
+        if (gitStepId) startPlanStep(userId, gitStepId, executionId);
         result = await runGitOp(
           { op: toolInput.op as 'log' | 'diff' | 'status' | 'commit' | 'push', message: toolInput.message as string | undefined, branch: toolInput.branch as string | undefined ?? gitWorktree.branch },
           { userId, executionId, projectId, repoPath: gitWorktree.worktree_path }
         );
-        if (gitTaskId) finishCampaignTask(userId, gitTaskId, result);
+        if (gitStepId) finishPlanStep(userId, gitStepId, result);
         break;
       }
       case 'project_query': {
@@ -788,8 +788,8 @@ async function dispatchTool(
         result = readChat(userId, toolInput.chat_id as string);
         break;
       case 'register_artifact': {
-        const regTaskId = toolInput.campaign_task_id as string | undefined;
-        if (regTaskId) startCampaignTask(userId, regTaskId, executionId);
+        const regStepId = toolInput.plan_step_id as string | undefined;
+        if (regStepId) startPlanStep(userId, regStepId, executionId);
         const art = await registerFileAsArtifact({
           project_id: toolInput.project_id as string,
           source_path: toolInput.file_path as string,
@@ -797,7 +797,7 @@ async function dispatchTool(
           kind: toolInput.kind as string | undefined,
         });
         result = JSON.stringify({ artifact_id: art.id, project_id: toolInput.project_id as string, title: art.title, kind: art.kind, mime_type: art.mime_type, url: art.url });
-        if (regTaskId) finishCampaignTask(userId, regTaskId, result);
+        if (regStepId) finishPlanStep(userId, regStepId, result);
         break;
       }
       case 'list_artifacts': {
@@ -894,8 +894,8 @@ async function dispatchTool(
         }, { userId, executionId, projectId, sessionId });
         break;
       case 'run_command': {
-        const rcTaskId = toolInput.campaign_task_id as string | undefined;
-        if (rcTaskId) startCampaignTask(userId, rcTaskId, executionId);
+        const rcStepId = toolInput.plan_step_id as string | undefined;
+        if (rcStepId) startPlanStep(userId, rcStepId, executionId);
         result = await runCommand(
           {
             command: toolInput.command as string,
@@ -904,22 +904,22 @@ async function dispatchTool(
           },
           { userId, executionId, permissionProfile: getPermissionProfile(userId) },
         );
-        if (rcTaskId) finishCampaignTask(userId, rcTaskId, result);
+        if (rcStepId) finishPlanStep(userId, rcStepId, result);
         break;
       }
       case 'write_file': {
-        const writeTaskId = toolInput.campaign_task_id as string | undefined;
-        if (writeTaskId) startCampaignTask(userId, writeTaskId, executionId);
+        const writeStepId = toolInput.plan_step_id as string | undefined;
+        if (writeStepId) startPlanStep(userId, writeStepId, executionId);
         result = await writeFile(
           { project_id: projectId, path: toolInput.path as string, content: toolInput.content as string },
           { userId, executionId, projectId, sessionId, permissionProfile: getPermissionProfile(userId) }
         );
-        if (writeTaskId) finishCampaignTask(userId, writeTaskId, result);
+        if (writeStepId) finishPlanStep(userId, writeStepId, result);
         break;
       }
       case 'create_artifact': {
-        const artifactTaskId = toolInput.campaign_task_id as string | undefined;
-        if (artifactTaskId) startCampaignTask(userId, artifactTaskId, executionId);
+        const artifactStepId = toolInput.plan_step_id as string | undefined;
+        if (artifactStepId) startPlanStep(userId, artifactStepId, executionId);
         const artifact = await createTextArtifact({
           project_id: projectId,
           kind: toolInput.kind as string,
@@ -928,7 +928,7 @@ async function dispatchTool(
           content: toolInput.content as string,
           mime_type: toolInput.mime_type as 'text/markdown' | 'text/plain' | 'application/json' | undefined,
           status: toolInput.status as 'ready' | 'review' | 'running' | 'error' | undefined,
-          source_task_id: artifactTaskId ?? null,
+          source_step_id: artifactStepId ?? null,
           metadata: { producer: 'create_artifact', execution_id: executionId },
         });
         result = JSON.stringify({ artifact_id: artifact.id, project_id: projectId, title: artifact.title, kind: artifact.kind, mime_type: artifact.mime_type });
@@ -942,7 +942,7 @@ async function dispatchTool(
           executionId,
           metadata: { kind: artifact.kind, mime_type: artifact.mime_type },
         });
-        if (artifactTaskId) finishCampaignTask(userId, artifactTaskId, result);
+        if (artifactStepId) finishPlanStep(userId, artifactStepId, result);
         break;
       }
       case 'create_project':
@@ -988,49 +988,49 @@ async function dispatchTool(
       case 'delete_project':
         result = await deleteProject({ project_id: toolInput.project_id as string, delete_files: toolInput.delete_files as boolean }, userId, executionId);
         break;
-      case 'list_campaigns': {
+      case 'list_plans': {
         const lcPid = toolInput.project_id as string;
         if (!getProjectForUser(lcPid, userId)) { result = `Error: project ${lcPid} not found`; break; }
-        const summaries = getCampaignSummaries(lcPid);
-        result = JSON.stringify(summaries.map(c => ({
-          id: c.id,
-          title: c.title,
-          status: c.status,
-          total_tasks: c.total_tasks,
-          done_tasks: c.done_tasks,
-          error_tasks: c.error_tasks,
-          created_at: c.created_at,
-          completed_at: c.completed_at,
+        const summaries = getPlanSummaries(lcPid);
+        result = JSON.stringify(summaries.map(p => ({
+          id: p.id,
+          title: p.title,
+          status: p.status,
+          total_steps: p.total_tasks,
+          done_steps: p.done_tasks,
+          error_steps: p.error_tasks,
+          created_at: p.created_at,
+          completed_at: p.completed_at,
         })), null, 2);
         break;
       }
-      case 'get_campaign': {
-        const campaign = getCampaignById(toolInput.campaign_id as string);
-        if (!campaign) { result = `Error: campaign ${toolInput.campaign_id} not found`; break; }
-        const tasks = getCampaignTasks(campaign.id);
+      case 'get_plan': {
+        const plan = getPlanById(toolInput.plan_id as string);
+        if (!plan) { result = `Error: plan ${toolInput.plan_id} not found`; break; }
+        const steps = getPlanSteps(plan.id);
         result = JSON.stringify({
-          id: campaign.id,
-          title: campaign.title,
-          status: campaign.status,
-          created_at: campaign.created_at,
-          completed_at: campaign.completed_at,
-          tasks: tasks.map(t => ({
-            id: t.id,
-            title: t.title,
-            agent: t.agent,
-            status: t.status,
-            execution_id: t.execution_id,
+          id: plan.id,
+          title: plan.title,
+          status: plan.status,
+          created_at: plan.created_at,
+          completed_at: plan.completed_at,
+          steps: steps.map(s => ({
+            id: s.id,
+            title: s.title,
+            agent: s.agent,
+            status: s.status,
+            execution_id: s.execution_id,
             result: null as string | null,
           })),
         }, null, 2);
         // attach result strings from executions (truncated — use get_execution_output for full log)
         const SUMMARY_CAP = 500;
-        const parsed = JSON.parse(result) as { tasks: Array<{ execution_id: string | null; result: string | null }> };
-        for (const t of parsed.tasks) {
-          if (t.execution_id) {
-            const ex = getExecutionById(t.execution_id);
+        const parsed = JSON.parse(result) as { steps: Array<{ execution_id: string | null; result: string | null }> };
+        for (const s of parsed.steps) {
+          if (s.execution_id) {
+            const ex = getExecutionById(s.execution_id);
             const r = ex?.result ?? null;
-            t.result = r && r.length > SUMMARY_CAP ? r.slice(0, SUMMARY_CAP) + '…(use get_execution_output for full output)' : r;
+            s.result = r && r.length > SUMMARY_CAP ? r.slice(0, SUMMARY_CAP) + '…(use get_execution_output for full output)' : r;
           }
         }
         result = JSON.stringify(parsed, null, 2);
@@ -1046,14 +1046,14 @@ async function dispatchTool(
         result = JSON.stringify({ id: ex.id, tool: ex.tool, status: ex.status, result: ex.result, output_log }, null, 2);
         break;
       }
-      case 'resume_campaign': {
-        const resumed = resumeCampaign(toolInput.campaign_id as string);
-        if (!resumed) { result = `Error: campaign ${toolInput.campaign_id} not found or cannot be resumed (cancelled campaigns cannot be resumed)`; break; }
+      case 'resume_plan': {
+        const resumed = resumePlan(toolInput.plan_id as string);
+        if (!resumed) { result = `Error: plan ${toolInput.plan_id} not found or cannot be resumed (cancelled plans cannot be resumed)`; break; }
         result = JSON.stringify({
-          id: resumed.campaign.id,
-          title: resumed.campaign.title,
-          status: resumed.campaign.status,
-          tasks: resumed.tasks.map(t => ({ id: t.id, title: t.title, agent: t.agent, status: t.status, execution_id: t.execution_id })),
+          id: resumed.plan.id,
+          title: resumed.plan.title,
+          status: resumed.plan.status,
+          steps: resumed.steps.map(s => ({ id: s.id, title: s.title, agent: s.agent, status: s.status, execution_id: s.execution_id })),
         }, null, 2);
         break;
       }
@@ -1092,26 +1092,26 @@ async function dispatchTool(
         result = deleted ? 'Scheduled task deleted' : `Error: task ${toolInput.task_id} not found`;
         break;
       }
-      case 'create_campaign': {
-        result = runCreateCampaign(
+      case 'create_plan': {
+        result = runCreatePlan(
           {
             project_id: toolInput.project_id as string,
             title: toolInput.title as string,
-            tasks: toolInput.tasks as Array<{ title: string; agent: 'claude_code' | 'codex' | 'mcp' | 'file_write' | 'git' | 'github' }>,
+            steps: toolInput.steps as Array<{ title: string; agent: 'claude_code' | 'codex' | 'mcp' | 'file_write' | 'git' | 'github' }>,
             session_id: sessionId,
           },
           userId
         );
         try {
-          const parsed = JSON.parse(result) as { campaign_id?: string; project_id?: string };
-          if (parsed.campaign_id && parsed.project_id) {
+          const parsed = JSON.parse(result) as { plan_id?: string; project_id?: string };
+          if (parsed.plan_id && parsed.project_id) {
             emitSessionEvent(userId, {
               sessionId,
-              type: 'campaign_created',
-              title: `Created campaign: ${toolInput.title as string}`,
+              type: 'plan_created',
+              title: `Created plan: ${toolInput.title as string}`,
               body: 'Tracks agent work from this chat.',
               projectId: parsed.project_id,
-              campaignId: parsed.campaign_id,
+              planId: parsed.plan_id,
               executionId,
               metadata: { source: 'agent' },
             });
@@ -1119,20 +1119,20 @@ async function dispatchTool(
         } catch { /* ignore malformed tool result */ }
         break;
       }
-      case 'run_campaign': {
-        const runCampaignId = toolInput.campaign_id as string;
+      case 'run_plan': {
+        const runPlanId = toolInput.plan_id as string;
         const onError = (toolInput.on_error as 'stop' | 'continue' | undefined) ?? 'stop';
-        const campaignCheck = getCampaignById(runCampaignId);
-        if (!campaignCheck) { result = `Error: campaign ${runCampaignId} not found`; break; }
-        const summary = await runCampaignAutoDispatch(runCampaignId, userId, messageId, sessionId, onError);
-        const finalCampaign = getCampaignById(runCampaignId)!;
-        result = JSON.stringify({ campaign_id: runCampaignId, status: finalCampaign.status, ...summary });
+        const planCheck = getPlanById(runPlanId);
+        if (!planCheck) { result = `Error: plan ${runPlanId} not found`; break; }
+        const summary = await runPlanAutoDispatch(runPlanId, userId, messageId, sessionId, onError);
+        const finalPlan = getPlanById(runPlanId)!;
+        result = JSON.stringify({ plan_id: runPlanId, status: finalPlan.status, ...summary });
         break;
       }
       case 'create_pipeline': {
         const pTitle = toolInput.title as string;
         const pDesc = toolInput.description as string | undefined ?? null;
-        const pTasks = toolInput.tasks as Array<{ title: string; agent: DbCampaignTask['agent']; prompt?: string; depends_on?: number[]; tool_args?: Record<string, unknown> }>;
+        const pTasks = toolInput.tasks as Array<{ title: string; agent: DbPlanStep['agent']; prompt?: string; depends_on?: number[]; tool_args?: Record<string, unknown> }>;
         const { pipeline, tasks: pipelineTasks } = createPipeline(userId, pTitle, pDesc, pTasks);
         result = JSON.stringify({
           pipeline_id: pipeline.id,
@@ -1151,12 +1151,12 @@ async function dispatchTool(
         if (!pipeline) { result = `Error: pipeline ${pipelineId} not found`; break; }
         const ptasks = getPipelineTasks(pipelineId);
 
-        // Instantiate pipeline as a campaign — resolve position-based depends_on to task IDs
-        const { campaign: pCampaign, tasks: cTasks } = createCampaign(
+        // Instantiate pipeline as a plan — resolve position-based depends_on to step IDs
+        const { plan: pPlan, steps: pSteps } = createPlan(
           pProjectId,
           sessionId,
           pTitleOverride ?? pipeline.title,
-          ptasks.map((pt, i) => ({
+          ptasks.map((pt) => ({
             title: pt.title,
             agent: pt.agent,
             prompt: pt.prompt,
@@ -1165,38 +1165,38 @@ async function dispatchTool(
           })),
         );
 
-        broadcast(userId, { type: 'campaign_created', campaignId: pCampaign.id });
+        broadcast(userId, { type: 'plan_created', planId: pPlan.id });
 
-        const pSummary = await runCampaignAutoDispatch(pCampaign.id, userId, messageId, sessionId, pOnError);
-        const pFinalCampaign = getCampaignById(pCampaign.id)!;
-        result = JSON.stringify({ campaign_id: pCampaign.id, pipeline_id: pipelineId, status: pFinalCampaign.status, ...pSummary });
+        const pSummary = await runPlanAutoDispatch(pPlan.id, userId, messageId, sessionId, pOnError);
+        const pFinalPlan = getPlanById(pPlan.id)!;
+        result = JSON.stringify({ plan_id: pPlan.id, pipeline_id: pipelineId, status: pFinalPlan.status, ...pSummary });
         break;
       }
       case 'delegate_to_agent': {
         const daInstructions = toolInput.instructions as string;
         const daProjectId = toolInput.project_id as string | undefined ?? null;
-        const daTaskId = toolInput.campaign_task_id as string | undefined;
-        const daCampaignId = daTaskId ? getCampaignForTask(daTaskId)?.id ?? null : null;
-        result = await runSubAgent(daInstructions, daProjectId, userId, executionId, messageId, sessionId, daCampaignId, toolInput.max_turns as number | undefined);
+        const daStepId = toolInput.plan_step_id as string | undefined;
+        const daPlanId = daStepId ? getPlanForStep(daStepId)?.id ?? null : null;
+        result = await runSubAgent(daInstructions, daProjectId, userId, executionId, messageId, sessionId, daPlanId, toolInput.max_turns as number | undefined);
         break;
       }
       case 'generate_video': {
         const title = toolInput.title as string;
         const scenes = toolInput.scenes as VideoScene[];
-        const videoTaskId = toolInput.campaign_task_id as string | undefined;
-        if (videoTaskId) startCampaignTask(userId, videoTaskId, executionId);
+        const videoStepId = toolInput.plan_step_id as string | undefined;
+        if (videoStepId) startPlanStep(userId, videoStepId, executionId);
         renderVideo(projectId, title, scenes, (progress) => {
           appendOutput(executionId, userId, `progress:${Math.round(progress * 100)}%\n`);
         })
           .then((fileName) => {
             const r = `Rendered ${fileName}`;
             completeExecution(executionId, userId, 'done', r);
-            if (videoTaskId) finishCampaignTask(userId, videoTaskId, r);
+            if (videoStepId) finishPlanStep(userId, videoStepId, r);
           })
           .catch((err) => {
             const msg = err instanceof Error ? err.message : String(err);
             completeExecution(executionId, userId, 'error', msg);
-            if (videoTaskId) finishCampaignTask(userId, videoTaskId, `Error: ${msg}`);
+            if (videoStepId) finishPlanStep(userId, videoStepId, `Error: ${msg}`);
           });
         // Return early — completeExecution is handled by the fire-and-forget above
         return JSON.stringify({
@@ -1235,8 +1235,8 @@ async function dispatchTool(
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err);
     completeExecution(executionId, userId, 'error', msg);
-    const catchTaskId = toolInput.campaign_task_id as string | undefined;
-    if (catchTaskId) finishCampaignTask(userId, catchTaskId, `Error: ${msg}`);
+    const catchStepId = toolInput.plan_step_id as string | undefined;
+    if (catchStepId) finishPlanStep(userId, catchStepId, `Error: ${msg}`);
     return `Error: ${msg}`;
   }
 }

@@ -93,6 +93,12 @@ struct ApprovalPayload: Decodable {
 }
 
 struct ApprovalDecision: Decodable { let status: String }
+struct OKResponse: Decodable { let ok: Bool }
+struct ActiveSessionsResult: Decodable { let ids: [String] }
+struct PinSessionRequest: Encodable {
+  let pinnedProjectId: String?
+  enum CodingKeys: String, CodingKey { case pinnedProjectId = "pinned_project_id" }
+}
 
 struct Project: Decodable {
   let id: String

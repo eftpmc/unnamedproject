@@ -44,11 +44,24 @@ final class AppCoordinator {
     controller.onShowChats = { [weak self] in self?.showChats() }
     controller.onShowChat = { [weak self] chat in self?.showChat(chatSession: chat) }
     controller.onShowInbox = { [weak self] in self?.showInbox() }
+    controller.onShowProjects = { [weak self] in self?.showProjects() }
     navigationController.setViewControllers([controller], animated: true)
   }
 
   func showInbox() {
     let controller = ApprovalsViewController(appSession: session)
+    navigationController.pushViewController(controller, animated: true)
+  }
+
+  func showProjects() {
+    let controller = ProjectsViewController(appSession: session)
+    controller.onSelectProject = { [weak self] project in self?.showProjectDetail(project: project) }
+    navigationController.pushViewController(controller, animated: true)
+  }
+
+  func showProjectDetail(project: Project) {
+    let controller = ProjectDetailViewController(appSession: session, project: project)
+    controller.onShowChat = { [weak self] chat in self?.showChat(chatSession: chat) }
     navigationController.pushViewController(controller, animated: true)
   }
 

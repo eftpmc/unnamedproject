@@ -39,6 +39,18 @@ enum AppTheme {
   static let warning = UIColor(red: 0.82, green: 0.47, blue: 0.12, alpha: 1)
 }
 
+func relativeTime(from epoch: Int) -> String {
+  let diff = max(0, Int(-Date(timeIntervalSince1970: TimeInterval(epoch)).timeIntervalSinceNow))
+  if diff < 60 { return "Just now" }
+  if diff < 3600 { return "\(diff / 60)m ago" }
+  if diff < 86400 { return "\(diff / 3600)h ago" }
+  if diff < 604800 { return "\(diff / 86400)d ago" }
+  let fmt = DateFormatter()
+  fmt.dateStyle = .short
+  fmt.timeStyle = .none
+  return fmt.string(from: Date(timeIntervalSince1970: TimeInterval(epoch)))
+}
+
 extension UIView {
   func pinToSuperviewMargins() {
     guard let superview else { return }

@@ -70,6 +70,21 @@ final class APIClient {
     try await request(path: "/executions/\(id)/reject", method: "POST")
   }
 
+  func activeSessions() async throws -> [String] {
+    let result: ActiveSessionsResult = try await request(path: "/sessions/active")
+    return result.ids
+  }
+
+  @discardableResult
+  func deleteSession(id: String) async throws -> OKResponse {
+    try await request(path: "/sessions/\(id)", method: "DELETE")
+  }
+
+  @discardableResult
+  func pinSessionToProject(sessionId: String, projectId: String) async throws -> OKResponse {
+    try await request(path: "/sessions/\(sessionId)", method: "PATCH", body: PinSessionRequest(pinnedProjectId: projectId))
+  }
+
   func projects() async throws -> [Project] {
     try await request(path: "/projects")
   }

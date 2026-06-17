@@ -1,13 +1,14 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useNavigate } from 'react-router-dom';
-import { Bell, Check, ChevronDown, Folder, Loader2, PanelRight, Target, X } from 'lucide-react';
+import { Bell, Check, ChevronDown, Folder, GitBranch, Loader2, PanelRight, Square, Target, X } from 'lucide-react';
 import ContextPanel from './ContextPanel.js';
 import MessageList from './MessageList.js';
 import MessageInput from './MessageInput.js';
-import { getMessages, sendMessage, getChats, updateChatConfig, getModelsForEffort, getSessionWorktree, mergeSessionBranch, getProjects, truncateMessagesFrom, approveExecution, rejectExecution, getChatEvents, getChatStatus } from '../lib/api.js';
+import { getMessages, sendMessage, getChats, updateChatConfig, getModelsForEffort, getSessionWorktree, mergeSessionBranch, getProjects, truncateMessagesFrom, approveExecution, rejectExecution, getChatEvents, getChatStatus, stopChat } from '../lib/api.js';
 import { subscribe } from '../lib/ws.js';
 import { cn } from '../lib/utils.js';
+import { usePageTitle } from '../lib/usePageTitle.js';
 import type { EffortLevel, Message, MessageExecution, Project, Session, SessionEvent, SessionProjectLink, WSEvent, WSMessageCreated, WSMessageStarted, WSMessageDelta, WSExecutionUpdate, WSApprovalRequested, WSAutoApproved, WSSessionTitleUpdated, WSSessionEventCreated, WSAgentError, WSTurnComplete, ClaudeModelInfo } from '../types.js';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
@@ -50,6 +51,8 @@ export default function ChatView({ chatId }: ChatViewProps) {
   const chat = chats.find(s => s.id === chatId);
   const effort = chat?.effort ?? 'medium';
 
+  usePageTitle(chat?.title);
+
   const { data: models = [] } = useQuery({
     queryKey: ['models', effort],
     queryFn: () => getModelsForEffort(effort),
@@ -64,7 +67,7 @@ export default function ChatView({ chatId }: ChatViewProps) {
   const contextProject = pinnedProject ?? inferredProject;
 
   const configMutation = useMutation({
-    mutationFn: (config: { effort?: EffortLevel; model?: string | null; pinned_project_id?: string | null }) => updateChatConfig(chatId, config),
+    mutationFn: (config: { effort?: EffortLevel; model?: string | null; pinned_project_id?: string | null; title?: string }) => updateChatConfig(chatId, config),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['chats'] });
       queryClient.invalidateQueries({ queryKey: ['chat-events', chatId] });
@@ -124,7 +127,8 @@ export default function ChatView({ chatId }: ChatViewProps) {
     if (Object.keys(byMessage).length) setExecutions(prev => ({ ...byMessage, ...prev }));
   }, [messages]);
 
-  const [inputValue, setInputValue] = useState('');
+  const draftKey = `draft:${chatId}`;
+  const [inputValue, setInputValue] = useState(() => localStorage.getItem(draftKey) ?? '');
   const [editingMessageId, setEditingMessageId] = useState<string | null>(null);
   const [sending, setSending] = useState(false);
   const [agentError, setAgentError] = useState<string | null>(null);
@@ -207,6 +211,7 @@ export default function ChatView({ chatId }: ChatViewProps) {
 
       await mutation.mutateAsync({ content, attachments });
       setInputValue('');
+      localStorage.removeItem(draftKey);
       setSending(false);
       return true;
     } catch {
@@ -423,17 +428,28 @@ export default function ChatView({ chatId }: ChatViewProps) {
     <div className="flex min-h-0 flex-1 overflow-hidden">
       <div className="flex min-w-0 flex-1 flex-col">
       <PageHeader
-        title={chat?.title ?? 'Untitled chat'}
+        title={<EditableTitle title={chat?.title ?? 'Untitled chat'} onSave={(t) => configMutation.mutate({ title: t })} />}
         className="border-b border-border-soft px-5 py-4"
         description={
-          <ScopePopover
-            projects={projects}
-            pinnedProject={pinnedProject}
-            inferredProject={inferredProject}
-            agentActive={agentActive}
-            onOpenProject={(projectId) => navigate(`/projects/${projectId}`)}
-            onScopeChange={(projectId) => configMutation.mutate({ pinned_project_id: projectId })}
-          />
+          <div className="flex items-center gap-2">
+            <ScopePopover
+              projects={projects}
+              pinnedProject={pinnedProject}
+              inferredProject={inferredProject}
+              agentActive={agentActive}
+              onOpenProject={(projectId) => navigate(`/projects/${projectId}`)}
+              onScopeChange={(projectId) => configMutation.mutate({ pinned_project_id: projectId })}
+            />
+            {worktree && (
+              <span className="flex items-center gap-1 rounded-md border border-border-soft bg-muted/60 px-1.5 py-0.5 font-mono text-[11px] text-muted-foreground">
+                <GitBranch size={10} className="shrink-0" />
+                {worktree.branch}
+                {worktree.files_changed > 0 && (
+                  <span className="text-warning">·{worktree.files_changed}</span>
+                )}
+              </span>
+            )}
+          </div>
         }
         actions={
           <div className="flex items-center gap-2">
@@ -483,14 +499,28 @@ export default function ChatView({ chatId }: ChatViewProps) {
         />
       )}
 
-      {agentError && (
-        <div className="shrink-0 flex items-center justify-between gap-3 border-t border-destructive/20 bg-destructive/5 px-5 py-2.5 text-xs text-destructive">
-          <span>{agentError}</span>
-          <button type="button" onClick={() => setAgentError(null)} className="shrink-0 text-destructive/60 hover:text-destructive" aria-label="Dismiss error">
-            <X size={14} />
-          </button>
-        </div>
-      )}
+      {agentError && (() => {
+        const lastUserContent = [...messages].reverse().find(m => m.role === 'user')?.content ?? null;
+        return (
+          <div className="shrink-0 flex items-center justify-between gap-3 border-t border-destructive/20 bg-destructive/5 px-5 py-2.5 text-xs text-destructive">
+            <span className="flex-1 min-w-0 truncate">{agentError}</span>
+            <div className="flex items-center gap-2 shrink-0">
+              {lastUserContent && (
+                <button
+                  type="button"
+                  onClick={() => { setAgentError(null); sendPrompt(lastUserContent); }}
+                  className="font-medium text-destructive/70 hover:text-destructive transition-colors"
+                >
+                  Retry
+                </button>
+              )}
+              <button type="button" onClick={() => setAgentError(null)} className="text-destructive/60 hover:text-destructive" aria-label="Dismiss error">
+                <X size={14} />
+              </button>
+            </div>
+          </div>
+        );
+      })()}
 
       {pendingApproval && !ctxOpen && (
         <div className="flex shrink-0 items-center justify-between gap-3 border-t border-warning/25 bg-warning/8 px-5 py-2.5 text-sm md:hidden">
@@ -511,15 +541,26 @@ export default function ChatView({ chatId }: ChatViewProps) {
       {agentActive && !pendingApproval && (
         <div className="flex shrink-0 items-center gap-2 border-t border-border-soft bg-muted/35 px-5 py-2 text-xs text-muted-foreground">
           <Loader2 size={13} className="animate-spin" />
-          <span>{agentStatusText}</span>
+          <span className="flex-1">{agentStatusText}</span>
+          <button
+            type="button"
+            onClick={() => stopChat(chatId).catch(() => {})}
+            title="Stop agent"
+            className="flex items-center gap-1 rounded-md px-2 py-1 text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
+          >
+            <Square size={11} className="fill-current" />
+            Stop
+          </button>
         </div>
       )}
 
       <MessageInput
         value={inputValue}
-        onChange={setInputValue}
+        onChange={(v) => { setInputValue(v); if (v) localStorage.setItem(draftKey, v); else localStorage.removeItem(draftKey); }}
         onSend={(attachments) => sendPrompt(undefined, attachments)}
         disabled={agentActive}
+        isEditing={!!editingMessageId}
+        onCancelEdit={() => { setEditingMessageId(null); setInputValue(''); }}
       />
       </div>
       <ContextPanel
@@ -578,6 +619,42 @@ function formatToolName(tool: string): string {
     .replace(/^invoke_/, '')
     .replace(/_/g, ' ')
     .replace(/\b\w/g, char => char.toUpperCase());
+}
+
+function EditableTitle({ title, onSave }: { title: string; onSave: (t: string) => void }) {
+  const [editing, setEditing] = useState(false);
+  const [draft, setDraft] = useState(title);
+
+  function commit() {
+    const trimmed = draft.trim();
+    if (trimmed && trimmed !== title) onSave(trimmed);
+    else setDraft(title);
+    setEditing(false);
+  }
+
+  if (editing) {
+    return (
+      <input
+        autoFocus
+        value={draft}
+        onChange={e => setDraft(e.target.value)}
+        onBlur={commit}
+        onKeyDown={e => { if (e.key === 'Enter') commit(); if (e.key === 'Escape') { setDraft(title); setEditing(false); } }}
+        className="min-w-0 flex-1 bg-transparent text-[15px] font-semibold text-foreground outline-none focus:underline focus:decoration-border"
+      />
+    );
+  }
+
+  return (
+    <button
+      type="button"
+      onClick={() => { setDraft(title); setEditing(true); }}
+      title="Click to rename"
+      className="min-w-0 truncate text-left text-[15px] font-semibold text-foreground hover:underline hover:decoration-border"
+    >
+      {title}
+    </button>
+  );
 }
 
 function EmptyChatState({

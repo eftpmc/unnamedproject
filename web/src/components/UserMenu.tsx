@@ -1,7 +1,8 @@
 import { useNavigate } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
-import { ChevronDown, Moon, Settings, Sun } from 'lucide-react';
+import { ChevronDown, LogOut, Moon, Settings, Sun } from 'lucide-react';
 import { getMe } from '../lib/api.js';
+import { clearToken } from '../lib/auth.js';
 import { useTheme } from '../lib/useTheme.js';
 import {
   DropdownMenu,
@@ -43,6 +44,14 @@ export default function UserMenu() {
         <DropdownMenuItem onClick={() => navigate('/settings')}>
           <Settings size={14} className="mr-2" />
           Settings
+        </DropdownMenuItem>
+        <DropdownMenuSeparator />
+        <DropdownMenuItem
+          onClick={() => { clearToken(); navigate('/login', { replace: true }); }}
+          className="text-muted-foreground"
+        >
+          <LogOut size={14} className="mr-2" />
+          Sign out
         </DropdownMenuItem>
       </DropdownMenuContent>
     </DropdownMenu>

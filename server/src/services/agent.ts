@@ -33,6 +33,19 @@ import { createTextArtifact, listProjectArtifacts, getArtifactById, readArtifact
 import { listMcpTools } from '../lib/mcp-pool.js';
 import { maybeDistill } from './distill.js';
 
+const activeTurnControllers = new Map<string, AbortController>();
+
+export function stopAgentTurn(sessionId: string): boolean {
+  const ctrl = activeTurnControllers.get(sessionId);
+  if (!ctrl) return false;
+  ctrl.abort();
+  return true;
+}
+
+export function getActiveSessionIds(): string[] {
+  return Array.from(activeTurnControllers.keys());
+}
+
 function buildPlanPriorContext(planStepId: string): string | null {
   const plan = getPlanForStep(planStepId);
   if (!plan) return null;
@@ -1320,8 +1333,12 @@ export async function runAgentTurn(userId: string, sessionId: string, userMessag
   let totalInputTokens = 0;
   let totalOutputTokens = 0;
 
+  const abortController = new AbortController();
+  activeTurnControllers.set(sessionId, abortController);
+
   try {
     while (true) {
+      if (abortController.signal.aborted) break;
       const stream = client.messages.stream({
         model,
         max_tokens: 8192,
@@ -1330,6 +1347,7 @@ export async function runAgentTurn(userId: string, sessionId: string, userMessag
         messages: currentMessages,
       }, {
         headers: { 'anthropic-beta': 'web-fetch-2025-09-10' },
+        signal: abortController.signal,
       });
 
       stream.on('text', (delta) => {
@@ -1362,6 +1380,7 @@ export async function runAgentTurn(userId: string, sessionId: string, userMessag
       break;
     }
   } catch (err) {
+    const wasStopped = abortController.signal.aborted;
     if (started) {
       // Persist whatever was streamed so far rather than leaving an empty
       // assistant message in history (the API rejects empty assistant content).
@@ -1372,7 +1391,16 @@ export async function runAgentTurn(userId: string, sessionId: string, userMessag
         getDb().prepare('DELETE FROM messages WHERE id = ?').run(replyId);
       }
     }
+    if (wasStopped) {
+      getDb()
+        .prepare("UPDATE session_turns SET status = 'done', completed_at = unixepoch() WHERE session_id = ? AND user_message_id = ? AND status = 'running'")
+        .run(sessionId, userMessageId);
+      broadcast(userId, { type: 'turn_complete', sessionId, status: 'stopped' });
+      return;
+    }
     throw err;
+  } finally {
+    activeTurnControllers.delete(sessionId);
   }
 
   if (fullText) {

@@ -4,6 +4,7 @@ import { createSessionEvent, getDb, getProjectForUser, getSessionEvents, getSess
 import { newId } from '../lib/ids.js';
 import { requireAuth, type AuthedRequest } from '../middleware/auth.js';
 import { DEFAULT_EFFORT, isEffortLevel, getModelsForEffort } from '../services/anthropic.js';
+import { stopAgentTurn, getActiveSessionIds } from '../services/agent.js';
 
 const router = Router();
 router.use(requireAuth);
@@ -180,6 +181,28 @@ router.post('/', (req, res) => {
     .prepare('INSERT INTO sessions (id, user_id, title, effort) VALUES (?,?,?,?)')
     .run(id, userId, title ?? null, DEFAULT_EFFORT);
   res.status(201).json({ id });
+});
+
+router.get('/active', (req, res) => {
+  const { userId } = req as unknown as AuthedRequest;
+  // Filter to only sessions belonging to this user
+  const activeIds = getActiveSessionIds();
+  if (activeIds.length === 0) { res.json({ ids: [] }); return; }
+  const placeholders = activeIds.map(() => '?').join(',');
+  const rows = getDb()
+    .prepare(`SELECT id FROM sessions WHERE id IN (${placeholders}) AND user_id = ?`)
+    .all(...activeIds, userId) as { id: string }[];
+  res.json({ ids: rows.map(r => r.id) });
+});
+
+router.post('/:id/stop', (req, res) => {
+  const { userId } = req as unknown as AuthedRequest;
+  const session = getDb()
+    .prepare('SELECT id FROM sessions WHERE id = ? AND user_id = ?')
+    .get(req.params.id, userId);
+  if (!session) { res.status(404).json({ error: 'Session not found' }); return; }
+  const stopped = stopAgentTurn(req.params.id);
+  res.json({ ok: true, stopped });
 });
 
 router.delete('/:id', (req, res) => {

@@ -1,9 +1,10 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import type { ReactNode } from 'react';
 import { useParams, useNavigate, Link, useLocation } from 'react-router-dom';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { Check, ChevronDown, ChevronRight, FileText, GitGraph, MessageSquare, Play, Sparkles, Trash2, Video, Workflow } from 'lucide-react';
-import { getProjects, getProjectPlans, getProjectCapabilities, createChat, updateChatConfig, deleteProject, updateProject, getChats, getProjectFile, getProjectArtifacts, getPipelines, deletePipeline, runPipeline } from '../lib/api.js';
+import { Check, ChevronRight, FileText, GitGraph, MessageSquare, Play, Sparkles, Trash2, Video, Workflow } from 'lucide-react';
+import { getProjects, getProjectPlans, getProjectCapabilities, createChat, updateChatConfig, deleteProject, updateProject, getChats, getProjectFile, getProjectArtifacts, getPipelines, deletePipeline, runPipeline, getProjectWorkspace, updateProjectWorkspace } from '../lib/api.js';
+import { usePageTitle } from '../lib/usePageTitle.js';
 import { Button } from '@/components/ui/button';
 import { ConfirmDialog } from '@/components/ui/confirm-dialog';
 import { EmptyPanel, PageHeader, PageLoading, PageShell } from '@/components/ui/app-layout';
@@ -53,6 +54,7 @@ export default function ProjectPage() {
     staleTime: 30_000,
   });
   const project = projects.find(p => p.id === projectId) ?? null;
+  usePageTitle(project?.name);
 
   const { data: plans = [] } = useQuery<Plan[]>({
     queryKey: ['project-plans', projectId],
@@ -83,6 +85,7 @@ export default function ProjectPage() {
 
   const [runningPipeline, setRunningPipeline] = useState<Pipeline | null>(null);
   const [pendingDeletePipeline, setPendingDeletePipeline] = useState<string | null>(null);
+  const [pendingDeleteProject, setPendingDeleteProject] = useState(false);
 
   const deletePipelineMutation = useMutation({
     mutationFn: deletePipeline,
@@ -174,8 +177,8 @@ export default function ProjectPage() {
             onClick={() => startChatMutation.mutate()}
             disabled={startChatMutation.isPending}
           >
-            <Sparkles size={14} />
-            New plan
+            <MessageSquare size={14} />
+            New chat
           </Button>
         }
       />
@@ -198,7 +201,7 @@ export default function ProjectPage() {
         ))}
       </div>
       {/* Tab content */}
-      <div className="flex-1 overflow-y-auto">
+      <div className={cn('flex-1', tab === 'artifacts' ? 'flex min-h-0 flex-col overflow-hidden' : 'overflow-y-auto')}>
         {tab === 'overview' && (
           <div className="mx-auto flex max-w-5xl flex-col gap-6 px-4 py-5 sm:px-6">
             {project.repo_path && (
@@ -342,13 +345,31 @@ export default function ProjectPage() {
                   </Button>
                 }
               />
-            ) : (
-              <div className="flex flex-col gap-2">
-                {plans.map(p => (
-                  <PlanRow key={p.id} plan={p} projectId={projectId!} {...countsForPlan(p)} />
-                ))}
-              </div>
-            )}
+            ) : (() => {
+              const active = plans.filter(p => p.status === 'running');
+              const errored = plans.filter(p => p.status === 'error');
+              const rest = plans.filter(p => p.status !== 'running' && p.status !== 'error');
+              const groups: { label: string; items: Plan[] }[] = [];
+              if (active.length) groups.push({ label: 'Running', items: active });
+              if (errored.length) groups.push({ label: 'Needs attention', items: errored });
+              if (rest.length) groups.push({ label: active.length || errored.length ? 'Completed' : 'All plans', items: rest });
+              return (
+                <div className="flex flex-col gap-6">
+                  {groups.map(group => (
+                    <div key={group.label}>
+                      {groups.length > 1 && (
+                        <div className="mb-2 text-[11px] font-semibold uppercase tracking-wide text-faint-fg">{group.label}</div>
+                      )}
+                      <div className="flex flex-col gap-2">
+                        {group.items.map(p => (
+                          <PlanRow key={p.id} plan={p} projectId={projectId!} {...countsForPlan(p)} />
+                        ))}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              );
+            })()}
           </div>
         )}
 
@@ -399,7 +420,7 @@ export default function ProjectPage() {
         )}
 
         {tab === 'artifacts' && (
-          <div className="p-4 sm:p-6">
+          <div className="flex h-full flex-col">
             <ArtifactsTab project={project} />
           </div>
         )}
@@ -448,8 +469,18 @@ export default function ProjectPage() {
 
         {tab === 'settings' && (
           <div className="mx-auto max-w-2xl p-4 sm:p-6">
-            <ProjectSettingsForm project={project} onDelete={() => deleteMutation.mutate()} />
+            <ProjectSettingsForm project={project} onDelete={() => setPendingDeleteProject(true)} />
           </div>
+        )}
+
+        {pendingDeleteProject && (
+          <ConfirmDialog
+            title="Delete project?"
+            description="This will permanently delete the project, all its plans, and associated data. This cannot be undone."
+            confirmLabel="Delete"
+            onConfirm={() => { setPendingDeleteProject(false); deleteMutation.mutate(); }}
+            onCancel={() => setPendingDeleteProject(false)}
+          />
         )}
       </div>
     </PageShell>
@@ -556,27 +587,58 @@ function ActivityRow({
 
 function ProjectSettingsForm({ project, onDelete }: { project: Project; onDelete: () => void }) {
   const queryClient = useQueryClient();
+  const [name, setName] = useState(project.name);
   const [description, setDescription] = useState(project.description ?? '');
+  const [repoPath, setRepoPath] = useState(project.repo_path ?? '');
+  const [workspaceContent, setWorkspaceContent] = useState<string | null>(null);
+  const [workspaceSaved, setWorkspaceSaved] = useState(false);
+
+  const { data: workspaceData, isLoading: workspaceLoading } = useQuery({
+    queryKey: ['project-workspace', project.id],
+    queryFn: () => getProjectWorkspace(project.id),
+    staleTime: 30_000,
+  });
+
+  useEffect(() => {
+    if (workspaceData && workspaceContent === null) {
+      setWorkspaceContent(workspaceData.content);
+    }
+  }, [workspaceData, workspaceContent]);
 
   const updateMutation = useMutation({
-    mutationFn: () => updateProject(project.id, { description: description.trim() }),
+    mutationFn: () => updateProject(project.id, {
+      name: name.trim() || project.name,
+      description: description.trim(),
+      repo_path: repoPath.trim() || null,
+    }),
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ['projects'] }),
   });
 
+  const workspaceMutation = useMutation({
+    mutationFn: () => updateProjectWorkspace(project.id, workspaceContent ?? ''),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['project-workspace', project.id] });
+      setWorkspaceSaved(true);
+      setTimeout(() => setWorkspaceSaved(false), 2000);
+    },
+  });
+
   function handleDelete() {
-    if (!window.confirm('Delete this project and all its plans? This cannot be undone.')) return;
     onDelete();
   }
 
+  const fieldClass = 'w-full rounded-md border border-border bg-card px-3 py-2 text-sm text-foreground placeholder:text-faint-fg focus:border-primary focus:outline-none focus:ring-2 focus:ring-ring';
+
   return (
-    <div className="flex flex-col gap-6">
+    <div className="flex flex-col gap-7">
       <section className="flex flex-col gap-3">
+        <h2 className="text-[13px] font-semibold text-fg-soft">General</h2>
         <div>
           <label className="mb-1.5 block text-xs font-medium text-muted-foreground">Project name</label>
           <input
-            value={project.name}
-            disabled
-            className="w-full rounded-md border border-border bg-card px-3 py-2 text-sm text-foreground placeholder:text-faint-fg focus:border-primary focus:outline-none focus:ring-2 focus:ring-ring"
+            value={name}
+            onChange={e => setName(e.target.value)}
+            className={fieldClass}
           />
         </div>
         <div>
@@ -584,55 +646,62 @@ function ProjectSettingsForm({ project, onDelete }: { project: Project; onDelete
           <textarea
             value={description}
             onChange={e => setDescription(e.target.value)}
-            rows={3}
-            className="w-full resize-none rounded-md border border-border bg-card px-3 py-2 text-sm text-foreground placeholder:text-faint-fg focus:border-primary focus:outline-none focus:ring-2 focus:ring-ring"
+            rows={2}
+            placeholder="What does this project contain?"
+            className={`${fieldClass} resize-none`}
           />
         </div>
-      </section>
-
-      <section className="flex flex-col gap-3">
-        <h2 className="text-[13px] font-semibold text-fg-soft">Connection</h2>
-        <div className="flex items-center justify-between gap-4 rounded-lg border border-border-soft bg-card p-4">
-          <div className="min-w-0">
-            <div className="text-sm font-medium text-foreground">Repository</div>
-            <div className="mt-0.5 truncate font-mono text-xs text-faint-fg">{project.repo_path ?? 'No repository connected'}</div>
-          </div>
-          {project.repo_path ? <StatusPill status="done" /> : <span className="text-xs text-muted-foreground">Not connected</span>}
+        <div>
+          <label className="mb-1.5 block text-xs font-medium text-muted-foreground">Repository path</label>
+          <input
+            value={repoPath}
+            onChange={e => setRepoPath(e.target.value)}
+            placeholder="/Users/you/code/my-app"
+            className={`${fieldClass} font-mono`}
+          />
+          <p className="mt-1 text-[11px] text-faint-fg">Absolute path to a local git repo. Leave blank for a document-only project.</p>
         </div>
-        <div className="flex items-center justify-between gap-4 rounded-lg border border-border-soft bg-card p-4">
-          <div className="min-w-0">
-            <div className="text-sm font-medium text-foreground">Default branch</div>
-            <div className="mt-0.5 text-xs text-faint-fg">main</div>
-          </div>
-          <Button variant="outline" size="sm" className="h-7 text-xs">Change</Button>
-        </div>
-      </section>
-
-      <section className="flex flex-col gap-3">
-        <h2 className="text-[13px] font-semibold text-fg-soft">Agent defaults</h2>
-        <div className="flex items-center justify-between gap-4 rounded-lg border border-border-soft bg-card p-4">
-          <div className="min-w-0">
-            <div className="text-sm font-medium text-foreground">Permission mode</div>
-            <div className="mt-0.5 text-xs text-faint-fg">Ask before file writes and commits</div>
-          </div>
-          <Button variant="ghost" size="sm" className="h-7 gap-1 rounded-lg border border-border/50 bg-muted/70 text-xs font-normal">
-            Auto
-            <ChevronDown size={12} />
+        <div className="flex justify-end">
+          <Button
+            size="sm"
+            onClick={() => updateMutation.mutate()}
+            disabled={updateMutation.isPending}
+            className="h-8 gap-1.5 text-xs"
+          >
+            <Check size={13} strokeWidth={2.2} />
+            {updateMutation.isPending ? 'Saving…' : 'Save'}
           </Button>
         </div>
       </section>
 
-      <div className="flex justify-end">
-        <Button
-          size="sm"
-          onClick={() => updateMutation.mutate()}
-          disabled={updateMutation.isPending}
-          className="h-8 gap-1.5 text-xs"
-        >
-          <Check size={14} strokeWidth={2.2} />
-          Save changes
-        </Button>
-      </div>
+      <section className="flex flex-col gap-3">
+        <div>
+          <h2 className="text-[13px] font-semibold text-fg-soft">workspace.md</h2>
+          <p className="mt-0.5 text-[11px] text-faint-fg">The agent reads this file at the start of each session. Use it to record goals, decisions, and progress.</p>
+        </div>
+        {workspaceLoading ? (
+          <div className="h-32 animate-pulse rounded-md border border-border bg-muted/30" />
+        ) : (
+          <textarea
+            value={workspaceContent ?? ''}
+            onChange={e => setWorkspaceContent(e.target.value)}
+            rows={10}
+            placeholder={`# ${project.name}\n\nCurrent goal: ...\n\nDecisions:\n- ...`}
+            className={`${fieldClass} resize-y font-mono text-[13px] leading-relaxed`}
+          />
+        )}
+        <div className="flex justify-end">
+          <Button
+            size="sm"
+            onClick={() => workspaceMutation.mutate()}
+            disabled={workspaceMutation.isPending || workspaceContent === null}
+            className="h-8 gap-1.5 text-xs"
+          >
+            {workspaceSaved ? <Check size={13} strokeWidth={2.5} className="text-success" /> : <Check size={13} strokeWidth={2.2} />}
+            {workspaceMutation.isPending ? 'Saving…' : workspaceSaved ? 'Saved' : 'Save workspace.md'}
+          </Button>
+        </div>
+      </section>
 
       <section className="flex items-center justify-between gap-4 rounded-lg border border-destructive/25 bg-destructive/5 p-4">
         <div className="min-w-0">

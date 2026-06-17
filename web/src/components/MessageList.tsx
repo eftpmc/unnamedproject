@@ -1,12 +1,15 @@
-import { useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
-import { ArrowRight, FileText, GitMerge, Image, Pencil, Plug, Sparkles, Target } from 'lucide-react';
+import rehypeHighlight from 'rehype-highlight';
+import 'highlight.js/styles/github-dark.css';
+import { ArrowDown, ArrowRight, Check, Copy, FileText, GitMerge, Image, Pencil, Plug, Sparkles, Target } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import ExecutionCard from './ExecutionCard.js';
 import PlanCard from './PlanCard.js';
 import ArtifactPreviewCard from './ArtifactPreviewCard.js';
 import { getToken } from '../lib/auth.js';
+import { cn } from '../lib/utils.js';
 import type { Message, MessageAttachment, SessionEvent } from '../types.js';
 
 interface InlineExecution {
@@ -37,19 +40,80 @@ interface MessageListProps {
   events?: SessionEvent[];
 }
 
+function extractTextContent(node: React.ReactNode): string {
+  if (typeof node === 'string') return node;
+  if (typeof node === 'number') return String(node);
+  if (Array.isArray(node)) return node.map(extractTextContent).join('');
+  if (node && typeof node === 'object' && 'props' in (node as object)) {
+    return extractTextContent((node as React.ReactElement<{ children?: React.ReactNode }>).props.children);
+  }
+  return '';
+}
+
+function CodeBlock({ children }: { children: React.ReactNode }) {
+  const child = (Array.isArray(children) ? children[0] : children) as React.ReactElement<{ className?: string; children?: React.ReactNode }> | undefined;
+  const childClassName = child?.props?.className ?? '';
+  const lang = childClassName.match(/language-(\S+)/)?.[1] ?? '';
+  const codeText = extractTextContent(child?.props?.children);
+  const [copied, setCopied] = useState(false);
+
+  function handleCopy() {
+    navigator.clipboard.writeText(codeText).then(() => {
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
+    });
+  }
+
+  return (
+    <div className="my-3 overflow-hidden rounded-xl border border-border-soft bg-[#0d1117]">
+      <div className="flex items-center justify-between px-3.5 py-1.5 text-[11px] text-white/30">
+        <span className="font-mono">{lang || 'code'}</span>
+        <button
+          type="button"
+          onClick={handleCopy}
+          title={copied ? 'Copied!' : 'Copy code'}
+          className="flex items-center gap-1 transition-colors hover:text-white/70"
+        >
+          {copied ? <Check size={12} /> : <Copy size={12} />}
+          {copied ? 'Copied' : 'Copy'}
+        </button>
+      </div>
+      <pre className="overflow-x-auto border-t border-white/5 px-3.5 pb-3.5 pt-3 font-mono text-[12px] leading-relaxed [&_.hljs]:bg-transparent [&_.hljs]:p-0">
+        {children}
+      </pre>
+    </div>
+  );
+}
+
 const markdownComponents: React.ComponentProps<typeof ReactMarkdown>['components'] = {
-  p:      ({ children }) => <p className="mb-3 last:mb-0">{children}</p>,
-  strong: ({ children }) => <strong className="font-semibold text-foreground">{children}</strong>,
-  code:   ({ children }) => (
-    <code className="rounded bg-muted px-1.5 py-0.5 font-mono text-[13px] text-foreground/85">{children}</code>
+  p:          ({ children }) => <p className="mb-3 last:mb-0">{children}</p>,
+  strong:     ({ children }) => <strong className="font-semibold text-foreground">{children}</strong>,
+  em:         ({ children }) => <em className="italic">{children}</em>,
+  h1:         ({ children }) => <h1 className="mb-3 mt-5 text-xl font-bold text-foreground first:mt-0">{children}</h1>,
+  h2:         ({ children }) => <h2 className="mb-2 mt-4 text-base font-semibold text-foreground first:mt-0">{children}</h2>,
+  h3:         ({ children }) => <h3 className="mb-2 mt-3 text-sm font-semibold text-foreground first:mt-0">{children}</h3>,
+  h4:         ({ children }) => <h4 className="mb-1 mt-2 text-sm font-medium text-foreground first:mt-0">{children}</h4>,
+  h5:         ({ children }) => <h5 className="mb-1 mt-2 text-xs font-medium text-foreground first:mt-0">{children}</h5>,
+  h6:         ({ children }) => <h6 className="mb-1 mt-2 text-xs font-medium text-muted-foreground first:mt-0">{children}</h6>,
+  blockquote: ({ children }) => (
+    <blockquote className="my-3 border-l-2 border-border pl-3.5 text-muted-foreground">{children}</blockquote>
   ),
-  pre:    ({ children }) => (
-    <pre className="my-3 overflow-x-auto rounded-xl border border-border-soft bg-muted/30 p-3 font-mono text-[12px] leading-relaxed">{children}</pre>
+  hr:         () => <hr className="my-4 border-border-soft" />,
+  a:          ({ href, children }) => (
+    <a href={href} target="_blank" rel="noopener noreferrer" className="text-primary underline underline-offset-2 hover:no-underline">
+      {children}
+    </a>
   ),
-  ul: ({ children }) => <ul className="mb-3 ml-5 list-disc">{children}</ul>,
-  ol: ({ children }) => <ol className="mb-3 ml-5 list-decimal">{children}</ol>,
-  li: ({ children }) => <li className="mb-1">{children}</li>,
-  table: ({ children }) => (
+  code:       ({ className, children }) => {
+    const isBlock = className?.includes('language-');
+    if (isBlock) return <code className={className}>{children}</code>;
+    return <code className="rounded bg-muted px-1.5 py-0.5 font-mono text-[13px] text-foreground/85">{children}</code>;
+  },
+  pre:        ({ children }) => <CodeBlock>{children}</CodeBlock>,
+  ul:         ({ children }) => <ul className="mb-3 ml-5 list-disc">{children}</ul>,
+  ol:         ({ children }) => <ol className="mb-3 ml-5 list-decimal">{children}</ol>,
+  li:         ({ children }) => <li className="mb-1">{children}</li>,
+  table:      ({ children }) => (
     <div className="my-3 max-w-full overflow-x-auto rounded-lg border border-border/40">
       <table className="w-full min-w-max border-collapse text-left text-[13px] leading-relaxed">
         {children}
@@ -58,9 +122,9 @@ const markdownComponents: React.ComponentProps<typeof ReactMarkdown>['components
   ),
   thead: ({ children }) => <thead className="bg-muted/45 text-foreground/80">{children}</thead>,
   tbody: ({ children }) => <tbody className="divide-y divide-border/35">{children}</tbody>,
-  tr: ({ children }) => <tr className="divide-x divide-border/35">{children}</tr>,
-  th: ({ children }) => <th className="whitespace-nowrap px-3 py-2 font-semibold">{children}</th>,
-  td: ({ children }) => <td className="px-3 py-2 align-top text-foreground/80">{children}</td>,
+  tr:    ({ children }) => <tr className="divide-x divide-border/35">{children}</tr>,
+  th:    ({ children }) => <th className="whitespace-nowrap px-3 py-2 font-semibold">{children}</th>,
+  td:    ({ children }) => <td className="px-3 py-2 align-top text-foreground/80">{children}</td>,
 };
 
 function stripEmoji(text: string): string {
@@ -70,18 +134,11 @@ function stripEmoji(text: string): string {
 }
 
 function renderExecutionCard(exec: InlineExecution) {
+  // create_plan is surfaced via the plan_created session event as a PlanCard — skip the execution card
+  if (exec.tool === 'create_plan') return null;
   if (exec.status === 'done' && exec.result) {
     try {
       const parsed = JSON.parse(exec.result) as Record<string, unknown>;
-      if (exec.tool === 'create_plan' && parsed.plan_id && parsed.project_id) {
-        return (
-          <PlanCard
-            key={exec.executionId}
-            planId={parsed.plan_id as string}
-            projectId={parsed.project_id as string}
-          />
-        );
-      }
       if ((exec.tool === 'create_artifact' || exec.tool === 'register_artifact') && parsed.artifact_id && parsed.project_id) {
         return (
           <ArtifactPreviewCard
@@ -105,10 +162,55 @@ function eventIcon(type: SessionEvent['type']) {
   return GitMerge;
 }
 
+function CopyButton({ text }: { text: string }) {
+  const [copied, setCopied] = useState(false);
+
+  function handleCopy() {
+    navigator.clipboard.writeText(text).then(() => {
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
+    });
+  }
+
+  return (
+    <button
+      type="button"
+      onClick={handleCopy}
+      title={copied ? 'Copied!' : 'Copy'}
+      className="shrink-0 text-muted-foreground/40 opacity-0 transition-opacity group-hover:opacity-100 hover:text-muted-foreground"
+    >
+      {copied ? <Check size={13} /> : <Copy size={13} />}
+    </button>
+  );
+}
+
+const NEAR_BOTTOM_THRESHOLD = 120;
+
 export default function MessageList({ messages, executions, streamingIds, sessionId, onEditMessage, canEdit, events = [] }: MessageListProps) {
   const lastUserMessageId = [...messages].reverse().find(m => m.role === 'user')?.id ?? null;
   const bottomRef = useRef<HTMLDivElement>(null);
+  const scrollContainerRef = useRef<HTMLDivElement>(null);
   const initialScrollDone = useRef(false);
+  const [showScrollButton, setShowScrollButton] = useState(false);
+  const [hasNewContent, setHasNewContent] = useState(false);
+
+  const isNearBottom = useCallback(() => {
+    const el = scrollContainerRef.current;
+    if (!el) return true;
+    return el.scrollHeight - el.scrollTop - el.clientHeight < NEAR_BOTTOM_THRESHOLD;
+  }, []);
+
+  const handleScroll = useCallback(() => {
+    const near = isNearBottom();
+    setShowScrollButton(!near);
+    if (near) setHasNewContent(false);
+  }, [isNearBottom]);
+
+  function scrollToBottom(behavior: ScrollBehavior = 'smooth') {
+    bottomRef.current?.scrollIntoView({ behavior });
+    setShowScrollButton(false);
+    setHasNewContent(false);
+  }
 
   // Build timeline by anchoring each message's executions immediately after
   // that message, so tool calls always appear between the triggering message
@@ -138,18 +240,52 @@ export default function MessageList({ messages, executions, streamingIds, sessio
 
   useEffect(() => {
     initialScrollDone.current = false;
+    setShowScrollButton(false);
+    setHasNewContent(false);
   }, [sessionId]);
 
   useEffect(() => {
     if (!bottomRef.current) return;
-    bottomRef.current.scrollIntoView({
-      behavior: initialScrollDone.current ? 'smooth' : 'instant',
-    });
-    initialScrollDone.current = true;
-  }, [messages.length, messages[messages.length - 1]?.content, streamingIds?.size]);
+    if (!initialScrollDone.current) {
+      bottomRef.current.scrollIntoView({ behavior: 'instant' });
+      initialScrollDone.current = true;
+      return;
+    }
+    // Only auto-scroll if the user is already near the bottom
+    if (isNearBottom()) {
+      bottomRef.current.scrollIntoView({ behavior: 'smooth' });
+    } else {
+      setShowScrollButton(true);
+      setHasNewContent(true);
+    }
+  }, [messages.length, messages[messages.length - 1]?.content, streamingIds?.size, isNearBottom]);
 
   return (
-    <div className="flex-1 overflow-y-auto">
+    <div ref={scrollContainerRef} onScroll={handleScroll} className="relative flex-1 overflow-y-auto">
+      {showScrollButton && (
+        <button
+          type="button"
+          onClick={() => scrollToBottom()}
+          className={cn(
+            'absolute bottom-4 left-1/2 z-10 flex -translate-x-1/2 items-center gap-1.5 rounded-full border px-3 py-1.5 text-xs font-medium shadow-md transition-all',
+            hasNewContent
+              ? 'animate-pulse border-primary/40 bg-primary text-primary-foreground hover:bg-primary/90'
+              : 'border-border bg-card text-foreground hover:bg-muted',
+          )}
+        >
+          {hasNewContent ? (
+            <>
+              New message
+              <ArrowDown size={12} />
+            </>
+          ) : (
+            <>
+              <ArrowDown size={12} />
+              Scroll to bottom
+            </>
+          )}
+        </button>
+      )}
       <div className="mx-auto flex w-full max-w-[46rem] flex-col gap-6 px-4 py-7 sm:px-6 sm:py-8">
         {timeline.map(item => {
           if (item.type === 'event') {
@@ -171,6 +307,13 @@ export default function MessageList({ messages, executions, streamingIds, sessio
                       Open Settings → MCP <ArrowRight size={11} />
                     </Link>
                   </div>
+                </div>
+              );
+            }
+            if (item.event.type === 'plan_created' && item.event.plan_id && item.event.project_id) {
+              return (
+                <div key={`event-${item.event.id}`} className="flex max-w-[94%] flex-col sm:max-w-[86%]">
+                  <PlanCard planId={item.event.plan_id} projectId={item.event.project_id} />
                 </div>
               );
             }
@@ -204,6 +347,9 @@ export default function MessageList({ messages, executions, streamingIds, sessio
 
           const isLastUser = msg.role === 'user' && msg.id === lastUserMessageId;
           const attachments = msg.attachments ?? [];
+          const timestamp = new Date(msg.created_at * 1000).toLocaleString(undefined, {
+            month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit',
+          });
           return (
           <div key={msg.id}>
             {msg.role === 'user' ? (
@@ -219,7 +365,10 @@ export default function MessageList({ messages, executions, streamingIds, sessio
                       <Pencil size={13} />
                     </button>
                   )}
-                  <div className="max-w-[88%] rounded-[18px] rounded-tr-md bg-muted px-4 py-2.5 text-[15px] leading-relaxed text-foreground sm:max-w-[80%]">
+                  <div
+                    title={timestamp}
+                    className="max-w-[88%] rounded-[18px] rounded-tr-md bg-muted px-4 py-2.5 text-[15px] leading-relaxed text-foreground sm:max-w-[80%]"
+                  >
                     {msg.content && <div className="whitespace-pre-wrap">{msg.content}</div>}
                     {attachments.length > 0 && (
                       <div className={msg.content ? 'mt-2 flex flex-wrap gap-1.5' : 'flex flex-wrap gap-1.5'}>
@@ -232,15 +381,20 @@ export default function MessageList({ messages, executions, streamingIds, sessio
                 </div>
               </div>
             ) : (
-              <div className="flex max-w-[94%] flex-col sm:max-w-[86%]">
+              <div title={timestamp} className="group flex max-w-[94%] flex-col sm:max-w-[86%]">
                 {(msg.content.trim() || isStreaming) && (
                   <div className="max-w-[90%] text-[15px] leading-[1.72] text-fg-soft">
-                    <ReactMarkdown remarkPlugins={[remarkGfm]} components={markdownComponents}>
+                    <ReactMarkdown remarkPlugins={[remarkGfm]} rehypePlugins={[rehypeHighlight]} components={markdownComponents}>
                       {stripEmoji(msg.content)}
                     </ReactMarkdown>
                     {isStreaming && (
                       <span className="ml-1 inline-block h-3.5 w-1 animate-pulse align-middle rounded-full bg-foreground/30" />
                     )}
+                  </div>
+                )}
+                {msg.content.trim() && !isStreaming && (
+                  <div className="mt-1 flex items-center gap-1.5">
+                    <CopyButton text={msg.content} />
                   </div>
                 )}
               </div>

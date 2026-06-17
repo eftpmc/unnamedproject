@@ -8,6 +8,7 @@ import ArtifactPreviewCard from '../components/ArtifactPreviewCard.js';
 import { subscribe } from '../lib/ws.js';
 import { cn } from '@/lib/utils';
 import { timeAgo } from '../lib/utils.js';
+import { usePageTitle } from '../lib/usePageTitle.js';
 import { getToken } from '../lib/auth.js';
 import { PageBody, PageHeader, PageLoading, PageShell } from '@/components/ui/app-layout';
 import { Button } from '@/components/ui/button';
@@ -173,6 +174,7 @@ export default function PlanPage() {
   }
 
   const { plan, steps } = data;
+  usePageTitle(plan.title);
   const effectivePlanStatus = planStatus ?? plan.status;
   const effectiveStatuses = steps.map(s => stepStatuses[s.id] ?? s.status);
   const doneCount = effectiveStatuses.filter(s => s === 'done').length;

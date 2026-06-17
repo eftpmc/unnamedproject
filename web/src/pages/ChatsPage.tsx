@@ -2,25 +2,60 @@ import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { ChevronRight, Search, Trash2, X } from 'lucide-react';
-import { getChats, deleteChat, searchChats } from '../lib/api.js';
+import { getChats, deleteChat, searchChats, getProjects } from '../lib/api.js';
 import { timeAgo } from '../lib/utils.js';
+import { usePageTitle } from '../lib/usePageTitle.js';
 import { ConfirmDialog } from '@/components/ui/confirm-dialog';
 import { Button } from '@/components/ui/button';
 import { ContentColumn, EmptyPanel, PageBody, PageHeader, PageLoading, PageShell } from '@/components/ui/app-layout';
-import type { Session } from '../types.js';
+import type { Project, Session } from '../types.js';
 import { useDebounce } from '../lib/useDebounce.js';
 
+function dateGroup(unixSeconds: number): string {
+  const now = new Date();
+  const d = new Date(unixSeconds * 1000);
+  const startOfToday = new Date(now.getFullYear(), now.getMonth(), now.getDate()).getTime();
+  const startOfYesterday = startOfToday - 86400_000;
+  const startOfWeek = startOfToday - (now.getDay() === 0 ? 6 : now.getDay() - 1) * 86400_000;
+  const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1).getTime();
+  const t = d.getTime();
+  if (t >= startOfToday) return 'Today';
+  if (t >= startOfYesterday) return 'Yesterday';
+  if (t >= startOfWeek) return 'This week';
+  if (t >= startOfMonth) return 'This month';
+  return d.toLocaleString('default', { month: 'long', year: now.getFullYear() !== d.getFullYear() ? 'numeric' : undefined });
+}
+
+function groupChats(chats: Session[]): { label: string; chats: Session[] }[] {
+  const groups: Map<string, Session[]> = new Map();
+  for (const chat of chats) {
+    const label = dateGroup(chat.updated_at);
+    if (!groups.has(label)) groups.set(label, []);
+    groups.get(label)!.push(chat);
+  }
+  return Array.from(groups.entries()).map(([label, chats]) => ({ label, chats }));
+}
+
 export default function ChatsPage() {
+  usePageTitle('Chats');
   const navigate = useNavigate();
   const queryClient = useQueryClient();
   const [pendingDelete, setPendingDelete] = useState<string | null>(null);
   const [searchQuery, setSearchQuery] = useState('');
+  const [projectFilter, setProjectFilter] = useState<string | null>(null);
   const debouncedQuery = useDebounce(searchQuery, 300);
 
   const { data: chats = [], isLoading } = useQuery<Session[]>({
     queryKey: ['chats'],
     queryFn: getChats,
   });
+
+  const { data: projects = [] } = useQuery<Project[]>({
+    queryKey: ['projects'],
+    queryFn: getProjects,
+    staleTime: 60_000,
+  });
+  const projectById = Object.fromEntries(projects.map(p => [p.id, p]));
 
   const { data: searchResults, isFetching: isSearching } = useQuery<Session[]>({
     queryKey: ['chats-search', debouncedQuery],
@@ -40,7 +75,10 @@ export default function ChatsPage() {
   });
 
   const isSearchActive = debouncedQuery.length >= 2;
-  const displayedChats = isSearchActive ? (searchResults ?? []) : chats;
+  const baseChats = isSearchActive ? (searchResults ?? []) : chats;
+  const displayedChats = projectFilter
+    ? baseChats.filter(c => c.pinned_project_id === projectFilter)
+    : baseChats;
 
   return (
     <PageShell>
@@ -69,6 +107,20 @@ export default function ChatsPage() {
               )}
             </div>
 
+            {projectFilter && (
+              <div className="mb-3 flex items-center gap-2">
+                <span className="text-xs text-muted-foreground">Filtered by</span>
+                <button
+                  type="button"
+                  onClick={() => setProjectFilter(null)}
+                  className="flex items-center gap-1 rounded-full border border-border bg-muted px-2.5 py-0.5 text-xs font-medium text-foreground hover:bg-accent transition-colors"
+                >
+                  {projectById[projectFilter]?.name ?? 'Project'}
+                  <X size={11} className="ml-0.5 text-faint-fg" />
+                </button>
+              </div>
+            )}
+
             {isSearchActive && (
               <p className="mb-3 text-xs text-muted-foreground">
                 {isSearching ? 'Searching…' : `${displayedChats.length} result${displayedChats.length !== 1 ? 's' : ''}`}
@@ -77,47 +129,81 @@ export default function ChatsPage() {
 
             {displayedChats.length === 0 ? (
               <EmptyPanel
-                title={isSearchActive ? 'No results' : 'No chats yet'}
+                title={isSearchActive || projectFilter ? 'No results' : 'No chats yet'}
                 description={isSearchActive
                   ? `Nothing matched "${debouncedQuery}".`
-                  : 'Start a conversation to plan work, inspect a project, or make a change.'}
+                  : projectFilter
+                    ? 'No chats pinned to this project.'
+                    : 'Start a conversation to plan work, inspect a project, or make a change.'}
               />
-            ) : (
-              <div className="flex flex-col gap-2">
-                {displayedChats.map(chat => (
-                  <div
-                    key={chat.id}
-                    className="group flex items-center gap-3 rounded-lg border border-border-soft bg-card px-4 py-3.5 transition-[transform,box-shadow,border-color] hover:-translate-y-px hover:border-border hover:shadow-sm"
-                  >
-                    <button
-                      type="button"
-                      aria-label={`Open chat: ${chat.title ?? 'Untitled chat'}`}
-                      className="min-w-0 flex-1 text-left"
-                      onClick={() => navigate(`/c/${chat.id}`)}
-                    >
-                      <div className="truncate text-sm font-medium text-foreground">
-                        {chat.title ?? 'Untitled chat'}
+            ) : (() => {
+              const useGroups = !isSearchActive && !projectFilter;
+              const groups = useGroups ? groupChats(displayedChats) : [{ label: '', chats: displayedChats }];
+              return (
+                <div className="flex flex-col gap-5">
+                  {groups.map(({ label, chats: groupChats }) => (
+                    <div key={label}>
+                      {label && (
+                        <div className="mb-2 px-1 text-[11px] font-semibold uppercase tracking-wide text-faint-fg">
+                          {label}
+                        </div>
+                      )}
+                      <div className="flex flex-col gap-2">
+                        {groupChats.map(chat => {
+                          const project = chat.pinned_project_id ? projectById[chat.pinned_project_id] : null;
+                          return (
+                            <div
+                              key={chat.id}
+                              className="group flex items-center gap-3 rounded-lg border border-border-soft bg-card px-4 py-3.5 transition-[transform,box-shadow,border-color] hover:-translate-y-px hover:border-border hover:shadow-sm"
+                            >
+                              <button
+                                type="button"
+                                aria-label={`Open chat: ${chat.title ?? 'Untitled chat'}`}
+                                className="min-w-0 flex-1 text-left"
+                                onClick={() => navigate(`/c/${chat.id}`)}
+                              >
+                                <div className="truncate text-sm font-medium text-foreground">
+                                  {chat.title ?? 'Untitled chat'}
+                                </div>
+                                <div className="mt-0.5 flex items-center gap-1.5 text-xs text-faint-fg">
+                                  <span>{timeAgo(chat.updated_at)}</span>
+                                  {project && (
+                                    <>
+                                      <span>·</span>
+                                      <button
+                                        type="button"
+                                        onClick={(e) => { e.stopPropagation(); setProjectFilter(project.id === projectFilter ? null : project.id); }}
+                                        className="truncate transition-colors hover:text-foreground"
+                                      >
+                                        {project.name}
+                                      </button>
+                                    </>
+                                  )}
+                                </div>
+                              </button>
+                              <ChevronRight
+                                size={15}
+                                className="shrink-0 text-faint-fg transition-colors group-hover:text-muted-foreground"
+                                onClick={() => navigate(`/c/${chat.id}`)}
+                              />
+                              <Button
+                                variant="ghost"
+                                size="icon-sm"
+                                aria-label={`Delete chat: ${chat.title ?? 'Untitled chat'}`}
+                                className="shrink-0 text-faint-fg opacity-0 transition-[opacity,color] hover:text-destructive group-hover:opacity-100"
+                                onClick={() => setPendingDelete(chat.id)}
+                              >
+                                <Trash2 size={14} />
+                              </Button>
+                            </div>
+                          );
+                        })}
                       </div>
-                      <div className="mt-0.5 text-xs text-faint-fg">{timeAgo(chat.updated_at)}</div>
-                    </button>
-                    <ChevronRight
-                      size={15}
-                      className="shrink-0 text-faint-fg transition-colors group-hover:text-muted-foreground"
-                      onClick={() => navigate(`/c/${chat.id}`)}
-                    />
-                    <Button
-                      variant="ghost"
-                      size="icon-sm"
-                      aria-label={`Delete chat: ${chat.title ?? 'Untitled chat'}`}
-                      className="shrink-0 text-faint-fg opacity-0 transition-[opacity,color] hover:text-destructive group-hover:opacity-100"
-                      onClick={() => setPendingDelete(chat.id)}
-                    >
-                      <Trash2 size={14} />
-                    </Button>
-                  </div>
-                ))}
-              </div>
-            )}
+                    </div>
+                  ))}
+                </div>
+              );
+            })()}
           </ContentColumn>
         </PageBody>
       )}

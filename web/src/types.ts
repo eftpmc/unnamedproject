@@ -203,7 +203,7 @@ export interface WSMessageDelta extends WSEvent {
 export interface WSTurnComplete extends WSEvent {
   type: 'turn_complete';
   sessionId: string;
-  status?: 'done' | 'error';
+  status?: 'done' | 'error' | 'stopped';
 }
 
 export interface WSSessionTitleUpdated extends WSEvent {

@@ -97,21 +97,27 @@ export default function PlanCard({ planId, projectId }: PlanCardProps) {
   const displayStatus = isDone ? 'done' : isError ? 'error' : isRunning ? 'running' : plan.status;
 
   return (
-    <Surface className="w-full overflow-hidden rounded-lg border-border-soft bg-card shadow-sm">
-      <div className="flex items-center justify-between border-b border-border-soft px-3.5 py-2.5">
-        <span className="text-xs font-semibold text-foreground truncate pr-2">{plan.title}</span>
+    <Surface className="w-full overflow-hidden rounded-xl border-border-soft bg-card shadow-sm">
+      <div className="flex items-center justify-between px-4 py-3">
+        <span className="text-sm font-semibold text-foreground truncate pr-2">{plan.title}</span>
         <StatusPill status={displayStatus} />
       </div>
-      <div className="flex flex-col gap-2 px-3.5 py-3">
-        {orderedSteps.map(step => {
+      <div className="flex flex-col border-t border-border-soft/60">
+        {orderedSteps.map((step, i) => {
           const status = stepStatuses[step.id] ?? step.status;
           const StatusIcon = STATUS_ICON[status];
           const AgentIcon = AGENT_ICON[step.agent];
           return (
-            <div key={step.id} className="flex min-w-0 items-center gap-2">
-              <StatusIcon size={13} className={cn('shrink-0', STATUS_ICON_CLASS[status])} />
-              <span className="flex-1 truncate text-xs text-foreground/80">{step.title}</span>
-              <span className="shrink-0 flex items-center gap-1 text-[10px] text-muted-foreground">
+            <div
+              key={step.id}
+              className={cn(
+                'flex min-w-0 items-center gap-3 px-4 py-2.5',
+                i > 0 && 'border-t border-border-soft/40',
+              )}
+            >
+              <StatusIcon size={14} className={cn('shrink-0', STATUS_ICON_CLASS[status])} />
+              <span className="flex-1 truncate text-[13px] text-foreground/85">{step.title}</span>
+              <span className="shrink-0 flex items-center gap-1 rounded-md bg-muted px-1.5 py-0.5 text-[10px] font-medium text-muted-foreground">
                 <AgentIcon className="size-2.5" />
                 {AGENT_LABEL[step.agent]}
               </span>
@@ -119,13 +125,13 @@ export default function PlanCard({ planId, projectId }: PlanCardProps) {
           );
         })}
       </div>
-      <div className="border-t border-border-soft px-3.5 py-2">
+      <div className="border-t border-border-soft px-4 py-2.5">
         <Link
           to={`/projects/${projectId}/plans/${planId}`}
-          className="flex items-center justify-center gap-1.5 text-xs font-medium text-foreground/70 transition-colors hover:text-foreground"
+          className="flex items-center gap-1.5 text-xs font-medium text-muted-foreground transition-colors hover:text-foreground"
         >
-          View plan
-          <ArrowRight size={12} />
+          View full plan
+          <ArrowRight size={11} />
         </Link>
       </div>
     </Surface>

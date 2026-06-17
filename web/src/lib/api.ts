@@ -56,6 +56,14 @@ export function getChatStatus(chatId: string): Promise<ChatStatus> {
   return request(`/sessions/${chatId}/status`);
 }
 
+export function stopChat(chatId: string): Promise<{ ok: boolean; stopped: boolean }> {
+  return request(`/sessions/${chatId}/stop`, { method: 'POST' });
+}
+
+export function getActiveSessions(): Promise<{ ids: string[] }> {
+  return request('/sessions/active');
+}
+
 export function truncateMessagesFrom(sessionId: string, messageId: string): Promise<{ deleted: number }> {
   return request(`/sessions/${sessionId}/messages/from/${messageId}`, { method: 'DELETE' });
 }
@@ -64,7 +72,7 @@ export function createChat(title?: string): Promise<{ id: string }> {
   return request('/sessions', { method: 'POST', body: JSON.stringify({ title }) });
 }
 
-export function updateChatConfig(chatId: string, config: { effort?: EffortLevel; model?: string | null; pinned_project_id?: string | null }): Promise<void> {
+export function updateChatConfig(chatId: string, config: { effort?: EffortLevel; model?: string | null; pinned_project_id?: string | null; title?: string }): Promise<void> {
   return request(`/sessions/${chatId}`, { method: 'PATCH', body: JSON.stringify(config) });
 }
 
@@ -232,10 +240,21 @@ export function runPipeline(
   });
 }
 
-export function updateProject(projectId: string, body: { description?: string }): Promise<void> {
+export function updateProject(projectId: string, body: { description?: string; name?: string; repo_path?: string | null }): Promise<void> {
   return request(`/projects/${projectId}`, {
     method: 'PATCH',
     body: JSON.stringify(body),
+  });
+}
+
+export function getProjectWorkspace(projectId: string): Promise<{ content: string }> {
+  return request(`/projects/${projectId}/workspace`);
+}
+
+export function updateProjectWorkspace(projectId: string, content: string): Promise<void> {
+  return request(`/projects/${projectId}/workspace`, {
+    method: 'PUT',
+    body: JSON.stringify({ content }),
   });
 }
 

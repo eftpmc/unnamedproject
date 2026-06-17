@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
 import ReactMarkdown from 'react-markdown';
@@ -47,18 +47,41 @@ interface ArtifactPreviewCardProps {
 
 export default function ArtifactPreviewCard({ artifactId, projectId, title, kind, mimeType }: ArtifactPreviewCardProps) {
   const [expanded, setExpanded] = useState(false);
+  const [imageSrc, setImageSrc] = useState<string | null>(null);
 
   const isText = !mimeType || mimeType === 'text/markdown' || mimeType === 'text/plain' || mimeType === 'application/json';
   const isMarkdown = !mimeType || mimeType === 'text/markdown';
+  const isHtml = mimeType === 'text/html';
+  const isImage = !!mimeType?.startsWith('image/');
 
   const contentUrl = `/projects/${projectId}/artifacts/${artifactId}/content`;
 
   const { data: content, isLoading } = useQuery({
     queryKey: ['artifact-content', artifactId],
     queryFn: () => getArtifactContent(contentUrl),
-    enabled: isText,
+    enabled: isText || isHtml,
     staleTime: 60_000,
   });
+
+  // Fetch images as authenticated blob URLs
+  useEffect(() => {
+    if (!isImage) return;
+    let objectUrl: string | null = null;
+    let cancelled = false;
+    const token = getToken();
+    fetch(contentUrl, { headers: token ? { Authorization: `Bearer ${token}` } : {} })
+      .then(r => r.ok ? r.blob() : Promise.reject())
+      .then(blob => {
+        if (cancelled) return;
+        objectUrl = URL.createObjectURL(blob);
+        setImageSrc(objectUrl);
+      })
+      .catch(() => {});
+    return () => {
+      cancelled = true;
+      if (objectUrl) URL.revokeObjectURL(objectUrl);
+    };
+  }, [contentUrl, isImage]);
 
   const truncated = content && !expanded && content.length > PREVIEW_CHAR_LIMIT;
   const displayed = truncated ? content.slice(0, PREVIEW_CHAR_LIMIT) : content;
@@ -72,6 +95,26 @@ export default function ArtifactPreviewCard({ artifactId, projectId, title, kind
           {KIND_LABEL[kind] ?? kind}
         </span>
       </div>
+
+      {isImage && (
+        <div className="flex items-center justify-center bg-muted/20 px-3.5 py-3">
+          {imageSrc ? (
+            <img src={imageSrc} alt={title} className="max-h-64 max-w-full rounded object-contain" />
+          ) : (
+            <span className="text-xs text-muted-foreground/50">Loading…</span>
+          )}
+        </div>
+      )}
+
+      {isHtml && content && (
+        <iframe
+          srcDoc={content}
+          sandbox="allow-scripts"
+          className="w-full border-0"
+          style={{ height: '360px' }}
+          title={title}
+        />
+      )}
 
       {isText && (
         <div className={cn('px-3.5 py-3 text-xs text-foreground/75 leading-relaxed', !expanded && 'max-h-64 overflow-hidden')}>

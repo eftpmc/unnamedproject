@@ -36,6 +36,7 @@ export function connect(): void {
 
   socket.onopen = () => {
     reconnectDelay = 1000;
+    subscribers.forEach(fn => fn({ type: 'ws_connected' } as unknown as WSEvent));
   };
 
   socket.onclose = () => {

@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState, type ChangeEvent, type KeyboardEvent } from 'react';
-import { ArrowUp, FileText, Mic, MicOff, Paperclip, X } from 'lucide-react';
+import { ArrowUp, FileText, Mic, MicOff, Paperclip, Pencil, X } from 'lucide-react';
 import { Textarea } from '@/components/ui/textarea';
 import { cn } from '@/lib/utils';
 
@@ -52,12 +52,14 @@ interface MessageInputProps {
   onChange: (value: string) => void;
   onSend: (attachments: File[]) => Promise<boolean>;
   disabled?: boolean;
+  isEditing?: boolean;
+  onCancelEdit?: () => void;
 }
 
 const MAX_ATTACHMENTS = 8;
 const MAX_ATTACHMENT_BYTES = 10 * 1024 * 1024;
 
-export default function MessageInput({ value, onChange, onSend, disabled }: MessageInputProps) {
+export default function MessageInput({ value, onChange, onSend, disabled, isEditing, onCancelEdit }: MessageInputProps) {
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const recognitionRef = useRef<SpeechRecognition | null>(null);
@@ -170,7 +172,22 @@ export default function MessageInput({ value, onChange, onSend, disabled }: Mess
 
   return (
     <div className="shrink-0 px-4 pb-5 pt-3 sm:px-6">
-      <div className="mx-auto max-w-[46rem] rounded-[18px] border border-input bg-card px-3 pb-2.5 pt-2.5 shadow-sm">
+      <div className={cn('mx-auto max-w-[46rem] rounded-[18px] border bg-card px-3 pb-2.5 pt-2.5 shadow-sm', isEditing ? 'border-primary/50' : 'border-input')}>
+        {isEditing && (
+          <div className="mb-2 flex items-center justify-between gap-2 rounded-lg bg-primary/8 px-2.5 py-1.5">
+            <div className="flex items-center gap-1.5 text-xs font-medium text-primary">
+              <Pencil size={11} />
+              Editing message
+            </div>
+            <button
+              type="button"
+              onClick={onCancelEdit}
+              className="text-xs text-muted-foreground transition-colors hover:text-foreground"
+            >
+              Cancel
+            </button>
+          </div>
+        )}
         {attachments.length > 0 && (
           <div className="mb-2 flex flex-wrap gap-2">
             {attachments.map((file, index) => (

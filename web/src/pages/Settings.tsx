@@ -28,6 +28,7 @@ import {
   updateSettings,
 } from '../lib/api.js';
 import { clearToken, getToken } from '../lib/auth.js';
+import { usePageTitle } from '../lib/usePageTitle.js';
 import type { Connection, Memory, PermissionProfile, Project, ScheduledTask, UserSettings } from '../types.js';
 
 type Tab = 'agents' | 'tools' | 'mcp' | 'workspace' | 'memory' | 'account';
@@ -179,6 +180,7 @@ function ConnectMobileSection() {
 }
 
 export default function Settings() {
+  usePageTitle('Settings');
   const navigate = useNavigate();
   const qc = useQueryClient();
   const [tab, setTab] = useState<Tab>('agents');

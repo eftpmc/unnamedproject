@@ -166,14 +166,50 @@ router.get('/:id/artifacts/:artifactId/content', (req, res) => {
 
 router.patch('/:id', (req, res) => {
   const { userId } = req as unknown as AuthedRequest;
-  const { description } = req.body as { description?: string };
+  const { description, name, repo_path } = req.body as { description?: string; name?: string; repo_path?: string | null };
   const project = getProjectForUser(req.params.id, userId);
   if (!project) { res.status(404).json({ error: 'Not found' }); return; }
-  if (description !== undefined) {
-    getDb()
-      .prepare('UPDATE projects SET description = ? WHERE id = ? AND user_id = ?')
-      .run(description, req.params.id, userId);
+  const fields: string[] = [];
+  const params: unknown[] = [];
+  if (description !== undefined) { fields.push('description = ?'); params.push(description); }
+  if (name !== undefined && name.trim()) { fields.push('name = ?'); params.push(name.trim()); }
+  if (repo_path !== undefined) { fields.push('repo_path = ?'); params.push(repo_path || null); }
+  if (fields.length) {
+    params.push(req.params.id, userId);
+    getDb().prepare(`UPDATE projects SET ${fields.join(', ')} WHERE id = ? AND user_id = ?`).run(...params);
   }
+  res.json({ ok: true });
+});
+
+router.get('/:id/workspace', async (req, res) => {
+  const { userId } = req as unknown as AuthedRequest;
+  const project = getDb()
+    .prepare('SELECT id, repo_path FROM projects WHERE id = ? AND user_id = ?')
+    .get(req.params.id, userId) as { id: string; repo_path: string | null } | undefined;
+  if (!project) { res.status(404).json({ error: 'Not found' }); return; }
+  const base = getProjectBasePath(project);
+  if (!base) { res.json({ content: '' }); return; }
+  const filePath = path.join(base, 'workspace.md');
+  try {
+    const content = await fs.readFile(filePath, 'utf-8');
+    res.json({ content });
+  } catch {
+    res.json({ content: '' });
+  }
+});
+
+router.put('/:id/workspace', async (req, res) => {
+  const { userId } = req as unknown as AuthedRequest;
+  const { content } = req.body as { content: string };
+  const project = getDb()
+    .prepare('SELECT id, repo_path FROM projects WHERE id = ? AND user_id = ?')
+    .get(req.params.id, userId) as { id: string; repo_path: string | null } | undefined;
+  if (!project) { res.status(404).json({ error: 'Not found' }); return; }
+  const base = getProjectBasePath(project);
+  if (!base) { res.status(400).json({ error: 'No project directory' }); return; }
+  await fs.mkdir(base, { recursive: true });
+  const filePath = path.join(base, 'workspace.md');
+  await fs.writeFile(filePath, content ?? '', 'utf-8');
   res.json({ ok: true });
 });
 

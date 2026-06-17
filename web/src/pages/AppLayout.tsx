@@ -1,14 +1,17 @@
-import { useEffect, useState, type CSSProperties } from 'react';
+import { useEffect, useRef, useState, type CSSProperties } from 'react';
 import { Outlet, useParams, useLocation, useNavigate } from 'react-router-dom';
 import { Menu } from 'lucide-react';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import Sidebar from '../components/Sidebar.js';
 import ChatView from '../components/ChatView.js';
 import EmptyState from '../components/EmptyState.js';
 import InboxPanel from '../components/InboxPanel.js';
-import { createChat } from '../lib/api.js';
+import CommandPalette from '../components/CommandPalette.js';
+import ErrorBoundary from '../components/ErrorBoundary.js';
+import { createChat, getConnections } from '../lib/api.js';
 import { connect, disconnect, subscribe } from '../lib/ws.js';
 import { SidebarInset, SidebarProvider, useSidebar } from '@/components/ui/sidebar';
-import type { WSApprovalRequested, WSExecutionUpdate } from '../types.js';
+import type { Connection, Session, WSApprovalRequested, WSExecutionUpdate, WSTurnComplete } from '../types.js';
 
 const PAGE_ROUTES = ['/chats', '/projects', '/settings'];
 
@@ -39,10 +42,34 @@ export default function AppLayout() {
   const { chatId } = useParams<{ chatId?: string }>();
   const location = useLocation();
   const navigate = useNavigate();
+  const queryClient = useQueryClient();
 
   // executionId → approvalId for pending approvals
   const [pendingApprovals, setPendingApprovals] = useState<Map<string, string>>(new Map());
   const [inboxOpen, setInboxOpen] = useState(false);
+  const [paletteOpen, setPaletteOpen] = useState(false);
+
+  // Keep a ref to chatId so the WS callback always has the current value
+  const chatIdRef = useRef(chatId);
+  useEffect(() => { chatIdRef.current = chatId; }, [chatId]);
+
+  useEffect(() => {
+    function handleKeyDown(e: KeyboardEvent) {
+      if ((e.metaKey || e.ctrlKey) && e.key === 'k') {
+        e.preventDefault();
+        setPaletteOpen(prev => !prev);
+      }
+    }
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, []);
+
+  const { data: connections = [] } = useQuery<Connection[]>({
+    queryKey: ['connections'],
+    queryFn: getConnections,
+    staleTime: 60_000,
+  });
+  const hasLeadAgent = connections.some(c => c.purpose === 'lead_agent');
 
   useEffect(() => {
     connect();
@@ -50,6 +77,27 @@ export default function AppLayout() {
       if (event.type === 'approval_requested') {
         const e = event as unknown as WSApprovalRequested;
         setPendingApprovals(prev => new Map(prev).set(e.executionId, e.approvalId));
+        if ('Notification' in window) {
+          const isCurrentChat = e.sessionId ? chatIdRef.current === e.sessionId : false;
+          const isVisible = document.visibilityState === 'visible';
+          if (!isCurrentChat || !isVisible) {
+            const actionLabel = e.action.replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase());
+            const fire = () => {
+              const n = new Notification('Approval needed', {
+                body: actionLabel,
+                icon: '/favicon.ico',
+                tag: `approval-${e.executionId}`,
+                requireInteraction: true,
+              });
+              if (e.sessionId) n.onclick = () => { window.focus(); navigate(`/c/${e.sessionId}`); };
+            };
+            if (Notification.permission === 'granted') {
+              fire();
+            } else if (Notification.permission === 'default') {
+              Notification.requestPermission().then(p => { if (p === 'granted') fire(); });
+            }
+          }
+        }
       } else if (event.type === 'execution_update') {
         const e = event as unknown as WSExecutionUpdate;
         if (e.status === 'running' || e.status === 'done' || e.status === 'error') {
@@ -59,10 +107,27 @@ export default function AppLayout() {
             return next;
           });
         }
+      } else if (event.type === 'turn_complete') {
+        const e = event as unknown as WSTurnComplete;
+        // Only notify for successful completions, not user-initiated stops
+        if (e.status === 'done' && ('Notification' in window)) {
+          const isCurrentChat = chatIdRef.current === e.sessionId;
+          const isVisible = document.visibilityState === 'visible';
+          if (!isCurrentChat || !isVisible) {
+            const chats = queryClient.getQueryData<Session[]>(['chats']);
+            const title = chats?.find(c => c.id === e.sessionId)?.title ?? 'Agent finished';
+            const fire = () => new Notification('unnamed', { body: title, icon: '/favicon.ico', tag: e.sessionId });
+            if (Notification.permission === 'granted') {
+              fire();
+            } else if (Notification.permission === 'default') {
+              Notification.requestPermission().then(p => { if (p === 'granted') fire(); });
+            }
+          }
+        }
       }
     });
     return () => { unsub(); disconnect(); };
-  }, []);
+  }, [queryClient]);
 
   function handleApprovalResolved(executionId: string) {
     setPendingApprovals(prev => {
@@ -83,7 +148,7 @@ export default function AppLayout() {
     ? <Outlet />
     : chatId
       ? <ChatView chatId={chatId} />
-      : <EmptyState onNewChat={handleNewChat} />;
+      : <EmptyState onNewChat={handleNewChat} hasLeadAgent={hasLeadAgent} />;
 
   return (
     <SidebarProvider
@@ -93,10 +158,13 @@ export default function AppLayout() {
       <Sidebar
         pendingApprovalCount={pendingApprovals.size}
         onOpenInbox={() => setInboxOpen(true)}
+        hasLeadAgent={hasLeadAgent}
       />
       <SidebarInset className="relative min-h-0 min-w-0 overflow-hidden bg-background/58 backdrop-blur">
         <MobileTopbar />
-        {mainContent}
+        <ErrorBoundary key={location.pathname}>
+          {mainContent}
+        </ErrorBoundary>
       </SidebarInset>
       <InboxPanel
         open={inboxOpen}
@@ -104,6 +172,7 @@ export default function AppLayout() {
         pendingApprovals={pendingApprovals}
         onApprovalResolved={handleApprovalResolved}
       />
+      <CommandPalette open={paletteOpen} onClose={() => setPaletteOpen(false)} />
     </SidebarProvider>
   );
 }

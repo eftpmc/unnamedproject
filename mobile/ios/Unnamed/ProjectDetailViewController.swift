@@ -35,7 +35,26 @@ final class ProjectDetailViewController: UIViewController {
     )
 
     setupTable()
+    setupEmptyState()
     load()
+  }
+
+  private func setupEmptyState() {
+    emptyLabel.text = "No chats yet.\nTap compose to start one."
+    emptyLabel.numberOfLines = 0
+    emptyLabel.textAlignment = .center
+    emptyLabel.font = UIFont.preferredFont(forTextStyle: .subheadline)
+    emptyLabel.textColor = .tertiaryLabel
+    emptyLabel.isHidden = true
+
+    view.addSubview(emptyLabel)
+    emptyLabel.translatesAutoresizingMaskIntoConstraints = false
+    NSLayoutConstraint.activate([
+      emptyLabel.centerXAnchor.constraint(equalTo: view.centerXAnchor),
+      emptyLabel.centerYAnchor.constraint(equalTo: view.centerYAnchor),
+      emptyLabel.leadingAnchor.constraint(equalTo: view.leadingAnchor, constant: 32),
+      emptyLabel.trailingAnchor.constraint(equalTo: view.trailingAnchor, constant: -32),
+    ])
   }
 
   private func setupTable() {
@@ -154,6 +173,7 @@ final class ProjectDetailViewController: UIViewController {
         activeIds = Set(try await active)
         chats = sessions.filter { $0.pinnedProjectId == project.id }
         tableView.reloadData()
+        emptyLabel.isHidden = !chats.isEmpty
       } catch {
         showError(error)
       }

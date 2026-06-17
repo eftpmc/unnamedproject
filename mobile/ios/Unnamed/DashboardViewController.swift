@@ -1,4 +1,5 @@
 import UIKit
+import UserNotifications
 
 final class DashboardViewController: UIViewController {
   var onSignedOut: (() -> Void)?
@@ -43,7 +44,10 @@ final class DashboardViewController: UIViewController {
     title = "Unnamed"
     view.backgroundColor = AppTheme.canvas
     navigationController?.navigationBar.prefersLargeTitles = false
-    navigationItem.rightBarButtonItem = UIBarButtonItem(title: "Server", style: .plain, target: self, action: #selector(changeServerTapped))
+    navigationItem.rightBarButtonItem = UIBarButtonItem(image: UIImage(systemName: "gearshape"), style: .plain, target: self, action: #selector(settingsTapped))
+
+    UNUserNotificationCenter.current().requestAuthorization(options: [.badge]) { _, _ in }
+    NotificationCenter.default.addObserver(self, selector: #selector(appWillForeground), name: UIApplication.willEnterForegroundNotification, object: nil)
 
     configureScrollView()
     configureHero()
@@ -357,6 +361,11 @@ final class DashboardViewController: UIViewController {
     } else {
       inboxBadge.isHidden = true
     }
+    if #available(iOS 16.0, *) {
+      Task { try? await UNUserNotificationCenter.current().setBadgeCount(approvalCount) }
+    } else {
+      UIApplication.shared.applicationIconBadgeNumber = approvalCount
+    }
     renderRecent()
     renderProjects()
   }
@@ -430,12 +439,19 @@ final class DashboardViewController: UIViewController {
     return label
   }
 
-  @objc private func refreshPulled() {
-    load()
-  }
+  @objc private func refreshPulled() { load() }
 
-  @objc private func changeServerTapped() {
-    onChangeServer?()
+  @objc private func appWillForeground() { load() }
+
+  @objc private func settingsTapped() {
+    let vc = SettingsViewController(email: profile?.email ?? "—", serverURL: session.serverURL)
+    vc.onChangeServer = { [weak self] in
+      self?.dismiss(animated: true) { self?.onChangeServer?() }
+    }
+    vc.onSignOut = { [weak self] in
+      self?.dismiss(animated: true) { self?.onSignedOut?() }
+    }
+    present(UINavigationController(rootViewController: vc), animated: true)
   }
 
   @objc private func sendTapped() {

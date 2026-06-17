@@ -8,6 +8,7 @@ final class ChatViewController: UIViewController {
   private var messages: [ChatMessage] = []
 
   private let tableView = UITableView(frame: .zero, style: .plain)
+  private let refreshControl = UIRefreshControl()
   private let composeBar = UIView()
   private let textView = ComposerTextView()
   private let sendButton = UIButton(type: .system)
@@ -82,6 +83,8 @@ final class ChatViewController: UIViewController {
     tableView.keyboardDismissMode = .interactive
     tableView.allowsSelection = false
     tableView.contentInset = UIEdgeInsets(top: 12, left: 0, bottom: 12, right: 0)
+    tableView.refreshControl = refreshControl
+    refreshControl.addTarget(self, action: #selector(refreshPulled), for: .valueChanged)
 
     view.addSubview(tableView)
     tableView.translatesAutoresizingMaskIntoConstraints = false
@@ -219,6 +222,13 @@ final class ChatViewController: UIViewController {
 
   @objc private func refreshTapped() {
     Task { await reloadMessages() }
+  }
+
+  @objc private func refreshPulled() {
+    Task {
+      await reloadMessages()
+      refreshControl.endRefreshing()
+    }
   }
 
   @objc private func sendTapped() {

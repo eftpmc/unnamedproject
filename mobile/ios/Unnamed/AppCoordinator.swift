@@ -8,6 +8,15 @@ final class AppCoordinator {
     self.navigationController = navigationController
     self.session = session
     self.navigationController.navigationBar.prefersLargeTitles = true
+
+    let appearance = UINavigationBarAppearance()
+    appearance.configureWithOpaqueBackground()
+    appearance.backgroundColor = AppTheme.canvas
+    appearance.shadowColor = AppTheme.border
+    UINavigationBar.appearance().standardAppearance = appearance
+    UINavigationBar.appearance().scrollEdgeAppearance = appearance
+    UINavigationBar.appearance().compactAppearance = appearance
+    UINavigationBar.appearance().tintColor = AppTheme.accent
   }
 
   func start() {

@@ -134,6 +134,13 @@ final class FormTextField: UITextField {
   required init?(coder: NSCoder) {
     fatalError("init(coder:) has not been implemented")
   }
+
+  override func traitCollectionDidChange(_ previousTraitCollection: UITraitCollection?) {
+    super.traitCollectionDidChange(previousTraitCollection)
+    if traitCollection.hasDifferentColorAppearance(comparedTo: previousTraitCollection) {
+      layer.borderColor = AppTheme.border.cgColor
+    }
+  }
 }
 
 final class SurfaceView: UIView {
@@ -148,6 +155,13 @@ final class SurfaceView: UIView {
 
   required init?(coder: NSCoder) {
     fatalError("init(coder:) has not been implemented")
+  }
+
+  override func traitCollectionDidChange(_ previousTraitCollection: UITraitCollection?) {
+    super.traitCollectionDidChange(previousTraitCollection)
+    if traitCollection.hasDifferentColorAppearance(comparedTo: previousTraitCollection) {
+      layer.borderColor = AppTheme.border.cgColor
+    }
   }
 }
 

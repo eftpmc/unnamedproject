@@ -14,6 +14,9 @@ final class DashboardViewController: UIViewController {
   private var profile: UserProfile?
   private var chats: [ChatSession] = []
   private var projects: [Project] = []
+  private var approvalCount = 0
+  private var activeIds: Set<String> = []
+  private let inboxBadge = UILabel()
 
   private let scrollView = UIScrollView()
   private let contentStack = UIStackView()
@@ -184,7 +187,26 @@ final class DashboardViewController: UIViewController {
     grid.axis = .vertical
     grid.spacing = 10
 
-    grid.addArrangedSubview(actionCard(icon: "bell.badge", title: "Inbox", subtitle: "Approvals and agent requests", tint: AppTheme.warning, action: { [weak self] in self?.onShowInbox?() }))
+    let inboxCard = actionCard(icon: "bell.badge", title: "Inbox", subtitle: "Approvals and agent requests", tint: AppTheme.warning, action: { [weak self] in self?.onShowInbox?() })
+
+    // Badge pinned to icon's top-right corner (icon sits at leading:13 top:13, size:36)
+    inboxBadge.font = .systemFont(ofSize: 11, weight: .bold)
+    inboxBadge.textColor = .white
+    inboxBadge.textAlignment = .center
+    inboxBadge.backgroundColor = .systemRed
+    inboxBadge.layer.cornerRadius = 8
+    inboxBadge.clipsToBounds = true
+    inboxBadge.isHidden = true
+    inboxBadge.translatesAutoresizingMaskIntoConstraints = false
+    inboxCard.addSubview(inboxBadge)
+    NSLayoutConstraint.activate([
+      inboxBadge.widthAnchor.constraint(greaterThanOrEqualToConstant: 20),
+      inboxBadge.heightAnchor.constraint(equalToConstant: 16),
+      inboxBadge.centerXAnchor.constraint(equalTo: inboxCard.leadingAnchor, constant: 49),
+      inboxBadge.centerYAnchor.constraint(equalTo: inboxCard.topAnchor, constant: 13),
+    ])
+
+    grid.addArrangedSubview(inboxCard)
     grid.addArrangedSubview(actionCard(icon: "message", title: "Chats", subtitle: "Recent conversations", tint: AppTheme.accent, action: { [weak self] in self?.onShowChats?() }))
     grid.addArrangedSubview(actionCard(icon: "folder", title: "Projects", subtitle: "Repos and artifacts", tint: .systemGreen, action: { [weak self] in self?.onShowProjects?() }))
 
@@ -273,7 +295,7 @@ final class DashboardViewController: UIViewController {
     return card
   }
 
-  private func listRow(icon: String, title: String, subtitle: String?, tint: UIColor) -> UIView {
+  private func listRow(icon: String, title: String, subtitle: String?, tint: UIColor, isActive: Bool = false) -> UIView {
     let row = UIStackView()
     row.axis = .horizontal
     row.alignment = .center
@@ -303,11 +325,38 @@ final class DashboardViewController: UIViewController {
 
     row.addArrangedSubview(IconBadgeView(systemName: icon, tintColor: tint))
     row.addArrangedSubview(textStack)
+
+    if isActive {
+      let spacer = UIView()
+      spacer.setContentHuggingPriority(.defaultLow, for: .horizontal)
+      row.addArrangedSubview(spacer)
+
+      let dot = UIView()
+      dot.backgroundColor = .systemGreen
+      dot.layer.cornerRadius = 4
+      dot.translatesAutoresizingMaskIntoConstraints = false
+      row.addArrangedSubview(dot)
+      NSLayoutConstraint.activate([
+        dot.widthAnchor.constraint(equalToConstant: 8),
+        dot.heightAnchor.constraint(equalToConstant: 8),
+      ])
+      let anim = CABasicAnimation(keyPath: "opacity")
+      anim.fromValue = 1.0; anim.toValue = 0.25; anim.duration = 0.9
+      anim.autoreverses = true; anim.repeatCount = .infinity
+      dot.layer.add(anim, forKey: "pulse")
+    }
+
     return row
   }
 
   private func renderData() {
     statusLabel.text = profile?.email ?? "Connected"
+    if approvalCount > 0 {
+      inboxBadge.text = "\(min(approvalCount, 99))"
+      inboxBadge.isHidden = false
+    } else {
+      inboxBadge.isHidden = true
+    }
     renderRecent()
     renderProjects()
   }
@@ -324,7 +373,18 @@ final class DashboardViewController: UIViewController {
     }
 
     for chat in chats.prefix(5) {
-      let row = listRow(icon: "message", title: chat.title ?? "Untitled chat", subtitle: chat.model ?? chat.effort, tint: AppTheme.accent)
+      let isActive = activeIds.contains(chat.id)
+      let timePart = (chat.updatedAt ?? chat.createdAt).map { relativeTime(from: $0) }
+      let metaParts = [chat.model ?? chat.effort, timePart].compactMap { $0 }
+      let subtitle = metaParts.isEmpty ? nil : metaParts.joined(separator: " · ")
+
+      let row = listRow(
+        icon: "message",
+        title: chat.title ?? "Untitled chat",
+        subtitle: subtitle,
+        tint: isActive ? .systemGreen : AppTheme.accent,
+        isActive: isActive
+      )
       let hit = UIControl()
       hit.addAction(UIAction { [weak self] _ in self?.onShowChat?(chat) }, for: .touchUpInside)
       hit.translatesAutoresizingMaskIntoConstraints = false
@@ -410,12 +470,17 @@ final class DashboardViewController: UIViewController {
     refreshControl.beginRefreshing()
     Task {
       do {
-        async let profile = client.me()
-        async let chats = client.sessions()
-        async let projects = client.projects()
-        self.profile = try await profile
-        self.chats = try await chats
-        self.projects = try await projects
+        async let profileTask = client.me()
+        async let chatsTask = client.sessions()
+        async let projectsTask = client.projects()
+        async let approvalsTask = client.pendingApprovals()
+        async let activeTask = client.activeSessions()
+
+        self.profile = try await profileTask
+        self.chats = try await chatsTask
+        self.projects = try await projectsTask
+        self.approvalCount = (try? await approvalsTask)?.count ?? 0
+        self.activeIds = Set((try? await activeTask) ?? [])
         renderData()
       } catch APIError.unauthorized {
         onSignedOut?()

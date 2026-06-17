@@ -277,10 +277,12 @@ extension ChatViewController: UITableViewDataSource {
 private final class MessageCell: UITableViewCell {
   static let reuseID = "MessageCell"
 
+  private let bubbleStack = UIStackView()
   private let bubble = UIView()
   private let label = UILabel()
-  private var leadingConstraint: NSLayoutConstraint!
-  private var trailingConstraint: NSLayoutConstraint!
+  private let timeLabel = UILabel()
+  private var stackLeading: NSLayoutConstraint!
+  private var stackTrailing: NSLayoutConstraint!
 
   override init(style: UITableViewCell.CellStyle, reuseIdentifier: String?) {
     super.init(style: style, reuseIdentifier: reuseIdentifier)
@@ -294,22 +296,34 @@ private final class MessageCell: UITableViewCell {
     label.font = UIFont.preferredFont(forTextStyle: .callout)
     label.adjustsFontForContentSizeCategory = true
 
-    contentView.addSubview(bubble)
+    timeLabel.font = UIFont.preferredFont(forTextStyle: .caption2)
+    timeLabel.textColor = .tertiaryLabel
+    timeLabel.adjustsFontForContentSizeCategory = true
+
     bubble.addSubview(label)
-    bubble.translatesAutoresizingMaskIntoConstraints = false
     label.translatesAutoresizingMaskIntoConstraints = false
-
-    leadingConstraint = bubble.leadingAnchor.constraint(equalTo: contentView.leadingAnchor, constant: 16)
-    trailingConstraint = bubble.trailingAnchor.constraint(equalTo: contentView.trailingAnchor, constant: -16)
-
     NSLayoutConstraint.activate([
-      bubble.topAnchor.constraint(equalTo: contentView.topAnchor, constant: 3),
-      bubble.bottomAnchor.constraint(equalTo: contentView.bottomAnchor, constant: -3),
-      bubble.widthAnchor.constraint(lessThanOrEqualTo: contentView.widthAnchor, multiplier: 0.78),
       label.topAnchor.constraint(equalTo: bubble.topAnchor, constant: 10),
       label.leadingAnchor.constraint(equalTo: bubble.leadingAnchor, constant: 14),
       label.trailingAnchor.constraint(equalTo: bubble.trailingAnchor, constant: -14),
       label.bottomAnchor.constraint(equalTo: bubble.bottomAnchor, constant: -10),
+    ])
+
+    bubbleStack.axis = .vertical
+    bubbleStack.spacing = 3
+    bubbleStack.addArrangedSubview(bubble)
+    bubbleStack.addArrangedSubview(timeLabel)
+
+    contentView.addSubview(bubbleStack)
+    bubbleStack.translatesAutoresizingMaskIntoConstraints = false
+
+    stackLeading = bubbleStack.leadingAnchor.constraint(equalTo: contentView.leadingAnchor, constant: 16)
+    stackTrailing = bubbleStack.trailingAnchor.constraint(equalTo: contentView.trailingAnchor, constant: -16)
+
+    NSLayoutConstraint.activate([
+      bubbleStack.topAnchor.constraint(equalTo: contentView.topAnchor, constant: 3),
+      bubbleStack.bottomAnchor.constraint(equalTo: contentView.bottomAnchor, constant: -3),
+      bubbleStack.widthAnchor.constraint(lessThanOrEqualTo: contentView.widthAnchor, multiplier: 0.78),
     ])
   }
 
@@ -320,12 +334,34 @@ private final class MessageCell: UITableViewCell {
     let isUser = message.role == "user"
     bubble.backgroundColor = isUser ? AppTheme.primary : AppTheme.secondarySurface
     label.textColor = isUser ? AppTheme.primaryText : .label
-    if isUser {
-      leadingConstraint.isActive = false
-      trailingConstraint.isActive = true
+
+    if let epoch = message.createdAt {
+      timeLabel.text = messageTime(epoch)
+      timeLabel.textAlignment = isUser ? .right : .left
+      timeLabel.isHidden = false
     } else {
-      trailingConstraint.isActive = false
-      leadingConstraint.isActive = true
+      timeLabel.isHidden = true
+    }
+
+    if isUser {
+      stackLeading.isActive = false
+      stackTrailing.isActive = true
+    } else {
+      stackTrailing.isActive = false
+      stackLeading.isActive = true
     }
   }
+}
+
+private func messageTime(_ epoch: Int) -> String {
+  let date = Date(timeIntervalSince1970: TimeInterval(epoch))
+  let cal = Calendar.current
+  let timeFmt = DateFormatter()
+  timeFmt.dateFormat = "h:mm a"
+  if cal.isDateInToday(date) { return timeFmt.string(from: date) }
+  if cal.isDateInYesterday(date) { return "Yesterday " + timeFmt.string(from: date) }
+  let fullFmt = DateFormatter()
+  fullFmt.dateStyle = .short
+  fullFmt.timeStyle = .short
+  return fullFmt.string(from: date)
 }

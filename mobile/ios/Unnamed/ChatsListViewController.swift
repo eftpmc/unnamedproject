@@ -8,6 +8,7 @@ final class ChatsListViewController: UIViewController {
   private var chats: [ChatSession] = []
   private var activeIds: Set<String> = []
   private var isLoading = true
+  private var wsSubscriptionId: UUID?
 
   private let tableView = UITableView(frame: .zero, style: .plain)
   private let refreshControl = UIRefreshControl()
@@ -28,6 +29,11 @@ final class ChatsListViewController: UIViewController {
     tableView.separatorInset = UIEdgeInsets(top: 0, left: 56, bottom: 0, right: 0)
     tableView.register(UITableViewCell.self, forCellReuseIdentifier: "cell")
     tableView.register(SkeletonCell.self, forCellReuseIdentifier: SkeletonCell.reuseID)
+
+    navigationItem.rightBarButtonItem = UIBarButtonItem(
+      image: UIImage(systemName: "square.and.pencil"),
+      style: .plain, target: self, action: #selector(composeTapped)
+    )
     tableView.dataSource = self
     tableView.delegate = self
     tableView.refreshControl = refreshControl
@@ -42,7 +48,52 @@ final class ChatsListViewController: UIViewController {
       tableView.bottomAnchor.constraint(equalTo: view.bottomAnchor),
     ])
 
+    wsSubscriptionId = WebSocketService.shared.subscribe { [weak self] event in
+      self?.handleWSEvent(event)
+    }
+
     load()
+  }
+
+  deinit {
+    if let id = wsSubscriptionId { WebSocketService.shared.unsubscribe(id) }
+  }
+
+  @objc private func composeTapped() {
+    Task {
+      do {
+        let created = try await client.createSession()
+        let chat = ChatSession(id: created.id, title: nil, effort: nil, model: nil,
+                               pinnedProjectId: nil, createdAt: nil, updatedAt: nil)
+        onSelectChat?(chat)
+      } catch {
+        showError(error)
+      }
+    }
+  }
+
+  private func handleWSEvent(_ event: WSEvent) {
+    switch event {
+    case .messageCreated(let sid, _):
+      guard let idx = chats.firstIndex(where: { $0.id == sid }) else { return }
+      activeIds.insert(sid)
+      tableView.reloadRows(at: [IndexPath(row: idx, section: 0)], with: .none)
+
+    case .turnComplete(let sid, _):
+      guard let idx = chats.firstIndex(where: { $0.id == sid }) else { return }
+      activeIds.remove(sid)
+      tableView.reloadRows(at: [IndexPath(row: idx, section: 0)], with: .none)
+
+    case .sessionTitleUpdated(let sid, let newTitle):
+      guard let idx = chats.firstIndex(where: { $0.id == sid }) else { return }
+      let old = chats[idx]
+      chats[idx] = ChatSession(id: old.id, title: newTitle, effort: old.effort, model: old.model,
+                               pinnedProjectId: old.pinnedProjectId, createdAt: old.createdAt, updatedAt: old.updatedAt)
+      tableView.reloadRows(at: [IndexPath(row: idx, section: 0)], with: .none)
+
+    default:
+      break
+    }
   }
 
   @objc private func refreshPulled() { load() }

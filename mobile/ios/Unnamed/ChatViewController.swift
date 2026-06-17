@@ -17,6 +17,17 @@ final class ChatViewController: UIViewController {
   private var composeBarBottom: NSLayoutConstraint!
   private var pollTimer: Timer?
 
+  // Agent status bar (between table and compose bar)
+  private let agentStatusBar = UIView()
+  private let agentStatusLabel = UILabel()
+  private let agentStatusSpinner = UIActivityIndicatorView(style: .medium)
+  private var agentStatusHeight: NSLayoutConstraint!
+
+  // Reconnect banner
+  private let reconnectBanner = UIView()
+  private var reconnectBannerHeight: NSLayoutConstraint!
+  private var pendingBannerItem: DispatchWorkItem?
+
   init(appSession: AppSession, chatSession: ChatSession) {
     self.appSession = appSession
     self.chatSession = chatSession
@@ -51,7 +62,9 @@ final class ChatViewController: UIViewController {
     )
 
     setupTable()
+    setupAgentStatusBar()
     setupComposeBar()
+    setupReconnectBanner()
     observeKeyboard()
     loadMessages()
   }
@@ -94,6 +107,7 @@ final class ChatViewController: UIViewController {
   private func handleWSEvent(_ event: WSEvent) {
     switch event {
     case .messageStarted(let sid, let message) where sid == chatSession.id:
+      setAgentStatus(nil)
       guard !messages.contains(where: { $0.id == message.id }) else { return }
       messages.append(message)
       let ip = IndexPath(row: messages.count - 1, section: 0)
@@ -119,15 +133,128 @@ final class ChatViewController: UIViewController {
       }
 
     case .turnComplete(let sid, _) where sid == chatSession.id:
+      setAgentStatus(nil)
       setSending(false)
       Task { await reloadMessages() }
+
+    case .executionUpdate(let sid, let tool, let status) where sid == chatSession.id || sid == nil:
+      guard sid == chatSession.id else { break }
+      switch status {
+      case "running":
+        let name = tool.map { formatToolName($0) } ?? "Working"
+        setAgentStatus("\(name)…")
+      case "awaiting_approval":
+        setAgentStatus("Waiting for approval…")
+      default:
+        setAgentStatus(nil)
+      }
+
+    case .sessionTitleUpdated(let sid, let t) where sid == chatSession.id:
+      title = t
+
+    case .connected:
+      pendingBannerItem?.cancel()
+      pendingBannerItem = nil
+      hideReconnectBanner()
+
+    case .disconnected:
+      pendingBannerItem?.cancel()
+      let item = DispatchWorkItem { [weak self] in self?.showReconnectBanner() }
+      pendingBannerItem = item
+      DispatchQueue.main.asyncAfter(deadline: .now() + 2, execute: item)
 
     default:
       break
     }
   }
 
+  private func formatToolName(_ raw: String) -> String {
+    raw.split(separator: "_").map { $0.capitalized }.joined(separator: " ")
+  }
+
   // MARK: - Layout
+
+  private func setupAgentStatusBar() {
+    agentStatusBar.backgroundColor = AppTheme.surface
+    agentStatusBar.clipsToBounds = true
+
+    let border = UIView()
+    border.backgroundColor = AppTheme.border
+    agentStatusBar.addSubview(border)
+    border.translatesAutoresizingMaskIntoConstraints = false
+    NSLayoutConstraint.activate([
+      border.topAnchor.constraint(equalTo: agentStatusBar.topAnchor),
+      border.leadingAnchor.constraint(equalTo: agentStatusBar.leadingAnchor),
+      border.trailingAnchor.constraint(equalTo: agentStatusBar.trailingAnchor),
+      border.heightAnchor.constraint(equalToConstant: 0.5),
+    ])
+
+    agentStatusSpinner.color = .tertiaryLabel
+    agentStatusSpinner.startAnimating()
+
+    agentStatusLabel.font = UIFont.preferredFont(forTextStyle: .footnote)
+    agentStatusLabel.textColor = .secondaryLabel
+
+    let row = UIStackView(arrangedSubviews: [agentStatusSpinner, agentStatusLabel])
+    row.axis = .horizontal
+    row.spacing = 7
+    row.alignment = .center
+    agentStatusBar.addSubview(row)
+    row.translatesAutoresizingMaskIntoConstraints = false
+    NSLayoutConstraint.activate([
+      row.centerXAnchor.constraint(equalTo: agentStatusBar.centerXAnchor),
+      row.centerYAnchor.constraint(equalTo: agentStatusBar.centerYAnchor),
+    ])
+
+    agentStatusHeight = agentStatusBar.heightAnchor.constraint(equalToConstant: 0)
+    agentStatusHeight.isActive = true
+    view.addSubview(agentStatusBar)
+    agentStatusBar.translatesAutoresizingMaskIntoConstraints = false
+  }
+
+  private func setupReconnectBanner() {
+    reconnectBanner.backgroundColor = AppTheme.warning.withAlphaComponent(0.9)
+    reconnectBanner.clipsToBounds = true
+
+    let label = UILabel()
+    label.text = "Reconnecting…"
+    label.font = UIFont.preferredFont(forTextStyle: .caption1)
+    label.textColor = .white
+    label.textAlignment = .center
+    reconnectBanner.addSubview(label)
+    label.translatesAutoresizingMaskIntoConstraints = false
+    NSLayoutConstraint.activate([
+      label.centerXAnchor.constraint(equalTo: reconnectBanner.centerXAnchor),
+      label.centerYAnchor.constraint(equalTo: reconnectBanner.centerYAnchor),
+    ])
+
+    view.addSubview(reconnectBanner)
+    reconnectBanner.translatesAutoresizingMaskIntoConstraints = false
+    reconnectBannerHeight = reconnectBanner.heightAnchor.constraint(equalToConstant: 0)
+    NSLayoutConstraint.activate([
+      reconnectBanner.topAnchor.constraint(equalTo: view.safeAreaLayoutGuide.topAnchor),
+      reconnectBanner.leadingAnchor.constraint(equalTo: view.leadingAnchor),
+      reconnectBanner.trailingAnchor.constraint(equalTo: view.trailingAnchor),
+      reconnectBannerHeight,
+    ])
+    view.bringSubviewToFront(reconnectBanner)
+  }
+
+  private func setAgentStatus(_ text: String?) {
+    agentStatusLabel.text = text
+    agentStatusHeight.constant = text == nil ? 0 : 36
+    UIView.animate(withDuration: 0.2) { self.view.layoutIfNeeded() }
+  }
+
+  private func showReconnectBanner() {
+    reconnectBannerHeight.constant = 28
+    UIView.animate(withDuration: 0.25) { self.view.layoutIfNeeded() }
+  }
+
+  private func hideReconnectBanner() {
+    reconnectBannerHeight.constant = 0
+    UIView.animate(withDuration: 0.25) { self.view.layoutIfNeeded() }
+  }
 
   private func setupTable() {
     tableView.backgroundColor = .clear
@@ -199,7 +326,10 @@ final class ChatViewController: UIViewController {
       tableView.topAnchor.constraint(equalTo: view.safeAreaLayoutGuide.topAnchor),
       tableView.leadingAnchor.constraint(equalTo: view.leadingAnchor),
       tableView.trailingAnchor.constraint(equalTo: view.trailingAnchor),
-      tableView.bottomAnchor.constraint(equalTo: composeBar.topAnchor),
+      tableView.bottomAnchor.constraint(equalTo: agentStatusBar.topAnchor),
+      agentStatusBar.leadingAnchor.constraint(equalTo: view.leadingAnchor),
+      agentStatusBar.trailingAnchor.constraint(equalTo: view.trailingAnchor),
+      agentStatusBar.bottomAnchor.constraint(equalTo: composeBar.topAnchor),
       composeBar.leadingAnchor.constraint(equalTo: view.leadingAnchor),
       composeBar.trailingAnchor.constraint(equalTo: view.trailingAnchor),
       composeBarBottom,
@@ -293,6 +423,7 @@ final class ChatViewController: UIViewController {
 
     textView.text = ""
     setSending(true)
+    setAgentStatus("Working…")
 
     let optimistic = ChatMessage(id: UUID().uuidString, role: "user", content: text, createdAt: nil)
     messages.append(optimistic)
@@ -314,6 +445,7 @@ final class ChatViewController: UIViewController {
           tableView.deleteRows(at: [IndexPath(row: idx, section: 0)], with: .automatic)
         }
         UINotificationFeedbackGenerator().notificationOccurred(.error)
+        setAgentStatus(nil)
         textView.text = text
         showError(error)
       }

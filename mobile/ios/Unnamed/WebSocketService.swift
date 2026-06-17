@@ -8,6 +8,10 @@ enum WSEvent {
   case messageCreated(sessionId: String, message: ChatMessage)
   case turnComplete(sessionId: String, status: String)
   case approvalRequested(sessionId: String?, executionId: String, approvalId: String, action: String)
+  case executionUpdate(sessionId: String?, tool: String?, status: String)
+  case sessionTitleUpdated(sessionId: String, title: String)
+  case connected
+  case disconnected
 }
 
 private struct RawWSEvent: Decodable {
@@ -20,9 +24,11 @@ private struct RawWSEvent: Decodable {
   let executionId: String?
   let approvalId: String?
   let action: String?
+  let tool: String?
+  let title: String?
 
   enum CodingKeys: String, CodingKey {
-    case type, sessionId, messageId, delta, message, status, action
+    case type, sessionId, messageId, delta, message, status, action, tool, title
     case executionId = "executionId"
     case approvalId = "approvalId"
   }
@@ -46,6 +52,11 @@ private extension WSEvent {
     case "approval_requested":
       guard let eid = raw.executionId, let aid = raw.approvalId, let act = raw.action else { return nil }
       self = .approvalRequested(sessionId: raw.sessionId, executionId: eid, approvalId: aid, action: act)
+    case "execution_update":
+      self = .executionUpdate(sessionId: raw.sessionId, tool: raw.tool, status: raw.status ?? "running")
+    case "session_title_updated":
+      guard let sid = raw.sessionId, let t = raw.title else { return nil }
+      self = .sessionTitleUpdated(sessionId: sid, title: t)
     default:
       return nil
     }
@@ -64,6 +75,7 @@ final class WebSocketService {
   private var reconnectDelay: TimeInterval = 1.0
   private let maxDelay: TimeInterval = 30.0
   private var stopping = false
+  private var needsConnectedEvent = true
 
   private init() {}
 
@@ -97,6 +109,7 @@ final class WebSocketService {
     components.queryItems = [URLQueryItem(name: "token", value: token)]
     guard let wsURL = components.url else { return }
 
+    needsConnectedEvent = true
     let task = URLSession.shared.webSocketTask(with: wsURL)
     self.task = task
     task.resume()
@@ -108,6 +121,10 @@ final class WebSocketService {
       guard let self else { return }
       switch result {
       case .success(let msg):
+        if self.needsConnectedEvent {
+          self.needsConnectedEvent = false
+          DispatchQueue.main.async { self.subscribers.values.forEach { $0(.connected) } }
+        }
         if case .string(let text) = msg,
            let data = text.data(using: .utf8),
            let raw = try? JSONDecoder().decode(RawWSEvent.self, from: data),
@@ -118,6 +135,7 @@ final class WebSocketService {
         }
         self.receiveLoop()
       case .failure:
+        DispatchQueue.main.async { self.subscribers.values.forEach { $0(.disconnected) } }
         self.scheduleReconnect()
       }
     }

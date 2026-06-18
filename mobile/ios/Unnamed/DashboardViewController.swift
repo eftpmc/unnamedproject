@@ -55,6 +55,7 @@ final class DashboardViewController: UIViewController {
 
     UNUserNotificationCenter.current().requestAuthorization(options: [.badge, .sound, .alert]) { _, _ in }
     NotificationCenter.default.addObserver(self, selector: #selector(appWillForeground), name: UIApplication.willEnterForegroundNotification, object: nil)
+    NotificationCenter.default.addObserver(self, selector: #selector(handleBadgeCleared), name: .approvalBadgeCleared, object: nil)
 
     wsSubscriptionId = WebSocketService.shared.subscribe { [weak self] event in
       guard let self else { return }
@@ -462,6 +463,11 @@ final class DashboardViewController: UIViewController {
   @objc private func refreshPulled() { load() }
 
   @objc private func appWillForeground() { load() }
+
+  @objc private func handleBadgeCleared() {
+    approvalCount = 0
+    renderData()
+  }
 
   private func scheduleApprovalNotification(count: Int) {
     let content = UNMutableNotificationContent()

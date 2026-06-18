@@ -1,5 +1,9 @@
 import UIKit
 
+extension Notification.Name {
+  static let approvalBadgeCleared = Notification.Name("ApprovalBadgeCleared")
+}
+
 enum AppTheme {
   static let canvas = UIColor { traits in
     traits.userInterfaceStyle == .dark
@@ -193,6 +197,42 @@ final class IconBadgeView: UIView {
   }
 }
 
+// MARK: - Message Segments
+
+enum MessageSegment {
+  case text(String)
+  case code(String)
+}
+
+func parseMessageSegments(_ raw: String) -> [MessageSegment] {
+  var segments: [MessageSegment] = []
+  var textBuffer = ""
+  var codeBuffer = ""
+  var inFence = false
+
+  for line in raw.components(separatedBy: "\n") {
+    if line.hasPrefix("```") {
+      if inFence {
+        if !codeBuffer.isEmpty { segments.append(.code(codeBuffer)) }
+        codeBuffer = ""
+        inFence = false
+      } else {
+        if !textBuffer.isEmpty { segments.append(.text(textBuffer)); textBuffer = "" }
+        inFence = true
+      }
+    } else if inFence {
+      codeBuffer += (codeBuffer.isEmpty ? "" : "\n") + line
+    } else {
+      textBuffer += (textBuffer.isEmpty ? "" : "\n") + line
+    }
+  }
+
+  if inFence && !codeBuffer.isEmpty { segments.append(.code(codeBuffer)) }
+  else if !textBuffer.isEmpty { segments.append(.text(textBuffer)) }
+
+  return segments
+}
+
 // MARK: - Markdown Rendering
 
 func markdownAttributedString(_ raw: String, baseFont: UIFont, textColor: UIColor) -> NSAttributedString {
@@ -234,7 +274,7 @@ func markdownAttributedString(_ raw: String, baseFont: UIFont, textColor: UIColo
   return output
 }
 
-private func applyInlineMarkdown(_ text: String, font: UIFont, color: UIColor, codeBg: UIColor) -> NSAttributedString {
+func applyInlineMarkdown(_ text: String, font: UIFont, color: UIColor, codeBg: UIColor) -> NSAttributedString {
   let boldFont = UIFont.boldSystemFont(ofSize: font.pointSize)
   let italicDesc = font.fontDescriptor.withSymbolicTraits(.traitItalic) ?? font.fontDescriptor
   let italicFont = UIFont(descriptor: italicDesc, size: font.pointSize)

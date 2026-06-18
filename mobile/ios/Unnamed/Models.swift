@@ -15,6 +15,8 @@ struct LoginResponse: Decodable {
 
 struct CreateSessionRequest: Encodable {
   let title: String?
+  let model: String?
+  let effort: String?
 }
 
 struct CreateSessionResponse: Decodable {
@@ -78,18 +80,44 @@ struct PendingApproval: Decodable {
 }
 
 struct ApprovalPayload: Decodable {
-  private let path: String?
-  private let filePath: String?
-  private let command: String?
-  private let cmd: String?
-  private let description: String?
+  let path: String?
+  let filePath: String?
+  let command: String?
+  let cmd: String?
+  let description: String?
+  let cwd: String?
+  let prompt: String?
+  let op: String?
+  let branch: String?
+  let remote: String?
 
-  var summary: String? { path ?? filePath ?? command ?? cmd ?? description }
+  var summary: String? { command ?? cmd ?? path ?? filePath ?? prompt ?? description }
+
+  var displayPairs: [(label: String, value: String)] {
+    var pairs: [(String, String)] = []
+    if let v = command ?? cmd   { pairs.append(("Command", v)) }
+    if let v = path ?? filePath { pairs.append(("Path", v)) }
+    if let v = cwd              { pairs.append(("Directory", v)) }
+    if let v = prompt           { pairs.append(("Prompt", v)) }
+    if let v = op               { pairs.append(("Operation", v)) }
+    if let v = branch           { pairs.append(("Branch", v)) }
+    if let v = remote           { pairs.append(("Remote", v)) }
+    if let v = description      { pairs.append(("Description", v)) }
+    return pairs
+  }
 
   enum CodingKeys: String, CodingKey {
-    case path, command, cmd, description
+    case path, command, cmd, description, cwd, prompt, op, branch, remote
     case filePath = "file_path"
   }
+}
+
+struct ToolEvent {
+  let executionId: String
+  let tool: String
+  var status: String
+  var output: String = ""
+  var result: String?
 }
 
 struct ApprovalDecision: Decodable { let status: String }

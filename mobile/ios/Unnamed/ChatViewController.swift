@@ -8,6 +8,7 @@ final class ChatViewController: UIViewController {
   private var messages: [ChatMessage] = []
   private var toolEvents: [ToolEvent] = []
   private var wsSubscriptionId: UUID?
+  private var isLoaded = false
 
   private let tableView = UITableView(frame: .zero, style: .plain)
   private let refreshControl = UIRefreshControl()
@@ -111,6 +112,7 @@ final class ChatViewController: UIViewController {
       setAgentStatus(nil)
       guard !messages.contains(where: { $0.id == message.id }) else { return }
       messages.append(message)
+      updateEmptyState()
       let ip = IndexPath(row: messages.count - 1, section: 0)
       tableView.insertRows(at: [ip], with: .none)
       if isNearBottom() { scrollToBottom(animated: true) }
@@ -395,11 +397,54 @@ final class ChatViewController: UIViewController {
       do {
         let loaded = try await client.messages(sessionId: chatSession.id)
         messages = loaded
+        isLoaded = true
         tableView.reloadData()
+        updateEmptyState()
         scrollToBottom(animated: false)
       } catch {
-        // Non-fatal: show empty state silently
+        isLoaded = true
+        updateEmptyState()
       }
+    }
+  }
+
+  private func updateEmptyState() {
+    guard isLoaded else { return }
+    if messages.isEmpty {
+      let container = UIView()
+      let icon = UIImageView(image: UIImage(systemName: "bubble.left.and.bubble.right"))
+      icon.tintColor = .tertiaryLabel
+      icon.contentMode = .scaleAspectFit
+      icon.translatesAutoresizingMaskIntoConstraints = false
+      NSLayoutConstraint.activate([
+        icon.widthAnchor.constraint(equalToConstant: 44),
+        icon.heightAnchor.constraint(equalToConstant: 44),
+      ])
+      let title = UILabel()
+      title.text = "Start the conversation"
+      title.font = UIFont.preferredFont(forTextStyle: .headline)
+      title.textAlignment = .center
+      let sub = UILabel()
+      sub.text = "Send a message below."
+      sub.font = UIFont.preferredFont(forTextStyle: .subheadline)
+      sub.textColor = .secondaryLabel
+      sub.textAlignment = .center
+      let stack = UIStackView(arrangedSubviews: [icon, title, sub])
+      stack.axis = .vertical
+      stack.alignment = .center
+      stack.spacing = 8
+      stack.setCustomSpacing(14, after: icon)
+      container.addSubview(stack)
+      stack.translatesAutoresizingMaskIntoConstraints = false
+      NSLayoutConstraint.activate([
+        stack.centerXAnchor.constraint(equalTo: container.centerXAnchor),
+        stack.centerYAnchor.constraint(equalTo: container.centerYAnchor, constant: -40),
+        stack.leadingAnchor.constraint(greaterThanOrEqualTo: container.leadingAnchor, constant: 32),
+        stack.trailingAnchor.constraint(lessThanOrEqualTo: container.trailingAnchor, constant: -32),
+      ])
+      tableView.backgroundView = container
+    } else {
+      tableView.backgroundView = nil
     }
   }
 
@@ -433,8 +478,9 @@ final class ChatViewController: UIViewController {
   }
 
   private func scrollToBottom(animated: Bool) {
-    guard !messages.isEmpty else { return }
-    tableView.scrollToRow(at: IndexPath(row: messages.count - 1, section: 0), at: .bottom, animated: animated)
+    let count = messages.count + toolEvents.count
+    guard count > 0 else { return }
+    tableView.scrollToRow(at: IndexPath(row: count - 1, section: 0), at: .bottom, animated: animated)
   }
 
   // MARK: - Actions
@@ -537,7 +583,7 @@ private final class MessageCell: UITableViewCell {
 
   private let bubbleStack = UIStackView()
   private let bubble = UIView()
-  private let label = UILabel()
+  private let contentStack = UIStackView()
   private let timeLabel = UILabel()
   private var stackLeading: NSLayoutConstraint!
   private var stackTrailing: NSLayoutConstraint!
@@ -552,23 +598,22 @@ private final class MessageCell: UITableViewCell {
 
     bubble.layer.cornerRadius = 18
     bubble.layer.cornerCurve = .continuous
+    bubble.clipsToBounds = true
 
-    label.numberOfLines = 0
-    label.font = UIFont.preferredFont(forTextStyle: .callout)
-    label.adjustsFontForContentSizeCategory = true
+    contentStack.axis = .vertical
+    contentStack.spacing = 0
+    bubble.addSubview(contentStack)
+    contentStack.translatesAutoresizingMaskIntoConstraints = false
+    NSLayoutConstraint.activate([
+      contentStack.topAnchor.constraint(equalTo: bubble.topAnchor),
+      contentStack.leadingAnchor.constraint(equalTo: bubble.leadingAnchor),
+      contentStack.trailingAnchor.constraint(equalTo: bubble.trailingAnchor),
+      contentStack.bottomAnchor.constraint(equalTo: bubble.bottomAnchor),
+    ])
 
     timeLabel.font = UIFont.preferredFont(forTextStyle: .caption2)
     timeLabel.textColor = .tertiaryLabel
     timeLabel.adjustsFontForContentSizeCategory = true
-
-    bubble.addSubview(label)
-    label.translatesAutoresizingMaskIntoConstraints = false
-    NSLayoutConstraint.activate([
-      label.topAnchor.constraint(equalTo: bubble.topAnchor, constant: 10),
-      label.leadingAnchor.constraint(equalTo: bubble.leadingAnchor, constant: 14),
-      label.trailingAnchor.constraint(equalTo: bubble.trailingAnchor, constant: -14),
-      label.bottomAnchor.constraint(equalTo: bubble.bottomAnchor, constant: -10),
-    ])
 
     bubbleStack.axis = .vertical
     bubbleStack.spacing = 3
@@ -584,7 +629,7 @@ private final class MessageCell: UITableViewCell {
     NSLayoutConstraint.activate([
       bubbleStack.topAnchor.constraint(equalTo: contentView.topAnchor, constant: 3),
       bubbleStack.bottomAnchor.constraint(equalTo: contentView.bottomAnchor, constant: -3),
-      bubbleStack.widthAnchor.constraint(lessThanOrEqualTo: contentView.widthAnchor, multiplier: 0.78),
+      bubbleStack.widthAnchor.constraint(lessThanOrEqualTo: contentView.widthAnchor, multiplier: 0.82),
     ])
   }
 
@@ -599,8 +644,24 @@ private final class MessageCell: UITableViewCell {
     rawContent = message.content
     let isUser = message.role == "user"
     let textColor: UIColor = isUser ? AppTheme.primaryText : .label
-    label.attributedText = markdownAttributedString(message.content, baseFont: label.font, textColor: textColor)
+    let baseFont = UIFont.preferredFont(forTextStyle: .callout)
+    let codeBg = UIColor.label.withAlphaComponent(0.08)
+
     bubble.backgroundColor = isUser ? AppTheme.primary : AppTheme.secondarySurface
+
+    contentStack.arrangedSubviews.forEach {
+      contentStack.removeArrangedSubview($0)
+      $0.removeFromSuperview()
+    }
+
+    for segment in parseMessageSegments(message.content) {
+      switch segment {
+      case .text(let str):
+        contentStack.addArrangedSubview(makeTextSegment(str, font: baseFont, textColor: textColor, codeBg: codeBg))
+      case .code(let code):
+        contentStack.addArrangedSubview(makeCodeSegment(code, textColor: textColor))
+      }
+    }
 
     if let epoch = message.createdAt {
       timeLabel.text = messageTime(epoch)
@@ -617,6 +678,63 @@ private final class MessageCell: UITableViewCell {
       stackTrailing.isActive = false
       stackLeading.isActive = true
     }
+  }
+
+  private func makeTextSegment(_ text: String, font: UIFont, textColor: UIColor, codeBg: UIColor) -> UIView {
+    let label = UILabel()
+    label.numberOfLines = 0
+    label.font = font
+    label.adjustsFontForContentSizeCategory = true
+    label.attributedText = applyInlineMarkdown(text, font: font, color: textColor, codeBg: codeBg)
+
+    let wrapper = UIView()
+    wrapper.addSubview(label)
+    label.translatesAutoresizingMaskIntoConstraints = false
+    NSLayoutConstraint.activate([
+      label.leadingAnchor.constraint(equalTo: wrapper.leadingAnchor, constant: 14),
+      label.trailingAnchor.constraint(equalTo: wrapper.trailingAnchor, constant: -14),
+      label.topAnchor.constraint(equalTo: wrapper.topAnchor, constant: 10),
+      label.bottomAnchor.constraint(equalTo: wrapper.bottomAnchor, constant: -10),
+    ])
+    return wrapper
+  }
+
+  private func makeCodeSegment(_ code: String, textColor: UIColor) -> UIView {
+    let container = UIView()
+    container.backgroundColor = UIColor.label.withAlphaComponent(0.1)
+
+    let scrollView = UIScrollView()
+    scrollView.showsHorizontalScrollIndicator = true
+    scrollView.showsVerticalScrollIndicator = false
+    scrollView.alwaysBounceHorizontal = false
+
+    let codeLabel = UILabel()
+    codeLabel.numberOfLines = 0
+    codeLabel.lineBreakMode = .byClipping
+    codeLabel.font = UIFont.monospacedSystemFont(ofSize: 12, weight: .regular)
+    codeLabel.text = code
+    codeLabel.textColor = textColor
+
+    scrollView.addSubview(codeLabel)
+    codeLabel.translatesAutoresizingMaskIntoConstraints = false
+    NSLayoutConstraint.activate([
+      codeLabel.leadingAnchor.constraint(equalTo: scrollView.contentLayoutGuide.leadingAnchor, constant: 14),
+      codeLabel.topAnchor.constraint(equalTo: scrollView.contentLayoutGuide.topAnchor, constant: 10),
+      codeLabel.bottomAnchor.constraint(equalTo: scrollView.contentLayoutGuide.bottomAnchor, constant: -10),
+      codeLabel.trailingAnchor.constraint(equalTo: scrollView.contentLayoutGuide.trailingAnchor, constant: -14),
+      scrollView.frameLayoutGuide.heightAnchor.constraint(equalTo: scrollView.contentLayoutGuide.heightAnchor),
+    ])
+
+    container.addSubview(scrollView)
+    scrollView.translatesAutoresizingMaskIntoConstraints = false
+    NSLayoutConstraint.activate([
+      scrollView.leadingAnchor.constraint(equalTo: container.leadingAnchor),
+      scrollView.trailingAnchor.constraint(equalTo: container.trailingAnchor),
+      scrollView.topAnchor.constraint(equalTo: container.topAnchor),
+      scrollView.bottomAnchor.constraint(equalTo: container.bottomAnchor),
+    ])
+
+    return container
   }
 }
 

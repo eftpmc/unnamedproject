@@ -44,8 +44,8 @@ final class APIClient {
     try await request(path: "/sessions")
   }
 
-  func createSession(title: String? = nil) async throws -> CreateSessionResponse {
-    try await request(path: "/sessions", method: "POST", body: CreateSessionRequest(title: title))
+  func createSession(title: String? = nil, model: String? = nil, effort: String? = nil) async throws -> CreateSessionResponse {
+    try await request(path: "/sessions", method: "POST", body: CreateSessionRequest(title: title, model: model, effort: effort))
   }
 
   func messages(sessionId: String) async throws -> [ChatMessage] {

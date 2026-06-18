@@ -60,10 +60,31 @@ final class ChatsListViewController: UIViewController {
   }
 
   @objc private func composeTapped() {
+    let sheet = UIAlertController(title: "New Chat", message: "Choose a model", preferredStyle: .actionSheet)
+
+    let options: [(display: String, model: String, effort: String)] = [
+      ("Haiku · Low",     "claude-haiku-4-5-20251001", "low"),
+      ("Sonnet · Medium", "claude-sonnet-4-6",         "medium"),
+      ("Sonnet · High",   "claude-sonnet-4-6",         "high"),
+      ("Opus · High",     "claude-opus-4-8",           "high"),
+    ]
+    for opt in options {
+      sheet.addAction(UIAlertAction(title: opt.display, style: .default) { [weak self] _ in
+        self?.startChat(model: opt.model, effort: opt.effort)
+      })
+    }
+    sheet.addAction(UIAlertAction(title: "Default", style: .default) { [weak self] _ in
+      self?.startChat(model: nil, effort: nil)
+    })
+    sheet.addAction(UIAlertAction(title: "Cancel", style: .cancel))
+    present(sheet, animated: true)
+  }
+
+  private func startChat(model: String?, effort: String?) {
     Task {
       do {
-        let created = try await client.createSession()
-        let chat = ChatSession(id: created.id, title: nil, effort: nil, model: nil,
+        let created = try await client.createSession(model: model, effort: effort)
+        let chat = ChatSession(id: created.id, title: nil, effort: effort, model: model,
                                pinnedProjectId: nil, createdAt: nil, updatedAt: nil)
         onSelectChat?(chat)
       } catch {

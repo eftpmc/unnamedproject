@@ -1,4 +1,5 @@
 import UIKit
+import UserNotifications
 
 final class ApprovalsViewController: UIViewController {
   private let appSession: AppSession
@@ -30,6 +31,16 @@ final class ApprovalsViewController: UIViewController {
   override func viewDidAppear(_ animated: Bool) {
     super.viewDidAppear(animated)
     startPolling()
+    clearBadge()
+  }
+
+  private func clearBadge() {
+    if #available(iOS 16.0, *) {
+      Task { try? await UNUserNotificationCenter.current().setBadgeCount(0) }
+    } else {
+      UIApplication.shared.applicationIconBadgeNumber = 0
+    }
+    NotificationCenter.default.post(name: .approvalBadgeCleared, object: nil)
   }
 
   override func viewWillDisappear(_ animated: Bool) {

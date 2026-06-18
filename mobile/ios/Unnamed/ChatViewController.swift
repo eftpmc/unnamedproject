@@ -6,6 +6,7 @@ final class ChatViewController: UIViewController {
   private lazy var client = APIClient(session: appSession)
 
   private var messages: [ChatMessage] = []
+  private var toolEvents: [ToolEvent] = []
   private var wsSubscriptionId: UUID?
 
   private let tableView = UITableView(frame: .zero, style: .plain)
@@ -135,19 +136,16 @@ final class ChatViewController: UIViewController {
     case .turnComplete(let sid, _) where sid == chatSession.id:
       setAgentStatus(nil)
       setSending(false)
+      // Finalize any still-running tool events
+      for i in toolEvents.indices where toolEvents[i].status == "running" {
+        toolEvents[i].status = "done"
+      }
+      tableView.reloadData()
       Task { await reloadMessages() }
 
-    case .executionUpdate(let sid, let tool, let status) where sid == chatSession.id || sid == nil:
-      guard sid == chatSession.id else { break }
-      switch status {
-      case "running":
-        let name = tool.map { formatToolName($0) } ?? "Working"
-        setAgentStatus("\(name)…")
-      case "awaiting_approval":
-        setAgentStatus("Waiting for approval…")
-      default:
-        setAgentStatus(nil)
-      }
+    case .executionUpdate(let sid, let executionId, let tool, let status, let chunk, let result)
+        where sid == chatSession.id:
+      handleExecutionUpdate(executionId: executionId, tool: tool, status: status, chunk: chunk, result: result)
 
     case .sessionTitleUpdated(let sid, let t) where sid == chatSession.id:
       title = t
@@ -170,6 +168,40 @@ final class ChatViewController: UIViewController {
 
   private func formatToolName(_ raw: String) -> String {
     raw.split(separator: "_").map { $0.capitalized }.joined(separator: " ")
+  }
+
+  private func handleExecutionUpdate(executionId: String, tool: String?, status: String?, chunk: String?, result: String?) {
+    if let status {
+      switch status {
+      case "running":
+        let name = tool.map { formatToolName($0) } ?? "Working"
+        setAgentStatus("\(name)…")
+        if !toolEvents.contains(where: { $0.executionId == executionId }) {
+          toolEvents.append(ToolEvent(executionId: executionId, tool: tool ?? "tool", status: "running"))
+          let ip = IndexPath(row: messages.count + toolEvents.count - 1, section: 0)
+          tableView.insertRows(at: [ip], with: .fade)
+          if isNearBottom() { scrollToBottom(animated: true) }
+        }
+      case "awaiting_approval":
+        setAgentStatus("Waiting for approval…")
+        updateToolEvent(executionId: executionId) { $0.status = "running" }
+      case "done", "error":
+        if status == "done" { setAgentStatus(nil) }
+        updateToolEvent(executionId: executionId) {
+          $0.status = status
+          $0.result = result
+        }
+      default: break
+      }
+    } else if let chunk {
+      updateToolEvent(executionId: executionId) { $0.output += chunk }
+    }
+  }
+
+  private func updateToolEvent(executionId: String, update: (inout ToolEvent) -> Void) {
+    guard let idx = toolEvents.firstIndex(where: { $0.executionId == executionId }) else { return }
+    update(&toolEvents[idx])
+    tableView.reloadRows(at: [IndexPath(row: messages.count + idx, section: 0)], with: .none)
   }
 
   // MARK: - Layout
@@ -260,6 +292,7 @@ final class ChatViewController: UIViewController {
     tableView.backgroundColor = .clear
     tableView.separatorStyle = .none
     tableView.register(MessageCell.self, forCellReuseIdentifier: MessageCell.reuseID)
+    tableView.register(ToolEventCell.self, forCellReuseIdentifier: ToolEventCell.reuseID)
     tableView.dataSource = self
     tableView.rowHeight = UITableView.automaticDimension
     tableView.estimatedRowHeight = 80
@@ -477,13 +510,21 @@ final class ChatViewController: UIViewController {
 // MARK: - UITableViewDataSource
 
 extension ChatViewController: UITableViewDataSource {
-  func tableView(_ tableView: UITableView, numberOfRowsInSection section: Int) -> Int { messages.count }
+  func tableView(_ tableView: UITableView, numberOfRowsInSection section: Int) -> Int {
+    messages.count + toolEvents.count
+  }
 
   func tableView(_ tableView: UITableView, cellForRowAt indexPath: IndexPath) -> UITableViewCell {
-    let cell = tableView.dequeueReusableCell(withIdentifier: MessageCell.reuseID, for: indexPath) as! MessageCell
-    cell.configure(with: messages[indexPath.row])
-    cell.onLongPress = { [weak self] text in self?.showMessageActions(text) }
-    return cell
+    if indexPath.row < messages.count {
+      let cell = tableView.dequeueReusableCell(withIdentifier: MessageCell.reuseID, for: indexPath) as! MessageCell
+      cell.configure(with: messages[indexPath.row])
+      cell.onLongPress = { [weak self] text in self?.showMessageActions(text) }
+      return cell
+    } else {
+      let cell = tableView.dequeueReusableCell(withIdentifier: ToolEventCell.reuseID, for: indexPath) as! ToolEventCell
+      cell.configure(with: toolEvents[indexPath.row - messages.count])
+      return cell
+    }
   }
 }
 
@@ -590,4 +631,127 @@ private func messageTime(_ epoch: Int) -> String {
   fullFmt.dateStyle = .short
   fullFmt.timeStyle = .short
   return fullFmt.string(from: date)
+}
+
+// MARK: - ToolEventCell
+
+private final class ToolEventCell: UITableViewCell {
+  static let reuseID = "ToolEventCell"
+
+  private let pill = UIView()
+  private let iconView = UIImageView()
+  private let nameLabel = UILabel()
+  private let statusLabel = UILabel()
+  private let outputLabel = UILabel()
+  private let spinner = UIActivityIndicatorView(style: .medium)
+
+  override init(style: UITableViewCell.CellStyle, reuseIdentifier: String?) {
+    super.init(style: style, reuseIdentifier: reuseIdentifier)
+    backgroundColor = .clear
+    selectionStyle = .none
+    buildLayout()
+  }
+
+  required init?(coder: NSCoder) { fatalError() }
+
+  private func buildLayout() {
+    pill.layer.cornerRadius = 12
+    pill.layer.cornerCurve = .continuous
+    pill.layer.borderWidth = 1
+
+    iconView.contentMode = .scaleAspectFit
+    iconView.translatesAutoresizingMaskIntoConstraints = false
+    NSLayoutConstraint.activate([
+      iconView.widthAnchor.constraint(equalToConstant: 15),
+      iconView.heightAnchor.constraint(equalToConstant: 15),
+    ])
+
+    nameLabel.font = UIFont.preferredFont(forTextStyle: .footnote)
+    nameLabel.textColor = .label
+
+    spinner.hidesWhenStopped = true
+    spinner.transform = CGAffineTransform(scaleX: 0.7, y: 0.7)
+
+    statusLabel.font = UIFont.preferredFont(forTextStyle: .caption2)
+    statusLabel.textColor = .tertiaryLabel
+
+    let headerRow = UIStackView(arrangedSubviews: [iconView, nameLabel, UIView(), spinner, statusLabel])
+    headerRow.axis = .horizontal
+    headerRow.alignment = .center
+    headerRow.spacing = 6
+
+    outputLabel.font = UIFont.monospacedSystemFont(ofSize: 11, weight: .regular)
+    outputLabel.textColor = .secondaryLabel
+    outputLabel.numberOfLines = 5
+    outputLabel.isHidden = true
+
+    let stack = UIStackView(arrangedSubviews: [headerRow, outputLabel])
+    stack.axis = .vertical
+    stack.spacing = 6
+    stack.isLayoutMarginsRelativeArrangement = true
+    stack.directionalLayoutMargins = NSDirectionalEdgeInsets(top: 10, leading: 12, bottom: 10, trailing: 12)
+
+    pill.addSubview(stack)
+    stack.translatesAutoresizingMaskIntoConstraints = false
+    NSLayoutConstraint.activate([
+      stack.leadingAnchor.constraint(equalTo: pill.leadingAnchor),
+      stack.trailingAnchor.constraint(equalTo: pill.trailingAnchor),
+      stack.topAnchor.constraint(equalTo: pill.topAnchor),
+      stack.bottomAnchor.constraint(equalTo: pill.bottomAnchor),
+    ])
+
+    contentView.addSubview(pill)
+    pill.translatesAutoresizingMaskIntoConstraints = false
+    NSLayoutConstraint.activate([
+      pill.leadingAnchor.constraint(equalTo: contentView.leadingAnchor, constant: 16),
+      pill.trailingAnchor.constraint(equalTo: contentView.trailingAnchor, constant: -80),
+      pill.topAnchor.constraint(equalTo: contentView.topAnchor, constant: 4),
+      pill.bottomAnchor.constraint(equalTo: contentView.bottomAnchor, constant: -4),
+    ])
+  }
+
+  func configure(with event: ToolEvent) {
+    let name = event.tool.split(separator: "_").map { $0.capitalized }.joined(separator: " ")
+    nameLabel.text = name
+
+    switch event.status {
+    case "running":
+      iconView.image = UIImage(systemName: "gear")
+      iconView.tintColor = AppTheme.accent
+      pill.backgroundColor = AppTheme.surface
+      pill.layer.borderColor = AppTheme.border.cgColor
+      spinner.startAnimating()
+      statusLabel.text = nil
+    case "done":
+      iconView.image = UIImage(systemName: "checkmark.circle.fill")
+      iconView.tintColor = .systemGreen
+      pill.backgroundColor = UIColor.systemGreen.withAlphaComponent(0.06)
+      pill.layer.borderColor = UIColor.systemGreen.withAlphaComponent(0.25).cgColor
+      spinner.stopAnimating()
+      statusLabel.text = "done"
+    case "error":
+      iconView.image = UIImage(systemName: "xmark.circle.fill")
+      iconView.tintColor = .systemRed
+      pill.backgroundColor = UIColor.systemRed.withAlphaComponent(0.06)
+      pill.layer.borderColor = UIColor.systemRed.withAlphaComponent(0.25).cgColor
+      spinner.stopAnimating()
+      statusLabel.text = "error"
+    default:
+      iconView.image = UIImage(systemName: "gear")
+      iconView.tintColor = .secondaryLabel
+      pill.backgroundColor = AppTheme.surface
+      pill.layer.borderColor = AppTheme.border.cgColor
+      spinner.stopAnimating()
+      statusLabel.text = nil
+    }
+
+    let output = event.output.trimmingCharacters(in: .whitespacesAndNewlines)
+    let display = output.isEmpty ? (event.result?.trimmingCharacters(in: .whitespacesAndNewlines) ?? "") : output
+    if display.isEmpty {
+      outputLabel.isHidden = true
+    } else {
+      outputLabel.text = display
+      outputLabel.isHidden = false
+    }
+  }
 }

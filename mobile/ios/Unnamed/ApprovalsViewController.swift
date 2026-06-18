@@ -46,6 +46,7 @@ final class ApprovalsViewController: UIViewController {
     tableView.separatorStyle = .none
     tableView.register(ApprovalCell.self, forCellReuseIdentifier: ApprovalCell.reuseID)
     tableView.dataSource = self
+    tableView.delegate = self
     tableView.rowHeight = UITableView.automaticDimension
     tableView.estimatedRowHeight = 140
     tableView.contentInset = UIEdgeInsets(top: 12, left: 0, bottom: 24, right: 0)
@@ -181,6 +182,25 @@ final class ApprovalsViewController: UIViewController {
         showError(error)
       }
     }
+  }
+}
+
+// MARK: - UITableViewDelegate
+
+extension ApprovalsViewController: UITableViewDelegate {
+  func tableView(_ tableView: UITableView, didSelectRowAt indexPath: IndexPath) {
+    tableView.deselectRow(at: indexPath, animated: true)
+    let approval = approvals[indexPath.row]
+    let detail = ApprovalDetailViewController(approval: approval)
+    detail.onApprove = { [weak self] in self?.handleApprove(at: indexPath.row) }
+    detail.onDeny = { [weak self] in self?.handleDeny(at: indexPath.row) }
+    let nav = UINavigationController(rootViewController: detail)
+    nav.modalPresentationStyle = .pageSheet
+    if let sheet = nav.sheetPresentationController {
+      sheet.detents = [.medium(), .large()]
+      sheet.prefersGrabberVisible = true
+    }
+    present(nav, animated: true)
   }
 }
 

@@ -66,6 +66,49 @@ extension UIView {
       bottomAnchor.constraint(equalTo: superview.layoutMarginsGuide.bottomAnchor)
     ])
   }
+
+  func pinToSuperviewEdges() {
+    guard let superview else { return }
+    translatesAutoresizingMaskIntoConstraints = false
+    NSLayoutConstraint.activate([
+      leadingAnchor.constraint(equalTo: superview.leadingAnchor),
+      trailingAnchor.constraint(equalTo: superview.trailingAnchor),
+      topAnchor.constraint(equalTo: superview.topAnchor),
+      bottomAnchor.constraint(equalTo: superview.bottomAnchor)
+    ])
+  }
+}
+
+enum ChatTimeGroup: Int {
+  case today, yesterday, last7, older
+  var label: String {
+    switch self {
+    case .today: return "Today"
+    case .yesterday: return "Yesterday"
+    case .last7: return "Previous 7 Days"
+    case .older: return "Older"
+    }
+  }
+}
+
+/// Groups chats into Today / Yesterday / Previous 7 Days / Older, newest-first
+/// within each group. Empty groups are omitted. Uses updatedAt, falling back to createdAt.
+func groupChatsByTime(_ chats: [ChatSession], now: Date = Date()) -> [(group: ChatTimeGroup, chats: [ChatSession])] {
+  let cal = Calendar.current
+  func ts(_ c: ChatSession) -> Int { c.updatedAt ?? c.createdAt ?? 0 }
+  func bucket(_ c: ChatSession) -> ChatTimeGroup {
+    let d = Date(timeIntervalSince1970: TimeInterval(ts(c)))
+    if cal.isDateInToday(d) { return .today }
+    if cal.isDateInYesterday(d) { return .yesterday }
+    if let days = cal.dateComponents([.day], from: d, to: now).day, days < 7 { return .last7 }
+    return .older
+  }
+  var map: [ChatTimeGroup: [ChatSession]] = [:]
+  for c in chats { map[bucket(c), default: []].append(c) }
+  return [ChatTimeGroup.today, .yesterday, .last7, .older].compactMap { g in
+    guard let items = map[g], !items.isEmpty else { return nil }
+    return (g, items.sorted { ts($0) > ts($1) })
+  }
 }
 
 extension UIViewController {

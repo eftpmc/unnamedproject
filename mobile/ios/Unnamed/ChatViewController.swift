@@ -677,13 +677,12 @@ private final class MessageCell: UITableViewCell {
       timeLabel.isHidden = true
     }
 
-    // Width: user bubble is capped; assistant spans full width.
+    // Width: user bubble is capped (right-aligned via leading-inactive + trailing + width cap);
+    // assistant spans full width (leading + trailing both active, no width cap) so the label wraps
+    // against the screen margins instead of reporting an unwrapped intrinsic width.
     bubbleMaxWidth.isActive = isUser
-    if isUser {
-      stackLeading.isActive = false; stackTrailing.isActive = true
-    } else {
-      stackTrailing.isActive = false; stackLeading.isActive = true
-    }
+    stackTrailing.isActive = true
+    stackLeading.isActive = !isUser
   }
 
   private func makeTextSegment(_ text: String, font: UIFont, textColor: UIColor, codeBg: UIColor, hInset: CGFloat = 14) -> UIView {

@@ -225,7 +225,27 @@ extension SidebarViewController: UITableViewDataSource, UITableViewDelegate {
   func numberOfSections(in tableView: UITableView) -> Int { grouped.count }
   func tableView(_ tableView: UITableView, numberOfRowsInSection section: Int) -> Int { grouped[section].chats.count }
 
-  func tableView(_ tableView: UITableView, titleForHeaderInSection section: Int) -> String? { grouped[section].group.label }
+  func tableView(_ tableView: UITableView, viewForHeaderInSection section: Int) -> UIView? {
+    let container = UIView()
+    container.backgroundColor = .clear
+
+    let label = UILabel()
+    label.text = grouped[section].group.label
+    label.font = UIFont.preferredFont(forTextStyle: .footnote)
+    label.adjustsFontForContentSizeCategory = true
+    label.textColor = .secondaryLabel
+    container.addSubview(label)
+    label.translatesAutoresizingMaskIntoConstraints = false
+    NSLayoutConstraint.activate([
+      label.leadingAnchor.constraint(equalTo: container.leadingAnchor, constant: 12),
+      label.trailingAnchor.constraint(lessThanOrEqualTo: container.trailingAnchor, constant: -12),
+      label.topAnchor.constraint(equalTo: container.topAnchor, constant: 6),
+      label.bottomAnchor.constraint(equalTo: container.bottomAnchor, constant: -6),
+    ])
+    return container
+  }
+
+  func tableView(_ tableView: UITableView, heightForHeaderInSection section: Int) -> CGFloat { 28 }
 
   func tableView(_ tableView: UITableView, cellForRowAt indexPath: IndexPath) -> UITableViewCell {
     let cell = tableView.dequeueReusableCell(withIdentifier: "chat", for: indexPath)

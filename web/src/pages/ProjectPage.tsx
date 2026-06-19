@@ -358,7 +358,7 @@ export default function ProjectPage() {
                   {groups.map(group => (
                     <div key={group.label}>
                       {groups.length > 1 && (
-                        <div className="mb-2 text-[11px] font-semibold uppercase tracking-wide text-faint-fg">{group.label}</div>
+                        <div className="mb-2 text-[11px] font-semibold text-faint-fg">{group.label}</div>
                       )}
                       <div className="flex flex-col gap-2">
                         {group.items.map(p => (

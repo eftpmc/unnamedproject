@@ -144,7 +144,7 @@ export default function ChatsPage() {
                   {groups.map(({ label, chats: groupChats }) => (
                     <div key={label}>
                       {label && (
-                        <div className="mb-2 px-1 text-[11px] font-semibold uppercase tracking-wide text-faint-fg">
+                        <div className="mb-2 px-1 text-[11px] font-semibold text-faint-fg">
                           {label}
                         </div>
                       )}

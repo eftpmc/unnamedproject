@@ -897,7 +897,7 @@ function ScopePopover({
         </button>
       </PopoverTrigger>
       <PopoverContent align="start" className="w-72 p-2">
-        <div className="px-2 pb-1.5 pt-1 text-[11px] font-semibold uppercase tracking-wide text-faint-fg">
+        <div className="px-2 pb-1.5 pt-1 text-[11px] font-semibold text-faint-fg">
           Scope of this chat
         </div>
         <ScopeOption

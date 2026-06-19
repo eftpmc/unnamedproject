@@ -8,7 +8,7 @@ enum WSEvent {
   case messageCreated(sessionId: String, message: ChatMessage)
   case turnComplete(sessionId: String, status: String)
   case approvalRequested(sessionId: String?, executionId: String, approvalId: String, action: String)
-  case executionUpdate(sessionId: String?, tool: String?, status: String)
+  case executionUpdate(sessionId: String?, executionId: String, tool: String?, status: String?, chunk: String?, result: String?)
   case sessionTitleUpdated(sessionId: String, title: String)
   case connected
   case disconnected
@@ -26,9 +26,11 @@ private struct RawWSEvent: Decodable {
   let action: String?
   let tool: String?
   let title: String?
+  let chunk: String?
+  let result: String?
 
   enum CodingKeys: String, CodingKey {
-    case type, sessionId, messageId, delta, message, status, action, tool, title
+    case type, sessionId, messageId, delta, message, status, action, tool, title, chunk, result
     case executionId = "executionId"
     case approvalId = "approvalId"
   }
@@ -53,7 +55,7 @@ private extension WSEvent {
       guard let eid = raw.executionId, let aid = raw.approvalId, let act = raw.action else { return nil }
       self = .approvalRequested(sessionId: raw.sessionId, executionId: eid, approvalId: aid, action: act)
     case "execution_update":
-      self = .executionUpdate(sessionId: raw.sessionId, tool: raw.tool, status: raw.status ?? "running")
+      self = .executionUpdate(sessionId: raw.sessionId, executionId: raw.executionId ?? "", tool: raw.tool, status: raw.status, chunk: raw.chunk, result: raw.result)
     case "session_title_updated":
       guard let sid = raw.sessionId, let t = raw.title else { return nil }
       self = .sessionTitleUpdated(sessionId: sid, title: t)

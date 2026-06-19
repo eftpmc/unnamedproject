@@ -28,6 +28,7 @@
 		AF1F48422D0307B40044C1D9 /* WebSocketService.swift in Sources */ = {isa = PBXBuildFile; fileRef = FF1748412D0307B40044C1D9 /* WebSocketService.swift */; };
 		B11F48422D0307B40044C1D9 /* ApprovalDetailViewController.swift in Sources */ = {isa = PBXBuildFile; fileRef = E11748412D0307B40044C1D9 /* ApprovalDetailViewController.swift */; };
 		B21F48422D0307B40044C1D9 /* ApprovalCenter.swift in Sources */ = {isa = PBXBuildFile; fileRef = D11748412D0307B40044C1D9 /* ApprovalCenter.swift */; };
+		C21F48422D0307B40044C1D9 /* SlideOverController.swift in Sources */ = {isa = PBXBuildFile; fileRef = C11748412D0307B40044C1D9 /* SlideOverController.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
@@ -54,6 +55,7 @@
 		FF1748412D0307B40044C1D9 /* WebSocketService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = WebSocketService.swift; path = Unnamed/WebSocketService.swift; sourceTree = "<group>"; };
 		E11748412D0307B40044C1D9 /* ApprovalDetailViewController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = ApprovalDetailViewController.swift; path = Unnamed/ApprovalDetailViewController.swift; sourceTree = "<group>"; };
 		D11748412D0307B40044C1D9 /* ApprovalCenter.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = ApprovalCenter.swift; path = Unnamed/ApprovalCenter.swift; sourceTree = "<group>"; };
+		C11748412D0307B40044C1D9 /* SlideOverController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = SlideOverController.swift; path = Unnamed/SlideOverController.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -88,6 +90,7 @@
 				FF1748412D0307B40044C1D9 /* WebSocketService.swift */,
 				E11748412D0307B40044C1D9 /* ApprovalDetailViewController.swift */,
 				D11748412D0307B40044C1D9 /* ApprovalCenter.swift */,
+				C11748412D0307B40044C1D9 /* SlideOverController.swift */,
 				13B07FB51A68108700A75B9A /* Images.xcassets */,
 				13B07FB61A68108700A75B9A /* Info.plist */,
 				AA286B85B6C04FC6940260E9 /* SplashScreen.storyboard */,
@@ -218,6 +221,7 @@
 				AF1F48422D0307B40044C1D9 /* WebSocketService.swift in Sources */,
 				B11F48422D0307B40044C1D9 /* ApprovalDetailViewController.swift in Sources */,
 				B21F48422D0307B40044C1D9 /* ApprovalCenter.swift in Sources */,
+				C21F48422D0307B40044C1D9 /* SlideOverController.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};

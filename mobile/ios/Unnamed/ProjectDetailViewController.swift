@@ -13,6 +13,8 @@ final class ProjectDetailViewController: UIViewController {
   private let tableView = UITableView(frame: .zero, style: .plain)
   private let refreshControl = UIRefreshControl()
   private let emptyLabel = UILabel()
+  private let segmentedControl = UISegmentedControl(items: ["Chats", "Plans", "Files"])
+  private var segmentedControlContainer: UIView!
 
   init(appSession: AppSession, project: Project) {
     self.appSession = appSession
@@ -34,9 +36,70 @@ final class ProjectDetailViewController: UIViewController {
       action: #selector(composeTapped)
     )
 
+    setupSegmentedControl()
     setupTable()
     setupEmptyState()
     load()
+  }
+
+  private func setupSegmentedControl() {
+    segmentedControl.selectedSegmentIndex = 0
+    segmentedControl.addTarget(self, action: #selector(segmentChanged), for: .valueChanged)
+
+    let container = UIView()
+    container.backgroundColor = AppTheme.canvas
+    container.addSubview(segmentedControl)
+    segmentedControl.translatesAutoresizingMaskIntoConstraints = false
+    NSLayoutConstraint.activate([
+      segmentedControl.leadingAnchor.constraint(equalTo: container.leadingAnchor, constant: 16),
+      segmentedControl.trailingAnchor.constraint(equalTo: container.trailingAnchor, constant: -16),
+      segmentedControl.topAnchor.constraint(equalTo: container.topAnchor, constant: 8),
+      segmentedControl.bottomAnchor.constraint(equalTo: container.bottomAnchor, constant: -8),
+    ])
+
+    view.addSubview(container)
+    container.translatesAutoresizingMaskIntoConstraints = false
+    NSLayoutConstraint.activate([
+      container.leadingAnchor.constraint(equalTo: view.leadingAnchor),
+      container.trailingAnchor.constraint(equalTo: view.trailingAnchor),
+      container.topAnchor.constraint(equalTo: view.safeAreaLayoutGuide.topAnchor),
+    ])
+    segmentedControlContainer = container
+  }
+
+  @objc private func segmentChanged() {
+    updateContentForSegment()
+  }
+
+  private func updateContentForSegment() {
+    switch segmentedControl.selectedSegmentIndex {
+    case 0:
+      tableView.backgroundView = nil
+      emptyLabel.isHidden = !chats.isEmpty
+    default:
+      emptyLabel.isHidden = true
+      let title = segmentedControl.selectedSegmentIndex == 1 ? "Plans" : "Files"
+      tableView.backgroundView = makeComingSoonView(title: title)
+    }
+    tableView.reloadData()
+  }
+
+  private func makeComingSoonView(title: String) -> UIView {
+    let container = UIView()
+    let label = UILabel()
+    label.text = "Coming soon"
+    label.font = UIFont.preferredFont(forTextStyle: .subheadline)
+    label.textColor = .tertiaryLabel
+    label.textAlignment = .center
+    container.addSubview(label)
+    label.translatesAutoresizingMaskIntoConstraints = false
+    NSLayoutConstraint.activate([
+      label.centerXAnchor.constraint(equalTo: container.centerXAnchor),
+      label.centerYAnchor.constraint(equalTo: container.centerYAnchor),
+      label.leadingAnchor.constraint(greaterThanOrEqualTo: container.leadingAnchor, constant: 32),
+      label.trailingAnchor.constraint(lessThanOrEqualTo: container.trailingAnchor, constant: -32),
+    ])
+    return container
   }
 
   private func setupEmptyState() {
@@ -72,7 +135,7 @@ final class ProjectDetailViewController: UIViewController {
     NSLayoutConstraint.activate([
       tableView.leadingAnchor.constraint(equalTo: view.leadingAnchor),
       tableView.trailingAnchor.constraint(equalTo: view.trailingAnchor),
-      tableView.topAnchor.constraint(equalTo: view.topAnchor),
+      tableView.topAnchor.constraint(equalTo: segmentedControlContainer.bottomAnchor),
       tableView.bottomAnchor.constraint(equalTo: view.bottomAnchor),
     ])
   }
@@ -119,41 +182,18 @@ final class ProjectDetailViewController: UIViewController {
       stack.addArrangedSubview(repoStack)
     }
 
-    let divider = UIView()
-    divider.backgroundColor = AppTheme.border
-    divider.heightAnchor.constraint(equalToConstant: 0.5).isActive = true
-
-    let sectionLabel = UILabel()
-    sectionLabel.text = "CHATS"
-    sectionLabel.font = UIFont.preferredFont(forTextStyle: .caption1)
-    sectionLabel.textColor = .secondaryLabel
-
-    let bottomStack = UIStackView()
-    bottomStack.axis = .vertical
-    bottomStack.spacing = 0
-    bottomStack.addArrangedSubview(divider)
-
-    let sectionWrapper = UIStackView(arrangedSubviews: [sectionLabel])
-    sectionWrapper.isLayoutMarginsRelativeArrangement = true
-    sectionWrapper.directionalLayoutMargins = NSDirectionalEdgeInsets(top: 10, leading: 16, bottom: 4, trailing: 16)
-    bottomStack.addArrangedSubview(sectionWrapper)
-
-    let outerStack = UIStackView(arrangedSubviews: [stack, bottomStack])
-    outerStack.axis = .vertical
-    outerStack.spacing = 0
-
-    wrapper.addSubview(outerStack)
-    outerStack.translatesAutoresizingMaskIntoConstraints = false
+    wrapper.addSubview(stack)
+    stack.translatesAutoresizingMaskIntoConstraints = false
     NSLayoutConstraint.activate([
-      outerStack.leadingAnchor.constraint(equalTo: wrapper.leadingAnchor),
-      outerStack.trailingAnchor.constraint(equalTo: wrapper.trailingAnchor),
-      outerStack.topAnchor.constraint(equalTo: wrapper.topAnchor),
-      outerStack.bottomAnchor.constraint(equalTo: wrapper.bottomAnchor),
+      stack.leadingAnchor.constraint(equalTo: wrapper.leadingAnchor),
+      stack.trailingAnchor.constraint(equalTo: wrapper.trailingAnchor),
+      stack.topAnchor.constraint(equalTo: wrapper.topAnchor),
+      stack.bottomAnchor.constraint(equalTo: wrapper.bottomAnchor),
     ])
 
     // Size the header view
-    outerStack.layoutIfNeeded()
-    let height = outerStack.systemLayoutSizeFitting(
+    stack.layoutIfNeeded()
+    let height = stack.systemLayoutSizeFitting(
       CGSize(width: UIScreen.main.bounds.width, height: UIView.layoutFittingCompressedSize.height),
       withHorizontalFittingPriority: .required,
       verticalFittingPriority: .fittingSizeLevel
@@ -172,8 +212,7 @@ final class ProjectDetailViewController: UIViewController {
         let sessions = try await all
         activeIds = Set(try await active)
         chats = sessions.filter { $0.pinnedProjectId == project.id }
-        tableView.reloadData()
-        emptyLabel.isHidden = !chats.isEmpty
+        updateContentForSegment()
       } catch {
         showError(error)
       }
@@ -202,7 +241,9 @@ final class ProjectDetailViewController: UIViewController {
 }
 
 extension ProjectDetailViewController: UITableViewDataSource, UITableViewDelegate {
-  func tableView(_ tableView: UITableView, numberOfRowsInSection section: Int) -> Int { chats.count }
+  func tableView(_ tableView: UITableView, numberOfRowsInSection section: Int) -> Int {
+    segmentedControl.selectedSegmentIndex == 0 ? chats.count : 0
+  }
 
   func tableView(_ tableView: UITableView, cellForRowAt indexPath: IndexPath) -> UITableViewCell {
     let cell = tableView.dequeueReusableCell(withIdentifier: "cell", for: indexPath)

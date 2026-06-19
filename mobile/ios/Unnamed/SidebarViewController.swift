@@ -196,7 +196,10 @@ final class SidebarViewController: UIViewController {
         allChats = chats
       }
       activeIds = Set((try? await active) ?? [])
-      if let p = await profile { email = p.email }
+      if let p = await profile {
+        email = p.email
+        appSession.setCachedEmail(p.email)
+      }
       applyFilterAndRender()
     }
   }

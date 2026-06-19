@@ -15,7 +15,6 @@
 		A21F48422D0307B40044C1D9 /* AppCoordinator.swift in Sources */ = {isa = PBXBuildFile; fileRef = F21748412D0307B40044C1D9 /* AppCoordinator.swift */; };
 		A31F48422D0307B40044C1D9 /* AppSession.swift in Sources */ = {isa = PBXBuildFile; fileRef = F31748412D0307B40044C1D9 /* AppSession.swift */; };
 		A41F48422D0307B40044C1D9 /* ConnectViewController.swift in Sources */ = {isa = PBXBuildFile; fileRef = F41748412D0307B40044C1D9 /* ConnectViewController.swift */; };
-		A51F48422D0307B40044C1D9 /* DashboardViewController.swift in Sources */ = {isa = PBXBuildFile; fileRef = F51748412D0307B40044C1D9 /* DashboardViewController.swift */; };
 		A61F48422D0307B40044C1D9 /* LoginViewController.swift in Sources */ = {isa = PBXBuildFile; fileRef = F61748412D0307B40044C1D9 /* LoginViewController.swift */; };
 		A71F48422D0307B40044C1D9 /* Models.swift in Sources */ = {isa = PBXBuildFile; fileRef = F71748412D0307B40044C1D9 /* Models.swift */; };
 		A81F48422D0307B40044C1D9 /* UIHelpers.swift in Sources */ = {isa = PBXBuildFile; fileRef = F81748412D0307B40044C1D9 /* UIHelpers.swift */; };
@@ -43,7 +42,6 @@
 		F21748412D0307B40044C1D9 /* AppCoordinator.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = AppCoordinator.swift; path = Unnamed/AppCoordinator.swift; sourceTree = "<group>"; };
 		F31748412D0307B40044C1D9 /* AppSession.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = AppSession.swift; path = Unnamed/AppSession.swift; sourceTree = "<group>"; };
 		F41748412D0307B40044C1D9 /* ConnectViewController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = ConnectViewController.swift; path = Unnamed/ConnectViewController.swift; sourceTree = "<group>"; };
-		F51748412D0307B40044C1D9 /* DashboardViewController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = DashboardViewController.swift; path = Unnamed/DashboardViewController.swift; sourceTree = "<group>"; };
 		F61748412D0307B40044C1D9 /* LoginViewController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = LoginViewController.swift; path = Unnamed/LoginViewController.swift; sourceTree = "<group>"; };
 		F71748412D0307B40044C1D9 /* Models.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = Models.swift; path = Unnamed/Models.swift; sourceTree = "<group>"; };
 		F81748412D0307B40044C1D9 /* UIHelpers.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = UIHelpers.swift; path = Unnamed/UIHelpers.swift; sourceTree = "<group>"; };
@@ -79,7 +77,6 @@
 				F11748412D0307B40044C1D9 /* AppDelegate.swift */,
 				F31748412D0307B40044C1D9 /* AppSession.swift */,
 				F41748412D0307B40044C1D9 /* ConnectViewController.swift */,
-				F51748412D0307B40044C1D9 /* DashboardViewController.swift */,
 				F61748412D0307B40044C1D9 /* LoginViewController.swift */,
 				F71748412D0307B40044C1D9 /* Models.swift */,
 				F81748412D0307B40044C1D9 /* UIHelpers.swift */,
@@ -211,7 +208,6 @@
 				A11F48422D0307B40044C1D9 /* AppDelegate.swift in Sources */,
 				A31F48422D0307B40044C1D9 /* AppSession.swift in Sources */,
 				A41F48422D0307B40044C1D9 /* ConnectViewController.swift in Sources */,
-				A51F48422D0307B40044C1D9 /* DashboardViewController.swift in Sources */,
 				A61F48422D0307B40044C1D9 /* LoginViewController.swift in Sources */,
 				A71F48422D0307B40044C1D9 /* Models.swift in Sources */,
 				A81F48422D0307B40044C1D9 /* UIHelpers.swift in Sources */,

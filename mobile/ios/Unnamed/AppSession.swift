@@ -7,6 +7,7 @@ final class AppSession {
   private enum Keys {
     static let serverURL = "server_url"
     static let authToken = "auth_token"
+    static let cachedEmail = "cached_email"
   }
 
   private let defaults: UserDefaults
@@ -26,6 +27,8 @@ final class AppSession {
     keychain.string(forKey: Keys.authToken)
   }
 
+  private(set) lazy var cachedEmail: String? = defaults.string(forKey: Keys.cachedEmail)
+
   func setServerURL(_ url: URL) {
     defaults.set(url.absoluteString.trimmingCharacters(in: CharacterSet(charactersIn: "/")), forKey: Keys.serverURL)
   }
@@ -34,12 +37,22 @@ final class AppSession {
     keychain.set(token, forKey: Keys.authToken)
   }
 
+  func setCachedEmail(_ email: String?) {
+    cachedEmail = email
+    if let email {
+      defaults.set(email, forKey: Keys.cachedEmail)
+    } else {
+      defaults.removeObject(forKey: Keys.cachedEmail)
+    }
+  }
+
   func clearToken() {
     keychain.delete(Keys.authToken)
   }
 
   func reset() {
     defaults.removeObject(forKey: Keys.serverURL)
+    defaults.removeObject(forKey: Keys.cachedEmail)
     clearToken()
   }
 }

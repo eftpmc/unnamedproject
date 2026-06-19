@@ -1,6 +1,8 @@
 import UIKit
 
 final class ChatViewController: UIViewController {
+  var onOpenSidebar: (() -> Void)?
+  private let isNew: Bool
   private let appSession: AppSession
   private let chatSession: ChatSession
   private lazy var client = APIClient(session: appSession)
@@ -30,9 +32,10 @@ final class ChatViewController: UIViewController {
   private var reconnectBannerHeight: NSLayoutConstraint!
   private var pendingBannerItem: DispatchWorkItem?
 
-  init(appSession: AppSession, chatSession: ChatSession) {
+  init(appSession: AppSession, chatSession: ChatSession, isNew: Bool = false) {
     self.appSession = appSession
     self.chatSession = chatSession
+    self.isNew = isNew
     super.init(nibName: nil, bundle: nil)
     hidesBottomBarWhenPushed = true
   }
@@ -53,15 +56,15 @@ final class ChatViewController: UIViewController {
 
   override func viewDidLoad() {
     super.viewDidLoad()
-    title = chatSession.title ?? "Chat"
     view.backgroundColor = AppTheme.canvas
 
+    title = isNew ? "New chat" : (chatSession.title ?? "Chat")
+    navigationItem.leftBarButtonItem = UIBarButtonItem(
+      image: UIImage(systemName: "sidebar.left"),
+      style: .plain, target: self, action: #selector(openSidebarTapped))
     navigationItem.rightBarButtonItem = UIBarButtonItem(
-      image: UIImage(systemName: "arrow.clockwise"),
-      style: .plain,
-      target: self,
-      action: #selector(refreshTapped)
-    )
+      image: UIImage(systemName: "square.and.pencil"),
+      style: .plain, target: self, action: #selector(composeNewTapped))
 
     setupTable()
     setupAgentStatusBar()
@@ -393,6 +396,7 @@ final class ChatViewController: UIViewController {
   // MARK: - Data
 
   private func loadMessages() {
+    guard !chatSession.id.isEmpty else { isLoaded = true; updateEmptyState(); return }
     Task {
       do {
         let loaded = try await client.messages(sessionId: chatSession.id)
@@ -488,6 +492,9 @@ final class ChatViewController: UIViewController {
   @objc private func refreshTapped() {
     Task { await reloadMessages() }
   }
+
+  @objc private func openSidebarTapped() { onOpenSidebar?() }
+  @objc private func composeNewTapped() { onOpenSidebar?() }
 
   @objc private func refreshPulled() {
     Task {

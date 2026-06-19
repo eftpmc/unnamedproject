@@ -594,6 +594,7 @@ private final class MessageCell: UITableViewCell {
   private let timeLabel = UILabel()
   private var stackLeading: NSLayoutConstraint!
   private var stackTrailing: NSLayoutConstraint!
+  private var bubbleMaxWidth: NSLayoutConstraint!
 
   override init(style: UITableViewCell.CellStyle, reuseIdentifier: String?) {
     super.init(style: style, reuseIdentifier: reuseIdentifier)
@@ -633,11 +634,12 @@ private final class MessageCell: UITableViewCell {
     stackLeading = bubbleStack.leadingAnchor.constraint(equalTo: contentView.leadingAnchor, constant: 16)
     stackTrailing = bubbleStack.trailingAnchor.constraint(equalTo: contentView.trailingAnchor, constant: -16)
 
+    bubbleMaxWidth = bubbleStack.widthAnchor.constraint(lessThanOrEqualTo: contentView.widthAnchor, multiplier: 0.82)
     NSLayoutConstraint.activate([
       bubbleStack.topAnchor.constraint(equalTo: contentView.topAnchor, constant: 3),
       bubbleStack.bottomAnchor.constraint(equalTo: contentView.bottomAnchor, constant: -3),
-      bubbleStack.widthAnchor.constraint(lessThanOrEqualTo: contentView.widthAnchor, multiplier: 0.82),
     ])
+    bubbleMaxWidth.isActive = true
   }
 
   required init?(coder: NSCoder) { fatalError() }
@@ -650,23 +652,20 @@ private final class MessageCell: UITableViewCell {
   func configure(with message: ChatMessage) {
     rawContent = message.content
     let isUser = message.role == "user"
-    let textColor: UIColor = isUser ? AppTheme.primaryText : .label
     let baseFont = UIFont.preferredFont(forTextStyle: .callout)
     let codeBg = UIColor.label.withAlphaComponent(0.08)
+    let textColor: UIColor = isUser ? AppTheme.primaryText : .label
 
-    bubble.backgroundColor = isUser ? AppTheme.primary : AppTheme.secondarySurface
+    // User keeps a bubble; assistant renders full-width on the canvas.
+    bubble.backgroundColor = isUser ? AppTheme.primary : .clear
 
     contentStack.arrangedSubviews.forEach {
-      contentStack.removeArrangedSubview($0)
-      $0.removeFromSuperview()
+      contentStack.removeArrangedSubview($0); $0.removeFromSuperview()
     }
-
     for segment in parseMessageSegments(message.content) {
       switch segment {
-      case .text(let str):
-        contentStack.addArrangedSubview(makeTextSegment(str, font: baseFont, textColor: textColor, codeBg: codeBg))
-      case .code(let code):
-        contentStack.addArrangedSubview(makeCodeSegment(code, textColor: textColor))
+      case .text(let str): contentStack.addArrangedSubview(makeTextSegment(str, font: baseFont, textColor: textColor, codeBg: codeBg, hInset: isUser ? 14 : 0))
+      case .code(let code): contentStack.addArrangedSubview(makeCodeSegment(code, textColor: textColor))
       }
     }
 
@@ -678,16 +677,16 @@ private final class MessageCell: UITableViewCell {
       timeLabel.isHidden = true
     }
 
+    // Width: user bubble is capped; assistant spans full width.
+    bubbleMaxWidth.isActive = isUser
     if isUser {
-      stackLeading.isActive = false
-      stackTrailing.isActive = true
+      stackLeading.isActive = false; stackTrailing.isActive = true
     } else {
-      stackTrailing.isActive = false
-      stackLeading.isActive = true
+      stackTrailing.isActive = false; stackLeading.isActive = true
     }
   }
 
-  private func makeTextSegment(_ text: String, font: UIFont, textColor: UIColor, codeBg: UIColor) -> UIView {
+  private func makeTextSegment(_ text: String, font: UIFont, textColor: UIColor, codeBg: UIColor, hInset: CGFloat = 14) -> UIView {
     let label = UILabel()
     label.numberOfLines = 0
     label.font = font
@@ -698,8 +697,8 @@ private final class MessageCell: UITableViewCell {
     wrapper.addSubview(label)
     label.translatesAutoresizingMaskIntoConstraints = false
     NSLayoutConstraint.activate([
-      label.leadingAnchor.constraint(equalTo: wrapper.leadingAnchor, constant: 14),
-      label.trailingAnchor.constraint(equalTo: wrapper.trailingAnchor, constant: -14),
+      label.leadingAnchor.constraint(equalTo: wrapper.leadingAnchor, constant: hInset),
+      label.trailingAnchor.constraint(equalTo: wrapper.trailingAnchor, constant: -hInset),
       label.topAnchor.constraint(equalTo: wrapper.topAnchor, constant: 10),
       label.bottomAnchor.constraint(equalTo: wrapper.bottomAnchor, constant: -10),
     ])
@@ -780,9 +779,9 @@ private final class ToolEventCell: UITableViewCell {
   required init?(coder: NSCoder) { fatalError() }
 
   private func buildLayout() {
-    pill.layer.cornerRadius = 12
+    pill.layer.cornerRadius = 8
     pill.layer.cornerCurve = .continuous
-    pill.layer.borderWidth = 1
+    pill.layer.borderWidth = 0.5
 
     iconView.contentMode = .scaleAspectFit
     iconView.translatesAutoresizingMaskIntoConstraints = false
@@ -829,7 +828,7 @@ private final class ToolEventCell: UITableViewCell {
     pill.translatesAutoresizingMaskIntoConstraints = false
     NSLayoutConstraint.activate([
       pill.leadingAnchor.constraint(equalTo: contentView.leadingAnchor, constant: 16),
-      pill.trailingAnchor.constraint(equalTo: contentView.trailingAnchor, constant: -80),
+      pill.trailingAnchor.constraint(lessThanOrEqualTo: contentView.trailingAnchor, constant: -16),
       pill.topAnchor.constraint(equalTo: contentView.topAnchor, constant: 4),
       pill.bottomAnchor.constraint(equalTo: contentView.bottomAnchor, constant: -4),
     ])

@@ -7,7 +7,7 @@ final class ProjectsViewController: UIViewController {
   private lazy var client = APIClient(session: appSession)
   private var projects: [Project] = []
 
-  private let tableView = UITableView(frame: .zero, style: .plain)
+  private let tableView = UITableView(frame: .zero, style: .insetGrouped)
   private let refreshControl = UIRefreshControl()
 
   init(appSession: AppSession) {
@@ -20,6 +20,8 @@ final class ProjectsViewController: UIViewController {
   override func viewDidLoad() {
     super.viewDidLoad()
     title = "Projects"
+    navigationItem.largeTitleDisplayMode = .always
+    navigationController?.navigationBar.prefersLargeTitles = true
     view.backgroundColor = AppTheme.canvas
 
     tableView.backgroundColor = AppTheme.canvas
@@ -66,7 +68,7 @@ extension ProjectsViewController: UITableViewDataSource, UITableViewDelegate {
 
     var content = cell.defaultContentConfiguration()
     content.text = project.name
-    content.secondaryText = project.repoPath ?? project.description
+    content.secondaryText = project.repoPath ?? "No repo linked"
     content.image = UIImage(systemName: "folder")
     content.imageProperties.tintColor = .systemGreen
     cell.contentConfiguration = content

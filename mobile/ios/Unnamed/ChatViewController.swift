@@ -64,6 +64,10 @@ final class ChatViewController: UIViewController {
     view.backgroundColor = AppTheme.canvas
 
     title = isNew ? "New chat" : (chatSession.title ?? "Chat")
+    // Always compact: guards against Projects/Settings leaving the shared
+    // nav bar in large-title mode when chat becomes the root again.
+    navigationItem.largeTitleDisplayMode = .never
+    navigationController?.navigationBar.prefersLargeTitles = false
     navigationItem.leftBarButtonItem = UIBarButtonItem(
       image: UIImage(systemName: "sidebar.left"),
       style: .plain, target: self, action: #selector(openSidebarTapped))

@@ -24,10 +24,7 @@ final class SettingsViewController: UIViewController {
     super.viewDidLoad()
     title = "Settings"
     view.backgroundColor = AppTheme.canvas
-
-    navigationItem.rightBarButtonItem = UIBarButtonItem(
-      barButtonSystemItem: .done, target: self, action: #selector(doneTapped)
-    )
+    navigationItem.largeTitleDisplayMode = .never
 
     tableView.backgroundColor = AppTheme.canvas
     tableView.dataSource = self
@@ -44,8 +41,6 @@ final class SettingsViewController: UIViewController {
       tableView.bottomAnchor.constraint(equalTo: view.bottomAnchor),
     ])
   }
-
-  @objc private func doneTapped() { dismiss(animated: true) }
 
   private var approvalAlertsEnabled: Bool {
     let defaults = UserDefaults.standard

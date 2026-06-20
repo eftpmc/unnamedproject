@@ -132,12 +132,12 @@ final class SidebarViewController: UIViewController {
 
   private let accountRow = UIControl()
   private let emailLabel = UILabel()
+  private let avatar = UILabel()
 
   private func setupAccountFooter() {
     accountRow.backgroundColor = AppTheme.surface
     accountRow.addTarget(self, action: #selector(settingsTapped), for: .touchUpInside)
 
-    let avatar = UILabel()
     avatar.backgroundColor = AppTheme.accent
     avatar.textColor = .white
     avatar.font = .systemFont(ofSize: 14, weight: .semibold)
@@ -210,6 +210,7 @@ final class SidebarViewController: UIViewController {
       : allChats.filter { ($0.title ?? "").localizedCaseInsensitiveContains(filter) }
     grouped = groupChatsByTime(filtered)
     emailLabel.text = email
+    avatar.text = email.first.map { String($0).uppercased() } ?? "•"
     let n = ApprovalCenter.shared.count
     inboxBadge.text = "\(min(n, 99))"
     inboxBadge.isHidden = n == 0

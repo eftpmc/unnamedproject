@@ -20,8 +20,8 @@ final class ProjectsViewController: UIViewController {
   override func viewDidLoad() {
     super.viewDidLoad()
     title = "Projects"
-    navigationItem.largeTitleDisplayMode = .always
-    navigationController?.navigationBar.prefersLargeTitles = true
+    navigationItem.largeTitleDisplayMode = .never
+    navigationController?.navigationBar.prefersLargeTitles = false
     view.backgroundColor = AppTheme.canvas
 
     tableView.backgroundColor = AppTheme.canvas

@@ -57,6 +57,7 @@ final class AppCoordinator {
       let root = makeChatVC(for: chats.first) // already nav-wrapped; most-recent chat, or new-chat empty state if nil
       let sidebar = makeSidebar()
       let slide = SlideOverController(main: root, side: sidebar)
+      slide.onWillOpenSide = { [weak sidebar] in sidebar?.reload() }
       self.slideOver = slide
       navigationController.setViewControllers([slide], animated: true)
     }

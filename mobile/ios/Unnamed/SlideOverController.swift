@@ -4,6 +4,11 @@ import UIKit
 final class SlideOverController: UIViewController {
   let sideWidthRatio: CGFloat = 0.84
 
+  /// Invoked right before the side drawer animates open, so callers can
+  /// refresh the sidebar's contents (e.g. newly created chats, active dots)
+  /// instead of relying on the one-time load done in viewDidLoad.
+  var onWillOpenSide: (() -> Void)?
+
   private var mainVC: UIViewController
   private let sideVC: UIViewController
   private let scrim = UIControl()
@@ -85,6 +90,7 @@ final class SlideOverController: UIViewController {
   }
 
   func openSide(animated: Bool = true) {
+    onWillOpenSide?()
     isOpen = true
     sideLeading.constant = 0
     UIView.animate(withDuration: animated ? 0.28 : 0, delay: 0, options: .curveEaseOut) {

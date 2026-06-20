@@ -5,6 +5,10 @@ final class ChatViewController: UIViewController {
   private let isNew: Bool
   private let appSession: AppSession
   private let chatSession: ChatSession
+  /// The session id messages/polling/websocket actually operate against.
+  /// Starts equal to `chatSession.id`, but gets populated once a brand-new
+  /// chat (empty id) is lazily created on first send.
+  private var activeSessionId: String
   private lazy var client = APIClient(session: appSession)
 
   private var messages: [ChatMessage] = []
@@ -35,6 +39,7 @@ final class ChatViewController: UIViewController {
   init(appSession: AppSession, chatSession: ChatSession, isNew: Bool = false) {
     self.appSession = appSession
     self.chatSession = chatSession
+    self.activeSessionId = chatSession.id
     self.isNew = isNew
     super.init(nibName: nil, bundle: nil)
     hidesBottomBarWhenPushed = true
@@ -111,7 +116,7 @@ final class ChatViewController: UIViewController {
 
   private func handleWSEvent(_ event: WSEvent) {
     switch event {
-    case .messageStarted(let sid, let message) where sid == chatSession.id:
+    case .messageStarted(let sid, let message) where sid == activeSessionId:
       setAgentStatus(nil)
       guard !messages.contains(where: { $0.id == message.id }) else { return }
       messages.append(message)
@@ -120,14 +125,14 @@ final class ChatViewController: UIViewController {
       tableView.insertRows(at: [ip], with: .none)
       if isNearBottom() { scrollToBottom(animated: true) }
 
-    case .messageDelta(let sid, let messageId, let delta) where sid == chatSession.id:
+    case .messageDelta(let sid, let messageId, let delta) where sid == activeSessionId:
       guard let idx = messages.firstIndex(where: { $0.id == messageId }) else { return }
       let old = messages[idx]
       messages[idx] = ChatMessage(id: old.id, role: old.role, content: old.content + delta, createdAt: old.createdAt)
       tableView.reloadRows(at: [IndexPath(row: idx, section: 0)], with: .none)
       if isNearBottom() { scrollToBottom(animated: false) }
 
-    case .messageCreated(let sid, let message) where sid == chatSession.id:
+    case .messageCreated(let sid, let message) where sid == activeSessionId:
       if let idx = messages.firstIndex(where: { $0.id == message.id }) {
         messages[idx] = message
         tableView.reloadRows(at: [IndexPath(row: idx, section: 0)], with: .none)
@@ -138,7 +143,7 @@ final class ChatViewController: UIViewController {
         if isNearBottom() { scrollToBottom(animated: true) }
       }
 
-    case .turnComplete(let sid, _) where sid == chatSession.id:
+    case .turnComplete(let sid, _) where sid == activeSessionId:
       setAgentStatus(nil)
       setSending(false)
       // Finalize any still-running tool events
@@ -149,10 +154,10 @@ final class ChatViewController: UIViewController {
       Task { await reloadMessages() }
 
     case .executionUpdate(let sid, let executionId, let tool, let status, let chunk, let result)
-        where sid == chatSession.id:
+        where sid == activeSessionId:
       handleExecutionUpdate(executionId: executionId, tool: tool, status: status, chunk: chunk, result: result)
 
-    case .sessionTitleUpdated(let sid, let t) where sid == chatSession.id:
+    case .sessionTitleUpdated(let sid, let t) where sid == activeSessionId:
       title = t
 
     case .connected:
@@ -396,10 +401,10 @@ final class ChatViewController: UIViewController {
   // MARK: - Data
 
   private func loadMessages() {
-    guard !chatSession.id.isEmpty else { isLoaded = true; updateEmptyState(); return }
+    guard !activeSessionId.isEmpty else { isLoaded = true; updateEmptyState(); return }
     Task {
       do {
-        let loaded = try await client.messages(sessionId: chatSession.id)
+        let loaded = try await client.messages(sessionId: activeSessionId)
         messages = loaded
         isLoaded = true
         tableView.reloadData()
@@ -455,7 +460,7 @@ final class ChatViewController: UIViewController {
   @MainActor
   private func reloadMessages() async {
     do {
-      let updated = try await client.messages(sessionId: chatSession.id)
+      let updated = try await client.messages(sessionId: activeSessionId)
       applyMessages(updated, scrollAnimated: true)
     } catch {}
   }
@@ -463,7 +468,7 @@ final class ChatViewController: UIViewController {
   @MainActor
   private func pollMessages() async {
     do {
-      let updated = try await client.messages(sessionId: chatSession.id)
+      let updated = try await client.messages(sessionId: activeSessionId)
       guard updated.count != messages.count || updated.last?.id != messages.last?.id else { return }
       let nearBottom = isNearBottom()
       applyMessages(updated, scrollAnimated: nearBottom)
@@ -519,7 +524,12 @@ final class ChatViewController: UIViewController {
 
     Task {
       do {
-        _ = try await client.sendMessage(sessionId: chatSession.id, content: text)
+        if activeSessionId.isEmpty {
+          let created = try await client.createSession(title: String(text.prefix(80)))
+          activeSessionId = created.id
+          if title == "New chat" { title = String(text.prefix(80)) }
+        }
+        _ = try await client.sendMessage(sessionId: activeSessionId, content: text)
         UIImpactFeedbackGenerator(style: .light).impactOccurred()
         // Brief pause to catch fast agent responses before first reload
         try? await Task.sleep(nanoseconds: 800_000_000)

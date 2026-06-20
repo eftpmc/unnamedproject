@@ -20,6 +20,7 @@ final class SidebarViewController: UIViewController {
   private let searchField = UISearchTextField()
   private let tableView = UITableView(frame: .zero, style: .plain)
   private let inboxBadge = UILabel()
+  private let avatar = UILabel()
 
   init(appSession: AppSession) {
     self.appSession = appSession
@@ -32,28 +33,62 @@ final class SidebarViewController: UIViewController {
   override func viewDidLoad() {
     super.viewDidLoad()
     view.backgroundColor = AppTheme.secondarySurface
-    setupHeader()
+    setupTopBar()
+    setupNavSection()
     setupTable()
-    setupAccountFooter()
+    setupNewChatButton()
     NotificationCenter.default.addObserver(self, selector: #selector(approvalCountChanged), name: .approvalCountChanged, object: nil)
     reload()
   }
 
-  // Pinned header: search + New chat + Projects + Inbox(badge)
-  private let headerStack = UIStackView()
+  // MARK: - Top bar: wordmark + avatar (tap → Settings)
 
-  private func setupHeader() {
-    headerStack.axis = .vertical
-    headerStack.spacing = 8
-    headerStack.isLayoutMarginsRelativeArrangement = true
-    headerStack.directionalLayoutMargins = NSDirectionalEdgeInsets(top: 8, leading: 14, bottom: 6, trailing: 14)
+  private func setupTopBar() {
+    let wordmark = UILabel()
+    wordmark.text = "unnamed"
+    wordmark.font = .systemFont(ofSize: 20, weight: .semibold)
+    wordmark.textColor = .label
 
+    avatar.backgroundColor = AppTheme.accent
+    avatar.textColor = .white
+    avatar.font = .systemFont(ofSize: 14, weight: .semibold)
+    avatar.textAlignment = .center
+    avatar.layer.cornerRadius = 16
+    avatar.clipsToBounds = true
+    avatar.text = "•"
+    avatar.isUserInteractionEnabled = true
+    avatar.accessibilityLabel = "Settings"
+    avatar.translatesAutoresizingMaskIntoConstraints = false
+    avatar.widthAnchor.constraint(equalToConstant: 32).isActive = true
+    avatar.heightAnchor.constraint(equalToConstant: 32).isActive = true
+    avatar.addGestureRecognizer(UITapGestureRecognizer(target: self, action: #selector(settingsTapped)))
+
+    let row = UIStackView(arrangedSubviews: [wordmark, UIView(), avatar])
+    row.axis = .horizontal
+    row.alignment = .center
+
+    view.addSubview(row)
+    row.translatesAutoresizingMaskIntoConstraints = false
+    NSLayoutConstraint.activate([
+      row.topAnchor.constraint(equalTo: view.safeAreaLayoutGuide.topAnchor, constant: 10),
+      row.leadingAnchor.constraint(equalTo: view.leadingAnchor, constant: 16),
+      row.trailingAnchor.constraint(equalTo: view.trailingAnchor, constant: -16),
+    ])
+    topBarBottom = row.bottomAnchor
+  }
+
+  private var topBarBottom: NSLayoutYAxisAnchor!
+
+  // MARK: - Search + flat nav rows (Projects, Inbox)
+
+  private let navStack = UIStackView()
+
+  private func setupNavSection() {
     searchField.placeholder = "Search chats"
     searchField.addTarget(self, action: #selector(searchChanged), for: .editingChanged)
 
-    let newChat = navButton(icon: "square.and.pencil", title: "New chat", primary: true, action: #selector(newChatTapped))
-    let projects = navButton(icon: "folder", title: "Projects", primary: false, action: #selector(projectsTapped))
-    let inbox = navButton(icon: "tray", title: "Inbox", primary: false, action: #selector(inboxTapped))
+    let projects = flatNavRow(icon: "folder", title: "Projects", action: #selector(projectsTapped))
+    let inbox = flatNavRow(icon: "tray", title: "Inbox", action: #selector(inboxTapped))
 
     inboxBadge.font = .systemFont(ofSize: 11, weight: .bold)
     inboxBadge.textColor = .white
@@ -67,52 +102,62 @@ final class SidebarViewController: UIViewController {
     NSLayoutConstraint.activate([
       inboxBadge.heightAnchor.constraint(equalToConstant: 18),
       inboxBadge.widthAnchor.constraint(greaterThanOrEqualToConstant: 22),
-      inboxBadge.trailingAnchor.constraint(equalTo: inbox.trailingAnchor, constant: -12),
+      inboxBadge.trailingAnchor.constraint(equalTo: inbox.trailingAnchor, constant: -14),
       inboxBadge.centerYAnchor.constraint(equalTo: inbox.centerYAnchor),
     ])
 
-    headerStack.addArrangedSubview(searchField)
-    headerStack.addArrangedSubview(newChat)
-    headerStack.addArrangedSubview(projects)
-    headerStack.addArrangedSubview(inbox)
+    navStack.axis = .vertical
+    navStack.spacing = 2
+    navStack.addArrangedSubview(searchField)
+    navStack.addArrangedSubview(projects)
+    navStack.addArrangedSubview(inbox)
+    navStack.setCustomSpacing(10, after: searchField)
 
-    view.addSubview(headerStack)
-    headerStack.translatesAutoresizingMaskIntoConstraints = false
+    view.addSubview(navStack)
+    navStack.translatesAutoresizingMaskIntoConstraints = false
     NSLayoutConstraint.activate([
-      headerStack.topAnchor.constraint(equalTo: view.safeAreaLayoutGuide.topAnchor, constant: 4),
-      headerStack.leadingAnchor.constraint(equalTo: view.leadingAnchor),
-      headerStack.trailingAnchor.constraint(equalTo: view.trailingAnchor),
+      navStack.topAnchor.constraint(equalTo: topBarBottom, constant: 14),
+      navStack.leadingAnchor.constraint(equalTo: view.leadingAnchor, constant: 14),
+      navStack.trailingAnchor.constraint(equalTo: view.trailingAnchor, constant: -14),
     ])
   }
 
-  private func navButton(icon: String, title: String, primary: Bool, action: Selector) -> UIControl {
+  /// A plain, flat list row — icon + label, no fill or border (matches the
+  /// rest of the nav list rather than reading as a separate "button").
+  private func flatNavRow(icon: String, title: String, action: Selector) -> UIControl {
     let row = UIControl()
-    row.backgroundColor = primary ? AppTheme.primary : AppTheme.surface
-    row.layer.cornerRadius = 12
-    row.layer.cornerCurve = .continuous
-    row.heightAnchor.constraint(equalToConstant: 44).isActive = true
+    row.heightAnchor.constraint(equalToConstant: 40).isActive = true
     row.addTarget(self, action: action, for: .touchUpInside)
 
     let img = UIImageView(image: UIImage(systemName: icon))
-    img.tintColor = primary ? AppTheme.primaryText : .label
+    img.tintColor = .secondaryLabel
+    img.contentMode = .scaleAspectFit
+    img.translatesAutoresizingMaskIntoConstraints = false
+    NSLayoutConstraint.activate([
+      img.widthAnchor.constraint(equalToConstant: 20),
+      img.heightAnchor.constraint(equalToConstant: 20),
+    ])
+
     let label = UILabel()
     label.text = title
     label.font = UIFont.preferredFont(forTextStyle: .subheadline)
-    label.textColor = primary ? AppTheme.primaryText : .label
+    label.textColor = .label
 
     let stack = UIStackView(arrangedSubviews: [img, label])
     stack.axis = .horizontal
-    stack.spacing = 10
+    stack.spacing = 12
     stack.alignment = .center
     stack.isUserInteractionEnabled = false
     row.addSubview(stack)
     stack.translatesAutoresizingMaskIntoConstraints = false
     NSLayoutConstraint.activate([
-      stack.leadingAnchor.constraint(equalTo: row.leadingAnchor, constant: 14),
+      stack.leadingAnchor.constraint(equalTo: row.leadingAnchor, constant: 2),
       stack.centerYAnchor.constraint(equalTo: row.centerYAnchor),
     ])
     return row
   }
+
+  // MARK: - Recents table
 
   private func setupTable() {
     tableView.backgroundColor = .clear
@@ -121,69 +166,41 @@ final class SidebarViewController: UIViewController {
     tableView.dataSource = self
     tableView.delegate = self
     tableView.rowHeight = 46
+    tableView.contentInset = UIEdgeInsets(top: 0, left: 0, bottom: 76, right: 0)
     view.addSubview(tableView)
     tableView.translatesAutoresizingMaskIntoConstraints = false
     NSLayoutConstraint.activate([
-      tableView.topAnchor.constraint(equalTo: headerStack.bottomAnchor, constant: 4),
+      tableView.topAnchor.constraint(equalTo: navStack.bottomAnchor, constant: 10),
       tableView.leadingAnchor.constraint(equalTo: view.leadingAnchor),
       tableView.trailingAnchor.constraint(equalTo: view.trailingAnchor),
+      tableView.bottomAnchor.constraint(equalTo: view.bottomAnchor),
     ])
   }
 
-  private let accountRow = UIControl()
-  private let emailLabel = UILabel()
-  private let avatar = UILabel()
+  // MARK: - Floating "New chat" pill
 
-  private func setupAccountFooter() {
-    accountRow.backgroundColor = AppTheme.surface
-    accountRow.addTarget(self, action: #selector(settingsTapped), for: .touchUpInside)
+  private func setupNewChatButton() {
+    let button = UIButton(type: .system)
+    var config = UIButton.Configuration.filled()
+    config.title = "New chat"
+    config.image = UIImage(systemName: "plus")
+    config.imagePadding = 6
+    config.cornerStyle = .capsule
+    config.baseBackgroundColor = AppTheme.primary
+    config.baseForegroundColor = AppTheme.primaryText
+    config.contentInsets = NSDirectionalEdgeInsets(top: 12, leading: 20, bottom: 12, trailing: 20)
+    button.configuration = config
+    button.addTarget(self, action: #selector(newChatTapped), for: .touchUpInside)
+    button.layer.shadowColor = UIColor.black.cgColor
+    button.layer.shadowOpacity = 0.15
+    button.layer.shadowRadius = 8
+    button.layer.shadowOffset = CGSize(width: 0, height: 2)
 
-    avatar.backgroundColor = AppTheme.accent
-    avatar.textColor = .white
-    avatar.font = .systemFont(ofSize: 14, weight: .semibold)
-    avatar.textAlignment = .center
-    avatar.layer.cornerRadius = 16
-    avatar.clipsToBounds = true
-    avatar.text = "•"
-    avatar.translatesAutoresizingMaskIntoConstraints = false
-    avatar.widthAnchor.constraint(equalToConstant: 32).isActive = true
-    avatar.heightAnchor.constraint(equalToConstant: 32).isActive = true
-
-    emailLabel.font = UIFont.preferredFont(forTextStyle: .subheadline)
-    emailLabel.textColor = .label
-
-    let gear = UIImageView(image: UIImage(systemName: "gearshape"))
-    gear.tintColor = .secondaryLabel
-
-    let stack = UIStackView(arrangedSubviews: [avatar, emailLabel, UIView(), gear])
-    stack.axis = .horizontal
-    stack.spacing = 10
-    stack.alignment = .center
-    stack.isUserInteractionEnabled = false
-    stack.isLayoutMarginsRelativeArrangement = true
-    stack.directionalLayoutMargins = NSDirectionalEdgeInsets(top: 10, leading: 14, bottom: 10, trailing: 14)
-    accountRow.addSubview(stack)
-    stack.translatesAutoresizingMaskIntoConstraints = false
-    stack.pinToSuperviewEdges()
-
-    let topBorder = UIView()
-    topBorder.backgroundColor = AppTheme.border
-    accountRow.addSubview(topBorder)
-    topBorder.translatesAutoresizingMaskIntoConstraints = false
+    view.addSubview(button)
+    button.translatesAutoresizingMaskIntoConstraints = false
     NSLayoutConstraint.activate([
-      topBorder.topAnchor.constraint(equalTo: accountRow.topAnchor),
-      topBorder.leadingAnchor.constraint(equalTo: accountRow.leadingAnchor),
-      topBorder.trailingAnchor.constraint(equalTo: accountRow.trailingAnchor),
-      topBorder.heightAnchor.constraint(equalToConstant: 0.5),
-    ])
-
-    view.addSubview(accountRow)
-    accountRow.translatesAutoresizingMaskIntoConstraints = false
-    NSLayoutConstraint.activate([
-      accountRow.leadingAnchor.constraint(equalTo: view.leadingAnchor),
-      accountRow.trailingAnchor.constraint(equalTo: view.trailingAnchor),
-      accountRow.topAnchor.constraint(equalTo: tableView.bottomAnchor),
-      accountRow.bottomAnchor.constraint(equalTo: view.bottomAnchor),
+      button.centerXAnchor.constraint(equalTo: view.centerXAnchor),
+      button.bottomAnchor.constraint(equalTo: view.safeAreaLayoutGuide.bottomAnchor, constant: -16),
     ])
   }
 
@@ -209,7 +226,6 @@ final class SidebarViewController: UIViewController {
       ? allChats
       : allChats.filter { ($0.title ?? "").localizedCaseInsensitiveContains(filter) }
     grouped = groupChatsByTime(filtered)
-    emailLabel.text = email
     avatar.text = email.first.map { String($0).uppercased() } ?? "•"
     let n = ApprovalCenter.shared.count
     inboxBadge.text = "\(min(n, 99))"
@@ -241,7 +257,7 @@ extension SidebarViewController: UITableViewDataSource, UITableViewDelegate {
     container.addSubview(label)
     label.translatesAutoresizingMaskIntoConstraints = false
     NSLayoutConstraint.activate([
-      label.leadingAnchor.constraint(equalTo: container.leadingAnchor, constant: 12),
+      label.leadingAnchor.constraint(equalTo: container.leadingAnchor, constant: 16),
       label.trailingAnchor.constraint(lessThanOrEqualTo: container.trailingAnchor, constant: -12),
       label.topAnchor.constraint(equalTo: container.topAnchor, constant: 6),
       label.bottomAnchor.constraint(equalTo: container.bottomAnchor, constant: -6),

@@ -10,7 +10,7 @@ appId: com.unnamed.app
 - assertVisible: "New chat"
 - assertVisible: "Projects"
 - assertVisible: "Inbox"
-- assertVisible: "gearshape"
+- assertVisible: "Settings"
 - tapOn:
     point: "95%, 50%"
 - assertNotVisible: "New chat"

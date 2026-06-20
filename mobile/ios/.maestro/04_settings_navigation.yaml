@@ -1,12 +1,12 @@
 appId: com.unnamed.app
 ---
-# Settings is reached via the sidebar's account row (gear icon), pushed onto
+# Settings is reached via the sidebar's avatar (top-right), pushed onto
 # the shared nav stack like Projects, with a native back button.
 - launchApp:
     permissions:
       notifications: deny
 - tapOn: "split view horizontally left"
-- tapOn: "gearshape"
+- tapOn: "Settings"
 - assertVisible: "Settings"
 - assertVisible: "Account"
 - assertVisible: "Server"

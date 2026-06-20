@@ -25,6 +25,14 @@ if (!JWT_SECRET && NODE_ENV !== 'test') {
   console.warn('WARNING: JWT_SECRET is not set. Set it in production.');
 }
 
+// An async route handler that throws outside its own try/catch (e.g. a bad
+// decrypt) becomes an unhandled rejection, which crashes the whole process by
+// default since Node 15. Log instead so one bad request can't take down every
+// user's session.
+process.on('unhandledRejection', (reason) => {
+  console.error('Unhandled promise rejection:', reason);
+});
+
 const app = express();
 
 app.use(helmet({

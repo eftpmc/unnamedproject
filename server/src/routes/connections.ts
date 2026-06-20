@@ -66,10 +66,10 @@ router.get('/:id/test', async (req, res) => {
     .get(req.params.id, userId) as { type: string; encrypted_config: string } | undefined;
   if (!row) { res.status(404).json({ error: 'Not found' }); return; }
 
-  const config = JSON.parse(decrypt(row.encrypted_config, deriveKey())) as Record<string, string>;
   const start = Date.now();
 
   try {
+    const config = JSON.parse(decrypt(row.encrypted_config, deriveKey())) as Record<string, string>;
     if (row.type === 'anthropic') {
       const client = new Anthropic({ apiKey: config.api_key });
       await client.models.list();

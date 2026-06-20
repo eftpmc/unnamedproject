@@ -1,5 +1,4 @@
 import UIKit
-import UserNotifications
 
 final class ApprovalsViewController: UIViewController {
   private let appSession: AppSession
@@ -22,6 +21,9 @@ final class ApprovalsViewController: UIViewController {
     super.viewDidLoad()
     title = "Inbox"
     view.backgroundColor = AppTheme.canvas
+    navigationItem.rightBarButtonItem = UIBarButtonItem(
+      barButtonSystemItem: .done, target: self, action: #selector(doneTapped)
+    )
 
     setupTable()
     setupEmptyView()
@@ -31,16 +33,11 @@ final class ApprovalsViewController: UIViewController {
   override func viewDidAppear(_ animated: Bool) {
     super.viewDidAppear(animated)
     startPolling()
-    clearBadge()
+    ApprovalCenter.shared.clear()
   }
 
-  private func clearBadge() {
-    if #available(iOS 16.0, *) {
-      Task { try? await UNUserNotificationCenter.current().setBadgeCount(0) }
-    } else {
-      UIApplication.shared.applicationIconBadgeNumber = 0
-    }
-    NotificationCenter.default.post(name: .approvalBadgeCleared, object: nil)
+  @objc private func doneTapped() {
+    dismiss(animated: true)
   }
 
   override func viewWillDisappear(_ animated: Bool) {

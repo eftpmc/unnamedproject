@@ -1,0 +1,14 @@
+appId: com.unnamed.app
+---
+# Projects is reached the same way as switching chats: pushed onto the
+# shared nav stack with a native back button, not a modal/sheet. The back
+# button's accessible label is the previous screen's title ("Chat").
+- launchApp:
+    permissions:
+      notifications: deny
+- tapOn: "split view horizontally left"
+- tapOn: "Projects"
+- assertVisible: "Projects"
+- tapOn: "Chat"
+- assertVisible: "split view horizontally left"
+- assertVisible: "Message..."

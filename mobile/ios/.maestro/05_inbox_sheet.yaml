@@ -1,0 +1,14 @@
+appId: com.unnamed.app
+---
+# Inbox is the one intentional sheet (transient, quick approve/deny) and
+# should stay distinct from Projects/Settings' push navigation.
+- launchApp:
+    permissions:
+      notifications: deny
+- tapOn: "split view horizontally left"
+- tapOn: "Inbox"
+- assertVisible: "Inbox"
+- assertVisible: "Done"
+- tapOn: "Done"
+- assertNotVisible: "Approvals and agent requests will appear here."
+- assertVisible: "Message..."

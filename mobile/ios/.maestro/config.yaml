@@ -1,0 +1,18 @@
+appId: com.unnamed.app
+---
+# Maestro e2e suite for the Unnamed iOS app.
+#
+# Prerequisites:
+#   brew tap facebook/fb && brew install facebook/fb/idb-companion
+#   curl -Ls "https://get.maestro.mobile.dev" | bash   (or: brew install maestro... see maestro docs)
+#
+# Run against a booted Simulator with the app already installed (Debug build):
+#   cd mobile/ios && xcodebuild -workspace Unnamed.xcworkspace -scheme Unnamed \
+#     -destination 'platform=iOS Simulator,name=iPhone 17 Pro' build
+#   xcrun simctl install booted <path-to-Unnamed.app>
+#   maestro test mobile/ios/.maestro/
+#
+# Flows assume a real backend is reachable from the server address already
+# saved on the simulator (Settings > Server), and that the simulator already
+# has a valid signed-in session (server URL + auth token persisted). These
+# flows exercise navigation/UI, not the auth flow itself.

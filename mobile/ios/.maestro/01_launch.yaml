@@ -1,0 +1,11 @@
+appId: com.unnamed.app
+---
+# Smoke test: app launches straight into the chat-first home screen with no
+# crash and no notification-permission dialog blocking the view.
+- launchApp:
+    permissions:
+      notifications: deny
+- assertVisible: "Chat"
+- assertVisible: "split view horizontally left"
+- assertVisible: "compose"
+- assertVisible: "Message..."

@@ -35,7 +35,7 @@ final class ConnectViewController: UIViewController {
     connectButton.configuration?.imagePadding = 8
     connectButton.addTarget(self, action: #selector(connectTapped), for: .touchUpInside)
 
-    let icon = centeredIcon(systemName: "server.rack")
+    let brandMark = centeredBrandMark()
 
     let titleLabel = UILabel()
     titleLabel.text = "Connect your workspace"
@@ -68,10 +68,11 @@ final class ConnectViewController: UIViewController {
       formStack.bottomAnchor.constraint(equalTo: card.bottomAnchor)
     ])
 
-    let stack = UIStackView(arrangedSubviews: [icon, titleLabel, helpLabel, card])
+    let stack = UIStackView(arrangedSubviews: [brandMark, titleLabel, helpLabel, card])
     stack.axis = .vertical
     stack.alignment = .fill
     stack.spacing = 16
+    stack.setCustomSpacing(20, after: brandMark)
     stack.setCustomSpacing(26, after: helpLabel)
 
     view.addSubview(stack)
@@ -83,15 +84,15 @@ final class ConnectViewController: UIViewController {
     ])
   }
 
-  private func centeredIcon(systemName: String) -> UIView {
+  private func centeredBrandMark() -> UIView {
     let wrapper = UIView()
-    let icon = IconBadgeView(systemName: systemName, tintColor: AppTheme.accent)
-    wrapper.addSubview(icon)
-    icon.translatesAutoresizingMaskIntoConstraints = false
+    let mark = BrandMarkView()
+    wrapper.addSubview(mark)
+    mark.translatesAutoresizingMaskIntoConstraints = false
     NSLayoutConstraint.activate([
-      icon.centerXAnchor.constraint(equalTo: wrapper.centerXAnchor),
-      icon.topAnchor.constraint(equalTo: wrapper.topAnchor),
-      icon.bottomAnchor.constraint(equalTo: wrapper.bottomAnchor)
+      mark.centerXAnchor.constraint(equalTo: wrapper.centerXAnchor),
+      mark.topAnchor.constraint(equalTo: wrapper.topAnchor),
+      mark.bottomAnchor.constraint(equalTo: wrapper.bottomAnchor)
     ])
     return wrapper
   }

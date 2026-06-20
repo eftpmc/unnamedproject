@@ -212,6 +212,34 @@ final class SurfaceView: UIView {
   }
 }
 
+final class BrandMarkView: UIView {
+  init(size: CGFloat = 56) {
+    super.init(frame: .zero)
+    backgroundColor = AppTheme.primary
+    layer.cornerRadius = size * 0.32
+    layer.cornerCurve = .continuous
+
+    let label = UILabel()
+    label.text = "u"
+    label.textColor = AppTheme.primaryText
+    label.font = .systemFont(ofSize: size * 0.5, weight: .semibold)
+    label.textAlignment = .center
+
+    addSubview(label)
+    label.translatesAutoresizingMaskIntoConstraints = false
+    NSLayoutConstraint.activate([
+      widthAnchor.constraint(equalToConstant: size),
+      heightAnchor.constraint(equalToConstant: size),
+      label.centerXAnchor.constraint(equalTo: centerXAnchor),
+      label.centerYAnchor.constraint(equalTo: centerYAnchor)
+    ])
+  }
+
+  required init?(coder: NSCoder) {
+    fatalError("init(coder:) has not been implemented")
+  }
+}
+
 final class IconBadgeView: UIView {
   init(systemName: String, tintColor: UIColor = AppTheme.accent) {
     super.init(frame: .zero)

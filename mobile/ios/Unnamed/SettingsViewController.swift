@@ -8,6 +8,10 @@ final class SettingsViewController: UIViewController {
   private let serverURL: URL?
   private let tableView = UITableView(frame: .zero, style: .insetGrouped)
 
+  private enum Section: Int, CaseIterable {
+    case account, server, notifications, signOut
+  }
+
   init(email: String, serverURL: URL?) {
     self.email = email
     self.serverURL = serverURL
@@ -29,6 +33,7 @@ final class SettingsViewController: UIViewController {
     tableView.dataSource = self
     tableView.delegate = self
     tableView.register(UITableViewCell.self, forCellReuseIdentifier: "cell")
+    tableView.register(UITableViewCell.self, forCellReuseIdentifier: "switchCell")
 
     view.addSubview(tableView)
     tableView.translatesAutoresizingMaskIntoConstraints = false
@@ -41,56 +46,144 @@ final class SettingsViewController: UIViewController {
   }
 
   @objc private func doneTapped() { dismiss(animated: true) }
+
+  private var approvalAlertsEnabled: Bool {
+    let defaults = UserDefaults.standard
+    if defaults.object(forKey: "approvalAlertsEnabled") == nil { return true }
+    return defaults.bool(forKey: "approvalAlertsEnabled")
+  }
+
+  @objc private func approvalAlertsToggled(_ sender: UISwitch) {
+    UserDefaults.standard.set(sender.isOn, forKey: "approvalAlertsEnabled")
+  }
 }
 
 extension SettingsViewController: UITableViewDataSource, UITableViewDelegate {
-  func numberOfSections(in tableView: UITableView) -> Int { 2 }
+  func numberOfSections(in tableView: UITableView) -> Int { Section.allCases.count }
 
   func tableView(_ tableView: UITableView, numberOfRowsInSection section: Int) -> Int {
-    section == 0 ? 2 : 2
+    switch Section(rawValue: section)! {
+    case .account: return 1
+    case .server: return 2
+    case .notifications: return 1
+    case .signOut: return 1
+    }
   }
 
   func tableView(_ tableView: UITableView, titleForHeaderInSection section: Int) -> String? {
-    section == 0 ? "Account" : nil
+    switch Section(rawValue: section)! {
+    case .account: return "Account"
+    case .server: return "Server"
+    case .notifications: return "Notifications"
+    case .signOut: return nil
+    }
   }
 
   func tableView(_ tableView: UITableView, cellForRowAt indexPath: IndexPath) -> UITableViewCell {
-    let cell = tableView.dequeueReusableCell(withIdentifier: "cell", for: indexPath)
-    cell.backgroundColor = AppTheme.surface
-
-    if indexPath.section == 0 {
-      var content = cell.defaultContentConfiguration()
-      if indexPath.row == 0 {
-        content.text = "Email"
-        content.secondaryText = email
-      } else {
-        content.text = "Server"
-        content.secondaryText = serverURL?.host ?? serverURL?.absoluteString ?? "—"
-      }
-      cell.contentConfiguration = content
+    switch Section(rawValue: indexPath.section)! {
+    case .account:
+      let cell = tableView.dequeueReusableCell(withIdentifier: "cell", for: indexPath)
+      cell.backgroundColor = AppTheme.surface
       cell.selectionStyle = .none
-    } else {
+      configureAccountCell(cell)
+      return cell
+
+    case .server:
+      let cell = tableView.dequeueReusableCell(withIdentifier: "cell", for: indexPath)
+      cell.backgroundColor = AppTheme.surface
       var content = cell.defaultContentConfiguration()
       if indexPath.row == 0 {
+        content.text = "Address"
+        content.secondaryText = serverAddressText
+        cell.selectionStyle = .none
+      } else {
         content.text = "Change Server"
         content.textProperties.color = AppTheme.accent
-      } else {
-        content.text = "Sign Out"
-        content.textProperties.color = .systemRed
+        cell.selectionStyle = .default
       }
       cell.contentConfiguration = content
+      cell.accessoryType = .none
+      return cell
+
+    case .notifications:
+      let cell = tableView.dequeueReusableCell(withIdentifier: "switchCell", for: indexPath)
+      cell.backgroundColor = AppTheme.surface
+      cell.selectionStyle = .none
+      var content = cell.defaultContentConfiguration()
+      content.text = "Approval Alerts"
+      cell.contentConfiguration = content
+      let switchView = UISwitch()
+      switchView.isOn = approvalAlertsEnabled
+      switchView.addTarget(self, action: #selector(approvalAlertsToggled(_:)), for: .valueChanged)
+      cell.accessoryView = switchView
+      return cell
+
+    case .signOut:
+      let cell = tableView.dequeueReusableCell(withIdentifier: "cell", for: indexPath)
+      cell.backgroundColor = AppTheme.surface
+      var content = cell.defaultContentConfiguration()
+      content.text = "Sign Out"
+      content.textProperties.color = .systemRed
+      content.textProperties.alignment = .center
+      cell.contentConfiguration = content
       cell.selectionStyle = .default
+      return cell
     }
-    return cell
+  }
+
+  private var serverAddressText: String {
+    guard let serverURL else { return "—" }
+    guard let host = serverURL.host else { return serverURL.absoluteString }
+    if let port = serverURL.port {
+      return "\(host):\(port)"
+    }
+    return host
+  }
+
+  private func configureAccountCell(_ cell: UITableViewCell) {
+    cell.contentView.subviews.forEach { $0.removeFromSuperview() }
+
+    let avatar = UILabel()
+    avatar.backgroundColor = AppTheme.accent
+    avatar.textColor = .white
+    avatar.font = .systemFont(ofSize: 14, weight: .semibold)
+    avatar.textAlignment = .center
+    avatar.layer.cornerRadius = 16
+    avatar.clipsToBounds = true
+    avatar.text = email.first.map { String($0).uppercased() } ?? "•"
+    avatar.translatesAutoresizingMaskIntoConstraints = false
+    avatar.widthAnchor.constraint(equalToConstant: 32).isActive = true
+    avatar.heightAnchor.constraint(equalToConstant: 32).isActive = true
+
+    let emailLabel = UILabel()
+    emailLabel.font = UIFont.preferredFont(forTextStyle: .body)
+    emailLabel.textColor = .label
+    emailLabel.text = email
+
+    let stack = UIStackView(arrangedSubviews: [avatar, emailLabel])
+    stack.axis = .horizontal
+    stack.spacing = 10
+    stack.alignment = .center
+    stack.translatesAutoresizingMaskIntoConstraints = false
+
+    cell.contentView.addSubview(stack)
+    NSLayoutConstraint.activate([
+      stack.leadingAnchor.constraint(equalTo: cell.contentView.leadingAnchor, constant: 16),
+      stack.trailingAnchor.constraint(lessThanOrEqualTo: cell.contentView.trailingAnchor, constant: -16),
+      stack.topAnchor.constraint(equalTo: cell.contentView.topAnchor, constant: 8),
+      stack.bottomAnchor.constraint(equalTo: cell.contentView.bottomAnchor, constant: -8),
+    ])
   }
 
   func tableView(_ tableView: UITableView, didSelectRowAt indexPath: IndexPath) {
     tableView.deselectRow(at: indexPath, animated: true)
-    guard indexPath.section == 1 else { return }
-    if indexPath.row == 0 {
+    switch Section(rawValue: indexPath.section)! {
+    case .server where indexPath.row == 1:
       onChangeServer?()
-    } else {
+    case .signOut:
       confirmSignOut()
+    default:
+      break
     }
   }
 

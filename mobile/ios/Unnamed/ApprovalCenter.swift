@@ -62,6 +62,10 @@ final class ApprovalCenter {
   }
 
   private func scheduleNotification(count: Int) {
+    let defaults = UserDefaults.standard
+    if defaults.object(forKey: "approvalAlertsEnabled") != nil && !defaults.bool(forKey: "approvalAlertsEnabled") {
+      return
+    }
     guard count > lastNotifiedCount else { return }
     let content = UNMutableNotificationContent()
     content.title = count == 1 ? "1 Pending Approval" : "\(count) Pending Approvals"

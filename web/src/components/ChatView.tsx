@@ -1,20 +1,25 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useNavigate } from 'react-router-dom';
-import { Bell, Check, ChevronDown, Folder, GitBranch, Loader2, PanelRight, Square, Target, X } from 'lucide-react';
+import { Bell, GitBranch, Loader2, PanelRight, Square, X } from 'lucide-react';
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from '@/components/ui/sheet';
 import ContextPanel from './ContextPanel.js';
 import MessageList from './MessageList.js';
 import MessageInput from './MessageInput.js';
+import EditableTitle from './EditableTitle.js';
+import WorktreeDiff from './WorktreeDiff.js';
+import ContextBar from './ContextBar.js';
+import EmptyChatState from './EmptyChatState.js';
+import ScopePopover from './ScopePopover.js';
+import ChatConfigPopover from './ChatConfigPopover.js';
 import { getMessages, sendMessage, getChats, updateChatConfig, getModelsForEffort, getSessionWorktree, mergeSessionBranch, getWorktreeDiff, getProjects, truncateMessagesFrom, approveExecution, rejectExecution, getChatEvents, getChatStatus, stopChat } from '../lib/api.js';
 import { subscribe } from '../lib/ws.js';
 import { cn } from '../lib/utils.js';
 import { usePageTitle } from '../lib/usePageTitle.js';
-import type { EffortLevel, Message, MessageExecution, Project, Session, SessionEvent, SessionProjectLink, WSEvent, WSMessageCreated, WSMessageStarted, WSMessageDelta, WSExecutionUpdate, WSApprovalRequested, WSAutoApproved, WSSessionTitleUpdated, WSSessionEventCreated, WSAgentError, WSTurnComplete, ClaudeModelInfo } from '../types.js';
+import { getAgentStatusText } from '../lib/chatStatus.js';
+import type { EffortLevel, Message, MessageExecution, Session, SessionEvent, SessionProjectLink, WSEvent, WSMessageCreated, WSMessageStarted, WSMessageDelta, WSExecutionUpdate, WSApprovalRequested, WSAutoApproved, WSSessionTitleUpdated, WSSessionEventCreated, WSAgentError, WSTurnComplete } from '../types.js';
 import { Skeleton } from '@/components/ui/skeleton';
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Button } from '@/components/ui/button';
-import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { PageHeader } from '@/components/ui/app-layout';
 
 type InlineExecution = MessageExecution;
@@ -123,6 +128,7 @@ export default function ChatView({ chatId }: ChatViewProps) {
     setStreamingIds(new Set());
     setSending(false);
     setAgentError(null);
+    setFailedMessageId(null);
     setLastInputTokens(null);
   }, [chatId]);
 
@@ -143,6 +149,7 @@ export default function ChatView({ chatId }: ChatViewProps) {
   const [editingMessageId, setEditingMessageId] = useState<string | null>(null);
   const [sending, setSending] = useState(false);
   const [agentError, setAgentError] = useState<string | null>(null);
+  const [failedMessageId, setFailedMessageId] = useState<string | null>(null);
   const hasActiveExecution = Object.values(executions).some(list =>
     list.some(exec => exec.status === 'running' || exec.status === 'awaiting_approval')
   );
@@ -246,6 +253,7 @@ export default function ChatView({ chatId }: ChatViewProps) {
     if (!content && attachments.length === 0) return false;
     setSending(true);
     setAgentError(null);
+    setFailedMessageId(null);
 
     // Clear input immediately so it feels instant
     setInputValue('');
@@ -297,6 +305,13 @@ export default function ChatView({ chatId }: ChatViewProps) {
       setSending(false);
       setAgentError(ev.error ?? 'The agent encountered an error. Please try again.');
       queryClient.setQueryData(['chat-status', chatId], { active: false, turn: null, execution: null });
+      // A turn that errors mid-stream never fires message_created, so streamingIds
+      // would otherwise leave a permanently stuck streaming cursor on that message.
+      setStreamingIds(prev => {
+        if (prev.size === 0) return prev;
+        setFailedMessageId([...prev][0]);
+        return new Set();
+      });
     }
 
     if (event.type === 'message_started') {
@@ -337,7 +352,14 @@ export default function ChatView({ chatId }: ChatViewProps) {
     if (event.type === 'turn_complete') {
       const ev = event as WSTurnComplete;
       queryClient.setQueryData(['chat-status', chatId], { active: false, turn: null, execution: null });
-      if (ev.status === 'error') queryClient.invalidateQueries({ queryKey: ['messages', chatId] });
+      if (ev.status === 'error') {
+        queryClient.invalidateQueries({ queryKey: ['messages', chatId] });
+        setStreamingIds(prev => {
+          if (prev.size === 0) return prev;
+          setFailedMessageId([...prev][0]);
+          return new Set();
+        });
+      }
       if (ev.status === 'done' && ev.inputTokens) setLastInputTokens(ev.inputTokens);
     }
 
@@ -575,6 +597,11 @@ export default function ChatView({ chatId }: ChatViewProps) {
           onEditMessage={handleEditMessage}
           canEdit={!agentActive}
           events={chatEvents}
+          failedMessageId={failedMessageId}
+          onRetryFailedMessage={() => {
+            const lastUserContent = [...messages].reverse().find(m => m.role === 'user')?.content ?? null;
+            if (lastUserContent) sendPrompt(lastUserContent);
+          }}
         />
       )}
 
@@ -688,354 +715,3 @@ export default function ChatView({ chatId }: ChatViewProps) {
   );
 }
 
-function getAgentStatusText({
-  sending,
-  agentStarting,
-  chatStatus,
-  now,
-}: {
-  sending: boolean;
-  agentStarting: boolean;
-  chatStatus: Awaited<ReturnType<typeof getChatStatus>> | undefined;
-  now: number;
-}): string {
-  if (sending) return 'Sending message...';
-  const elapsedFrom = chatStatus?.execution?.createdAt ?? chatStatus?.turn?.startedAt ?? null;
-  const elapsed = elapsedFrom ? ` for ${formatElapsedSeconds(now - elapsedFrom)}` : '';
-  if (chatStatus?.execution) {
-    const tool = formatToolName(chatStatus.execution.tool);
-    if (chatStatus.execution.status === 'awaiting_approval') return `${tool} is waiting for approval${elapsed}`;
-    return `Running ${tool}${elapsed}`;
-  }
-  if (agentStarting) return `Agent is getting started${elapsed}`;
-  return `Agent is working${elapsed}`;
-}
-
-function formatElapsedSeconds(seconds: number): string {
-  const safeSeconds = Math.max(0, seconds);
-  if (safeSeconds < 60) return `${safeSeconds}s`;
-  const minutes = Math.floor(safeSeconds / 60);
-  if (minutes < 60) return `${minutes}m`;
-  const hours = Math.floor(minutes / 60);
-  return `${hours}h ${minutes % 60}m`;
-}
-
-function formatToolName(tool: string): string {
-  return tool
-    .replace(/^invoke_/, '')
-    .replace(/_/g, ' ')
-    .replace(/\b\w/g, char => char.toUpperCase());
-}
-
-function EditableTitle({ title, onSave }: { title: string; onSave: (t: string) => void }) {
-  const [editing, setEditing] = useState(false);
-  const [draft, setDraft] = useState(title);
-
-  function commit() {
-    const trimmed = draft.trim();
-    if (trimmed && trimmed !== title) onSave(trimmed);
-    else setDraft(title);
-    setEditing(false);
-  }
-
-  if (editing) {
-    return (
-      <input
-        autoFocus
-        value={draft}
-        onChange={e => setDraft(e.target.value)}
-        onBlur={commit}
-        onKeyDown={e => { if (e.key === 'Enter') commit(); if (e.key === 'Escape') { setDraft(title); setEditing(false); } }}
-        className="min-w-0 flex-1 bg-transparent text-[15px] font-semibold text-foreground outline-none focus:underline focus:decoration-border"
-      />
-    );
-  }
-
-  return (
-    <button
-      type="button"
-      onClick={() => { setDraft(title); setEditing(true); }}
-      title="Click to rename"
-      className="min-w-0 truncate text-left text-[15px] font-semibold text-foreground hover:underline hover:decoration-border"
-    >
-      {title}
-    </button>
-  );
-}
-
-function WorktreeDiff({ diff }: { diff: string }) {
-  const files = diff.split(/^(?=diff --git )/m).filter(Boolean);
-  return (
-    <div className="divide-y divide-border-soft">
-      {files.map((fileDiff, i) => {
-        const header = fileDiff.split('\n')[0] ?? '';
-        const filename = header.replace('diff --git a/', '').split(' b/')[0] ?? header;
-        const lines = fileDiff.split('\n');
-        return (
-          <details key={i} open className="group">
-            <summary className="flex cursor-pointer items-center gap-2 bg-muted/30 px-4 py-2.5 text-xs font-mono font-medium text-foreground hover:bg-muted/50 list-none">
-              <span className="min-w-0 flex-1 truncate">{filename}</span>
-            </summary>
-            <div className="overflow-x-auto bg-[#0d1117] font-mono text-[12px] leading-relaxed">
-              {lines.slice(4).map((line, j) => {
-                let cls = 'block px-4 text-muted-foreground/60';
-                if (line.startsWith('+') && !line.startsWith('+++')) cls = 'block px-4 bg-success/10 text-success';
-                else if (line.startsWith('-') && !line.startsWith('---')) cls = 'block px-4 bg-destructive/10 text-destructive';
-                else if (line.startsWith('@@')) cls = 'block px-4 text-primary/60 bg-primary/5';
-                return <span key={j} className={cls}>{line || ' '}</span>;
-              })}
-            </div>
-          </details>
-        );
-      })}
-    </div>
-  );
-}
-
-const CONTEXT_WINDOW = 200_000;
-
-function ContextBar({ inputTokens }: { inputTokens: number }) {
-  const pct = Math.min(inputTokens / CONTEXT_WINDOW, 1);
-  const used = pct * 100;
-  const color = pct > 0.85 ? 'bg-destructive' : pct > 0.6 ? 'bg-warning' : 'bg-primary/50';
-  const label = `${Math.round(used)}% of context used · ${inputTokens.toLocaleString()} / ${CONTEXT_WINDOW.toLocaleString()} tokens`;
-
-  return (
-    <div title={label} className="flex items-center gap-2 group/ctx cursor-default">
-      <div className="h-1 w-28 overflow-hidden rounded-full bg-muted">
-        <div className={cn('h-full rounded-full transition-all duration-500', color)} style={{ width: `${used}%` }} />
-      </div>
-      <span className="text-[10px] text-faint-fg opacity-0 transition-opacity group-hover/ctx:opacity-100">
-        {Math.round(used)}% context
-      </span>
-    </div>
-  );
-}
-
-function EmptyChatState({
-  projectName,
-  disabled,
-  onSelect,
-}: {
-  projectName?: string;
-  disabled: boolean;
-  onSelect: (content: string) => void;
-}) {
-  const prompts = projectName
-    ? [
-        `Give me a quick orientation to ${projectName}.`,
-        `Review the current state of ${projectName} and suggest next steps.`,
-        `Find the highest-impact UI/UX improvements for ${projectName}.`,
-      ]
-    : [
-        'Help me plan the next useful step.',
-        'Review this app and suggest the highest-impact improvements.',
-        'Start by asking me the fewest questions needed to get moving.',
-      ];
-
-  return (
-    <div className="flex flex-1 items-center justify-center px-4">
-      <div className="w-full max-w-xl text-center">
-        <div className="text-sm font-semibold text-foreground">
-          {projectName ? `Start with ${projectName}` : 'Start a chat'}
-        </div>
-        <p className="mx-auto mt-2 max-w-md text-sm leading-relaxed text-muted-foreground">
-          Ask for a plan, a review, or a concrete change. The agent will keep tool work and project context attached to this conversation.
-        </p>
-        <div className="mt-5 grid grid-cols-1 gap-2 sm:grid-cols-3">
-          {prompts.map(prompt => (
-            <Button
-              key={prompt}
-              variant="outline"
-              size="sm"
-              disabled={disabled}
-              onClick={() => onSelect(prompt)}
-              className="h-auto whitespace-normal justify-start rounded-xl px-3 py-2 text-left text-xs font-normal"
-            >
-              {prompt}
-            </Button>
-          ))}
-        </div>
-      </div>
-    </div>
-  );
-}
-
-function ScopePopover({
-  projects,
-  pinnedProject,
-  inferredProject,
-  agentActive,
-  onOpenProject,
-  onScopeChange,
-}: {
-  projects: Project[];
-  pinnedProject: Project | null;
-  inferredProject: SessionProjectLink | null;
-  agentActive: boolean;
-  onOpenProject: (projectId: string) => void;
-  onScopeChange: (projectId: string | null) => void;
-}) {
-  const isAuto = !pinnedProject;
-  const triggerLabel = pinnedProject?.name ?? (inferredProject ? `Auto · ${inferredProject.name}` : 'Auto');
-
-  return (
-    <Popover>
-      <PopoverTrigger asChild>
-        <button
-          type="button"
-          className="mt-1 flex w-fit max-w-full items-center gap-1.5 rounded-lg border border-border/40 bg-muted/50 px-2 py-1 text-left text-xs text-muted-foreground transition-colors hover:border-border hover:bg-muted hover:text-foreground"
-          aria-label={`Chat scope: ${triggerLabel}`}
-        >
-          {isAuto ? (
-            <Target size={12} className="shrink-0" strokeWidth={1.85} />
-          ) : (
-            <span className={cn('size-1.5 shrink-0 rounded-full', agentActive ? 'bg-success' : 'bg-muted-foreground/40')} />
-          )}
-          <span className="truncate">{triggerLabel}</span>
-          <ChevronDown size={11} className="shrink-0" />
-        </button>
-      </PopoverTrigger>
-      <PopoverContent align="start" className="w-72 p-2">
-        <div className="px-2 pb-1.5 pt-1 text-[11px] font-semibold text-faint-fg">
-          Scope of this chat
-        </div>
-        <ScopeOption
-          selected={isAuto}
-          icon={<Target size={14} />}
-          title="Auto"
-          description={inferredProject ? `Agent attached ${inferredProject.name}.` : 'Let the agent route this work or create a project.'}
-          onClick={() => onScopeChange(null)}
-        />
-        <div className="my-1 border-t border-border-soft" />
-        <div className="max-h-60 overflow-y-auto">
-          {projects.map(project => (
-            <ScopeOption
-              key={project.id}
-              selected={pinnedProject?.id === project.id}
-              icon={<Folder size={14} />}
-              title={project.name}
-              description={project.repo_path ? project.repo_path.split('/').pop() ?? 'Code project' : 'Project context'}
-              onClick={() => onScopeChange(project.id)}
-              onAuxClick={() => onOpenProject(project.id)}
-            />
-          ))}
-        </div>
-      </PopoverContent>
-    </Popover>
-  );
-}
-
-function ScopeOption({
-  selected,
-  icon,
-  title,
-  description,
-  onClick,
-  onAuxClick,
-}: {
-  selected: boolean;
-  icon: React.ReactNode;
-  title: string;
-  description: string;
-  onClick: () => void;
-  onAuxClick?: () => void;
-}) {
-  return (
-    <div className="group flex items-center gap-1">
-      <button
-        type="button"
-        onClick={onClick}
-        className={cn(
-          'flex min-w-0 flex-1 items-center gap-2 rounded-lg px-2 py-2 text-left transition-colors',
-          selected ? 'bg-accent-tint text-on-accent-soft' : 'hover:bg-muted',
-        )}
-      >
-        <span className={cn('grid size-7 shrink-0 place-items-center rounded-md', selected ? 'bg-primary/10' : 'bg-muted text-muted-foreground')}>
-          {icon}
-        </span>
-        <span className="min-w-0 flex-1">
-          <span className="block truncate text-xs font-medium text-foreground">{title}</span>
-          <span className="block truncate text-[11px] text-muted-foreground">{description}</span>
-        </span>
-        {selected && <Check size={13} className="shrink-0" strokeWidth={2.4} />}
-      </button>
-      {onAuxClick && (
-        <button
-          type="button"
-          onClick={onAuxClick}
-          className="hidden shrink-0 rounded-md px-1.5 py-1 text-[11px] font-medium text-muted-foreground transition-colors hover:bg-muted hover:text-foreground group-hover:block"
-        >
-          Open
-        </button>
-      )}
-    </div>
-  );
-}
-
-function ChatConfigPopover({
-  effort,
-  model,
-  models,
-  onConfigChange,
-}: {
-  effort: EffortLevel;
-  model: string | null;
-  models: ClaudeModelInfo[];
-  onConfigChange: (config: { effort?: EffortLevel; model?: string | null }) => void;
-}) {
-  const currentModel = models.find(m => m.id === model);
-  const label = `${effort} · ${currentModel?.display_name ?? 'Auto'}`;
-
-  return (
-    <Popover>
-      <PopoverTrigger asChild>
-        <Button
-          variant="ghost"
-          size="sm"
-          className="flex h-7 max-w-28 gap-1.5 rounded-lg border border-border/50 bg-muted/70 px-3 text-xs font-normal sm:max-w-none"
-        >
-          <span className="truncate">{label}</span>
-          <ChevronDown size={11} className="shrink-0 text-muted-foreground" />
-        </Button>
-      </PopoverTrigger>
-      <PopoverContent align="end" className="w-52 p-3">
-        <div className="flex flex-col gap-3">
-          <div>
-            <div className="mb-1.5 text-xs font-medium text-muted-foreground">Effort</div>
-            <div className="flex gap-1">
-              {(['low', 'medium', 'high'] as EffortLevel[]).map(o => (
-                <Button
-                  key={o}
-                  size="sm"
-                  variant={effort === o ? 'default' : 'ghost'}
-                  className="h-7 flex-1 text-xs"
-                  onClick={() => onConfigChange({ effort: o })}
-                >
-                  {o}
-                </Button>
-              ))}
-            </div>
-          </div>
-          <div>
-            <div className="mb-1.5 text-xs font-medium text-muted-foreground">Model</div>
-            <Select
-              value={model ?? 'auto'}
-              onValueChange={value => onConfigChange({ model: value === 'auto' ? null : value })}
-            >
-              <SelectTrigger size="sm" className="h-7 text-xs">
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="auto">Auto</SelectItem>
-                {models.map(m => (
-                  <SelectItem key={m.id} value={m.id}>{m.display_name}</SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          </div>
-        </div>
-      </PopoverContent>
-    </Popover>
-  );
-}

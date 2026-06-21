@@ -119,6 +119,8 @@ interface MessageListProps {
   onEditMessage?: (messageId: string, content: string) => void;
   canEdit?: boolean;
   events?: SessionEvent[];
+  failedMessageId?: string | null;
+  onRetryFailedMessage?: () => void;
 }
 
 function extractTextContent(node: React.ReactNode): string {
@@ -267,7 +269,7 @@ function CopyButton({ text }: { text: string }) {
 
 const NEAR_BOTTOM_THRESHOLD = 120;
 
-export default function MessageList({ messages, executions, streamingIds, sessionId, onEditMessage, canEdit, events = [] }: MessageListProps) {
+export default function MessageList({ messages, executions, streamingIds, sessionId, onEditMessage, canEdit, events = [], failedMessageId, onRetryFailedMessage }: MessageListProps) {
   const lastUserMessageId = [...messages].reverse().find(m => m.role === 'user')?.id ?? null;
   const bottomRef = useRef<HTMLDivElement>(null);
   const scrollContainerRef = useRef<HTMLDivElement>(null);
@@ -391,7 +393,7 @@ export default function MessageList({ messages, executions, streamingIds, sessio
           )}
         </button>
       )}
-      <div className="mx-auto flex w-full max-w-[46rem] flex-col gap-6 px-4 py-7 sm:px-6 sm:py-8">
+      <div role="log" aria-live="polite" aria-relevant="additions text" className="mx-auto flex w-full max-w-[46rem] flex-col gap-6 px-4 py-7 sm:px-6 sm:py-8">
         {renderItems.map(item => {
           if (item.type === 'execution-group') {
             const firstId = item.executions[0].executionId;
@@ -483,7 +485,13 @@ export default function MessageList({ messages, executions, streamingIds, sessio
                     title={timestamp}
                     className="max-w-[88%] rounded-[18px] rounded-tr-md bg-muted px-4 py-2.5 text-[15px] leading-relaxed text-foreground sm:max-w-[80%]"
                   >
-                    {msg.content && <div className="whitespace-pre-wrap">{msg.content}</div>}
+                    {msg.content && (
+                      <div className="[&_p:last-child]:mb-0">
+                        <ReactMarkdown remarkPlugins={[remarkGfm]} rehypePlugins={[rehypeHighlight]} components={markdownComponents}>
+                          {msg.content}
+                        </ReactMarkdown>
+                      </div>
+                    )}
                     {attachments.length > 0 && (
                       <div className={msg.content ? 'mt-2 flex flex-wrap gap-1.5' : 'flex flex-wrap gap-1.5'}>
                         {attachments.map(attachment => (
@@ -511,6 +519,20 @@ export default function MessageList({ messages, executions, streamingIds, sessio
                     <CopyButton text={msg.content} />
                   </div>
                 )}
+                {msg.id === failedMessageId && (
+                  <div className="mt-1.5 flex items-center gap-1.5 text-xs text-destructive">
+                    <span>Response didn't finish.</span>
+                    {onRetryFailedMessage && (
+                      <button
+                        type="button"
+                        onClick={onRetryFailedMessage}
+                        className="font-medium underline-offset-2 hover:underline"
+                      >
+                        Retry
+                      </button>
+                    )}
+                  </div>
+                )}
               </div>
             )}
           </div>
@@ -530,6 +552,8 @@ function formatFileSize(bytes: number): string {
 
 function AttachmentChip({ attachment }: { attachment: MessageAttachment }) {
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
+  const [previewLoading, setPreviewLoading] = useState(false);
+  const [previewFailed, setPreviewFailed] = useState(false);
   const [downloadError, setDownloadError] = useState(false);
   const isImage = attachment.mimeType.startsWith('image/');
   const Icon = isImage ? Image : FileText;
@@ -538,6 +562,8 @@ function AttachmentChip({ attachment }: { attachment: MessageAttachment }) {
     if (!isImage) return;
     let objectUrl: string | null = null;
     let cancelled = false;
+    setPreviewLoading(true);
+    setPreviewFailed(false);
     const token = getToken();
     fetch(attachment.url, {
       headers: token ? { Authorization: `Bearer ${token}` } : {},
@@ -552,7 +578,10 @@ function AttachmentChip({ attachment }: { attachment: MessageAttachment }) {
         setPreviewUrl(objectUrl);
       })
       .catch(() => {
-        if (!cancelled) setPreviewUrl(null);
+        if (!cancelled) setPreviewFailed(true);
+      })
+      .finally(() => {
+        if (!cancelled) setPreviewLoading(false);
       });
     return () => {
       cancelled = true;
@@ -587,12 +616,14 @@ function AttachmentChip({ attachment }: { attachment: MessageAttachment }) {
       type="button"
       onClick={downloadAttachment}
       className="flex max-w-full items-center gap-1.5 rounded-lg border border-border-soft bg-background/70 px-2 py-1 text-left text-xs text-muted-foreground transition-colors hover:border-border hover:bg-background hover:text-foreground"
-      title={downloadError ? `Could not download ${attachment.filename}` : `Download ${attachment.filename}`}
+      title={downloadError ? `Could not download ${attachment.filename}` : previewFailed ? `Could not load preview for ${attachment.filename}` : `Download ${attachment.filename}`}
     >
       {previewUrl ? (
         <img src={previewUrl} alt="" className="size-7 shrink-0 rounded object-cover" />
+      ) : previewLoading ? (
+        <span className="size-7 shrink-0 animate-pulse rounded bg-muted" />
       ) : (
-        <Icon size={13} className="shrink-0" />
+        <Icon size={13} className={cn('shrink-0', previewFailed && 'text-destructive/70')} />
       )}
       <span className="max-w-44 truncate">{attachment.filename}</span>
       <span className="shrink-0 text-faint-fg">{formatFileSize(attachment.sizeBytes)}</span>

@@ -21,7 +21,7 @@ The layout/spacing/cards are explicitly **out of scope** — they stay.
 | Web font | **Inter** (variable), replacing Hanken Grotesk |
 | Roundness | **Moderate** — base radius 18px → 10px; pill buttons/chips → rounded-rect; cards stay gently rounded |
 | iOS | **Deferred** — no changes this round |
-| Accent color | Keep the blue (it's the shared design-system signal with iOS `tintColor`); no color overhaul |
+| Accent color | **User-changeable theme color** — preset swatches + custom hue, set in Settings → Appearance, persisted in localStorage. Default stays the current blue. |
 
 ## Design
 
@@ -63,32 +63,73 @@ The radius scale in `index.css` is calc-derived from one token:
 
 Each `rounded-full` site will be inspected individually; the rule is "is this a circle (keep) or a stadium/pill (convert)?"
 
-### 4. Optional accent tidy (low priority, only if time permits)
+### 4. User-changeable accent color
 
-- Keep the blue. Optionally nudge the pill **chips** (model selector, branch) from tinted-pill toward a flatter bordered chip so they read as standard UI controls. This is a nice-to-have; the font + radius changes do the heavy lifting. Will confirm visually before/after and back out if it doesn't clearly help.
+Replace the hardcoded blue with a themeable accent driven by **two CSS custom properties** so a single choice recomputes every accent token consistently in both light and dark:
+
+- `--accent-h` — hue (oklch hue angle)
+- `--accent-c` — chroma (lets neutral/muted presets dial saturation down)
+
+**Token parametrization (`index.css`).** Rewrite the accent tokens in both the light and dark blocks to reference these vars instead of literal hue/chroma. Lightness stays per-mode (so contrast holds); only hue/chroma come from the vars:
+
+```css
+/* defaults — the current blue */
+--accent-h: 252;
+--accent-c: 0.085;   /* dark block uses its own 0.1 */
+
+/* light block, rewritten */
+--primary:        oklch(0.58 var(--accent-c) var(--accent-h));
+--accent-tint:    oklch(0.95 calc(var(--accent-c) * 0.3) var(--accent-h));
+--on-accent-soft: oklch(0.50 calc(var(--accent-c) * 1.05) var(--accent-h));
+--ring:           color-mix(in oklch, oklch(0.58 var(--accent-c) var(--accent-h)) 55%, transparent);
+--sidebar-primary: oklch(0.58 var(--accent-c) var(--accent-h));
+/* --primary-foreground / --sidebar-primary-foreground stay near-white (light) / near-dark (dark) — readable across hues at these lightnesses */
+```
+
+The dark block mirrors this with its existing dark lightness values. Because oklch holds perceived lightness roughly constant across hue, foreground contrast stays acceptable for any chosen hue without per-color tuning.
+
+**Presets + custom.** New `web/src/lib/accent.ts` (mirrors `theme.ts`):
+- `Accent` = a small set of presets, each mapping to `{ h, c }`: e.g. **Blue** (252, 0.085 — default), **Violet** (290, 0.09), **Teal** (190, 0.08), **Green** (155, 0.08), **Amber** (70, 0.09), **Rose** (15, 0.10), plus **Slate** (252, 0.02 — near-neutral).
+- Custom: a hue value (0–360) at the default chroma. Stored as `{ h, c }` too, so presets and custom share one storage shape.
+- `STORAGE_KEY = 'accent'`; `getStoredAccent()`, `getInitialAccent()` (default Blue), `applyAccent({h,c})` → sets `--accent-h` / `--accent-c` on `document.documentElement.style`, `setStoredAccent()` persists + applies.
+- `web/src/lib/useAccent.ts` — `useState` + setter, mirroring `useTheme.ts`.
+
+**Apply before paint.** In `main.tsx` (or wherever `getInitialTheme()` runs at startup), also call `applyAccent(getInitialAccent())` before first render so there's no flash of the default blue.
+
+**Settings UI.** Add an **Appearance** section to Settings (the screens already have an Account-style tab pattern). It contains:
+- the existing light/dark control (if not already surfaced there), and
+- an **Accent** row: a row of preset swatch buttons (the active one shows a ring/check) + a **Custom** affordance that reveals a hue slider (`<input type="range" min=0 max=360>`) or a native color input. Selecting any option calls `setStoredAccent` immediately (live preview, no save button — consistent with the instant theme toggle).
+
+**iOS note (future):** because the accent is just `{h, c}`, the later iOS pass can read the same stored choice (when settings sync exists) and map it to `view.tintColor`. Out of scope now, but the shape is chosen to make that trivial.
 
 ## Components / files touched
 
 - `web/package.json` — dependency swap.
-- `web/src/index.css` — `@import`, `--font-sans`, `--radius`, optional body font-features.
+- `web/src/index.css` — `@import`, `--font-sans`, `--radius`, optional body font-features, **accent token parametrization (`--accent-h`/`--accent-c`)**.
 - `rounded-full` call sites (subset): `Sidebar.tsx`, `UserMenu.tsx`, `ChatView.tsx`, `MessageList.tsx`, `ContextPanel.tsx`, `InboxPanel.tsx`, `ui/status-pill.tsx`, `ChatsPage.tsx`, `ProjectPage.tsx`, `PlanPage.tsx`, `ProjectsPage.tsx`, `Settings.tsx` — only the pill (non-circular) instances.
+- **New:** `web/src/lib/accent.ts`, `web/src/lib/useAccent.ts`.
+- `web/src/main.tsx` — apply stored accent before first render.
+- `web/src/pages/Settings.tsx` — Appearance section with theme + accent controls.
 
 ## Testing / verification
 
 - **Playwright (visual)** — capture before/after screenshots of the key screens at desktop + mobile widths: Login, Chats (empty + loaded), Projects, Project detail, Settings, Chat with code block + Context panel. Compare side-by-side to confirm: font changed everywhere, no pills left where they shouldn't be, avatars/dots still round, nothing visually broke (overflow, clipped corners).
-- **Existing unit tests** (`vitest`) — run `npm test` in `web/`; these are logic/markup tests and should stay green (no logic touched). Treat any failure as a regression to fix.
+- **Accent verification (Playwright)** — in Settings → Appearance, select a non-default preset and a custom hue; assert `getComputedStyle(document.documentElement).getPropertyValue('--accent-h')` changes and that `--primary` resolves to the new hue; screenshot the sidebar "New chat" button + active nav in two accents to confirm it recolors live; reload to confirm persistence; verify it holds in both light and dark.
+- **Existing unit tests** (`vitest`) — run `npm test` in `web/`; these are logic/markup tests and should stay green (no logic touched). Add a small unit test for `accent.ts` (default, persistence round-trip, apply sets the CSS vars). Treat any existing failure as a regression to fix.
 - **Maestro** — not used this round (iOS deferred).
 
 ## Out of scope
 
 - Any layout, spacing, or card-structure changes.
 - iOS app (separate later pass — its native font/system-color approach already avoids the "stylish" problem).
-- Color-system overhaul; dark/light token values stay as-is apart from the optional chip tidy.
+- Color-system overhaul beyond accent — the neutral slate surfaces and light/dark lightness values stay as-is; only the **accent** hue/chroma becomes user-driven.
+- Server-side persistence of the accent (client-only localStorage this round); iOS consumption of the accent (future).
 
 ## Success criteria
 
 1. No Hanken Grotesk anywhere; Inter renders across all screens in light and dark.
 2. No full-pill buttons/chips; cards and controls read as standard rounded-rect (~10px family).
 3. Avatars, status dots, and scrollbar thumb remain circular.
-4. All existing `vitest` tests pass; Playwright before/after shows no broken layout.
-5. User confirms it "feels cleaner / less stylish" while keeping the spacing & cards they like.
+4. Accent is user-changeable via Settings → Appearance (presets + custom hue), applies live across the whole UI in light and dark, and persists across reloads. Default remains the current blue.
+5. All existing `vitest` tests pass (+ new `accent.ts` test); Playwright before/after shows no broken layout and confirms accent recoloring.
+6. User confirms it "feels cleaner / less stylish" while keeping the spacing & cards they like.

@@ -48,7 +48,7 @@ const haikuIntent: Intent = {
 };
 const opusIntent: Intent = {
   domain: 'code', complexity: 'high', model: 'opus',
-  tools: [], scope: 'campaign', needs_research: false, ambiguous: false,
+  tools: [], scope: 'plan', needs_research: false, ambiguous: false,
 };
 
 describe('resolveModelForTurn', () => {

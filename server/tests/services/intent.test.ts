@@ -54,9 +54,9 @@ describe('classifyIntent', () => {
     expect(intent.model).toBe('haiku');
   });
 
-  it('routes coordinated work to campaign scope', () => {
-    const intent = classifyIntent('run a campaign to launch the product');
-    expect(intent.scope).toBe('campaign');
+  it('routes coordinated multi-step work to plan scope', () => {
+    const intent = classifyIntent('plan and run multiple tasks to launch the product');
+    expect(intent.scope).toBe('plan');
   });
 
   it('classifies a message with multiple domain signals as multi', () => {

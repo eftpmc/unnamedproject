@@ -3,6 +3,8 @@ import path from 'path';
 import fs from 'fs';
 import { fileURLToPath } from 'url';
 import { newId } from '../lib/ids.js';
+import { runMigrations, type Migration } from './migrate.js';
+import { backupDatabase } from './backup.js';
 
 let db: Database.Database;
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
@@ -10,6 +12,104 @@ const defaultDataDir = path.resolve(__dirname, '../../../data');
 
 export function getDataDir(): string {
   return process.env.DATA_DIR ? path.resolve(process.env.DATA_DIR) : defaultDataDir;
+}
+
+// Ordered, versioned schema migrations. Version 1 is the baseline: the full
+// historical schema plus every in-place migration that predates this runner,
+// kept idempotent so it lands any existing or fresh database at today's schema
+// and stamps user_version = 1. New schema changes append as version 2, 3, …
+// (use noTransaction + self-managed PRAGMAs for table rebuilds).
+const migrations: Migration[] = [
+  { version: 1, name: 'baseline-schema', noTransaction: true, up: () => applySchema() },
+  { version: 2, name: 'repair-plan-foreign-keys', noTransaction: true, up: repairPlanForeignKeys },
+];
+
+function tableSql(database: Database.Database, name: string): string | undefined {
+  return (database
+    .prepare("SELECT sql FROM sqlite_master WHERE type='table' AND name = ?")
+    .get(name) as { sql: string } | undefined)?.sql;
+}
+
+/**
+ * The campaigns→plans / campaign_tasks→plan_steps rename used
+ * `legacy_alter_table = ON`, which deliberately does NOT rewrite foreign-key
+ * references in other tables. That left `plan_steps.plan_id` pointing at the
+ * dropped `campaigns` table, and `artifacts.source_plan_id` / `source_step_id`
+ * pointing at the dropped `campaigns` / `campaign_tasks` tables. With
+ * `foreign_keys = ON`, SQLite validates those on every INSERT, so creating a
+ * plan step or an artifact failed with "no such table: campaigns". Rebuild both
+ * with the FK targets corrected to `plans` / `plan_steps`. plan_steps is rebuilt
+ * first because artifacts references it.
+ */
+function repairPlanForeignKeys(database: Database.Database): void {
+  const planStepsSql = tableSql(database, 'plan_steps');
+  if (planStepsSql && planStepsSql.includes('campaigns')) {
+    database.exec(`
+      PRAGMA foreign_keys = OFF;
+      PRAGMA legacy_alter_table = ON;
+      ALTER TABLE plan_steps RENAME TO plan_steps_fk_repair;
+      PRAGMA legacy_alter_table = OFF;
+      CREATE TABLE plan_steps (
+        id TEXT PRIMARY KEY,
+        plan_id TEXT NOT NULL REFERENCES plans(id) ON DELETE CASCADE,
+        title TEXT NOT NULL,
+        agent TEXT NOT NULL CHECK(agent IN ('claude_code','codex','mcp','file_write','git','github','eval','subagent')),
+        status TEXT NOT NULL DEFAULT 'waiting'
+          CHECK(status IN ('waiting','running','done','error')),
+        execution_id TEXT REFERENCES executions(id) ON DELETE SET NULL,
+        position INTEGER NOT NULL,
+        prompt TEXT,
+        depends_on TEXT,
+        tool_args TEXT,
+        created_at INTEGER NOT NULL DEFAULT (unixepoch()),
+        completed_at INTEGER
+      );
+      INSERT INTO plan_steps (
+        id, plan_id, title, agent, status, execution_id, position, prompt, depends_on, tool_args, created_at, completed_at
+      )
+      SELECT
+        id, plan_id, title, agent, status, execution_id, position, prompt, depends_on, tool_args, created_at, completed_at
+      FROM plan_steps_fk_repair;
+      DROP TABLE plan_steps_fk_repair;
+      PRAGMA foreign_keys = ON;
+    `);
+  }
+
+  const artifactsSql = tableSql(database, 'artifacts');
+  if (artifactsSql && (artifactsSql.includes('campaign_tasks') || artifactsSql.includes('campaigns'))) {
+    database.exec(`
+      PRAGMA foreign_keys = OFF;
+      PRAGMA legacy_alter_table = ON;
+      ALTER TABLE artifacts RENAME TO artifacts_fk_repair;
+      PRAGMA legacy_alter_table = OFF;
+      CREATE TABLE artifacts (
+        id TEXT PRIMARY KEY,
+        project_id TEXT NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
+        kind TEXT NOT NULL,
+        title TEXT NOT NULL,
+        description TEXT,
+        status TEXT NOT NULL DEFAULT 'ready'
+          CHECK(status IN ('ready','review','running','error')),
+        mime_type TEXT NOT NULL DEFAULT 'application/octet-stream',
+        path TEXT,
+        url TEXT,
+        metadata TEXT NOT NULL DEFAULT '{}',
+        source_plan_id TEXT REFERENCES plans(id) ON DELETE SET NULL,
+        source_step_id TEXT REFERENCES plan_steps(id) ON DELETE SET NULL,
+        created_at INTEGER NOT NULL DEFAULT (unixepoch())
+      );
+      INSERT INTO artifacts (
+        id, project_id, kind, title, description, status, mime_type, path, url, metadata,
+        source_plan_id, source_step_id, created_at
+      )
+      SELECT
+        id, project_id, kind, title, description, status, mime_type, path, url, metadata,
+        source_plan_id, source_step_id, created_at
+      FROM artifacts_fk_repair;
+      DROP TABLE artifacts_fk_repair;
+      PRAGMA foreign_keys = ON;
+    `);
+  }
 }
 
 export function initDb(): void {
@@ -20,7 +120,19 @@ export function initDb(): void {
   db.pragma('journal_mode = WAL');
   db.pragma('foreign_keys = ON');
   db.pragma('busy_timeout = 5000');
-  applySchema();
+
+  runMigrations(db, migrations, {
+    beforeMigrate: () => {
+      // Only snapshot a database that already holds data — a brand-new install
+      // has nothing to lose and the empty file isn't worth copying.
+      const hasData = db
+        .prepare("SELECT name FROM sqlite_master WHERE type='table' AND name='users'")
+        .get();
+      if (hasData) {
+        console.log(`Backed up database to ${backupDatabase(db, dbPath, 'pre-migrate')} before migrating.`);
+      }
+    },
+  });
 }
 
 export function getDb(): Database.Database {

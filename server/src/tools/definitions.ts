@@ -364,7 +364,7 @@ export const toolDefinitions: Anthropic.Tool[] = [
   },
   {
     name: 'create_pipeline',
-    description: 'Create a reusable workflow template (pipeline) with named tasks and dependency declarations. Pipelines can be run multiple times via run_pipeline, which instantiates them as campaigns. Useful for recurring multi-step workflows like "test → build → deploy".',
+    description: 'Create a reusable workflow template (pipeline) with named tasks and dependency declarations. Pipelines can be run multiple times via run_pipeline, which instantiates them as plans. Useful for recurring multi-step workflows like "test → build → deploy".',
     input_schema: {
       type: 'object',
       properties: {
@@ -397,7 +397,7 @@ export const toolDefinitions: Anthropic.Tool[] = [
       properties: {
         pipeline_id: { type: 'string', description: 'ID of the pipeline to run (from create_pipeline)' },
         project_id: { type: 'string', description: 'Project to run the pipeline against' },
-        title: { type: 'string', description: 'Optional campaign title override. Defaults to the pipeline title.' },
+        title: { type: 'string', description: 'Optional plan title override. Defaults to the pipeline title.' },
         on_error: { type: 'string', enum: ['stop', 'continue'], description: 'Whether to stop on first task error (default: stop)' },
       },
       required: ['pipeline_id', 'project_id'],
@@ -405,7 +405,7 @@ export const toolDefinitions: Anthropic.Tool[] = [
   },
   {
     name: 'delegate_to_agent',
-    description: 'Spawn a focused sub-agent with its own context window to complete a specific task. The sub-agent can read files, search code, write files, and create artifacts, but cannot spawn further agents or create campaigns. Returns when the sub-agent finishes. Use for self-contained tasks that benefit from a fresh context (e.g. "analyze all API endpoints and write a summary doc").',
+    description: 'Spawn a focused sub-agent with its own context window to complete a specific task. The sub-agent can read files, search code, write files, and create artifacts, but cannot spawn further agents or create plans. Returns when the sub-agent finishes. Use for self-contained tasks that benefit from a fresh context (e.g. "analyze all API endpoints and write a summary doc").',
     input_schema: {
       type: 'object',
       properties: {

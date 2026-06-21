@@ -2,7 +2,11 @@ import express from 'express';
 import helmet from 'helmet';
 import { rateLimit } from 'express-rate-limit';
 import { createServer } from 'http';
-import { initDb, reconcileOrphanedExecutions } from './db/index.js';
+import { initDb, reconcileOrphanedExecutions, getDataDir, getDb, closeDb } from './db/index.js';
+import { ensureSecrets, getSecretSources } from './lib/secrets.js';
+import { logger } from './lib/logger.js';
+import { requestLogger } from './middleware/request-logger.js';
+import { notFoundHandler, errorHandler } from './middleware/error-handler.js';
 import { initSocket } from './services/socket.js';
 import { startScheduler } from './services/scheduler.js';
 import authRoutes from './routes/auth.js';
@@ -18,19 +22,34 @@ import plansRoutes from './routes/plans.js';
 import pipelinesRoutes from './routes/pipelines.js';
 
 const PORT = process.env.PORT ?? '3000';
-const JWT_SECRET = process.env.JWT_SECRET;
 const NODE_ENV = process.env.NODE_ENV;
 
-if (!JWT_SECRET && NODE_ENV !== 'test') {
-  console.warn('WARNING: JWT_SECRET is not set. Set it in production.');
+// Resolve secrets at boot: use env-provided values, otherwise generate and
+// persist strong ones to DATA_DIR so a self-hoster gets a secure zero-config
+// first run. Throws (and so aborts boot) only if a generated secret can't be
+// persisted in production — running with a secret that won't survive a restart
+// would silently log everyone out on the next deploy.
+function initSecrets() {
+  ensureSecrets();
+  const src = getSecretSources();
+  if (src.jwtSecret === 'generated') {
+    logger.info(`Generated a JWT signing secret and saved it to ${getDataDir()}/secrets.json. Keep this file with your backups — deleting it logs everyone out.`);
+  }
+  if (src.jwtSecret === 'ephemeral') {
+    logger.warn('Could not persist generated secrets — tokens will not survive a restart. Set JWT_SECRET or make DATA_DIR writable.');
+  }
+  if (!process.env.ANTHROPIC_API_KEY) {
+    logger.warn('ANTHROPIC_API_KEY is not set. Configure an Anthropic key in Settings → connections, or set it in the environment.');
+  }
 }
 
-// An async route handler that throws outside its own try/catch (e.g. a bad
-// decrypt) becomes an unhandled rejection, which crashes the whole process by
-// default since Node 15. Log instead so one bad request can't take down every
-// user's session.
+if (NODE_ENV !== 'test') initSecrets();
+
+// A backstop only. Async route errors are forwarded to the error handler via
+// asyncHandler; this catches anything that still escapes (e.g. a rejection in a
+// background task) so one stray error can't crash the whole process.
 process.on('unhandledRejection', (reason) => {
-  console.error('Unhandled promise rejection:', reason);
+  logger.error('Unhandled promise rejection', { reason: reason instanceof Error ? reason.stack : String(reason) });
 });
 
 const app = express();
@@ -42,6 +61,18 @@ app.use(helmet({
 }));
 
 app.use(express.json());
+app.use(requestLogger);
+
+// Liveness/readiness probe — verifies the database answers. Used by the Docker
+// healthcheck and any external monitor. Unauthenticated and cheap by design.
+app.get('/health', (_req, res) => {
+  try {
+    getDb().prepare('SELECT 1').get();
+    res.json({ status: 'ok' });
+  } catch {
+    res.status(503).json({ status: 'error' });
+  }
+});
 
 const authLimiter = rateLimit({
   windowMs: 15 * 60 * 1000,
@@ -66,14 +97,35 @@ app.use('/scheduled-tasks', scheduledTasksRoutes);
 app.use('/plans', plansRoutes);
 app.use('/pipelines', pipelinesRoutes);
 
+// Must be registered after all routes.
+app.use(notFoundHandler);
+app.use(errorHandler);
+
 const server = createServer(app);
 initSocket(server);
 
+// Stop accepting connections, finish in-flight requests, then close the DB so a
+// deploy/restart doesn't drop work or leave the SQLite WAL mid-write.
+function shutdown(signal: string) {
+  logger.info(`Received ${signal}, shutting down`);
+  server.close(() => {
+    closeDb();
+    logger.info('Closed server and database');
+    process.exit(0);
+  });
+  setTimeout(() => {
+    logger.error('Forced shutdown after 10s timeout');
+    process.exit(1);
+  }, 10_000).unref();
+}
+
 if (NODE_ENV !== 'test') {
   server.listen(parseInt(PORT), () => {
-    console.log(`Server running on port ${PORT}`);
+    logger.info(`Server running on port ${PORT}`);
   });
   startScheduler();
+  process.on('SIGTERM', () => shutdown('SIGTERM'));
+  process.on('SIGINT', () => shutdown('SIGINT'));
 }
 
 export { app, server };

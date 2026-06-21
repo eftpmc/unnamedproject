@@ -692,30 +692,30 @@ describe('agent', () => {
     expect(subAgentMock).toHaveBeenCalledTimes(2);
   });
 
-  it('includes errors array in run_campaign tool result when tasks fail', async () => {
+  it('includes errors array in run_plan tool result when steps fail', async () => {
     const db = getDb();
     const projectId = newId();
     db.prepare('INSERT INTO projects (id, user_id, name, description, repo_path, enabled_connection_ids) VALUES (?,?,?,?,?,?)')
-      .run(projectId, userId, 'campaign-errors', 'Campaign errors test', null, '[]');
+      .run(projectId, userId, 'plan-errors', 'Plan errors test', null, '[]');
 
-    // Create a campaign with one error task
-    const campaignId = newId();
-    const taskId = newId();
+    // Create a plan with one errored step
+    const planId = newId();
+    const stepId = newId();
     const execId = newId();
-    db.prepare('INSERT INTO campaigns (id, project_id, session_id, title, status) VALUES (?,?,?,?,?)')
-      .run(campaignId, projectId, sessionId, 'Test Campaign', 'error');
+    db.prepare('INSERT INTO plans (id, project_id, session_id, title, status) VALUES (?,?,?,?,?)')
+      .run(planId, projectId, sessionId, 'Test Plan', 'error');
     db.prepare('INSERT INTO executions (id, message_id, project_id, tool, status, result) VALUES (?,?,?,?,?,?)')
       .run(execId, null, projectId, 'subagent', 'error', 'Exit 1: jest not found — full error message here');
-    db.prepare('INSERT INTO campaign_tasks (id, campaign_id, title, agent, position, status, execution_id) VALUES (?,?,?,?,?,?,?)')
-      .run(taskId, campaignId, 'Run tests', 'subagent', 0, 'error', execId);
+    db.prepare('INSERT INTO plan_steps (id, plan_id, title, agent, position, status, execution_id) VALUES (?,?,?,?,?,?,?)')
+      .run(stepId, planId, 'Run tests', 'subagent', 0, 'error', execId);
 
-    // Lead agent calls run_campaign
+    // Lead agent calls run_plan
     streamMock.mockImplementationOnce(() => ({
       on: () => ({ on: () => ({ finalMessage: async () => ({}) }) }),
       finalMessage: async () => ({
         stop_reason: 'tool_use',
         usage: { input_tokens: 10, output_tokens: 5 },
-        content: [{ type: 'tool_use', id: 'tool-rc', name: 'run_campaign', input: { campaign_id: campaignId } }],
+        content: [{ type: 'tool_use', id: 'tool-rc', name: 'run_plan', input: { plan_id: planId } }],
       }),
     }));
     streamMock.mockImplementationOnce(() => {
@@ -730,7 +730,7 @@ describe('agent', () => {
     });
 
     const msgId = newId();
-    db.prepare('INSERT INTO messages (id, session_id, role, content) VALUES (?,?,?,?)').run(msgId, sessionId, 'user', 'run the campaign');
+    db.prepare('INSERT INTO messages (id, session_id, role, content) VALUES (?,?,?,?)').run(msgId, sessionId, 'user', 'run the plan');
     await runAgentTurn(userId, sessionId, msgId);
 
     // Inspect what the lead agent received as the tool result
@@ -743,7 +743,7 @@ describe('agent', () => {
     expect(toolResult.errors).toBeDefined();
     expect(toolResult.errors).toHaveLength(1);
     expect(toolResult.errors[0]).toMatchObject({
-      task_id: taskId,
+      step_id: stepId,
       title: 'Run tests',
       error: expect.stringContaining('jest not found'),
     });

@@ -5,7 +5,9 @@ services:
       dockerfile: Dockerfile
     environment:
       NODE_ENV: production
-      JWT_SECRET: ${JWT_SECRET}
+      # Optional — auto-generated into /data/secrets.json on first run if unset.
+      JWT_SECRET: ${JWT_SECRET:-}
+      ENCRYPTION_KEY: ${ENCRYPTION_KEY:-}
       DATA_DIR: /data
       ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY}
       DEFAULT_CLAUDE_MODEL: ${DEFAULT_CLAUDE_MODEL:-}
@@ -17,7 +19,7 @@ services:
       - app-data:/data
     restart: unless-stopped
     healthcheck:
-      test: ["CMD", "node", "-e", "require('http').get('http://localhost:3000/auth/me', r => process.exit(r.statusCode === 401 ? 0 : 1)).on('error', () => process.exit(1))"]
+      test: ["CMD", "node", "-e", "require('http').get('http://localhost:3000/health', r => process.exit(r.statusCode === 200 ? 0 : 1)).on('error', () => process.exit(1))"]
       interval: 10s
       timeout: 5s
       retries: 3

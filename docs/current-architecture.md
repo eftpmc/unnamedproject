@@ -1,11 +1,11 @@
 # Current Architecture
 
-Unnamed is a local agent workspace for chats, projects, campaigns, executions, artifacts, memory, and scheduled work.
+Unnamed is a local agent workspace for chats, projects, plans, executions, artifacts, memory, and scheduled work.
 
 ## Runtime Shape
 
-- `server/`: Express API, WebSocket server, SQLite data model, agent/tool orchestration, executions, campaigns, pipelines, artifacts, memory, scheduled tasks, and MCP process pooling.
-- `web/`: React/Vite client with React Query, authenticated API calls, WebSocket updates, chat UI, project workspace, campaign views, artifacts, files, and settings.
+- `server/`: Express API, WebSocket server, SQLite data model, agent/tool orchestration, executions, plans, pipelines, artifacts, memory, scheduled tasks, and MCP process pooling.
+- `web/`: React/Vite client with React Query, authenticated API calls, WebSocket updates, chat UI, project workspace, plan views, artifacts, files, and settings.
 - `remotion/`: shared Remotion renderer used by the `generate_video` tool.
 - `data/`: local runtime storage for SQLite, project files, media, attachments, worktrees, and generated artifacts.
 
@@ -14,10 +14,11 @@ Unnamed is a local agent workspace for chats, projects, campaigns, executions, a
 Projects are capability-detected sandboxes. The UI keeps a stable set of project tabs:
 
 - Overview
-- Campaigns
+- Plans
 - Chats
 - Artifacts
 - Files
+- Pipelines
 - Settings
 
 Generated outputs belong in Artifacts. This replaces earlier plans for project-type-specific Studio tabs and capability-specific Research tabs.
@@ -75,8 +76,8 @@ Important event types:
 - `turn_complete`
 - `session_title_updated`
 - `session_event_created`
-- `campaign_task_updated`
-- `campaign_created`
+- `plan_step_updated`
+- `plan_created`
 
 Chat-scoped events include `sessionId`. Clients should ignore events for other chats and refresh messages/status after reconnect.
 
@@ -109,11 +110,11 @@ Sub-agents use `delegate_to_agent` with a configurable `max_turns` cap. Long-run
 
 Research and GitHub integrations are MCP-based. Built-in `web_search`, `web_fetch`, and direct `github_api` tools are not active product surfaces. Agents discover MCP servers through `list_connections` and call them with `mcp_call`.
 
-## Campaigns And Pipelines
+## Plans And Pipelines
 
-Campaigns coordinate multi-task work against a project. Tasks can run in parallel when dependencies are satisfied. `run_campaign` returns counts and an `errors` array with failed task details.
+Plans coordinate multi-step work against a project. Steps can run in parallel when dependencies are satisfied. Plan routes (`/plans`) expose listing, detail, cancel, and resume.
 
-Pipelines are reusable workflow templates. `run_pipeline` instantiates a pipeline as a campaign and dispatches it through the same campaign machinery.
+Pipelines are reusable workflow templates. `run_pipeline` instantiates a pipeline as a plan and dispatches it through the same plan machinery.
 
 Scheduled tasks are polled by the scheduler and due tasks run in parallel. Individual task failures are logged without blocking remaining due tasks.
 

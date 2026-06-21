@@ -54,8 +54,8 @@ Important event types:
 - `turn_complete`
 - `session_title_updated`
 - `session_event_created`
-- `campaign_task_updated`
-- `campaign_created`
+- `plan_step_updated`
+- `plan_created`
 
 Events that relate to a chat include `sessionId`; clients must ignore events for other chats. On reconnect, mobile should refresh `GET /sessions/:id/status` and `GET /sessions/:id/messages`.
 
@@ -81,18 +81,18 @@ Message payloads include persisted `executions`, so mobile can rebuild execution
 
 - `GET /projects` lists projects.
 - `GET /projects/:id/capabilities` returns detected project capabilities.
-- `GET /projects/:id/campaigns` lists project campaigns.
+- `GET /projects/:id/plans` lists project plans.
 - `GET /projects/:id/artifacts` lists artifacts for a project.
 - `GET /projects/:id/artifacts/:artifactId/content` reads text artifact content.
 - Artifact content/download URLs require auth.
 
-## Campaigns And Long Work
+## Plans And Long Work
 
-- Campaign execution state is visible through campaign routes and message executions.
-- `GET /campaigns` lists campaigns across projects.
-- `GET /campaigns/:id` returns campaign detail and tasks.
-- `POST /campaigns/:id/cancel` cancels a campaign.
-- `POST /campaigns/:id/resume` resumes failed campaign tasks.
+- Plan execution state is visible through plan routes and message executions.
+- `GET /plans` lists plans across projects.
+- `GET /plans/:id` returns plan detail and steps.
+- `POST /plans/:id/cancel` cancels a plan.
+- `POST /plans/:id/resume` resumes failed plan steps.
 - Async tools such as `generate_video` return an execution id.
 - Agents can use `wait_for_execution`; clients should use `/sessions/:id/status`, WebSocket events, and persisted executions for UI recovery.
 

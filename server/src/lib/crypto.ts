@@ -1,4 +1,5 @@
-import { createCipheriv, createDecipheriv, randomBytes, createHash } from 'crypto';
+import { createCipheriv, createDecipheriv, randomBytes } from 'crypto';
+import { getEncryptionKeyHex } from './secrets.js';
 
 // key must be 64 hex chars (32 bytes)
 export function encrypt(plaintext: string, hexKey: string): string {
@@ -18,7 +19,10 @@ export function decrypt(ciphertext: string, hexKey: string): string {
   return decipher.update(Buffer.from(dataHex, 'hex')) + decipher.final('utf8');
 }
 
+// Returns the 32-byte (64 hex char) key used to encrypt stored connection
+// secrets (API keys, MCP credentials). Resolution (env ENCRYPTION_KEY →
+// SHA-256(JWT_SECRET) for backward compatibility → generated-and-persisted key)
+// lives in the secrets module.
 export function deriveKey(): string {
-  const secret = process.env.JWT_SECRET ?? 'dev-secret-not-for-production';
-  return createHash('sha256').update(secret).digest('hex');
+  return getEncryptionKeyHex();
 }

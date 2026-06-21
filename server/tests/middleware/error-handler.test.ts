@@ -1,6 +1,6 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import type { Request, Response } from 'express';
-import { asyncHandler, notFoundHandler, errorHandler } from '../../src/middleware/error-handler.js';
+import express, { type Request, type Response } from 'express';
+import { asyncHandler, notFoundHandler, errorHandler, wrapAsyncErrors } from '../../src/middleware/error-handler.js';
 
 // errorHandler logs every failure; keep that out of the test output.
 beforeEach(() => { vi.spyOn(console, 'error').mockImplementation(() => {}); });
@@ -71,5 +71,21 @@ describe('errorHandler', () => {
     res.headersSent = true;
     errorHandler(new Error('late'), req, res, vi.fn());
     expect(res.status).not.toHaveBeenCalled();
+  });
+});
+
+describe('wrapAsyncErrors', () => {
+  it('wraps a router\'s async handler so a rejection reaches next()', async () => {
+    const router = express.Router();
+    const boom = new Error('async boom');
+    router.get('/x', async () => { throw boom; });
+    wrapAsyncErrors(router);
+
+    // Pull the wrapped handler back off the router and invoke it directly.
+    const stack = (router as unknown as { stack: { route?: { stack: { handle: (...a: unknown[]) => unknown }[] } }[] }).stack;
+    const handle = stack.find(l => l.route)!.route!.stack[0].handle;
+    const next = vi.fn();
+    await handle(req, mockRes(), next);
+    expect(next).toHaveBeenCalledWith(boom);
   });
 });

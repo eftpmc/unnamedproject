@@ -6,7 +6,7 @@ import { initDb, reconcileOrphanedExecutions, getDataDir, getDb, closeDb } from 
 import { ensureSecrets, getSecretSources } from './lib/secrets.js';
 import { logger } from './lib/logger.js';
 import { requestLogger } from './middleware/request-logger.js';
-import { notFoundHandler, errorHandler } from './middleware/error-handler.js';
+import { notFoundHandler, errorHandler, wrapAsyncErrors } from './middleware/error-handler.js';
 import { initSocket } from './services/socket.js';
 import { startScheduler } from './services/scheduler.js';
 import authRoutes from './routes/auth.js';
@@ -85,17 +85,19 @@ const authLimiter = rateLimit({
 
 initDb();
 reconcileOrphanedExecutions();
-app.use('/auth', authLimiter, authRoutes);
-app.use('/connections', connectionsRoutes);
-app.use('/projects', projectsRoutes);
-app.use('/settings', settingsRoutes);
-app.use('/sessions', sessionsRoutes);
-app.use('/sessions', messagesRoutes);
-app.use('/executions', executionsRoutes);
-app.use('/memory', memoryRoutes);
-app.use('/scheduled-tasks', scheduledTasksRoutes);
-app.use('/plans', plansRoutes);
-app.use('/pipelines', pipelinesRoutes);
+// wrapAsyncErrors forwards async route rejections to the error handler below
+// (Express 4 does not do this on its own).
+app.use('/auth', authLimiter, wrapAsyncErrors(authRoutes));
+app.use('/connections', wrapAsyncErrors(connectionsRoutes));
+app.use('/projects', wrapAsyncErrors(projectsRoutes));
+app.use('/settings', wrapAsyncErrors(settingsRoutes));
+app.use('/sessions', wrapAsyncErrors(sessionsRoutes));
+app.use('/sessions', wrapAsyncErrors(messagesRoutes));
+app.use('/executions', wrapAsyncErrors(executionsRoutes));
+app.use('/memory', wrapAsyncErrors(memoryRoutes));
+app.use('/scheduled-tasks', wrapAsyncErrors(scheduledTasksRoutes));
+app.use('/plans', wrapAsyncErrors(plansRoutes));
+app.use('/pipelines', wrapAsyncErrors(pipelinesRoutes));
 
 // Must be registered after all routes.
 app.use(notFoundHandler);

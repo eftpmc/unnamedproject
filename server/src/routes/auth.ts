@@ -4,11 +4,10 @@ import { getDb, createScheduledTask } from '../db/index.js';
 import { newId } from '../lib/ids.js';
 import { signToken } from '../lib/jwt.js';
 import { requireAuth, type AuthedRequest } from '../middleware/auth.js';
-import { asyncHandler } from '../middleware/error-handler.js';
 
 const router = Router();
 
-router.post('/register', asyncHandler(async (req, res) => {
+router.post('/register', async (req, res) => {
   const { email, password } = req.body as { email?: string; password?: string };
   if (!email || !password) {
     res.status(400).json({ error: 'email and password required' });
@@ -36,9 +35,9 @@ router.post('/register', asyncHandler(async (req, res) => {
   createScheduledTask(id, 'reorganize_memory', 24);
 
   res.status(201).json({ token: signToken(id) });
-}));
+});
 
-router.post('/login', asyncHandler(async (req, res) => {
+router.post('/login', async (req, res) => {
   const { email, password } = req.body as { email?: string; password?: string };
   if (!email || !password) {
     res.status(400).json({ error: 'email and password required' });
@@ -56,7 +55,7 @@ router.post('/login', asyncHandler(async (req, res) => {
   }
 
   res.json({ token: signToken(user.id) });
-}));
+});
 
 router.get('/me', requireAuth, (req, res) => {
   const { userId } = req as AuthedRequest;

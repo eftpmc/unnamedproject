@@ -1,4 +1,4 @@
-import type { Request, Response, NextFunction, RequestHandler } from 'express';
+import type { Request, Response, NextFunction, RequestHandler, Router } from 'express';
 import { logger } from '../lib/logger.js';
 
 /**
@@ -8,6 +8,28 @@ import { logger } from '../lib/logger.js';
  */
 export function asyncHandler(fn: RequestHandler): RequestHandler {
   return (req, res, next) => Promise.resolve(fn(req, res, next)).catch(next);
+}
+
+interface RouteLayer { handle: RequestHandler }
+interface RouterStackLayer { route?: { stack: RouteLayer[] } }
+
+/**
+ * Applies asyncHandler to every handler registered on a router, so async
+ * rejections (and sync throws) reach the central error handler without wrapping
+ * each handler by hand. Mutates handlers in place to preserve Express's Layer
+ * instances. Call once per router at mount time. Error handlers (arity 4) are
+ * left untouched.
+ */
+export function wrapAsyncErrors<T extends Router>(router: T): T {
+  for (const layer of (router as unknown as { stack: RouterStackLayer[] }).stack) {
+    if (!layer.route) continue;
+    for (const handlerLayer of layer.route.stack) {
+      if (typeof handlerLayer.handle === 'function' && handlerLayer.handle.length < 4) {
+        handlerLayer.handle = asyncHandler(handlerLayer.handle);
+      }
+    }
+  }
+  return router;
 }
 
 /** Terminal middleware for requests that matched no route. */

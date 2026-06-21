@@ -102,7 +102,7 @@ function PanelContent({
     enabled: !!project,
     staleTime: 20_000,
   });
-  const artifacts = artifactData?.artifacts.slice(0, 3) ?? [];
+  const artifacts = artifactData?.artifacts?.slice(0, 3) ?? [];
 
   const { data: plans = [] } = useQuery<Plan[]>({
     queryKey: ['project-plans', project?.id],

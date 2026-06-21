@@ -113,7 +113,7 @@ export default function ChatsPage() {
                 <button
                   type="button"
                   onClick={() => setProjectFilter(null)}
-                  className="flex items-center gap-1 rounded-full border border-border bg-muted px-2.5 py-0.5 text-xs font-medium text-foreground hover:bg-accent transition-colors"
+                  className="flex items-center gap-1 rounded-md border border-border bg-muted px-2.5 py-0.5 text-xs font-medium text-foreground hover:bg-accent transition-colors"
                 >
                   {projectById[projectFilter]?.name ?? 'Project'}
                   <X size={11} className="ml-0.5 text-faint-fg" />
@@ -156,11 +156,18 @@ export default function ChatsPage() {
                               key={chat.id}
                               className="group flex items-center gap-3 rounded-lg border border-border-soft bg-card px-4 py-3.5 transition-[transform,box-shadow,border-color] hover:-translate-y-px hover:border-border hover:shadow-sm"
                             >
-                              <button
-                                type="button"
+                              <div
+                                role="button"
+                                tabIndex={0}
                                 aria-label={`Open chat: ${chat.title ?? 'Untitled chat'}`}
-                                className="min-w-0 flex-1 text-left"
+                                className="min-w-0 flex-1 text-left cursor-pointer"
                                 onClick={() => navigate(`/c/${chat.id}`)}
+                                onKeyDown={(e) => {
+                                  if (e.key === 'Enter' || e.key === ' ') {
+                                    e.preventDefault();
+                                    navigate(`/c/${chat.id}`);
+                                  }
+                                }}
                               >
                                 <div className="truncate text-sm font-medium text-foreground">
                                   {chat.title ?? 'Untitled chat'}
@@ -180,7 +187,7 @@ export default function ChatsPage() {
                                     </>
                                   )}
                                 </div>
-                              </button>
+                              </div>
                               <ChevronRight
                                 size={15}
                                 className="shrink-0 text-faint-fg transition-colors group-hover:text-muted-foreground"

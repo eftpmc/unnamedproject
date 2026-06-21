@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { Check, Play, Plus, Trash2 } from 'lucide-react';
+import { Check, Moon, Play, Plus, Sun, Trash2 } from 'lucide-react';
 import { QRCodeSVG } from 'qrcode.react';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -30,6 +30,9 @@ import {
 } from '../lib/api.js';
 import { clearToken, getToken } from '../lib/auth.js';
 import { usePageTitle } from '../lib/usePageTitle.js';
+import { useTheme } from '../lib/useTheme.js';
+import { useAccent } from '../lib/useAccent.js';
+import { ACCENT_PRESETS, DEFAULT_ACCENT } from '../lib/accent.js';
 import type { Connection, Memory, PermissionProfile, Project, ScheduledTask, UserSettings } from '../types.js';
 
 type Tab = 'agents' | 'tools' | 'mcp' | 'workspace' | 'memory' | 'account';
@@ -114,6 +117,10 @@ function ConnectedBadge() {
   return <Badge variant="secondary" className="text-success">Connected</Badge>;
 }
 
+function ConnectionErrorBadge() {
+  return <Badge variant="secondary" className="text-destructive">Error</Badge>;
+}
+
 function NotSetBadge() {
   return <Badge variant="outline">Not set</Badge>;
 }
@@ -135,6 +142,74 @@ function SettingRow({ children, className }: { children: React.ReactNode; classN
     <div className={cn('flex items-center justify-between gap-4 rounded-lg border border-border-soft bg-card p-4', className)}>
       {children}
     </div>
+  );
+}
+
+function AppearanceSection() {
+  const { theme, toggleTheme } = useTheme();
+  const { accent, setAccent } = useAccent();
+  const isDark = theme === 'unnamed-dark';
+  const isCustom = !ACCENT_PRESETS.some(p => p.h === accent.h && p.c === accent.c);
+
+  return (
+    <>
+      <SettingRow>
+        <div>
+          <div className="text-sm font-medium text-foreground">Theme</div>
+          <div className="mt-0.5 text-xs text-muted-foreground">Switch between light and dark mode.</div>
+        </div>
+        <Button variant="outline" size="sm" onClick={toggleTheme}>
+          {isDark ? <Sun size={14} className="mr-1.5" /> : <Moon size={14} className="mr-1.5" />}
+          {isDark ? 'Light mode' : 'Dark mode'}
+        </Button>
+      </SettingRow>
+      <div className="rounded-lg border border-border-soft bg-card p-4">
+        <div className="text-sm font-medium text-foreground">Accent</div>
+        <div className="mt-0.5 text-xs text-muted-foreground">Pick a preset or a custom hue. Applies instantly.</div>
+        <div className="mt-3 flex flex-wrap items-center gap-2">
+          {ACCENT_PRESETS.map(preset => {
+            const active = !isCustom && accent.h === preset.h && accent.c === preset.c;
+            return (
+              <button
+                key={preset.name}
+                type="button"
+                title={preset.name}
+                onClick={() => setAccent({ h: preset.h, c: preset.c })}
+                className={cn(
+                  'size-7 shrink-0 rounded-full ring-offset-2 ring-offset-card transition-all',
+                  active ? 'ring-2 ring-foreground' : 'hover:ring-2 hover:ring-border',
+                )}
+                style={{ backgroundColor: `oklch(0.6 ${preset.c} ${preset.h})` }}
+              >
+                {active && <Check size={14} className="mx-auto text-white drop-shadow" strokeWidth={3} />}
+              </button>
+            );
+          })}
+          <button
+            type="button"
+            title="Custom hue"
+            onClick={() => { if (!isCustom) setAccent({ h: accent.h, c: DEFAULT_ACCENT.c }); }}
+            className={cn(
+              'flex size-7 shrink-0 items-center justify-center rounded-full border-2 transition-all',
+              isCustom ? 'border-foreground' : 'border-dashed border-border hover:border-muted-foreground',
+            )}
+            style={isCustom ? { backgroundColor: `oklch(0.6 ${accent.c} ${accent.h})` } : undefined}
+          >
+            {!isCustom && <Plus size={14} className="text-muted-foreground" />}
+          </button>
+        </div>
+        {isCustom && (
+          <input
+            type="range"
+            min={0}
+            max={360}
+            value={accent.h}
+            onChange={e => setAccent({ h: Number(e.target.value), c: accent.c })}
+            className="mt-3 w-full"
+          />
+        )}
+      </div>
+    </>
   );
 }
 
@@ -361,12 +436,17 @@ export default function Settings() {
 
     return (
       <SettingRow>
-        <SettingRowInfo title={meta.title} description={connection ? connection.name : meta.description} />
+        <div className="min-w-0">
+          <SettingRowInfo title={meta.title} description={connection ? connection.name : meta.description} />
+          {health?.ok === false && (
+            <div className="mt-1 text-xs text-destructive">Error: {health.error}</div>
+          )}
+        </div>
         <div className="flex items-center gap-2 shrink-0">
           {healthDot && (
             <span title={healthTitle} className={cn('size-2 shrink-0 rounded-full', healthDot)} />
           )}
-          {connection ? <ConnectedBadge /> : <NotSetBadge />}
+          {connection ? (health?.ok === false ? <ConnectionErrorBadge /> : <ConnectedBadge />) : <NotSetBadge />}
           <Button size="sm" variant={connection ? 'ghost' : 'default'} onClick={() => openSetupModal(kind)}>
             {connection ? 'Edit' : 'Connect'}
           </Button>
@@ -769,6 +849,8 @@ export default function Settings() {
           {/* ── Account ────────────────────────────────── */}
           {tab === 'account' && (
             <div className="flex flex-col gap-3">
+              <SectionLabel>Appearance</SectionLabel>
+              <AppearanceSection />
               <SectionLabel>Account</SectionLabel>
               <ConnectMobileSection />
               <div className="flex items-center justify-between gap-4 rounded-lg border border-destructive/20 bg-destructive/5 px-4 py-4">

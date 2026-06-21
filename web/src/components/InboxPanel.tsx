@@ -2,7 +2,7 @@ import { useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { Bell, Check, ChevronDown, ChevronUp, X } from 'lucide-react';
 import { getPendingApprovals, approveExecution, rejectExecution } from '../lib/api.js';
-import { Sheet, SheetContent, SheetHeader, SheetTitle } from '@/components/ui/sheet';
+import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle } from '@/components/ui/sheet';
 
 interface Props {
   open: boolean;
@@ -148,6 +148,7 @@ export default function InboxPanel({ open, onOpenChange, pendingApprovals, onApp
             <Bell size={15} strokeWidth={1.75} className="text-muted-foreground" />
             Inbox
           </SheetTitle>
+          <SheetDescription className="sr-only">Pending approvals and agent requests requiring action</SheetDescription>
         </SheetHeader>
 
         <div className="flex-1 overflow-y-auto">

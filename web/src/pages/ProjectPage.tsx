@@ -150,7 +150,7 @@ export default function ProjectPage() {
   const recentActivityPlans = plans
     .filter(p => p.id !== activePlan?.id)
     .slice(0, Math.max(1, 4 - (activePlan ? 1 : 0)));
-  const artifactsCount = artifactData?.artifacts.length ?? 0;
+  const artifactsCount = artifactData?.artifacts?.length ?? 0;
 
   const countsForPlan = (plan: Plan) => ({
     artifactCount: (artifactData?.artifacts ?? []).filter(a => a.source_plan_id === plan.id).length,

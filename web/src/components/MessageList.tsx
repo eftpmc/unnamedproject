@@ -3,14 +3,94 @@ import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import rehypeHighlight from 'rehype-highlight';
 import 'highlight.js/styles/github-dark.css';
-import { ArrowDown, ArrowRight, Check, Copy, FileText, GitMerge, Image, Pencil, Plug, Sparkles, Target } from 'lucide-react';
+import { ArrowDown, ArrowRight, Check, ChevronDown, ChevronUp, Copy, FileText, GitMerge, Image, ListChecks, Pencil, Plug, Sparkles, Target } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import ExecutionCard from './ExecutionCard.js';
 import PlanCard from './PlanCard.js';
 import ArtifactPreviewCard from './ArtifactPreviewCard.js';
+import { StatusPill } from '@/components/ui/status-pill';
 import { getToken } from '../lib/auth.js';
 import { cn } from '../lib/utils.js';
 import type { Message, MessageAttachment, SessionEvent } from '../types.js';
+
+const DELEGATE_TOOLS = new Set(['invoke_claude_code', 'invoke_codex', 'delegate_to_agent']);
+
+// Cards that always stay individually visible: delegated work, errors/approvals
+// awaiting a decision, and tool calls that render as a richer preview card.
+function isGroupExempt(exec: InlineExecution): boolean {
+  if (DELEGATE_TOOLS.has(exec.tool)) return true;
+  if (exec.status === 'error' || exec.status === 'awaiting_approval') return true;
+  if (exec.tool === 'create_plan') return true;
+  if ((exec.tool === 'create_artifact' || exec.tool === 'register_artifact') && exec.status === 'done' && exec.result) {
+    try {
+      const parsed = JSON.parse(exec.result) as Record<string, unknown>;
+      if (parsed.artifact_id && parsed.project_id) return true;
+    } catch { /* not an artifact payload, stays groupable */ }
+  }
+  return false;
+}
+
+function formatToolLabel(tool: string): string {
+  return tool
+    .replace(/^invoke_/, '')
+    .replace(/_/g, ' ')
+    .replace(/\b\w/g, char => char.toUpperCase());
+}
+
+function summarizeGroup(executions: InlineExecution[]): string {
+  const parts: string[] = [];
+  let prevLabel = '';
+  let count = 0;
+  for (const exec of executions) {
+    const label = formatToolLabel(exec.tool);
+    if (label === prevLabel) {
+      count++;
+    } else {
+      if (prevLabel) parts.push(count > 1 ? `${prevLabel} ×${count}` : prevLabel);
+      prevLabel = label;
+      count = 1;
+    }
+  }
+  if (prevLabel) parts.push(count > 1 ? `${prevLabel} ×${count}` : prevLabel);
+  return parts.join(', ');
+}
+
+function ExecutionGroup({ executions }: { executions: InlineExecution[] }) {
+  const [expanded, setExpanded] = useState(false);
+  const anyRunning = executions.some(e => e.status === 'running' || e.status === 'pending');
+
+  return (
+    <div className="overflow-hidden rounded-lg border border-border-soft bg-card shadow-sm">
+      <button
+        type="button"
+        onClick={() => setExpanded(v => !v)}
+        aria-expanded={expanded}
+        className="flex w-full items-center gap-2.5 px-3.5 py-3 text-left transition-colors hover:bg-muted/20"
+      >
+        <div className="grid h-7 w-7 shrink-0 place-items-center rounded-md bg-muted text-muted-foreground">
+          <ListChecks size={14} />
+        </div>
+        <div className="flex min-w-0 flex-1 flex-col">
+          <span className="text-xs font-medium text-foreground">Ran {executions.length} tools</span>
+          <span className="truncate text-[11px] text-faint-fg">{summarizeGroup(executions)}</span>
+        </div>
+        <StatusPill status={anyRunning ? 'running' : 'done'} />
+        <span className="text-muted-foreground/70">
+          {expanded ? <ChevronUp size={16} /> : <ChevronDown size={16} />}
+        </span>
+      </button>
+      {expanded && (
+        <div className="flex flex-col gap-2 border-t border-border-soft bg-muted/10 p-2.5">
+          {executions.map(exec => (
+            <div key={exec.executionId} data-execution-id={exec.executionId}>
+              {renderExecutionCard(exec)}
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
 
 interface InlineExecution {
   executionId: string;
@@ -239,6 +319,30 @@ export default function MessageList({ messages, executions, streamingIds, sessio
   });
   timeline.sort((a, b) => a.order - b.order);
 
+  // Collapse runs of 2+ consecutive groupable executions (routine reads/lookups)
+  // into a single ExecutionGroup, so a chain of tool calls doesn't dominate the transcript.
+  type RenderItem = TimelineItem | { type: 'execution-group'; executions: InlineExecution[]; order: number };
+  const renderItems: RenderItem[] = [];
+  for (let i = 0; i < timeline.length; i++) {
+    const item = timeline[i];
+    if (item.type === 'execution' && !isGroupExempt(item.execution)) {
+      const run: InlineExecution[] = [item.execution];
+      let j = i + 1;
+      while (j < timeline.length) {
+        const next = timeline[j];
+        if (next.type !== 'execution' || isGroupExempt(next.execution)) break;
+        run.push(next.execution);
+        j++;
+      }
+      if (run.length >= 2) {
+        renderItems.push({ type: 'execution-group', executions: run, order: item.order });
+        i = j - 1;
+        continue;
+      }
+    }
+    renderItems.push(item);
+  }
+
   useEffect(() => {
     initialScrollDone.current = false;
     setShowScrollButton(false);
@@ -268,7 +372,7 @@ export default function MessageList({ messages, executions, streamingIds, sessio
           type="button"
           onClick={() => scrollToBottom()}
           className={cn(
-            'absolute bottom-4 left-1/2 z-10 flex -translate-x-1/2 items-center gap-1.5 rounded-full border px-3 py-1.5 text-xs font-medium shadow-md transition-all',
+            'absolute bottom-4 left-1/2 z-10 flex -translate-x-1/2 items-center gap-1.5 rounded-lg border px-3 py-1.5 text-xs font-medium shadow-md transition-all',
             hasNewContent
               ? 'animate-pulse border-primary/40 bg-primary text-primary-foreground hover:bg-primary/90'
               : 'border-border bg-card text-foreground hover:bg-muted',
@@ -288,7 +392,16 @@ export default function MessageList({ messages, executions, streamingIds, sessio
         </button>
       )}
       <div className="mx-auto flex w-full max-w-[46rem] flex-col gap-6 px-4 py-7 sm:px-6 sm:py-8">
-        {timeline.map(item => {
+        {renderItems.map(item => {
+          if (item.type === 'execution-group') {
+            const firstId = item.executions[0].executionId;
+            return (
+              <div key={`exec-group-${firstId}`} className="flex max-w-[94%] flex-col sm:max-w-[86%]">
+                <ExecutionGroup executions={item.executions} />
+              </div>
+            );
+          }
+
           if (item.type === 'event') {
             if (item.event.type === 'mcp_required') {
               return (

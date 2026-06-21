@@ -6,7 +6,7 @@ import { getProjects, createProject, getProjectPlans, getProjectCapabilities, ge
 import { usePageTitle } from '../lib/usePageTitle.js';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from '@/components/ui/dialog';
 import { CenteredEmptyState, ContentColumn, PageBody, PageHeader, PageLoading, PageShell, Surface } from '@/components/ui/app-layout';
 import type { Project, Session } from '../types.js';
 
@@ -183,6 +183,7 @@ export default function ProjectsPage() {
         <DialogContent className="sm:max-w-md">
           <DialogHeader>
             <DialogTitle>New project</DialogTitle>
+            <DialogDescription className="sr-only">Create a new project by giving it a name and optional description or repo path</DialogDescription>
           </DialogHeader>
           <div className="flex flex-col gap-3 py-2">
             <Input

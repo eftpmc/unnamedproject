@@ -471,6 +471,11 @@ export default function MessageList({ messages, executions, streamingIds, sessio
             {msg.role === 'user' ? (
               <div className="group flex flex-col items-end">
                 <div className="flex items-end gap-2 justify-end">
+                  {msg.content.trim() && (
+                    <div className="mb-1">
+                      <CopyButton text={msg.content} />
+                    </div>
+                  )}
                   {isLastUser && canEdit && onEditMessage && (
                     <button
                       type="button"

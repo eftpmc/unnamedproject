@@ -131,6 +131,7 @@ export type PermissionProfile = 'fast' | 'trusted' | 'strict';
 export interface UserSettings {
   projects_root: string;
   agent_budgets: AgentBudgets;
+  agent_daily_budgets: AgentBudgets;
   permission_profile: PermissionProfile;
 }
 

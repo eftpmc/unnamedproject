@@ -165,7 +165,7 @@ export function updateSettings(body: { projects_root: string; permission_profile
   return request('/settings', { method: 'PUT', body: JSON.stringify(body) });
 }
 
-export function updateAgentBudgets(body: { claude_code?: number | null; codex?: number | null }): Promise<{ agent_budgets: AgentBudgets; permission_profile: PermissionProfile }> {
+export function updateAgentBudgets(body: { claude_code?: number | null; codex?: number | null; claude_code_daily?: number | null; codex_daily?: number | null }): Promise<{ agent_budgets: AgentBudgets; agent_daily_budgets: AgentBudgets; permission_profile: PermissionProfile }> {
   return request('/settings/agent-budgets', { method: 'PUT', body: JSON.stringify(body) });
 }
 

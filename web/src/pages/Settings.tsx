@@ -285,6 +285,8 @@ export default function Settings() {
 
   const [claudeCodeBudget, setClaudeCodeBudget] = useState('');
   const [codexBudget, setCodexBudget] = useState('');
+  const [claudeCodeDailyBudget, setClaudeCodeDailyBudget] = useState('');
+  const [codexDailyBudget, setCodexDailyBudget] = useState('');
   const [agentBudgetsError, setAgentBudgetsError] = useState('');
   const [taskIntervals, setTaskIntervals] = useState<Record<string, string>>({});
 
@@ -300,6 +302,8 @@ export default function Settings() {
     if (!settings) return;
     setClaudeCodeBudget(settings.agent_budgets.claude_code !== null ? String(settings.agent_budgets.claude_code) : '');
     setCodexBudget(settings.agent_budgets.codex !== null ? String(settings.agent_budgets.codex) : '');
+    setClaudeCodeDailyBudget(settings.agent_daily_budgets.claude_code !== null ? String(settings.agent_daily_budgets.claude_code) : '');
+    setCodexDailyBudget(settings.agent_daily_budgets.codex !== null ? String(settings.agent_daily_budgets.codex) : '');
   }, [settings]);
 
   const createConnMutation = useMutation({
@@ -355,7 +359,7 @@ export default function Settings() {
   });
 
   const updateAgentBudgetsMutation = useMutation({
-    mutationFn: (body: { claude_code?: number | null; codex?: number | null }) => updateAgentBudgets(body),
+    mutationFn: (body: { claude_code?: number | null; codex?: number | null; claude_code_daily?: number | null; codex_daily?: number | null }) => updateAgentBudgets(body),
     onSuccess: () => qc.invalidateQueries({ queryKey: ['settings'] }),
     onError: (e: Error) => setAgentBudgetsError(e.message),
   });
@@ -369,7 +373,12 @@ export default function Settings() {
       return n;
     };
     try {
-      updateAgentBudgetsMutation.mutate({ claude_code: parseBudget(claudeCodeBudget), codex: parseBudget(codexBudget) });
+      updateAgentBudgetsMutation.mutate({
+        claude_code: parseBudget(claudeCodeBudget),
+        codex: parseBudget(codexBudget),
+        claude_code_daily: parseBudget(claudeCodeDailyBudget),
+        codex_daily: parseBudget(codexDailyBudget),
+      });
     } catch (e) {
       setAgentBudgetsError((e as Error).message);
     }
@@ -618,16 +627,26 @@ export default function Settings() {
               </div>
 
               <div>
-                <SectionLabel>Monthly budgets</SectionLabel>
+                <SectionLabel>Agent budgets</SectionLabel>
                 <div className="rounded-lg border border-border-soft bg-card p-4 flex flex-col gap-4">
                   <div className="flex gap-3 items-end">
                     <div className="flex-1">
-                      <Label className="text-xs">Claude Code (USD)</Label>
+                      <Label className="text-xs">Claude Code monthly (USD)</Label>
                       <Input type="number" min="0" step="0.01" placeholder="No limit" value={claudeCodeBudget} onChange={e => setClaudeCodeBudget(e.target.value)} className="mt-1 text-sm" />
                     </div>
                     <div className="flex-1">
-                      <Label className="text-xs">Codex (USD)</Label>
+                      <Label className="text-xs">Codex monthly (USD)</Label>
                       <Input type="number" min="0" step="0.01" placeholder="No limit" value={codexBudget} onChange={e => setCodexBudget(e.target.value)} className="mt-1 text-sm" />
+                    </div>
+                  </div>
+                  <div className="flex gap-3 items-end">
+                    <div className="flex-1">
+                      <Label className="text-xs">Claude Code daily (USD)</Label>
+                      <Input type="number" min="0" step="0.01" placeholder="No limit" value={claudeCodeDailyBudget} onChange={e => setClaudeCodeDailyBudget(e.target.value)} className="mt-1 text-sm" />
+                    </div>
+                    <div className="flex-1">
+                      <Label className="text-xs">Codex daily (USD)</Label>
+                      <Input type="number" min="0" step="0.01" placeholder="No limit" value={codexDailyBudget} onChange={e => setCodexDailyBudget(e.target.value)} className="mt-1 text-sm" />
                     </div>
                     <Button size="sm" className="h-9 gap-1.5 text-xs" onClick={saveAgentBudgets}>
                       <Check size={13} strokeWidth={2.2} />
@@ -636,7 +655,7 @@ export default function Settings() {
                   </div>
                   {agentBudgetsError && <div className="text-sm text-destructive">{agentBudgetsError}</div>}
                   <p className="text-xs leading-relaxed text-muted-foreground/70">
-                    Set a monthly spend cap for each coding agent. Leave blank for no limit.
+                    Set monthly and/or daily spend caps for each coding agent. Daily caps reset at UTC midnight; monthly caps reset on the 1st. Leave blank for no limit.
                   </p>
                 </div>
               </div>

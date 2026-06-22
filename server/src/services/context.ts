@@ -1,10 +1,8 @@
-import type Anthropic from '@anthropic-ai/sdk';
 import fs from 'fs';
 import path from 'path';
 import { getDb, getAgentBudgets, getMonthlyUsage, getDailyUsage, getDataDir, getPermissionProfile, type DbProject } from '../db/index.js';
 import { recallRelevant } from './memory.js';
 import { formatEntry } from '../tools/memory_tools.js';
-import { toolDefinitions } from '../tools/definitions.js';
 import type { Intent } from './intent.js';
 import { detectCapabilities } from './projectCapabilities.js';
 
@@ -262,51 +260,4 @@ export function buildContext(userId: string, sessionId: string, intent: Intent):
   if (summary) blocks.push(summary);
 
   return blocks.join('\n\n');
-}
-
-// ─── Tool subsetting ───────────────────────────────────────────────────────
-
-const SHARED = [
-  'remember', 'recall', 'forget',
-  'list_chats', 'read_chat',
-  'register_artifact', 'list_artifacts', 'read_artifact',
-  'list_connections', 'test_connection', 'tool_search',
-  'search_files', 'read_file', 'list_dir',
-  'create_project', 'update_project',
-];
-
-const SCHEDULED = [
-  'list_scheduled_tasks', 'create_scheduled_task', 'update_scheduled_task', 'delete_scheduled_task',
-];
-
-const TOOL_SETS: Record<string, string[]> = {
-  code: [
-    'invoke_claude_code', 'invoke_codex', 'git_op', 'run_command',
-    'project_query', 'rebuild_graph',
-    'create_plan', 'resume_plan', 'list_plans', 'get_plan', 'get_execution_output',
-    'write_file', 'create_artifact', 'generate_video',
-    ...SCHEDULED,
-    ...SHARED,
-  ],
-  writing: [
-    'write_file', 'create_artifact', 'run_command',
-    ...SCHEDULED,
-    ...SHARED,
-  ],
-  research: [
-    'write_file', 'create_artifact', 'run_command',
-    ...SCHEDULED,
-    ...SHARED,
-  ],
-  creative: [
-    'write_file', 'create_artifact', 'generate_video', 'run_command',
-    ...SCHEDULED,
-    ...SHARED,
-  ],
-};
-
-export function getToolSubset(intent: Intent): Anthropic.Tool[] {
-  const allowed = TOOL_SETS[intent.domain];
-  if (!allowed) return toolDefinitions; // multi, general, image → all tools
-  return toolDefinitions.filter(t => allowed.includes(t.name));
 }

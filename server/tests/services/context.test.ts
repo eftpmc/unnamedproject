@@ -4,10 +4,9 @@ import os from 'os';
 import path from 'path';
 import { initDb, getDb, recordAgentUsage, setAgentBudget } from '../../src/db/index.js';
 import { newId } from '../../src/lib/ids.js';
-import { buildContext, getToolSubset } from '../../src/services/context.js';
+import { buildContext } from '../../src/services/context.js';
 import { DEFAULT_INTENT } from '../../src/services/intent.js';
 import type { Intent } from '../../src/services/intent.js';
-import { toolDefinitions } from '../../src/tools/definitions.js';
 
 const userId = newId();
 let sessionId: string;
@@ -139,44 +138,5 @@ describe('buildContext', () => {
 
     getDb().prepare('UPDATE sessions SET pinned_project_id = NULL WHERE id = ?').run(sessionId);
     getDb().prepare('DELETE FROM projects WHERE id = ?').run(projectId);
-  });
-});
-
-describe('getToolSubset', () => {
-  it('code domain includes invoke_claude_code and git_op', () => {
-    const tools = getToolSubset(codeIntent);
-    const names = tools.map(t => t.name);
-    expect(names).toContain('invoke_claude_code');
-    expect(names).toContain('git_op');
-  });
-
-  it('code domain includes MCP discovery tools for external research', () => {
-    const tools = getToolSubset(codeIntent);
-    const names = tools.map(t => t.name);
-    expect(names).toContain('list_connections');
-    expect(names).toContain('tool_search');
-  });
-
-  it('writing domain excludes invoke_claude_code', () => {
-    const tools = getToolSubset(writingIntent);
-    expect(tools.map(t => t.name)).not.toContain('invoke_claude_code');
-  });
-
-  it('research domain excludes invoke_claude_code and git_op', () => {
-    const tools = getToolSubset(researchIntent);
-    const names = tools.map(t => t.name);
-    expect(names).not.toContain('invoke_claude_code');
-    expect(names).not.toContain('git_op');
-  });
-
-  it('general domain returns all tools', () => {
-    const tools = getToolSubset(DEFAULT_INTENT); // domain=general
-    expect(tools.length).toBe(toolDefinitions.length);
-  });
-
-  it('multi domain returns all tools', () => {
-    const multiIntent: Intent = { ...DEFAULT_INTENT, domain: 'multi' };
-    const tools = getToolSubset(multiIntent);
-    expect(tools.length).toBe(toolDefinitions.length);
   });
 });

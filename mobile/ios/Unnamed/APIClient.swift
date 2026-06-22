@@ -151,6 +151,23 @@ final class APIClient {
     try await request(path: "/projects")
   }
 
+  func projectPlans(projectId: String) async throws -> [Plan] {
+    try await request(path: "/projects/\(projectId)/plans")
+  }
+
+  func projectTree(projectId: String, dirPath: String? = nil) async throws -> ProjectTreeResult {
+    if let p = dirPath {
+      let encoded = p.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed) ?? p
+      return try await request(path: "/projects/\(projectId)/tree?path=\(encoded)")
+    }
+    return try await request(path: "/projects/\(projectId)/tree")
+  }
+
+  func projectFile(projectId: String, filePath: String) async throws -> ProjectFileResult {
+    let encoded = filePath.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed) ?? filePath
+    return try await request(path: "/projects/\(projectId)/file?path=\(encoded)")
+  }
+
   @discardableResult
   func checkServer(_ url: URL) async throws -> UserProfile {
     let original = session.serverURL

@@ -9,6 +9,15 @@ final class ProjectDetailViewController: UIViewController {
 
   private var chats: [ChatSession] = []
   private var activeIds: Set<String> = []
+  private var plans: [Plan] = []
+  private var treeItems: [TreeItem] = []
+
+  private struct TreeItem {
+    let entry: FileEntry
+    let depth: Int
+    var isExpanded: Bool = false
+    var isLoading: Bool = false
+  }
 
   private let tableView = UITableView(frame: .zero, style: .plain)
   private let refreshControl = UIRefreshControl()
@@ -17,6 +26,8 @@ final class ProjectDetailViewController: UIViewController {
   private var segmentedControlContainer: UIView!
   private var projectInfoContainer: UIView!
   private var hasLoaded = false
+  private var plansLoaded = false
+  private var treeLoaded = false
 
   init(appSession: AppSession, project: Project) {
     self.appSession = appSession
@@ -142,23 +153,120 @@ final class ProjectDetailViewController: UIViewController {
   }
 
   private func updateContentForSegment() {
+    emptyLabel.isHidden = true
     switch segmentedControl.selectedSegmentIndex {
     case 0:
-      emptyLabel.isHidden = true
       tableView.backgroundView = hasLoaded && chats.isEmpty ? makeEmptyChatsView() : nil
+      tableView.reloadData()
+    case 1:
+      if !plansLoaded {
+        tableView.backgroundView = makeLoadingView()
+        tableView.reloadData()
+        loadPlans()
+      } else {
+        tableView.backgroundView = plans.isEmpty ? makeEmptyView(
+          systemName: "list.bullet.clipboard",
+          title: "No plans yet",
+          subtitle: "Plans created in project chats will appear here."
+        ) : nil
+        tableView.reloadData()
+      }
+    case 2:
+      if !treeLoaded {
+        tableView.backgroundView = makeLoadingView()
+        tableView.reloadData()
+        loadTree()
+      } else {
+        tableView.backgroundView = treeItems.isEmpty ? makeEmptyView(
+          systemName: "doc",
+          title: "No files found",
+          subtitle: "Files from the linked repository will appear here."
+        ) : nil
+        tableView.reloadData()
+      }
     default:
-      emptyLabel.isHidden = true
-      let isPlans = segmentedControl.selectedSegmentIndex == 1
-      tableView.backgroundView = makeComingSoonView(
-        systemName: isPlans ? "list.bullet.clipboard" : "doc",
-        title: isPlans ? "Plans coming soon" : "Files coming soon",
-        subtitle: isPlans ? "Project plans will collect longer-running work." : "Files linked to this project will appear here."
-      )
+      tableView.reloadData()
     }
-    tableView.reloadData()
   }
 
-  private func makeComingSoonView(systemName: String, title: String, subtitle subtitleText: String) -> UIView {
+  private func loadPlans() {
+    Task {
+      let loaded = (try? await client.projectPlans(projectId: project.id)) ?? []
+      plans = loaded.sorted { $0.createdAt > $1.createdAt }
+      plansLoaded = true
+      if segmentedControl.selectedSegmentIndex == 1 {
+        tableView.backgroundView = plans.isEmpty ? makeEmptyView(
+          systemName: "list.bullet.clipboard",
+          title: "No plans yet",
+          subtitle: "Plans created in project chats will appear here."
+        ) : nil
+        tableView.reloadData()
+      }
+    }
+  }
+
+  private func loadTree() {
+    Task {
+      guard let result = try? await client.projectTree(projectId: project.id) else {
+        treeLoaded = true
+        if segmentedControl.selectedSegmentIndex == 2 {
+          tableView.backgroundView = makeEmptyView(systemName: "doc", title: "No files found", subtitle: "Files from the linked repository will appear here.")
+          tableView.reloadData()
+        }
+        return
+      }
+      let sorted = result.entries.sorted { a, b in a.isDir != b.isDir ? a.isDir : a.name < b.name }
+      treeItems = sorted.map { TreeItem(entry: $0, depth: 0) }
+      treeLoaded = true
+      if segmentedControl.selectedSegmentIndex == 2 {
+        tableView.backgroundView = treeItems.isEmpty ? makeEmptyView(systemName: "doc", title: "No files found", subtitle: "Files from the linked repository will appear here.") : nil
+        tableView.reloadData()
+      }
+    }
+  }
+
+  private func toggleFolder(at index: Int) {
+    guard treeItems[index].entry.isDir else { return }
+
+    if treeItems[index].isExpanded {
+      // Collapse: remove all descendants
+      let depth = treeItems[index].depth
+      var end = index + 1
+      while end < treeItems.count && treeItems[end].depth > depth { end += 1 }
+      let removedPaths = (index + 1 ..< end).map { IndexPath(row: $0, section: 0) }
+      treeItems.removeSubrange(index + 1 ..< end)
+      treeItems[index].isExpanded = false
+      tableView.performBatchUpdates {
+        tableView.deleteRows(at: removedPaths, with: .fade)
+        tableView.reloadRows(at: [IndexPath(row: index, section: 0)], with: .none)
+      }
+    } else {
+      // Expand: load children
+      treeItems[index].isLoading = true
+      tableView.reloadRows(at: [IndexPath(row: index, section: 0)], with: .none)
+      let path = treeItems[index].entry.path
+      let insertDepth = treeItems[index].depth + 1
+      Task {
+        guard let result = try? await client.projectTree(projectId: project.id, dirPath: path) else {
+          treeItems[index].isLoading = false
+          tableView.reloadRows(at: [IndexPath(row: index, section: 0)], with: .none)
+          return
+        }
+        let sorted = result.entries.sorted { a, b in a.isDir != b.isDir ? a.isDir : a.name < b.name }
+        let children = sorted.map { TreeItem(entry: $0, depth: insertDepth) }
+        treeItems[index].isExpanded = true
+        treeItems[index].isLoading = false
+        treeItems.insert(contentsOf: children, at: index + 1)
+        let insertedPaths = (1 ... max(1, children.count)).map { IndexPath(row: index + $0, section: 0) }
+        tableView.performBatchUpdates {
+          if !children.isEmpty { tableView.insertRows(at: insertedPaths, with: .fade) }
+          tableView.reloadRows(at: [IndexPath(row: index, section: 0)], with: .none)
+        }
+      }
+    }
+  }
+
+  private func makeEmptyView(systemName: String, title: String, subtitle subtitleText: String) -> UIView {
     let container = UIView()
     let icon = UIImageView(image: UIImage(systemName: systemName))
     icon.tintColor = .tertiaryLabel
@@ -272,6 +380,8 @@ final class ProjectDetailViewController: UIViewController {
     tableView.backgroundColor = .systemBackground
     tableView.separatorStyle = .none
     tableView.register(UITableViewCell.self, forCellReuseIdentifier: "cell")
+    tableView.register(UITableViewCell.self, forCellReuseIdentifier: "planCell")
+    tableView.register(UITableViewCell.self, forCellReuseIdentifier: "treeCell")
     tableView.dataSource = self
     tableView.delegate = self
     tableView.backgroundView = makeLoadingView()
@@ -329,7 +439,7 @@ final class ProjectDetailViewController: UIViewController {
     ])
 
     let label = UILabel()
-    label.text = repo
+    label.text = URL(fileURLWithPath: repo).lastPathComponent
     label.font = UIFont.monospacedSystemFont(ofSize: 12, weight: .regular)
     label.textColor = .tertiaryLabel
     label.numberOfLines = 1
@@ -388,14 +498,26 @@ final class ProjectDetailViewController: UIViewController {
 
 extension ProjectDetailViewController: UITableViewDataSource, UITableViewDelegate {
   func tableView(_ tableView: UITableView, numberOfRowsInSection section: Int) -> Int {
-    segmentedControl.selectedSegmentIndex == 0 ? chats.count : 0
+    switch segmentedControl.selectedSegmentIndex {
+    case 0: return chats.count
+    case 1: return plans.count
+    case 2: return treeItems.count
+    default: return 0
+    }
   }
 
   func tableView(_ tableView: UITableView, cellForRowAt indexPath: IndexPath) -> UITableViewCell {
+    switch segmentedControl.selectedSegmentIndex {
+    case 1: return planCell(at: indexPath)
+    case 2: return treeCell(at: indexPath)
+    default: return chatCell(at: indexPath)
+    }
+  }
+
+  private func chatCell(at indexPath: IndexPath) -> UITableViewCell {
     let cell = tableView.dequeueReusableCell(withIdentifier: "cell", for: indexPath)
     let chat = chats[indexPath.row]
     let isActive = activeIds.contains(chat.id)
-
     var content = UIListContentConfiguration.subtitleCell()
     content.text = chat.title ?? "Untitled"
     content.textProperties.font = .app(ofSize: 15, weight: .medium)
@@ -408,7 +530,6 @@ extension ProjectDetailViewController: UITableViewDataSource, UITableViewDelegat
     content.imageProperties.tintColor = isActive ? AppPalette.success : AppPalette.accent
     cell.contentConfiguration = content
     cell.backgroundColor = .systemBackground
-
     if isActive {
       cell.accessoryView = makePulseDot()
     } else {
@@ -418,9 +539,96 @@ extension ProjectDetailViewController: UITableViewDataSource, UITableViewDelegat
     return cell
   }
 
+  private func planCell(at indexPath: IndexPath) -> UITableViewCell {
+    let cell = tableView.dequeueReusableCell(withIdentifier: "planCell", for: indexPath)
+    let plan = plans[indexPath.row]
+    var content = UIListContentConfiguration.subtitleCell()
+    content.text = plan.title
+    content.textProperties.font = .app(ofSize: 15, weight: .medium)
+    content.secondaryText = relativeTime(from: Int(plan.createdAt))
+    content.secondaryTextProperties.font = .app(ofSize: 12)
+    content.secondaryTextProperties.color = .secondaryLabel
+    content.image = UIImage(systemName: planIcon(for: plan.status))
+    content.imageProperties.tintColor = planColor(for: plan.status)
+    cell.contentConfiguration = content
+    cell.backgroundColor = .systemBackground
+    cell.accessoryView = nil
+    cell.accessoryType = .disclosureIndicator
+    return cell
+  }
+
+  private func treeCell(at indexPath: IndexPath) -> UITableViewCell {
+    let cell = tableView.dequeueReusableCell(withIdentifier: "treeCell", for: indexPath)
+    let item = treeItems[indexPath.row]
+    var content = UIListContentConfiguration.cell()
+    content.text = item.entry.name
+    content.textProperties.font = .app(ofSize: 14, weight: item.entry.isDir ? .medium : .regular)
+    content.directionalLayoutMargins.leading = CGFloat(12 + item.depth * 20)
+    if item.isLoading {
+      content.image = UIImage(systemName: "ellipsis")
+      content.imageProperties.tintColor = .secondaryLabel
+      cell.accessoryType = .none
+      cell.accessoryView = nil
+    } else if item.entry.isDir {
+      content.image = UIImage(systemName: item.isExpanded ? "chevron.down" : "chevron.right")
+      content.imageProperties.tintColor = .secondaryLabel
+      content.imageProperties.preferredSymbolConfiguration = UIImage.SymbolConfiguration(pointSize: 11, weight: .medium)
+      cell.accessoryType = .none
+      cell.accessoryView = nil
+    } else {
+      content.image = UIImage(systemName: "doc.text")
+      content.imageProperties.tintColor = .secondaryLabel
+      content.imageProperties.preferredSymbolConfiguration = UIImage.SymbolConfiguration(pointSize: 14, weight: .regular)
+      cell.accessoryType = .disclosureIndicator
+      cell.accessoryView = nil
+    }
+    cell.contentConfiguration = content
+    cell.backgroundColor = .systemBackground
+    return cell
+  }
+
+  private func planIcon(for status: String) -> String {
+    switch status {
+    case "done": return "checkmark.circle.fill"
+    case "error": return "exclamationmark.circle.fill"
+    case "running": return "arrow.trianglehead.2.clockwise.rotate.90.circle.fill"
+    case "cancelled": return "slash.circle.fill"
+    default: return "circle"
+    }
+  }
+
+  private func planColor(for status: String) -> UIColor {
+    switch status {
+    case "done": return AppPalette.success
+    case "error": return .systemRed
+    case "running": return AppPalette.accent
+    case "cancelled": return .secondaryLabel
+    default: return .tertiaryLabel
+    }
+  }
+
   func tableView(_ tableView: UITableView, didSelectRowAt indexPath: IndexPath) {
     tableView.deselectRow(at: indexPath, animated: true)
-    onShowChat?(chats[indexPath.row])
+    switch segmentedControl.selectedSegmentIndex {
+    case 0:
+      onShowChat?(chats[indexPath.row])
+    case 1:
+      break
+    case 2:
+      let item = treeItems[indexPath.row]
+      if item.entry.isDir {
+        toggleFolder(at: indexPath.row)
+      } else {
+        pushFileContent(entry: item.entry)
+      }
+    default:
+      break
+    }
+  }
+
+  private func pushFileContent(entry: FileEntry) {
+    let vc = FileContentViewController(appSession: appSession, projectId: project.id, entry: entry, client: client)
+    navigationController?.pushViewController(vc, animated: true)
   }
 }
 

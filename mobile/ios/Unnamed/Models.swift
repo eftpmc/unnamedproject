@@ -189,6 +189,57 @@ struct PinSessionRequest: Encodable {
   enum CodingKeys: String, CodingKey { case pinnedProjectId = "pinned_project_id" }
 }
 
+struct Plan: Decodable {
+  let id: String
+  let projectId: String
+  let sessionId: String?
+  let title: String
+  let status: String
+  let createdAt: TimeInterval
+  let completedAt: TimeInterval?
+  enum CodingKeys: String, CodingKey {
+    case id, title, status
+    case projectId = "project_id"
+    case sessionId = "session_id"
+    case createdAt = "created_at"
+    case completedAt = "completed_at"
+  }
+}
+
+struct PlanStep: Decodable {
+  let id: String
+  let planId: String
+  let title: String
+  let agent: String
+  let status: String
+  let position: Int
+  enum CodingKeys: String, CodingKey {
+    case id, title, agent, status, position
+    case planId = "plan_id"
+  }
+}
+
+struct FileEntry: Decodable {
+  let name: String
+  let type: String
+  let path: String
+  var isDir: Bool { type == "dir" }
+}
+
+struct ProjectTreeResult: Decodable {
+  let entries: [FileEntry]
+  let baseIsRepo: Bool
+  enum CodingKeys: String, CodingKey {
+    case entries
+    case baseIsRepo = "base_is_repo"
+  }
+}
+
+struct ProjectFileResult: Decodable {
+  let content: String
+  let path: String
+}
+
 struct Project: Decodable {
   let id: String
   let name: String

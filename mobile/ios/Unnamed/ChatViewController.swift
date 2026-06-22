@@ -1052,7 +1052,7 @@ private final class MessageCell: UITableViewCell {
     stackLeading = bubbleStack.leadingAnchor.constraint(equalTo: contentView.leadingAnchor, constant: 16)
     stackTrailing = bubbleStack.trailingAnchor.constraint(equalTo: contentView.trailingAnchor, constant: -16)
 
-    bubbleMaxWidth = bubbleStack.widthAnchor.constraint(lessThanOrEqualTo: contentView.widthAnchor, multiplier: 0.82)
+    bubbleMaxWidth = bubbleStack.widthAnchor.constraint(lessThanOrEqualTo: contentView.widthAnchor, multiplier: 0.75)
     NSLayoutConstraint.activate([
       bubbleStack.topAnchor.constraint(equalTo: contentView.topAnchor, constant: 3),
       bubbleStack.bottomAnchor.constraint(equalTo: contentView.bottomAnchor, constant: -3),

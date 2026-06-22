@@ -34,6 +34,9 @@ final class ChatsViewController: UIViewController {
     searchController.searchBar.placeholder = "Search chats"
     navigationItem.searchController = searchController
     navigationItem.hidesSearchBarWhenScrolling = false
+    if #available(iOS 26.0, *) {
+      navigationItem.preferredSearchBarPlacement = .integratedButton
+    }
 
     tableView.backgroundColor = .systemBackground
     tableView.separatorStyle = .none

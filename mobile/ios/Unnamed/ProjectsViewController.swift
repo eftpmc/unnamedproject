@@ -157,7 +157,7 @@ extension ProjectsViewController: UITableViewDataSource, UITableViewDelegate {
   private func projectSubtitle(_ project: Project) -> String {
     let count = chatCountsByProjectId[project.id] ?? 0
     let chatText = count == 1 ? "1 chat" : "\(count) chats"
-    let repo = project.repoPath ?? "No repo linked"
+    let repo = project.repoPath.map { URL(fileURLWithPath: $0).lastPathComponent } ?? "No repo linked"
     return "\(repo) · \(chatText)"
   }
 }

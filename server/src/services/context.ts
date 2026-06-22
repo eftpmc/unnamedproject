@@ -1,7 +1,7 @@
 import type Anthropic from '@anthropic-ai/sdk';
 import fs from 'fs';
 import path from 'path';
-import { getDb, getAgentBudgets, getMonthlyUsage, getDataDir, getPermissionProfile, type DbProject } from '../db/index.js';
+import { getDb, getAgentBudgets, getMonthlyUsage, getDailyUsage, getDataDir, getPermissionProfile, type DbProject } from '../db/index.js';
 import { recallRelevant } from './memory.js';
 import { formatEntry } from '../tools/memory_tools.js';
 import { toolDefinitions } from '../tools/definitions.js';
@@ -195,20 +195,27 @@ function projectsListBlock(userId: string): string {
   return `Available projects:\n${projects.map(p => `- ${p.name} (id: ${p.id}${p.repo_path ? '' : ', no repo'})${p.description ? ': ' + p.description : ''}`).join('\n')}`;
 }
 
-function formatUsageLine(label: string, spent: number, budget: number | null): string {
-  if (budget === null) return `- ${label}: $${spent.toFixed(2)} spent (no budget set)`;
-  const pct = budget > 0 ? Math.round((spent / budget) * 100) : 100;
-  return `- ${label}: $${spent.toFixed(2)} / $${budget.toFixed(2)} used (${pct}%)`;
+function formatUsageLine(label: string, spent: number, budget: number | null, dailySpent: number, dailyBudget: number | null): string {
+  const monthly = budget === null
+    ? `$${spent.toFixed(2)} spent (no monthly budget)`
+    : `$${spent.toFixed(2)} / $${budget.toFixed(2)} used this month (${budget > 0 ? Math.round((spent / budget) * 100) : 100}%)`;
+  const daily = dailyBudget === null
+    ? `$${dailySpent.toFixed(2)} spent today (no daily budget)`
+    : `$${dailySpent.toFixed(2)} / $${dailyBudget.toFixed(2)} used today (${dailyBudget > 0 ? Math.round((dailySpent / dailyBudget) * 100) : 100}%)`;
+  return `- ${label}: ${monthly}; ${daily}`;
 }
 
 function usageBlock(userId: string): string {
   const budgets = getAgentBudgets(userId);
+  const dailyBudgets = getAgentBudgets(userId, 'daily');
   const claudeSpent = getMonthlyUsage(userId, 'claude_code');
   const codexSpent = getMonthlyUsage(userId, 'codex');
-  return `## Agent usage this month
-${formatUsageLine('Claude Code (invoke_claude_code)', claudeSpent, budgets.claude_code)}
-${formatUsageLine('Codex (invoke_codex)', codexSpent, budgets.codex)}
-When a budget is set and nearly exhausted, route routine work to the other agent and reserve the constrained one for tasks where it's clearly the better fit. Once a budget is fully used, that agent's tool will return an error instead of running until the next month or until the budget is raised in Settings.`;
+  const claudeSpentToday = getDailyUsage(userId, 'claude_code');
+  const codexSpentToday = getDailyUsage(userId, 'codex');
+  return `## Agent usage
+${formatUsageLine('Claude Code (invoke_claude_code)', claudeSpent, budgets.claude_code, claudeSpentToday, dailyBudgets.claude_code)}
+${formatUsageLine('Codex (invoke_codex)', codexSpent, budgets.codex, codexSpentToday, dailyBudgets.codex)}
+When a budget is set and nearly exhausted, route routine work to the other agent and reserve the constrained one for tasks where it's clearly the better fit. Once a budget is fully used, that agent's tool will return an error instead of running until the budget resets (daily budgets reset at UTC midnight, monthly budgets reset on the 1st) or until the budget is raised in Settings.`;
 }
 
 function sessionSummaryBlock(sessionId: string): string {

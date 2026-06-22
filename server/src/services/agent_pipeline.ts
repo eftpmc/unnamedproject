@@ -1,4 +1,4 @@
-import { getAgentBudgets, getMonthlyUsage, recordAgentUsage, type AgentUsageTool } from '../db/index.js';
+import { getAgentBudgets, getMonthlyUsage, getDailyUsage, recordAgentUsage, type AgentUsageTool } from '../db/index.js';
 import { buildGraph } from './graphify.js';
 
 export interface AgentPipelineCtx {
@@ -35,8 +35,16 @@ const TOOL_LABELS: Record<AgentUsageTool, string> = {
   subagent: 'Sub-agent',
 };
 
-/** Hard-stops the run before it starts if the monthly budget for this tool is already used up. */
+/** Hard-stops the run before it starts if the daily or monthly budget for this tool is already used up. */
 export const budgetGate: AgentMiddleware = async (ctx, next) => {
+  const dailyBudget = getAgentBudgets(ctx.userId, 'daily')[ctx.tool];
+  if (dailyBudget !== null) {
+    const spentToday = getDailyUsage(ctx.userId, ctx.tool);
+    if (spentToday >= dailyBudget) {
+      ctx.result = `Error: daily budget for ${TOOL_LABELS[ctx.tool]} ($${dailyBudget.toFixed(2)}) has been reached ($${spentToday.toFixed(2)} spent today). Use the other coding agent instead, or raise the daily budget in Settings.`;
+      return;
+    }
+  }
   const budget = getAgentBudgets(ctx.userId)[ctx.tool];
   if (budget !== null) {
     const spent = getMonthlyUsage(ctx.userId, ctx.tool);

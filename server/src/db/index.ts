@@ -181,6 +181,8 @@ function applySchema(): void {
       projects_root TEXT,
       claude_code_budget_usd REAL,
       codex_budget_usd REAL,
+      claude_code_daily_budget_usd REAL,
+      codex_daily_budget_usd REAL,
       permission_profile TEXT NOT NULL DEFAULT 'fast'
         CHECK(permission_profile IN ('fast','trusted','strict'))
     );
@@ -409,6 +411,12 @@ function applySchema(): void {
   }
   if (!userSettingsCols.some(c => c.name === 'codex_budget_usd')) {
     db.exec('ALTER TABLE user_settings ADD COLUMN codex_budget_usd REAL');
+  }
+  if (!userSettingsCols.some(c => c.name === 'claude_code_daily_budget_usd')) {
+    db.exec('ALTER TABLE user_settings ADD COLUMN claude_code_daily_budget_usd REAL');
+  }
+  if (!userSettingsCols.some(c => c.name === 'codex_daily_budget_usd')) {
+    db.exec('ALTER TABLE user_settings ADD COLUMN codex_daily_budget_usd REAL');
   }
   if (!userSettingsCols.some(c => c.name === 'permission_profile')) {
     db.exec("ALTER TABLE user_settings ADD COLUMN permission_profile TEXT NOT NULL DEFAULT 'fast' CHECK(permission_profile IN ('fast','trusted','strict'))");
@@ -1019,11 +1027,25 @@ export function setProjectsRoot(userId: string, projectsRoot: string): void {
 export type AgentUsageTool = 'claude_code' | 'codex' | 'lead_agent' | 'subagent';
 
 export type AgentBudgets = Record<AgentUsageTool, number | null>;
+export type AgentBudgetPeriod = 'monthly' | 'daily';
 
-export function getAgentBudgets(userId: string): AgentBudgets {
+export function getAgentBudgets(userId: string, period: AgentBudgetPeriod = 'monthly'): AgentBudgets {
   const row = getDb()
-    .prepare('SELECT claude_code_budget_usd, codex_budget_usd FROM user_settings WHERE user_id = ?')
-    .get(userId) as { claude_code_budget_usd: number | null; codex_budget_usd: number | null } | undefined;
+    .prepare('SELECT claude_code_budget_usd, codex_budget_usd, claude_code_daily_budget_usd, codex_daily_budget_usd FROM user_settings WHERE user_id = ?')
+    .get(userId) as {
+      claude_code_budget_usd: number | null;
+      codex_budget_usd: number | null;
+      claude_code_daily_budget_usd: number | null;
+      codex_daily_budget_usd: number | null;
+    } | undefined;
+  if (period === 'daily') {
+    return {
+      claude_code: row?.claude_code_daily_budget_usd ?? null,
+      codex: row?.codex_daily_budget_usd ?? null,
+      lead_agent: null,
+      subagent: null,
+    };
+  }
   return {
     claude_code: row?.claude_code_budget_usd ?? null,
     codex: row?.codex_budget_usd ?? null,
@@ -1032,8 +1054,10 @@ export function getAgentBudgets(userId: string): AgentBudgets {
   };
 }
 
-export function setAgentBudget(userId: string, tool: AgentUsageTool, budgetUsd: number | null): void {
-  const column = tool === 'claude_code' ? 'claude_code_budget_usd' : 'codex_budget_usd';
+export function setAgentBudget(userId: string, tool: AgentUsageTool, budgetUsd: number | null, period: AgentBudgetPeriod = 'monthly'): void {
+  const column = period === 'daily'
+    ? (tool === 'claude_code' ? 'claude_code_daily_budget_usd' : 'codex_daily_budget_usd')
+    : (tool === 'claude_code' ? 'claude_code_budget_usd' : 'codex_budget_usd');
   getDb()
     .prepare(`
       INSERT INTO user_settings (user_id, ${column}) VALUES (?, ?)
@@ -1073,6 +1097,14 @@ export function getMonthlyUsage(userId: string, tool: AgentUsageTool): number {
   const row = getDb()
     .prepare('SELECT COALESCE(SUM(cost_usd), 0) as total FROM agent_usage WHERE user_id = ? AND tool = ? AND created_at >= ?')
     .get(userId, tool, monthStart) as { total: number };
+  return row.total;
+}
+
+export function getDailyUsage(userId: string, tool: AgentUsageTool): number {
+  const dayStart = Math.floor(new Date(new Date().toISOString().slice(0, 10) + 'T00:00:00Z').getTime() / 1000);
+  const row = getDb()
+    .prepare('SELECT COALESCE(SUM(cost_usd), 0) as total FROM agent_usage WHERE user_id = ? AND tool = ? AND created_at >= ?')
+    .get(userId, tool, dayStart) as { total: number };
   return row.total;
 }
 

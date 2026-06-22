@@ -63,14 +63,14 @@ describe('buildContext', () => {
     recordAgentUsage(userId, 'codex', 1.5);
 
     const ctx = buildContext(userId, sessionId, codeIntent);
-    expect(ctx).toContain('Agent usage this month');
-    expect(ctx).toContain('Claude Code (invoke_claude_code): $5.00 / $20.00 used (25%)');
-    expect(ctx).toContain('Codex (invoke_codex): $1.50 spent (no budget set)');
+    expect(ctx).toContain('## Agent usage');
+    expect(ctx).toContain('Claude Code (invoke_claude_code): $5.00 / $20.00 used this month (25%); $5.00 spent today (no daily budget)');
+    expect(ctx).toContain('Codex (invoke_codex): $1.50 spent (no monthly budget); $1.50 spent today (no daily budget)');
   });
 
   it('omits agent usage block for non-code, non-multi domains', () => {
     const ctx = buildContext(userId, sessionId, writingIntent);
-    expect(ctx).not.toContain('Agent usage this month');
+    expect(ctx).not.toContain('## Agent usage');
   });
 
   it('includes session summary when present', () => {

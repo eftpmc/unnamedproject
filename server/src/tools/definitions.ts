@@ -341,7 +341,7 @@ export const toolDefinitions: Anthropic.Tool[] = [
               agent: { type: 'string', enum: ['claude_code', 'codex', 'mcp', 'file_write', 'git', 'github', 'eval', 'subagent'], description: 'Which executor to use' },
               prompt: { type: 'string', description: 'Instruction for the agent / command for eval / message for git commit. Required when using run_plan auto-dispatch.' },
               depends_on: { type: 'array', items: { type: 'number' }, description: 'Zero-based indices of steps this step depends on. Steps with no depends_on run immediately in parallel when using run_plan.' },
-              tool_args: { type: 'object', description: 'Additional tool-specific arguments (e.g. {"op":"commit","branch":"main"} for git, {"path":"src/foo.ts","content":"..."} for file_write, {"connection_id":"...","tool_name":"...","tool_input":{}} for mcp)' },
+              tool_args: { type: 'object', description: 'Additional tool-specific arguments (e.g. {"op":"commit","branch":"main"} for git, {"path":"src/foo.ts","content":"..."} for file_write, {"connection_id":"...","tool_name":"...","tool_input":{}} for mcp, {"model":"opus"} to override the model for claude_code/codex steps)' },
             },
             required: ['title', 'agent'],
           },

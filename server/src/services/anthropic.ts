@@ -25,6 +25,29 @@ export function isEffortLevel(value: unknown): value is EffortLevel {
   return typeof value === 'string' && EFFORT_LEVELS.includes(value as EffortLevel);
 }
 
+const TRANSIENT_STATUS_CODES = new Set([408, 409, 429, 500, 502, 503, 504, 529]);
+
+/** True for network/overload errors worth a quick retry, false for auth, validation, or other permanent errors. */
+export function isTransientApiError(err: unknown): boolean {
+  const e = err as { status?: number; code?: string; name?: string } | null | undefined;
+  if (!e) return false;
+  if (typeof e.status === 'number' && TRANSIENT_STATUS_CODES.has(e.status)) return true;
+  if (e.code === 'ECONNRESET' || e.code === 'ETIMEDOUT' || e.code === 'ECONNREFUSED') return true;
+  return e.name === 'APIConnectionError' || e.name === 'APIConnectionTimeoutError';
+}
+
+/** Retries `fn` with short backoff on transient API errors only; rethrows immediately on anything else. */
+export async function withTransientRetry<T>(fn: () => Promise<T>, attempts = 2): Promise<T> {
+  for (let attempt = 0; ; attempt++) {
+    try {
+      return await fn();
+    } catch (err) {
+      if (attempt >= attempts || !isTransientApiError(err)) throw err;
+      await new Promise(resolve => setTimeout(resolve, 300 * 2 ** attempt));
+    }
+  }
+}
+
 export function getAnthropicKey(userId: string): string {
   const conn = getDb()
     .prepare(`
@@ -156,7 +179,12 @@ export async function resolveModelForTurn(
 
 /** Models worth offering for a given effort level, ranked best-first. */
 export async function getModelsForEffort(userId: string, effort: EffortLevel): Promise<ClaudeModelInfo[]> {
-  const apiKey = getAnthropicKey(userId);
+  let apiKey: string;
+  try {
+    apiKey = getAnthropicKey(userId);
+  } catch {
+    return [];
+  }
   const models = await listClaudeModelsForClient(new Anthropic({ apiKey }), apiKey);
   return rankModels(models, effort).filter(model => familyRank(model.id, effort) < 50);
 }

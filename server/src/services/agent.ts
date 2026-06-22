@@ -23,7 +23,7 @@ import { createProject, updateProject, deleteProject } from '../tools/project_op
 import { runCreatePlan } from '../tools/create_plan.js';
 import { broadcast } from './socket.js';
 import { newId } from '../lib/ids.js';
-import { DEFAULT_EFFORT, getAnthropicKey, resolveModelForTurn, listClaudeModels, tokensToUsd, type EffortLevel } from './anthropic.js';
+import { DEFAULT_EFFORT, getAnthropicKey, resolveModelForTurn, listClaudeModels, tokensToUsd, withTransientRetry, isTransientApiError, type EffortLevel } from './anthropic.js';
 import { classifyIntent } from './intent.js';
 import { buildContext } from './context.js';
 import { toolDefinitions } from '../tools/definitions.js';
@@ -315,7 +315,11 @@ async function runSubAgent(
   const systemPrompt = `You are a focused sub-agent completing a specific task.${projectId ? ` Use project_id "${projectId}" when calling project tools.` : ''} Complete the task fully, then respond with a clear summary of what you accomplished.`;
 
   const messages: Anthropic.MessageParam[] = [{ role: 'user', content: instructions }];
-  const SUB_MODEL = 'claude-sonnet-4-6';
+  const parentSession = getDb()
+    .prepare('SELECT effort FROM sessions WHERE id = ?')
+    .get(parentSessionId) as { effort: EffortLevel } | undefined;
+  const effort = parentSession?.effort ?? DEFAULT_EFFORT;
+  const SUB_MODEL = await resolveModelForTurn(client, { model: 'sonnet' }, effort, apiKey);
   const clampedMaxTurns = Math.max(1, Math.min(50, maxTurns));
   let totalInputTokens = 0;
   let totalOutputTokens = 0;
@@ -335,13 +339,13 @@ async function runSubAgent(
       return 'Sub-agent cancelled.';
     }
 
-    const response = await client.messages.create({
+    const response = await withTransientRetry(() => client.messages.create({
       model: SUB_MODEL,
       max_tokens: 8192,
       system: systemPrompt,
       tools: subtools as Anthropic.Tool[],
       messages,
-    });
+    }));
 
     totalInputTokens += response.usage.input_tokens;
     totalOutputTokens += response.usage.output_tokens;
@@ -408,7 +412,7 @@ async function executePlanStep(
         const ctx: AgentPipelineCtx = { userId, tool: 'claude_code', repoPath: project.repo_path, projectId: project.id, graphKey };
         await runAgentPipeline(ctx, async () => {
           const r = await invokeClaudeCode(
-            { prompt: fullPrompt },
+            { prompt: fullPrompt, model: toolArgs.model as string | undefined },
             { userId, executionId, repoPath: worktree.worktree_path, apiKey, resumeSessionId: worktree.claude_session_id, mcpServers: getMcpServersForUser(userId), permissionProfile: getPermissionProfile(userId), onSessionId: (id) => setAgentWorktreeSession(worktree.id, 'claude', id) },
           );
           ctx.result = r.result;
@@ -435,7 +439,7 @@ async function executePlanStep(
         const cCtx: AgentPipelineCtx = { userId, tool: 'codex', repoPath: project.repo_path, projectId: project.id, graphKey: cGraphKey };
         await runAgentPipeline(cCtx, async () => {
           const cr = await invokeCodex(
-            { prompt: fullPrompt },
+            { prompt: fullPrompt, model: toolArgs.model as string | undefined },
             { userId, executionId, repoPath: cWorktree.worktree_path, apiKey: codexKey, resumeSessionId: cWorktree.codex_session_id, mcpServers: getMcpServersForUser(userId), permissionProfile: getPermissionProfile(userId), onSessionId: (id) => setAgentWorktreeSession(cWorktree.id, 'codex', id) },
           );
           cCtx.result = cr.result;
@@ -1339,30 +1343,41 @@ export async function runAgentTurn(userId: string, sessionId: string, userMessag
   try {
     while (true) {
       if (abortController.signal.aborted) break;
-      const stream = client.messages.stream({
-        model,
-        max_tokens: 8192,
-        system: systemPrompt,
-        tools: tools,
-        messages: currentMessages,
-      }, {
-        headers: { 'anthropic-beta': 'web-fetch-2025-09-10' },
-        signal: abortController.signal,
-      });
 
-      stream.on('text', (delta) => {
-        if (!started) {
-          started = true;
-          getDb()
-            .prepare('INSERT INTO messages (id, session_id, role, content) VALUES (?,?,?,?)')
-            .run(replyId, sessionId, 'assistant', '');
-          broadcast(userId, { type: 'message_started', sessionId, message: { id: replyId, role: 'assistant', content: '' } });
+      let response: Anthropic.Message | undefined;
+      for (let attempt = 0; ; attempt++) {
+        const stream = client.messages.stream({
+          model,
+          max_tokens: 8192,
+          system: systemPrompt,
+          tools: tools,
+          messages: currentMessages,
+        }, {
+          headers: { 'anthropic-beta': 'web-fetch-2025-09-10' },
+          signal: abortController.signal,
+        });
+
+        stream.on('text', (delta) => {
+          if (!started) {
+            started = true;
+            getDb()
+              .prepare('INSERT INTO messages (id, session_id, role, content) VALUES (?,?,?,?)')
+              .run(replyId, sessionId, 'assistant', '');
+            broadcast(userId, { type: 'message_started', sessionId, message: { id: replyId, role: 'assistant', content: '' } });
+          }
+          fullText += delta;
+          broadcast(userId, { type: 'message_delta', sessionId, messageId: replyId, delta });
+        });
+
+        try {
+          response = await stream.finalMessage();
+          break;
+        } catch (err) {
+          // Only safe to retry before any text has reached the client — once streamed, a retry would duplicate output.
+          if (started || attempt >= 2 || !isTransientApiError(err)) throw err;
+          await new Promise(resolve => setTimeout(resolve, 300 * 2 ** attempt));
         }
-        fullText += delta;
-        broadcast(userId, { type: 'message_delta', sessionId, messageId: replyId, delta });
-      });
-
-      const response = await stream.finalMessage();
+      }
       totalInputTokens += response.usage.input_tokens;
       totalOutputTokens += response.usage.output_tokens;
 

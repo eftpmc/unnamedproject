@@ -62,25 +62,30 @@ router.post('/', (req, res) => {
 router.get('/:id/test', async (req, res) => {
   const { userId } = req as unknown as AuthedRequest;
   const row = getDb()
-    .prepare('SELECT type, encrypted_config FROM connections WHERE id = ? AND user_id = ?')
-    .get(req.params.id, userId) as { type: string; encrypted_config: string } | undefined;
+    .prepare('SELECT type, purpose, encrypted_config FROM connections WHERE id = ? AND user_id = ?')
+    .get(req.params.id, userId) as { type: string; purpose: string; encrypted_config: string } | undefined;
   if (!row) { res.status(404).json({ error: 'Not found' }); return; }
 
   const start = Date.now();
 
   try {
     const config = JSON.parse(decrypt(row.encrypted_config, deriveKey())) as Record<string, string>;
+    const usesLocalCliAuth = !config.apiKey && (row.purpose === 'claude_code' || row.purpose === 'codex');
+    if (usesLocalCliAuth) {
+      res.json({ ok: null }); // relies on local `claude`/`codex` CLI subscription login — not testable via HTTP
+      return;
+    }
     if (row.type === 'anthropic') {
-      const client = new Anthropic({ apiKey: config.api_key });
+      const client = new Anthropic({ apiKey: config.apiKey });
       await client.models.list();
     } else if (row.type === 'openai') {
       const r = await fetch('https://api.openai.com/v1/models', {
-        headers: { Authorization: `Bearer ${config.api_key}` },
+        headers: { Authorization: `Bearer ${config.apiKey}` },
       });
       if (!r.ok) throw new Error(`HTTP ${r.status}`);
     } else if (row.type === 'github') {
       const r = await fetch('https://api.github.com/user', {
-        headers: { Authorization: `Bearer ${config.token ?? config.api_key}`, 'User-Agent': 'unnamed-app' },
+        headers: { Authorization: `Bearer ${config.apiKey}`, 'User-Agent': 'unnamed-app' },
       });
       if (!r.ok) throw new Error(`HTTP ${r.status}`);
     } else {

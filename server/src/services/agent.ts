@@ -2,7 +2,7 @@ import Anthropic from '@anthropic-ai/sdk';
 import { exec as execCallback } from 'child_process';
 import fs from 'fs';
 import { promisify } from 'util';
-import { createSessionEvent, getDb, getProjectForUser, linkSessionProject, setAgentWorktreeSession, updatePlanStepStatus, maybeCompletePlan, getPlanForStep, getPlanSummaries, getPlanById, getPlanSteps, getExecutionById, getScheduledTasksForUser, createScheduledTask, updateScheduledTask, deleteScheduledTask, resumePlan, getPermissionProfile, createPipeline, getPipelineById, getPipelineTasks, listPipelinesForUser, createPlan, recordAgentUsage, type DbPlan, type DbPlanStep } from '../db/index.js';
+import { createSessionEvent, getDb, getProjectForUser, linkSessionProject, setAgentWorktreeSession, updatePlanStepStatus, maybeCompletePlan, getPlanForStep, getPlanSummaries, getPlanById, getPlanSteps, getExecutionById, getScheduledTasksForUser, createScheduledTask, updateScheduledTask, deleteScheduledTask, resumePlan, getPermissionProfile, createPipeline, getPipelineById, getPipelineTasks, listPipelinesForUser, createPlan, recordAgentUsage, addSessionDiscoveredTools, getSessionDiscoveredTools, type DbPlan, type DbPlanStep } from '../db/index.js';
 
 const execAsync = promisify(execCallback);
 import { runAgentPipeline, type AgentPipelineCtx } from './agent_pipeline.js';
@@ -27,6 +27,8 @@ import { DEFAULT_EFFORT, getAnthropicKey, resolveModelForTurn, listClaudeModels,
 import { classifyIntent } from './intent.js';
 import { buildContext } from './context.js';
 import { toolDefinitions } from '../tools/definitions.js';
+import { searchTools } from './toolSearch.js';
+import { resolveRegistryTool, dispatchRegistryTool, ingestMcpTools } from './toolRegistry.js';
 import { extractAndRemember } from './extract-memory.js';
 import { renderVideo, type VideoScene } from './video.js';
 import { createTextArtifact, listProjectArtifacts, getArtifactById, readArtifactContent, registerFileAsArtifact } from './artifacts.js';
@@ -184,7 +186,30 @@ const PARALLEL_SAFE_TOOLS = new Set([
   'get_execution_output',
   'list_scheduled_tasks',
   'wait_for_execution',
+  'tool_search',
 ]);
+
+const CORE_TOOLS = new Set([
+  'tool_search',
+  'recall',
+  'remember',
+  'read_file',
+  'search_files',
+  'list_dir',
+  'write_file',
+  'create_plan',
+  'delegate_to_agent',
+]);
+
+export function resolveToolsForTurn(userId: string, sessionId: string): Anthropic.Tool[] {
+  const core = toolDefinitions.filter(t => CORE_TOOLS.has(t.name));
+  const discoveredNames = getSessionDiscoveredTools(sessionId);
+  const discovered = discoveredNames
+    .filter(name => !CORE_TOOLS.has(name))
+    .map(name => toolDefinitions.find(t => t.name === name) ?? resolveRegistryTool(userId, name))
+    .filter((t): t is Anthropic.Tool => Boolean(t));
+  return [...core, ...discovered];
+}
 
 // Best-effort session-event emission: writing a session event + broadcasting it
 // is telemetry, not core execution. It must never abort or mask the tool call
@@ -719,26 +744,14 @@ async function dispatchTool(
         if (codexStepId) finishPlanStep(userId, codexStepId, result);
         break;
       }
-      case 'mcp_call': {
-        const mcpConn = getDb()
-          .prepare("SELECT id FROM connections WHERE id = ? AND user_id = ? AND type = 'mcp'")
-          .get(toolInput.connection_id as string, userId) as { id: string } | undefined;
-        if (!mcpConn) {
-          result = `Error: MCP connection ${toolInput.connection_id as string} not found`;
+      case 'tool_search': {
+        const matches = searchTools(userId, toolInput.query as string);
+        if (matches.length === 0) {
+          result = 'No matching tools found, try rephrasing the query.';
           break;
         }
-        const mcpConfig = getDecryptedConfig(mcpConn.id, userId);
-        const mcpStepId = toolInput.plan_step_id as string | undefined;
-        if (mcpStepId) startPlanStep(userId, mcpStepId, executionId);
-        result = await callMcpTool(
-          toolInput.connection_id as string,
-          mcpConfig.command,
-          mcpConfig.args ? JSON.parse(mcpConfig.args) : [],
-          mcpConfig.env ? JSON.parse(mcpConfig.env) : {},
-          toolInput.tool_name as string,
-          toolInput.tool_input as Record<string, unknown>,
-        );
-        if (mcpStepId) finishPlanStep(userId, mcpStepId, result);
+        addSessionDiscoveredTools(sessionId, matches.map(m => m.name));
+        result = JSON.stringify(matches, null, 2);
         break;
       }
       case 'git_op': {
@@ -889,6 +902,7 @@ async function dispatchTool(
           const mcpArgs = cfg.args ? JSON.parse(cfg.args) : [];
           const mcpEnv = cfg.env ? JSON.parse(cfg.env) : {};
           const tools = await listMcpTools(connRow.id, cfg.command, mcpArgs, mcpEnv);
+          await ingestMcpTools(userId, connRow.id);
           result = JSON.stringify({ id: connRow.id, name: connRow.name, type: 'mcp', status: 'ok', tools: tools.map(t => ({ name: t.name, description: t.description })) });
         } catch (err) {
           result = JSON.stringify({ id: connRow.id, name: connRow.name, type: 'mcp', status: 'error', error: err instanceof Error ? err.message : String(err) });
@@ -1243,8 +1257,16 @@ async function dispatchTool(
         result = waitResult ?? `Error: execution ${waitExecId} still running after ${timeoutSecs}s timeout`;
         break;
       }
-      default:
-        result = `Unknown tool: ${toolName}`;
+      default: {
+        const registryResult = await dispatchRegistryTool(userId, toolName, toolInput);
+        if (registryResult !== undefined) {
+          // Self-healing: the model called a registry tool that wasn't in its
+          // pinned discovered set (hallucinated name or lost session state).
+          // Pin it now so subsequent turns see its schema without re-searching.
+          addSessionDiscoveredTools(sessionId, [toolName]);
+        }
+        result = registryResult ?? `Unknown tool: ${toolName}`;
+      }
     }
 
     completeExecution(executionId, userId, 'done', result);
@@ -1307,7 +1329,7 @@ export async function runAgentTurn(userId: string, sessionId: string, userMessag
   const model = session?.model ?? await resolveModelForTurn(client, intent, effort, apiKey);
 
   const systemPrompt = buildContext(userId, sessionId, intent);
-  const tools = toolDefinitions;
+  const tools = resolveToolsForTurn(userId, sessionId);
 
   // When a session summary exists, use a sliding window of the last 20 messages
   // to keep context bounded; prepend the summary as a synthetic exchange.

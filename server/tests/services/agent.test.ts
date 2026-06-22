@@ -121,7 +121,7 @@ describe('agent', () => {
     expect(payload).not.toHaveProperty('thinking');
   });
 
-  it('includes available projects and project tools in the system prompt', async () => {
+  it('includes available projects in the system prompt', async () => {
     const db = getDb();
     db.prepare('INSERT INTO projects (id, user_id, name, description, repo_path, enabled_connection_ids) VALUES (?,?,?,?,?,?)')
       .run(newId(), userId, 'demo', 'Demo project', null, '[]');
@@ -134,8 +134,19 @@ describe('agent', () => {
     const call = streamMock.mock.calls[streamMock.mock.calls.length - 1][0];
     expect(call.system).toContain('Available projects');
     expect(call.system).toContain('demo');
-    expect(call.tools.some((t: { name: string }) => t.name === 'create_project')).toBe(true);
-    expect(call.tools.some((t: { name: string }) => t.name === 'delete_project')).toBe(true);
+  });
+
+  it('makes project tools available via tool_search discovery', async () => {
+    const { addSessionDiscoveredTools } = await import('../../src/db/index.js');
+    const { resolveToolsForTurn } = await import('../../src/services/agent.js');
+    const discoverySessionId = newId();
+    getDb().prepare('INSERT INTO sessions (id, user_id) VALUES (?,?)').run(discoverySessionId, userId);
+
+    addSessionDiscoveredTools(discoverySessionId, ['create_project', 'delete_project']);
+    const tools = resolveToolsForTurn(userId, discoverySessionId);
+    const names = tools.map(t => t.name);
+    expect(names).toContain('create_project');
+    expect(names).toContain('delete_project');
   });
 
   it('returns "no repo" error for git_op on a project without repo_path and does not call runGitOp', async () => {
@@ -922,4 +933,29 @@ describe('agent', () => {
     expect(toolResult).toContain('Error');
     expect(toolResult).toContain('still running');
   }, 10_000);
+});
+
+describe('tool discovery in runAgentTurn', () => {
+  it('always-loaded core set includes tool_search and excludes the full static list', async () => {
+    const { resolveToolsForTurn } = await import('../../src/services/agent.js');
+    const discoverySessionId = newId();
+    getDb().prepare('INSERT INTO sessions (id, user_id) VALUES (?,?)').run(discoverySessionId, userId);
+
+    const tools = resolveToolsForTurn(userId, discoverySessionId);
+    const names = tools.map(t => t.name);
+    expect(names).toContain('tool_search');
+    expect(names).toContain('delegate_to_agent');
+    expect(names).not.toContain('generate_video'); // not in core, not yet discovered
+  });
+
+  it('includes a previously discovered tool on subsequent calls', async () => {
+    const { addSessionDiscoveredTools } = await import('../../src/db/index.js');
+    const { resolveToolsForTurn } = await import('../../src/services/agent.js');
+    const discoverySessionId = newId();
+    getDb().prepare('INSERT INTO sessions (id, user_id) VALUES (?,?)').run(discoverySessionId, userId);
+
+    addSessionDiscoveredTools(discoverySessionId, ['generate_video']);
+    const tools = resolveToolsForTurn(userId, discoverySessionId);
+    expect(tools.map(t => t.name)).toContain('generate_video');
+  });
 });

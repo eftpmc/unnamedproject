@@ -84,12 +84,12 @@ final class ApprovalsViewController: UIViewController {
 
     let titleLabel = UILabel()
     titleLabel.text = "All clear"
-    titleLabel.font = UIFont.preferredFont(forTextStyle: .headline)
+    titleLabel.font = UIFont.app(forTextStyle: .headline)
     titleLabel.textAlignment = .center
 
     let subtitleLabel = UILabel()
     subtitleLabel.text = "Approvals and agent requests will appear here."
-    subtitleLabel.font = UIFont.preferredFont(forTextStyle: .subheadline)
+    subtitleLabel.font = UIFont.app(forTextStyle: .subheadline)
     subtitleLabel.textColor = .secondaryLabel
     subtitleLabel.textAlignment = .center
     subtitleLabel.numberOfLines = 0
@@ -260,7 +260,7 @@ private final class ApprovalCell: UITableViewCell {
 
     let iconBadge = IconBadgeView(systemName: "bell.badge", tintColor: .systemOrange)
 
-    actionLabel.font = UIFont.preferredFont(forTextStyle: .subheadline)
+    actionLabel.font = UIFont.app(forTextStyle: .subheadline)
     actionLabel.adjustsFontForContentSizeCategory = true
     actionLabel.numberOfLines = 0
 

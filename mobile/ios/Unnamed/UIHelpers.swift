@@ -108,6 +108,31 @@ extension UIFont {
     let descriptor = fontDescriptor.addingAttributes([.traits: [UIFontDescriptor.TraitKey.weight: weight]])
     return UIFont(descriptor: descriptor, size: pointSize)
   }
+
+  /// The app's body typeface (web app uses Inter; this mirrors it instead of
+  /// the system SF font, for visual consistency across platforms). Backed by
+  /// Inter's variable TTF (bundled, registered via `UIAppFonts`), so any
+  /// weight is reachable through the same `.traits` mechanism used for the
+  /// system font above — no separate static-weight files needed.
+  private static let interFamilyNames = ["Inter", "Inter-Regular", "InterVariable"]
+  private static let interBase: UIFont? = {
+    for name in interFamilyNames {
+      if let font = UIFont(name: name, size: 17) { return font }
+    }
+    return nil
+  }()
+
+  static func app(ofSize size: CGFloat, weight: UIFont.Weight = .regular) -> UIFont {
+    guard let base = interBase else { return .systemFont(ofSize: size, weight: weight) }
+    let descriptor = base.fontDescriptor.addingAttributes([.traits: [UIFontDescriptor.TraitKey.weight: weight]])
+    return UIFont(descriptor: descriptor, size: size)
+  }
+
+  /// Dynamic-Type-scaled equivalent of `preferredFont(forTextStyle:)`, but in Inter.
+  static func app(forTextStyle style: TextStyle, weight: UIFont.Weight = .regular) -> UIFont {
+    let base = app(ofSize: UIFont.preferredFont(forTextStyle: style).pointSize, weight: weight)
+    return UIFontMetrics(forTextStyle: style).scaledFont(for: base)
+  }
 }
 
 extension UIView {
@@ -200,7 +225,7 @@ final class PrimaryButton: UIButton {
     configuration = .filled()
     configuration?.cornerStyle = .medium
     configuration?.contentInsets = NSDirectionalEdgeInsets(top: 12, leading: 16, bottom: 12, trailing: 16)
-    titleLabel?.font = UIFont.preferredFont(forTextStyle: .headline)
+    titleLabel?.font = UIFont.app(forTextStyle: .headline)
   }
 
   required init?(coder: NSCoder) {
@@ -216,7 +241,7 @@ final class SecondaryButton: UIButton {
     configuration?.baseForegroundColor = .label
     configuration?.background.backgroundColor = .secondarySystemBackground
     configuration?.contentInsets = NSDirectionalEdgeInsets(top: 11, leading: 14, bottom: 11, trailing: 14)
-    titleLabel?.font = UIFont.preferredFont(forTextStyle: .callout)
+    titleLabel?.font = UIFont.app(forTextStyle: .callout)
   }
 
   required init?(coder: NSCoder) {
@@ -258,7 +283,7 @@ final class BrandMarkView: UIView {
     let label = UILabel()
     label.text = "u"
     label.textColor = .white
-    label.font = .systemFont(ofSize: size * 0.5, weight: .semibold)
+    label.font = .app(ofSize: size * 0.5, weight: .semibold)
     label.textAlignment = .center
 
     addSubview(label)
@@ -362,9 +387,9 @@ func markdownAttributedString(_ raw: String, baseFont: UIFont, textColor: UIColo
     var lineText = line
     var lineFont = baseFont
     var bulletPrefix = ""
-    if line.hasPrefix("### ")      { lineText = String(line.dropFirst(4)); lineFont = .systemFont(ofSize: baseFont.pointSize + 1, weight: .semibold) }
-    else if line.hasPrefix("## ")  { lineText = String(line.dropFirst(3)); lineFont = .systemFont(ofSize: baseFont.pointSize + 2, weight: .bold) }
-    else if line.hasPrefix("# ")   { lineText = String(line.dropFirst(2)); lineFont = .systemFont(ofSize: baseFont.pointSize + 4, weight: .bold) }
+    if line.hasPrefix("### ")      { lineText = String(line.dropFirst(4)); lineFont = .app(ofSize: baseFont.pointSize + 1, weight: .semibold) }
+    else if line.hasPrefix("## ")  { lineText = String(line.dropFirst(3)); lineFont = .app(ofSize: baseFont.pointSize + 2, weight: .bold) }
+    else if line.hasPrefix("# ")   { lineText = String(line.dropFirst(2)); lineFont = .app(ofSize: baseFont.pointSize + 4, weight: .bold) }
     else if line.hasPrefix("- ") || line.hasPrefix("* ") { lineText = String(line.dropFirst(2)); bulletPrefix = "•  " }
 
     if renderedAny {
@@ -380,7 +405,7 @@ func markdownAttributedString(_ raw: String, baseFont: UIFont, textColor: UIColo
 }
 
 func applyInlineMarkdown(_ text: String, font: UIFont, color: UIColor, codeBg: UIColor, lineSpacing: CGFloat = 0) -> NSAttributedString {
-  let boldFont = UIFont.boldSystemFont(ofSize: font.pointSize)
+  let boldFont = UIFont.app(ofSize: font.pointSize, weight: .bold)
   let italicDesc = font.fontDescriptor.withSymbolicTraits(.traitItalic) ?? font.fontDescriptor
   let italicFont = UIFont(descriptor: italicDesc, size: font.pointSize)
   let monoFont = UIFont.monospacedSystemFont(ofSize: font.pointSize * 0.9, weight: .regular)
@@ -519,12 +544,12 @@ final class ComposerTextView: UITextView {
   override init(frame: CGRect, textContainer: NSTextContainer?) {
     super.init(frame: frame, textContainer: textContainer)
     backgroundColor = .clear
-    font = UIFont.preferredFont(forTextStyle: .body)
+    font = UIFont.app(forTextStyle: .body)
     adjustsFontForContentSizeCategory = true
     isScrollEnabled = false
     textContainerInset = UIEdgeInsets(top: 10, left: 2, bottom: 10, right: 2)
 
-    placeholderLabel.font = UIFont.preferredFont(forTextStyle: .body)
+    placeholderLabel.font = UIFont.app(forTextStyle: .body)
     placeholderLabel.adjustsFontForContentSizeCategory = true
     placeholderLabel.textColor = .tertiaryLabel
     placeholderLabel.numberOfLines = 0

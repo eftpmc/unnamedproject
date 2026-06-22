@@ -90,7 +90,7 @@ final class ProjectDetailViewController: UIViewController {
     let container = UIView()
     let label = UILabel()
     label.text = "Coming soon"
-    label.font = UIFont.preferredFont(forTextStyle: .subheadline)
+    label.font = UIFont.app(forTextStyle: .subheadline)
     label.textColor = .tertiaryLabel
     label.textAlignment = .center
     container.addSubview(label)
@@ -108,7 +108,7 @@ final class ProjectDetailViewController: UIViewController {
     emptyLabel.text = "No chats yet.\nTap compose to start one."
     emptyLabel.numberOfLines = 0
     emptyLabel.textAlignment = .center
-    emptyLabel.font = UIFont.preferredFont(forTextStyle: .subheadline)
+    emptyLabel.font = UIFont.app(forTextStyle: .subheadline)
     emptyLabel.textColor = .tertiaryLabel
     emptyLabel.isHidden = true
 
@@ -153,7 +153,7 @@ final class ProjectDetailViewController: UIViewController {
     if let desc = project.description, !desc.isEmpty {
       let label = UILabel()
       label.text = desc
-      label.font = UIFont.preferredFont(forTextStyle: .subheadline)
+      label.font = UIFont.app(forTextStyle: .subheadline)
       label.textColor = .secondaryLabel
       label.numberOfLines = 0
       stack.addArrangedSubview(label)

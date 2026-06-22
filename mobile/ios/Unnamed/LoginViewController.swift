@@ -40,14 +40,14 @@ final class LoginViewController: UIViewController {
 
     let titleLabel = UILabel()
     titleLabel.text = "Welcome back"
-    titleLabel.font = UIFont.preferredFont(forTextStyle: .largeTitle)
+    titleLabel.font = UIFont.app(forTextStyle: .largeTitle)
     titleLabel.adjustsFontForContentSizeCategory = true
     titleLabel.textAlignment = .center
     titleLabel.numberOfLines = 0
 
     let helpLabel = UILabel()
     helpLabel.text = "Sign in to keep chats, projects, and approvals tied to this server."
-    helpLabel.font = UIFont.preferredFont(forTextStyle: .body)
+    helpLabel.font = UIFont.app(forTextStyle: .body)
     helpLabel.adjustsFontForContentSizeCategory = true
     helpLabel.textColor = .secondaryLabel
     helpLabel.numberOfLines = 0
@@ -55,7 +55,7 @@ final class LoginViewController: UIViewController {
 
     let serverLabel = UILabel()
     serverLabel.text = session.serverURL?.absoluteString
-    serverLabel.font = UIFont.preferredFont(forTextStyle: .footnote)
+    serverLabel.font = UIFont.app(forTextStyle: .footnote)
     serverLabel.adjustsFontForContentSizeCategory = true
     serverLabel.textColor = .secondaryLabel
     serverLabel.textAlignment = .center

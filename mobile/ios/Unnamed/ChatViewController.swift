@@ -281,7 +281,7 @@ final class ChatViewController: UIViewController {
     agentStatusSpinner.color = .tertiaryLabel
     agentStatusSpinner.startAnimating()
 
-    agentStatusLabel.font = UIFont.preferredFont(forTextStyle: .footnote)
+    agentStatusLabel.font = UIFont.app(forTextStyle: .footnote)
     agentStatusLabel.textColor = .secondaryLabel
 
     let row = UIStackView(arrangedSubviews: [agentStatusSpinner, agentStatusLabel])
@@ -307,7 +307,7 @@ final class ChatViewController: UIViewController {
 
     let label = UILabel()
     label.text = "Reconnecting…"
-    label.font = UIFont.preferredFont(forTextStyle: .caption1)
+    label.font = UIFont.app(forTextStyle: .caption1)
     label.textColor = .white
     label.textAlignment = .center
     reconnectBanner.addSubview(label)
@@ -546,11 +546,11 @@ final class ChatViewController: UIViewController {
       ])
       let title = UILabel()
       title.text = "Start the conversation"
-      title.font = UIFont.preferredFont(forTextStyle: .headline)
+      title.font = UIFont.app(forTextStyle: .headline)
       title.textAlignment = .center
       let sub = UILabel()
       sub.text = "Send a message below."
-      sub.font = UIFont.preferredFont(forTextStyle: .subheadline)
+      sub.font = UIFont.app(forTextStyle: .subheadline)
       sub.textColor = .secondaryLabel
       sub.textAlignment = .center
       let stack = UIStackView(arrangedSubviews: [icon, title, sub])
@@ -678,7 +678,7 @@ final class ChatViewController: UIViewController {
     let modelLabel = currentModel.flatMap { modelDisplayNames[$0] } ?? currentModel ?? "Auto"
     let label = "\(currentEffort.capitalized) · \(modelLabel)"
     var config = configPill.configuration
-    config?.attributedTitle = AttributedString(label, attributes: AttributeContainer([.font: UIFont.preferredFont(forTextStyle: .caption1)]))
+    config?.attributedTitle = AttributedString(label, attributes: AttributeContainer([.font: UIFont.app(forTextStyle: .caption1)]))
     config?.image = nil
     configPill.configuration = config
   }
@@ -869,7 +869,7 @@ final class ChatViewController: UIViewController {
     config.imagePadding = 4
     config.contentInsets = NSDirectionalEdgeInsets(top: 4, leading: 10, bottom: 4, trailing: 8)
     config.attributedTitle = AttributedString(
-      attachment.filename, attributes: AttributeContainer([.font: UIFont.preferredFont(forTextStyle: .caption2)]))
+      attachment.filename, attributes: AttributeContainer([.font: UIFont.app(forTextStyle: .caption2)]))
     config.titleLineBreakMode = .byTruncatingMiddle
     let button = UIButton(configuration: config)
     button.tag = index
@@ -1008,7 +1008,7 @@ private final class MessageCell: UITableViewCell {
       contentStack.bottomAnchor.constraint(equalTo: bubble.bottomAnchor),
     ])
 
-    timeLabel.font = UIFont.preferredFont(forTextStyle: .caption2)
+    timeLabel.font = UIFont.app(forTextStyle: .caption2)
     timeLabel.textColor = .tertiaryLabel
     timeLabel.adjustsFontForContentSizeCategory = true
 
@@ -1041,7 +1041,7 @@ private final class MessageCell: UITableViewCell {
   func configure(with message: ChatMessage) {
     rawContent = message.content
     let isUser = message.role == "user"
-    let baseFont = UIFont.preferredFont(forTextStyle: .callout)
+    let baseFont = UIFont.app(forTextStyle: .callout)
     let codeBg = AppPalette.muted
     let textColor: UIColor = isUser ? .label : AppPalette.foregroundSoft
 
@@ -1211,7 +1211,7 @@ private final class ToolEventCell: UITableViewCell {
       iconView.heightAnchor.constraint(equalToConstant: 13),
     ])
 
-    nameLabel.font = UIFont.preferredFont(forTextStyle: .footnote).withWeight(.medium)
+    nameLabel.font = UIFont.app(forTextStyle: .footnote).withWeight(.medium)
     nameLabel.textColor = .label
 
     spinner.hidesWhenStopped = true
@@ -1223,7 +1223,7 @@ private final class ToolEventCell: UITableViewCell {
       pillIcon.widthAnchor.constraint(equalToConstant: 10),
       pillIcon.heightAnchor.constraint(equalToConstant: 10),
     ])
-    pillLabel.font = UIFont.preferredFont(forTextStyle: .caption2).withWeight(.medium)
+    pillLabel.font = UIFont.app(forTextStyle: .caption2).withWeight(.medium)
 
     let pillRow = UIStackView(arrangedSubviews: [spinner, pillIcon, pillLabel])
     pillRow.axis = .horizontal

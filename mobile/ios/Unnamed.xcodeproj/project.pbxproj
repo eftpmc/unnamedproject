@@ -27,6 +27,7 @@
 		B11F48422D0307B40044C1D9 /* ApprovalDetailViewController.swift in Sources */ = {isa = PBXBuildFile; fileRef = E11748412D0307B40044C1D9 /* ApprovalDetailViewController.swift */; };
 		B21F48422D0307B40044C1D9 /* ApprovalCenter.swift in Sources */ = {isa = PBXBuildFile; fileRef = D11748412D0307B40044C1D9 /* ApprovalCenter.swift */; };
 		D21F48422D0307B40044C1D9 /* SidebarViewController.swift in Sources */ = {isa = PBXBuildFile; fileRef = D21748412D0307B40044C1D9 /* SidebarViewController.swift */; };
+		C11748422D0307B40044C1DA /* Inter-Variable.ttf in Resources */ = {isa = PBXBuildFile; fileRef = C01748412D0307B40044C1DA /* Inter-Variable.ttf */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
@@ -52,6 +53,7 @@
 		E11748412D0307B40044C1D9 /* ApprovalDetailViewController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = ApprovalDetailViewController.swift; path = Unnamed/ApprovalDetailViewController.swift; sourceTree = "<group>"; };
 		D11748412D0307B40044C1D9 /* ApprovalCenter.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = ApprovalCenter.swift; path = Unnamed/ApprovalCenter.swift; sourceTree = "<group>"; };
 		D21748412D0307B40044C1D9 /* SidebarViewController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = SidebarViewController.swift; path = Unnamed/SidebarViewController.swift; sourceTree = "<group>"; };
+		C01748412D0307B40044C1DA /* Inter-Variable.ttf */ = {isa = PBXFileReference; lastKnownFileType = file; name = "Inter-Variable.ttf"; path = "Unnamed/Fonts/Inter-Variable.ttf"; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -85,6 +87,7 @@
 				E11748412D0307B40044C1D9 /* ApprovalDetailViewController.swift */,
 				D11748412D0307B40044C1D9 /* ApprovalCenter.swift */,
 				D21748412D0307B40044C1D9 /* SidebarViewController.swift */,
+				C01748412D0307B40044C1DA /* Inter-Variable.ttf */,
 				13B07FB51A68108700A75B9A /* Images.xcassets */,
 				13B07FB61A68108700A75B9A /* Info.plist */,
 				AA286B85B6C04FC6940260E9 /* SplashScreen.storyboard */,
@@ -187,6 +190,7 @@
 				13B07FBF1A68108700A75B9A /* Images.xcassets in Resources */,
 				3E461D99554A48A4959DE609 /* SplashScreen.storyboard in Resources */,
 				01C318E318BC543896027D60 /* PrivacyInfo.xcprivacy in Resources */,
+				C11748422D0307B40044C1DA /* Inter-Variable.ttf in Resources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};

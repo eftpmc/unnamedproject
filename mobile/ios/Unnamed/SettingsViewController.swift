@@ -141,7 +141,7 @@ extension SettingsViewController: UITableViewDataSource, UITableViewDelegate {
     let avatar = UILabel()
     avatar.backgroundColor = .tintColor
     avatar.textColor = .white
-    avatar.font = .systemFont(ofSize: 14, weight: .semibold)
+    avatar.font = .app(ofSize: 14, weight: .semibold)
     avatar.textAlignment = .center
     avatar.layer.cornerRadius = 16
     avatar.clipsToBounds = true
@@ -151,7 +151,7 @@ extension SettingsViewController: UITableViewDataSource, UITableViewDelegate {
     avatar.heightAnchor.constraint(equalToConstant: 32).isActive = true
 
     let emailLabel = UILabel()
-    emailLabel.font = UIFont.preferredFont(forTextStyle: .body)
+    emailLabel.font = UIFont.app(forTextStyle: .body)
     emailLabel.textColor = .label
     emailLabel.text = email
 

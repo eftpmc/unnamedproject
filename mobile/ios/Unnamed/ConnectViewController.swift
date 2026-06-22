@@ -40,14 +40,14 @@ final class ConnectViewController: UIViewController {
 
     let titleLabel = UILabel()
     titleLabel.text = "Connect your workspace"
-    titleLabel.font = UIFont.preferredFont(forTextStyle: .largeTitle)
+    titleLabel.font = UIFont.app(forTextStyle: .largeTitle)
     titleLabel.adjustsFontForContentSizeCategory = true
     titleLabel.textAlignment = .center
     titleLabel.numberOfLines = 0
 
     let helpLabel = UILabel()
     helpLabel.text = "Enter the Unnamed server address from your Mac. QR connect and saved hosts can land here next."
-    helpLabel.font = UIFont.preferredFont(forTextStyle: .body)
+    helpLabel.font = UIFont.app(forTextStyle: .body)
     helpLabel.adjustsFontForContentSizeCategory = true
     helpLabel.textColor = .secondaryLabel
     helpLabel.numberOfLines = 0

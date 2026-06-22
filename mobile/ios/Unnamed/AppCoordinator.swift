@@ -21,6 +21,8 @@ final class AppCoordinator {
     appearance.configureWithOpaqueBackground()
     appearance.backgroundColor = .systemBackground
     appearance.shadowColor = .separator
+    appearance.titleTextAttributes = [.font: UIFont.app(forTextStyle: .headline)]
+    appearance.largeTitleTextAttributes = [.font: UIFont.app(forTextStyle: .largeTitle, weight: .bold)]
     UINavigationBar.appearance().standardAppearance = appearance
     UINavigationBar.appearance().scrollEdgeAppearance = appearance
     UINavigationBar.appearance().compactAppearance = appearance

@@ -23,10 +23,10 @@ final class SettingsViewController: UIViewController {
   override func viewDidLoad() {
     super.viewDidLoad()
     title = "Settings"
-    view.backgroundColor = AppTheme.canvas
-    navigationItem.largeTitleDisplayMode = .never
+    view.backgroundColor = .systemBackground
+    navigationItem.largeTitleDisplayMode = .always
 
-    tableView.backgroundColor = AppTheme.canvas
+    tableView.backgroundColor = .systemBackground
     tableView.dataSource = self
     tableView.delegate = self
     tableView.register(UITableViewCell.self, forCellReuseIdentifier: "cell")
@@ -78,14 +78,14 @@ extension SettingsViewController: UITableViewDataSource, UITableViewDelegate {
     switch Section(rawValue: indexPath.section)! {
     case .account:
       let cell = tableView.dequeueReusableCell(withIdentifier: "cell", for: indexPath)
-      cell.backgroundColor = AppTheme.surface
+      cell.backgroundColor = .secondarySystemBackground
       cell.selectionStyle = .none
       configureAccountCell(cell)
       return cell
 
     case .server:
       let cell = tableView.dequeueReusableCell(withIdentifier: "cell", for: indexPath)
-      cell.backgroundColor = AppTheme.surface
+      cell.backgroundColor = .secondarySystemBackground
       var content = cell.defaultContentConfiguration()
       if indexPath.row == 0 {
         content.text = "Address"
@@ -93,7 +93,7 @@ extension SettingsViewController: UITableViewDataSource, UITableViewDelegate {
         cell.selectionStyle = .none
       } else {
         content.text = "Change Server"
-        content.textProperties.color = AppTheme.accent
+        content.textProperties.color = .tintColor
         cell.selectionStyle = .default
       }
       cell.contentConfiguration = content
@@ -102,7 +102,7 @@ extension SettingsViewController: UITableViewDataSource, UITableViewDelegate {
 
     case .notifications:
       let cell = tableView.dequeueReusableCell(withIdentifier: "switchCell", for: indexPath)
-      cell.backgroundColor = AppTheme.surface
+      cell.backgroundColor = .secondarySystemBackground
       cell.selectionStyle = .none
       var content = cell.defaultContentConfiguration()
       content.text = "Approval Alerts"
@@ -115,7 +115,7 @@ extension SettingsViewController: UITableViewDataSource, UITableViewDelegate {
 
     case .signOut:
       let cell = tableView.dequeueReusableCell(withIdentifier: "cell", for: indexPath)
-      cell.backgroundColor = AppTheme.surface
+      cell.backgroundColor = .secondarySystemBackground
       var content = cell.defaultContentConfiguration()
       content.text = "Sign Out"
       content.textProperties.color = .systemRed
@@ -139,7 +139,7 @@ extension SettingsViewController: UITableViewDataSource, UITableViewDelegate {
     cell.contentView.subviews.forEach { $0.removeFromSuperview() }
 
     let avatar = UILabel()
-    avatar.backgroundColor = AppTheme.accent
+    avatar.backgroundColor = .tintColor
     avatar.textColor = .white
     avatar.font = .systemFont(ofSize: 14, weight: .semibold)
     avatar.textAlignment = .center

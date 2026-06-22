@@ -17,12 +17,11 @@ final class AppCoordinator {
 
     let appearance = UINavigationBarAppearance()
     appearance.configureWithOpaqueBackground()
-    appearance.backgroundColor = AppTheme.canvas
-    appearance.shadowColor = AppTheme.border
+    appearance.backgroundColor = .systemBackground
+    appearance.shadowColor = .separator
     UINavigationBar.appearance().standardAppearance = appearance
     UINavigationBar.appearance().scrollEdgeAppearance = appearance
     UINavigationBar.appearance().compactAppearance = appearance
-    UINavigationBar.appearance().tintColor = AppTheme.accent
   }
 
   func start() {
@@ -62,7 +61,9 @@ final class AppCoordinator {
       }
       let chats = (try? await client.sessions()) ?? []
       let mainNav = UINavigationController(rootViewController: makeChatVC(for: chats.first))
-      mainNav.navigationBar.prefersLargeTitles = false
+      // Allow large titles on the shell so pushed list screens (Projects,
+      // Settings) get them; Chat opts out per-VC via largeTitleDisplayMode.
+      mainNav.navigationBar.prefersLargeTitles = true
       self.mainNav = mainNav
       let sidebar = makeSidebar()
       let slide = SlideOverController(main: mainNav, side: sidebar)
@@ -88,6 +89,7 @@ final class AppCoordinator {
     sidebar.onShowProjects = { [weak self] in self?.showProjects() }
     sidebar.onShowInbox = { [weak self] in self?.presentInbox() }
     sidebar.onShowSettings = { [weak self] in self?.showSettings() }
+    sidebar.onClose = { [weak self] in self?.slideOver?.closeSide() }
     return sidebar
   }
 
@@ -135,6 +137,7 @@ final class AppCoordinator {
     slideOver?.closeSide()
     let controller = ApprovalsViewController(appSession: session)
     let nav = UINavigationController(rootViewController: controller)
+    nav.navigationBar.prefersLargeTitles = true
     if let sheet = nav.sheetPresentationController {
       sheet.detents = [.medium(), .large()]
       sheet.prefersGrabberVisible = true

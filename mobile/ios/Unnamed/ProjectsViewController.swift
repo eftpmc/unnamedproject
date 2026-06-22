@@ -20,11 +20,10 @@ final class ProjectsViewController: UIViewController {
   override func viewDidLoad() {
     super.viewDidLoad()
     title = "Projects"
-    navigationItem.largeTitleDisplayMode = .never
-    navigationController?.navigationBar.prefersLargeTitles = false
-    view.backgroundColor = AppTheme.canvas
+    navigationItem.largeTitleDisplayMode = .always
+    view.backgroundColor = .systemBackground
 
-    tableView.backgroundColor = AppTheme.canvas
+    tableView.backgroundColor = .systemBackground
     tableView.separatorInset = UIEdgeInsets(top: 0, left: 56, bottom: 0, right: 0)
     tableView.register(UITableViewCell.self, forCellReuseIdentifier: "cell")
     tableView.dataSource = self
@@ -73,7 +72,7 @@ extension ProjectsViewController: UITableViewDataSource, UITableViewDelegate {
     content.imageProperties.tintColor = .systemGreen
     cell.contentConfiguration = content
     cell.accessoryType = .disclosureIndicator
-    cell.backgroundColor = AppTheme.canvas
+    cell.backgroundColor = .systemBackground
     return cell
   }
 

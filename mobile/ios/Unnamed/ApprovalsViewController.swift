@@ -20,7 +20,8 @@ final class ApprovalsViewController: UIViewController {
   override func viewDidLoad() {
     super.viewDidLoad()
     title = "Inbox"
-    view.backgroundColor = AppTheme.canvas
+    navigationItem.largeTitleDisplayMode = .always
+    view.backgroundColor = .systemBackground
     navigationItem.rightBarButtonItem = UIBarButtonItem(
       barButtonSystemItem: .done, target: self, action: #selector(doneTapped)
     )
@@ -50,7 +51,7 @@ final class ApprovalsViewController: UIViewController {
   // MARK: - Layout
 
   private func setupTable() {
-    tableView.backgroundColor = AppTheme.canvas
+    tableView.backgroundColor = .systemBackground
     tableView.separatorStyle = .none
     tableView.register(ApprovalCell.self, forCellReuseIdentifier: ApprovalCell.reuseID)
     tableView.dataSource = self
@@ -251,13 +252,13 @@ private final class ApprovalCell: UITableViewCell {
 
   private func buildLayout() {
     let card = UIView()
-    card.backgroundColor = AppTheme.warning.withAlphaComponent(0.06)
+    card.backgroundColor = .systemOrange.withAlphaComponent(0.06)
     card.layer.cornerRadius = 16
     card.layer.cornerCurve = .continuous
-    card.layer.borderColor = AppTheme.warning.withAlphaComponent(0.3).cgColor
+    card.layer.borderColor = UIColor.systemOrange.withAlphaComponent(0.3).cgColor
     card.layer.borderWidth = 1
 
-    let iconBadge = IconBadgeView(systemName: "bell.badge", tintColor: AppTheme.warning)
+    let iconBadge = IconBadgeView(systemName: "bell.badge", tintColor: .systemOrange)
 
     actionLabel.font = UIFont.preferredFont(forTextStyle: .subheadline)
     actionLabel.adjustsFontForContentSizeCategory = true
@@ -279,8 +280,6 @@ private final class ApprovalCell: UITableViewCell {
     // Approve button
     approveButton.configuration = .filled()
     approveButton.configuration?.cornerStyle = .medium
-    approveButton.configuration?.baseBackgroundColor = AppTheme.primary
-    approveButton.configuration?.baseForegroundColor = AppTheme.primaryText
     approveButton.configuration?.image = UIImage(systemName: "checkmark")
     approveButton.configuration?.title = "Approve"
     approveButton.configuration?.imagePadding = 5
@@ -302,7 +301,7 @@ private final class ApprovalCell: UITableViewCell {
     buttonRow.spacing = 8
 
     let divider = UIView()
-    divider.backgroundColor = AppTheme.warning.withAlphaComponent(0.15)
+    divider.backgroundColor = .systemOrange.withAlphaComponent(0.15)
     divider.heightAnchor.constraint(equalToConstant: 1).isActive = true
 
     let cardStack = UIStackView(arrangedSubviews: [headerRow, divider, buttonRow])

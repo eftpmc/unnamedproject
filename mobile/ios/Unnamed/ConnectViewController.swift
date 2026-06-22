@@ -22,7 +22,7 @@ final class ConnectViewController: UIViewController {
   override func viewDidLoad() {
     super.viewDidLoad()
     title = "Connect"
-    view.backgroundColor = AppTheme.canvas
+    view.backgroundColor = .systemBackground
 
     urlField.text = session.serverURL?.absoluteString ?? "http://"
     urlField.textContentType = .URL

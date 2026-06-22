@@ -19,6 +19,10 @@ final class ChatViewController: UIViewController {
   private let tableView = UITableView(frame: .zero, style: .plain)
   private let refreshControl = UIRefreshControl()
   private let composeBar = UIView()
+  /// Gap between the floating composer card and the bottom safe area (or the
+  /// keyboard, once it's up). Kept as a constant since both the resting
+  /// constraint and the keyboard handler need to agree on it.
+  private let composeFloatingGap: CGFloat = 8
   private let textView = ComposerTextView()
   private let sendButton = UIButton(type: .system)
   private let sendActivity = UIActivityIndicatorView(style: .medium)
@@ -61,13 +65,12 @@ final class ChatViewController: UIViewController {
 
   override func viewDidLoad() {
     super.viewDidLoad()
-    view.backgroundColor = AppTheme.canvas
+    view.backgroundColor = .systemBackground
 
     title = isNew ? "New chat" : (chatSession.title ?? "Chat")
-    // Always compact: guards against Projects/Settings leaving the shared
-    // nav bar in large-title mode when chat becomes the root again.
+    // Chat is a conversation/detail surface: always compact, even though the
+    // shared shell nav bar allows large titles for pushed list screens.
     navigationItem.largeTitleDisplayMode = .never
-    navigationController?.navigationBar.prefersLargeTitles = false
     navigationItem.leftBarButtonItem = UIBarButtonItem(
       image: UIImage(systemName: "sidebar.left"),
       style: .plain, target: self, action: #selector(openSidebarTapped))
@@ -221,11 +224,11 @@ final class ChatViewController: UIViewController {
   // MARK: - Layout
 
   private func setupAgentStatusBar() {
-    agentStatusBar.backgroundColor = AppTheme.surface
+    agentStatusBar.backgroundColor = .secondarySystemBackground
     agentStatusBar.clipsToBounds = true
 
     let border = UIView()
-    border.backgroundColor = AppTheme.border
+    border.backgroundColor = .separator
     agentStatusBar.addSubview(border)
     border.translatesAutoresizingMaskIntoConstraints = false
     NSLayoutConstraint.activate([
@@ -259,7 +262,7 @@ final class ChatViewController: UIViewController {
   }
 
   private func setupReconnectBanner() {
-    reconnectBanner.backgroundColor = AppTheme.warning.withAlphaComponent(0.9)
+    reconnectBanner.backgroundColor = .systemOrange.withAlphaComponent(0.9)
     reconnectBanner.clipsToBounds = true
 
     let label = UILabel()
@@ -321,30 +324,27 @@ final class ChatViewController: UIViewController {
   }
 
   private func setupComposeBar() {
-    composeBar.backgroundColor = AppTheme.surface
-    let topBorder = UIView()
-    topBorder.backgroundColor = AppTheme.border
-    topBorder.translatesAutoresizingMaskIntoConstraints = false
-    composeBar.addSubview(topBorder)
-    NSLayoutConstraint.activate([
-      topBorder.leadingAnchor.constraint(equalTo: composeBar.leadingAnchor),
-      topBorder.trailingAnchor.constraint(equalTo: composeBar.trailingAnchor),
-      topBorder.topAnchor.constraint(equalTo: composeBar.topAnchor),
-      topBorder.heightAnchor.constraint(equalToConstant: 0.5),
-    ])
+    // A floating, rounded card rather than an edge-to-edge bottom bar.
+    composeBar.backgroundColor = .secondarySystemBackground
+    composeBar.layer.cornerRadius = 22
+    composeBar.layer.cornerCurve = .continuous
+    composeBar.layer.borderColor = UIColor.separator.cgColor
+    composeBar.layer.borderWidth = 0.5
+    composeBar.layer.shadowColor = UIColor.black.cgColor
+    composeBar.layer.shadowOpacity = 0.12
+    composeBar.layer.shadowRadius = 12
+    composeBar.layer.shadowOffset = CGSize(width: 0, height: 3)
 
     textView.placeholder = "Message..."
 
     sendButton.configuration = .filled()
     sendButton.configuration?.cornerStyle = .capsule
-    sendButton.configuration?.baseBackgroundColor = AppTheme.primary
-    sendButton.configuration?.baseForegroundColor = AppTheme.primaryText
     sendButton.configuration?.image = UIImage(systemName: "arrow.up")
-    sendButton.configuration?.contentInsets = NSDirectionalEdgeInsets(top: 7, leading: 7, bottom: 7, trailing: 7)
+    sendButton.configuration?.contentInsets = NSDirectionalEdgeInsets(top: 8, leading: 8, bottom: 8, trailing: 8)
     sendButton.addTarget(self, action: #selector(sendTapped), for: .touchUpInside)
     NSLayoutConstraint.activate([
-      sendButton.widthAnchor.constraint(equalToConstant: 34),
-      sendButton.heightAnchor.constraint(equalToConstant: 34),
+      sendButton.widthAnchor.constraint(equalToConstant: 36),
+      sendButton.heightAnchor.constraint(equalToConstant: 36),
     ])
 
     sendActivity.hidesWhenStopped = true
@@ -354,7 +354,7 @@ final class ChatViewController: UIViewController {
     row.alignment = .bottom
     row.spacing = 8
     row.isLayoutMarginsRelativeArrangement = true
-    row.directionalLayoutMargins = NSDirectionalEdgeInsets(top: 10, leading: 14, bottom: 0, trailing: 14)
+    row.directionalLayoutMargins = NSDirectionalEdgeInsets(top: 8, leading: 18, bottom: 8, trailing: 10)
 
     composeBar.addSubview(row)
     row.translatesAutoresizingMaskIntoConstraints = false
@@ -362,12 +362,13 @@ final class ChatViewController: UIViewController {
       row.leadingAnchor.constraint(equalTo: composeBar.leadingAnchor),
       row.trailingAnchor.constraint(equalTo: composeBar.trailingAnchor),
       row.topAnchor.constraint(equalTo: composeBar.topAnchor),
-      row.bottomAnchor.constraint(equalTo: composeBar.safeAreaLayoutGuide.bottomAnchor, constant: -10),
+      row.bottomAnchor.constraint(equalTo: composeBar.bottomAnchor),
     ])
 
     view.addSubview(composeBar)
     composeBar.translatesAutoresizingMaskIntoConstraints = false
-    composeBarBottom = composeBar.bottomAnchor.constraint(equalTo: view.bottomAnchor)
+    composeBarBottom = composeBar.bottomAnchor.constraint(
+      equalTo: view.safeAreaLayoutGuide.bottomAnchor, constant: -composeFloatingGap)
 
     NSLayoutConstraint.activate([
       tableView.topAnchor.constraint(equalTo: view.safeAreaLayoutGuide.topAnchor),
@@ -376,9 +377,9 @@ final class ChatViewController: UIViewController {
       tableView.bottomAnchor.constraint(equalTo: agentStatusBar.topAnchor),
       agentStatusBar.leadingAnchor.constraint(equalTo: view.leadingAnchor),
       agentStatusBar.trailingAnchor.constraint(equalTo: view.trailingAnchor),
-      agentStatusBar.bottomAnchor.constraint(equalTo: composeBar.topAnchor),
-      composeBar.leadingAnchor.constraint(equalTo: view.leadingAnchor),
-      composeBar.trailingAnchor.constraint(equalTo: view.trailingAnchor),
+      agentStatusBar.bottomAnchor.constraint(equalTo: composeBar.topAnchor, constant: -8),
+      composeBar.leadingAnchor.constraint(equalTo: view.leadingAnchor, constant: 12),
+      composeBar.trailingAnchor.constraint(equalTo: view.trailingAnchor, constant: -12),
       composeBarBottom,
     ])
   }
@@ -396,8 +397,12 @@ final class ChatViewController: UIViewController {
     guard let frame = note.userInfo?[UIResponder.keyboardFrameEndUserInfoKey] as? CGRect,
           let duration = note.userInfo?[UIResponder.keyboardAnimationDurationUserInfoKey] as? Double else { return }
     let overlap = max(0, UIScreen.main.bounds.height - frame.minY)
+    // The resting constraint already floats the card above the bottom safe
+    // area; the keyboard only needs to push it up by however much it covers
+    // beyond that inset.
+    let keyboardRise = max(0, overlap - view.safeAreaInsets.bottom)
     UIView.animate(withDuration: duration) {
-      self.composeBarBottom.constant = -overlap
+      self.composeBarBottom.constant = -self.composeFloatingGap - keyboardRise
       self.view.layoutIfNeeded()
     }
   }
@@ -668,10 +673,10 @@ private final class MessageCell: UITableViewCell {
     let isUser = message.role == "user"
     let baseFont = UIFont.preferredFont(forTextStyle: .callout)
     let codeBg = UIColor.label.withAlphaComponent(0.08)
-    let textColor: UIColor = isUser ? AppTheme.primaryText : .label
+    let textColor: UIColor = isUser ? .white : .label
 
     // User keeps a bubble; assistant renders full-width on the canvas.
-    bubble.backgroundColor = isUser ? AppTheme.primary : .clear
+    bubble.backgroundColor = isUser ? .tintColor : .clear
 
     contentStack.arrangedSubviews.forEach {
       contentStack.removeArrangedSubview($0); $0.removeFromSuperview()
@@ -854,9 +859,9 @@ private final class ToolEventCell: UITableViewCell {
     switch event.status {
     case "running":
       iconView.image = UIImage(systemName: "gear")
-      iconView.tintColor = AppTheme.accent
-      pill.backgroundColor = AppTheme.surface
-      pill.layer.borderColor = AppTheme.border.cgColor
+      iconView.tintColor = .tintColor
+      pill.backgroundColor = .secondarySystemBackground
+      pill.layer.borderColor = UIColor.separator.cgColor
       spinner.startAnimating()
       statusLabel.text = nil
     case "done":
@@ -876,8 +881,8 @@ private final class ToolEventCell: UITableViewCell {
     default:
       iconView.image = UIImage(systemName: "gear")
       iconView.tintColor = .secondaryLabel
-      pill.backgroundColor = AppTheme.surface
-      pill.layer.borderColor = AppTheme.border.cgColor
+      pill.backgroundColor = .secondarySystemBackground
+      pill.layer.borderColor = UIColor.separator.cgColor
       spinner.stopAnimating()
       statusLabel.text = nil
     }

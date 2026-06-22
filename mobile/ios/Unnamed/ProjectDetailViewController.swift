@@ -27,7 +27,9 @@ final class ProjectDetailViewController: UIViewController {
   override func viewDidLoad() {
     super.viewDidLoad()
     title = project.name
-    view.backgroundColor = AppTheme.canvas
+    // Detail screen: compact title even though the shell allows large titles.
+    navigationItem.largeTitleDisplayMode = .never
+    view.backgroundColor = .systemBackground
 
     navigationItem.rightBarButtonItem = UIBarButtonItem(
       image: UIImage(systemName: "square.and.pencil"),
@@ -47,7 +49,7 @@ final class ProjectDetailViewController: UIViewController {
     segmentedControl.addTarget(self, action: #selector(segmentChanged), for: .valueChanged)
 
     let container = UIView()
-    container.backgroundColor = AppTheme.canvas
+    container.backgroundColor = .systemBackground
     container.addSubview(segmentedControl)
     segmentedControl.translatesAutoresizingMaskIntoConstraints = false
     NSLayoutConstraint.activate([
@@ -121,7 +123,7 @@ final class ProjectDetailViewController: UIViewController {
   }
 
   private func setupTable() {
-    tableView.backgroundColor = AppTheme.canvas
+    tableView.backgroundColor = .systemBackground
     tableView.separatorInset = UIEdgeInsets(top: 0, left: 56, bottom: 0, right: 0)
     tableView.register(UITableViewCell.self, forCellReuseIdentifier: "cell")
     tableView.dataSource = self
@@ -256,9 +258,9 @@ extension ProjectDetailViewController: UITableViewDataSource, UITableViewDelegat
     let metaParts = [chat.model ?? chat.effort, timePart].compactMap { $0 }
     content.secondaryText = metaParts.isEmpty ? nil : metaParts.joined(separator: " · ")
     content.image = UIImage(systemName: "message")
-    content.imageProperties.tintColor = isActive ? .systemGreen : AppTheme.accent
+    content.imageProperties.tintColor = isActive ? .systemGreen : .tintColor
     cell.contentConfiguration = content
-    cell.backgroundColor = AppTheme.canvas
+    cell.backgroundColor = .systemBackground
 
     if isActive {
       cell.accessoryView = makePulseDot()

@@ -23,7 +23,7 @@ final class LoginViewController: UIViewController {
   override func viewDidLoad() {
     super.viewDidLoad()
     title = "Sign In"
-    view.backgroundColor = AppTheme.canvas
+    view.backgroundColor = .systemBackground
     navigationItem.rightBarButtonItem = UIBarButtonItem(title: "Server", style: .plain, target: self, action: #selector(changeServerTapped))
 
     passwordField.returnKeyType = .go

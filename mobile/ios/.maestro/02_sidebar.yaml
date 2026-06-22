@@ -1,7 +1,7 @@
 appId: com.unnamed.app
 ---
 # Sidebar opens via the nav-bar button, shows its core sections, and closes
-# via the scrim tap without leaving any residue on the chat screen.
+# via the explicit close button without leaving any residue on the chat screen.
 - launchApp:
     permissions:
       notifications: deny
@@ -11,7 +11,6 @@ appId: com.unnamed.app
 - assertVisible: "Projects"
 - assertVisible: "Inbox"
 - assertVisible: "Settings"
-- tapOn:
-    point: "95%, 50%"
+- tapOn: "xmark"
 - assertNotVisible: "New chat"
 - assertVisible: "Chat"

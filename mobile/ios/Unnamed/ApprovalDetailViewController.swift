@@ -18,7 +18,7 @@ final class ApprovalDetailViewController: UIViewController {
   override func viewDidLoad() {
     super.viewDidLoad()
     title = approval.action
-    view.backgroundColor = AppTheme.canvas
+    view.backgroundColor = .systemBackground
     navigationItem.leftBarButtonItem = UIBarButtonItem(
       barButtonSystemItem: .close, target: self, action: #selector(closeTapped)
     )
@@ -28,7 +28,7 @@ final class ApprovalDetailViewController: UIViewController {
   }
 
   private func setupTableView() {
-    tableView.backgroundColor = AppTheme.canvas
+    tableView.backgroundColor = .systemBackground
     tableView.register(UITableViewCell.self, forCellReuseIdentifier: "detail")
     tableView.dataSource = self
     tableView.rowHeight = UITableView.automaticDimension
@@ -49,8 +49,6 @@ final class ApprovalDetailViewController: UIViewController {
     let approveBtn = UIButton(type: .system)
     approveBtn.configuration = .filled()
     approveBtn.configuration?.cornerStyle = .medium
-    approveBtn.configuration?.baseBackgroundColor = AppTheme.primary
-    approveBtn.configuration?.baseForegroundColor = AppTheme.primaryText
     approveBtn.configuration?.image = UIImage(systemName: "checkmark")
     approveBtn.configuration?.title = "Approve"
     approveBtn.configuration?.imagePadding = 6
@@ -120,7 +118,7 @@ extension ApprovalDetailViewController: UITableViewDataSource {
       content.secondaryText = approval.payload?.summary
       content.secondaryTextProperties.numberOfLines = 0
       content.image = UIImage(systemName: "bell.badge")
-      content.imageProperties.tintColor = AppTheme.warning
+      content.imageProperties.tintColor = .systemOrange
     } else {
       let pair = pairs[indexPath.row]
       content.text = pair.label
@@ -131,7 +129,7 @@ extension ApprovalDetailViewController: UITableViewDataSource {
     }
 
     cell.contentConfiguration = content
-    cell.backgroundColor = AppTheme.surface
+    cell.backgroundColor = .secondarySystemBackground
     return cell
   }
 }

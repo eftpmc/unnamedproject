@@ -2,31 +2,36 @@
 import UIKit
 
 /// A row in the sidebar's single table: either one of the two static
-/// quick-access rows up top, or a chat in one of the date-grouped sections
-/// below. Kept as one enum so the table's data source stays a flat,
-/// section-indexed lookup rather than juggling two parallel models.
+/// quick-access rows up top, or a chat in the "Recent" section below. Kept as
+/// one enum so the table's data source stays a flat, section-indexed lookup
+/// rather than juggling two parallel models.
 private enum SidebarRow {
+  case chats
   case projects
-  case inbox
   case chat(ChatSession)
 }
 
+private let recentLimit = 5
+
 /// Styled to read as the same product as the web app's sidebar (flat list,
-/// brand header, pill "New chat" button, footer account row) rather than a
-/// native iOS Settings-style grouped list.
+/// brand in the nav bar, pill "New chat" button, full-width footer account
+/// row) rather than a native iOS Settings-style grouped list. The sidebar is
+/// the navigation root on iPhone — there is no close button, only the system
+/// back chevron from a pushed chat.
 final class SidebarViewController: UIViewController {
   var onSelectChat: ((ChatSession) -> Void)?
   var onNewChat: (() -> Void)?
   var onShowProjects: (() -> Void)?
+  var onShowChats: (() -> Void)?
   var onShowInbox: (() -> Void)?
   var onShowSettings: (() -> Void)?
-  var onClose: (() -> Void)?
 
   private let appSession: AppSession
   private lazy var client = APIClient(session: appSession)
 
   private var allChats: [ChatSession] = []
-  private var groupedChats: [(group: ChatTimeGroup, chats: [ChatSession])] = []
+  private var recentChats: [ChatSession] = []
+  private var searchResults: [ChatSession] = []
   private var projectsById: [String: Project] = [:]
   private var activeIds: Set<String> = []
   private var filter = ""
@@ -36,6 +41,7 @@ final class SidebarViewController: UIViewController {
 
   private let tableView = UITableView(frame: .zero, style: .plain)
   private let searchController = UISearchController(searchResultsController: nil)
+  private let footer = SidebarFooterView()
 
   init(appSession: AppSession) {
     self.appSession = appSession
@@ -48,50 +54,32 @@ final class SidebarViewController: UIViewController {
   override func viewDidLoad() {
     super.viewDidLoad()
     view.backgroundColor = .systemBackground
-    navigationItem.title = nil
     navigationItem.largeTitleDisplayMode = .never
-    updateCloseButtonVisibility()
+    hideNavBarHairline()
+    navigationItem.leftBarButtonItem = UIBarButtonItem(customView: makeBrandView())
 
     searchController.searchResultsUpdater = self
     searchController.delegate = self
     searchController.obscuresBackgroundDuringPresentation = false
     searchController.searchBar.placeholder = "Search chats"
-    // The search bar is only attached to the nav item while active, so at
-    // rest the nav bar shows just the icon button (below) — not the icon
-    // *and* a docked search field underneath it.
-    navigationItem.hidesSearchBarWhenScrolling = false
     let searchItem = UIBarButtonItem(image: UIImage(systemName: "magnifyingglass"), style: .plain, target: self, action: #selector(searchTapped))
     searchItem.accessibilityLabel = "Search"
-    navigationItem.rightBarButtonItems = [makeAccountButton(), searchItem]
+    navigationItem.rightBarButtonItems = [makeInboxButton(), searchItem]
 
     setupTable()
-    setupToolbar()
+    setupFooter()
     NotificationCenter.default.addObserver(self, selector: #selector(approvalCountChanged), name: .approvalCountChanged, object: nil)
     reload()
   }
 
   override func viewWillAppear(_ animated: Bool) {
     super.viewWillAppear(animated)
-    updateCloseButtonVisibility()
-    navigationController?.setToolbarHidden(false, animated: animated)
+    navigationController?.setToolbarHidden(true, animated: animated)
   }
 
-  override func traitCollectionDidChange(_ previous: UITraitCollection?) {
-    super.traitCollectionDidChange(previous)
-    updateCloseButtonVisibility()
-  }
+  // MARK: - Brand (top-left nav slot, replaces the old header block + close button)
 
-  private lazy var closeButton = UIBarButtonItem(image: UIImage(systemName: "xmark"), style: .plain, target: self, action: #selector(closeTapped))
-
-  private func updateCloseButtonVisibility() {
-    navigationItem.leftBarButtonItem = (splitViewController?.isCollapsed ?? true) ? closeButton : nil
-  }
-
-  // MARK: - Header: brand row + "New chat" button (mirrors web's SidebarHeader)
-
-  private func makeHeaderView() -> UIView {
-    let container = UIView()
-
+  private func makeBrandView() -> UIView {
     let mark = UILabel()
     mark.text = "u"
     mark.textColor = AppPalette.accentForeground
@@ -100,22 +88,46 @@ final class SidebarViewController: UIViewController {
     mark.backgroundColor = AppPalette.accent
     mark.layer.cornerRadius = 7
     mark.clipsToBounds = true
+    mark.translatesAutoresizingMaskIntoConstraints = false
+    NSLayoutConstraint.activate([
+      mark.widthAnchor.constraint(equalToConstant: 24),
+      mark.heightAnchor.constraint(equalToConstant: 24),
+    ])
 
     let name = UILabel()
     name.text = "unnamed"
-    name.font = .app(ofSize: 14, weight: .semibold)
+    name.font = .app(ofSize: 15, weight: .semibold)
     name.textColor = .label
 
-    let brandRow = UIStackView(arrangedSubviews: [mark, name])
-    brandRow.axis = .horizontal
-    brandRow.spacing = 8
-    brandRow.alignment = .center
+    let row = UIStackView(arrangedSubviews: [mark, name])
+    row.axis = .horizontal
+    row.spacing = 8
+    row.alignment = .center
+    return row
+  }
 
-    mark.translatesAutoresizingMaskIntoConstraints = false
-    NSLayoutConstraint.activate([
-      mark.widthAnchor.constraint(equalToConstant: 28),
-      mark.heightAnchor.constraint(equalToConstant: 28),
-    ])
+  // MARK: - Inbox bell (top-right nav bar)
+
+  private func makeInboxButton() -> UIBarButtonItem {
+    let item = UIBarButtonItem(image: UIImage(systemName: "bell"), style: .plain, target: self, action: #selector(inboxTapped))
+    item.accessibilityLabel = "Inbox"
+    self.inboxBarButton = item
+    return item
+  }
+
+  private var inboxBarButton: UIBarButtonItem?
+
+  private func updateInboxBadge() {
+    let n = ApprovalCenter.shared.count
+    inboxBarButton?.image = n > 0
+      ? UIImage(systemName: "bell.badge.fill")
+      : UIImage(systemName: "bell")
+  }
+
+  // MARK: - "New chat" header above the table
+
+  private func makeHeaderView() -> UIView {
+    let container = UIView()
 
     let newChatButton = UIButton(type: .system)
     var config = UIButton.Configuration.filled()
@@ -133,82 +145,32 @@ final class SidebarViewController: UIViewController {
     }
     newChatButton.configuration = config
     newChatButton.addTarget(self, action: #selector(newChatTapped), for: .touchUpInside)
-
-    let stack = UIStackView(arrangedSubviews: [brandRow, newChatButton])
-    stack.axis = .vertical
-    stack.spacing = 12
-    stack.translatesAutoresizingMaskIntoConstraints = false
-    container.addSubview(stack)
+    newChatButton.translatesAutoresizingMaskIntoConstraints = false
+    container.addSubview(newChatButton)
     NSLayoutConstraint.activate([
-      stack.topAnchor.constraint(equalTo: container.topAnchor, constant: 12),
-      stack.leadingAnchor.constraint(equalTo: container.leadingAnchor, constant: 16),
-      stack.trailingAnchor.constraint(equalTo: container.trailingAnchor, constant: -16),
-      stack.bottomAnchor.constraint(equalTo: container.bottomAnchor, constant: -12),
+      newChatButton.topAnchor.constraint(equalTo: container.topAnchor, constant: 12),
+      newChatButton.leadingAnchor.constraint(equalTo: container.leadingAnchor, constant: 16),
+      newChatButton.trailingAnchor.constraint(equalTo: container.trailingAnchor, constant: -16),
+      newChatButton.bottomAnchor.constraint(equalTo: container.bottomAnchor, constant: -12),
     ])
     return container
   }
 
-  // MARK: - Account button (top-right, grouped with the search icon)
+  // MARK: - Footer: full-width account row (mirrors web's footer account menu)
 
-  private func makeAccountButton() -> UIBarButtonItem {
-    let avatar = UILabel()
-    avatar.backgroundColor = .tintColor
-    avatar.textColor = .white
-    avatar.font = .app(ofSize: 13, weight: .semibold)
-    avatar.textAlignment = .center
-    avatar.text = "•"
-    avatar.layer.cornerRadius = 14
-    avatar.clipsToBounds = true
-    avatar.translatesAutoresizingMaskIntoConstraints = false
+  private func setupFooter() {
+    footer.onTap = { [weak self] in self?.onShowSettings?() }
+    footer.translatesAutoresizingMaskIntoConstraints = false
+    view.addSubview(footer)
     NSLayoutConstraint.activate([
-      avatar.widthAnchor.constraint(equalToConstant: 28),
-      avatar.heightAnchor.constraint(equalToConstant: 28),
+      footer.leadingAnchor.constraint(equalTo: view.leadingAnchor),
+      footer.trailingAnchor.constraint(equalTo: view.trailingAnchor),
+      footer.bottomAnchor.constraint(equalTo: view.safeAreaLayoutGuide.bottomAnchor),
     ])
-    self.avatarLabel = avatar
-
-    let button = UIButton(type: .system)
-    button.addSubview(avatar)
-    avatar.pinToSuperviewEdges()
-    button.addTarget(self, action: #selector(settingsTapped), for: .touchUpInside)
-    button.accessibilityLabel = "Settings"
-    return UIBarButtonItem(customView: button)
-  }
-
-  // MARK: - Toolbar: inbox (native sidebar-footer pattern, as in Notes/Files/Reminders)
-
-  private func setupToolbar() {
-    let inboxButton = UIButton(type: .system)
-    inboxButton.setImage(UIImage(systemName: "bell"), for: .normal)
-    inboxButton.addTarget(self, action: #selector(inboxTapped), for: .touchUpInside)
-    inboxButton.accessibilityLabel = "Inbox"
-
-    let badge = UILabel()
-    badge.font = .app(ofSize: 10, weight: .semibold)
-    badge.textColor = .white
-    badge.backgroundColor = .systemOrange
-    badge.textAlignment = .center
-    badge.layer.cornerRadius = 7
-    badge.clipsToBounds = true
-    badge.isHidden = true
-    badge.isUserInteractionEnabled = false
-    self.inboxBadge = badge
-
-    inboxButton.addSubview(badge)
-    badge.translatesAutoresizingMaskIntoConstraints = false
     NSLayoutConstraint.activate([
-      badge.topAnchor.constraint(equalTo: inboxButton.topAnchor, constant: -4),
-      badge.trailingAnchor.constraint(equalTo: inboxButton.trailingAnchor, constant: 4),
-      badge.heightAnchor.constraint(equalToConstant: 14),
-      badge.widthAnchor.constraint(greaterThanOrEqualToConstant: 14),
+      tableView.bottomAnchor.constraint(equalTo: footer.topAnchor),
     ])
-
-    let inboxItem = UIBarButtonItem(customView: inboxButton)
-
-    toolbarItems = [.flexibleSpace(), inboxItem]
   }
-
-  private var avatarLabel: UILabel?
-  private var inboxBadge: UILabel?
 
   // MARK: - Table
 
@@ -219,8 +181,13 @@ final class SidebarViewController: UIViewController {
     tableView.dataSource = self
     tableView.delegate = self
     tableView.tableHeaderView = makeHeaderView()
+    tableView.translatesAutoresizingMaskIntoConstraints = false
     view.addSubview(tableView)
-    tableView.pinToSuperviewEdges()
+    NSLayoutConstraint.activate([
+      tableView.topAnchor.constraint(equalTo: view.topAnchor),
+      tableView.leadingAnchor.constraint(equalTo: view.leadingAnchor),
+      tableView.trailingAnchor.constraint(equalTo: view.trailingAnchor),
+    ])
     layoutHeader()
   }
 
@@ -264,37 +231,33 @@ final class SidebarViewController: UIViewController {
   private var isSearching: Bool { !filter.isEmpty }
 
   private func applyFilterAndRender() {
-    let filteredChats = filter.isEmpty
-      ? allChats
-      : allChats.filter { ($0.title ?? "").localizedCaseInsensitiveContains(filter) }
-    groupedChats = groupChatsByTime(filteredChats)
+    if isSearching {
+      searchResults = allChats.filter { ($0.title ?? "").localizedCaseInsensitiveContains(filter) }
+    } else {
+      recentChats = Array(allChats.prefix(recentLimit))
+    }
 
-    avatarLabel?.text = email.first.map { String($0).uppercased() } ?? "•"
-
-    let n = ApprovalCenter.shared.count
-    inboxBadge?.isHidden = n == 0
-    inboxBadge?.text = n > 0 ? " \(min(n, 99)) " : nil
+    footer.configure(email: email)
+    updateInboxBadge()
 
     var newSections: [[SidebarRow]] = []
-    if !isSearching {
-      newSections.append([.projects, .inbox])
-    }
-    for group in groupedChats {
-      newSections.append(group.chats.map { SidebarRow.chat($0) })
+    if isSearching {
+      newSections.append(searchResults.map { SidebarRow.chat($0) })
+    } else {
+      newSections.append([.chats, .projects])
+      newSections.append(recentChats.map { SidebarRow.chat($0) })
     }
     sections = newSections
     tableView.reloadData()
   }
 
   @objc private func newChatTapped() { onNewChat?() }
-  @objc private func settingsTapped() { onShowSettings?() }
   @objc private func inboxTapped() { onShowInbox?() }
   @objc private func searchTapped() {
     navigationItem.searchController = searchController
     searchController.isActive = true
   }
-  @objc private func approvalCountChanged() { applyFilterAndRender() }
-  @objc private func closeTapped() { onClose?() }
+  @objc private func approvalCountChanged() { updateInboxBadge() }
 }
 
 extension SidebarViewController: UISearchResultsUpdating {
@@ -307,6 +270,8 @@ extension SidebarViewController: UISearchResultsUpdating {
 extension SidebarViewController: UISearchControllerDelegate {
   func didDismissSearchController(_ searchController: UISearchController) {
     navigationItem.searchController = nil
+    filter = ""
+    applyFilterAndRender()
   }
 }
 
@@ -314,14 +279,9 @@ extension SidebarViewController: UITableViewDataSource, UITableViewDelegate {
   func numberOfSections(in tableView: UITableView) -> Int { sections.count }
   func tableView(_ tableView: UITableView, numberOfRowsInSection section: Int) -> Int { sections[section].count }
 
-  private func chatSectionIndex(for section: Int) -> Int? {
-    let offset = isSearching ? 0 : 1
-    let idx = section - offset
-    return idx >= 0 && idx < groupedChats.count ? idx : nil
-  }
-
   func tableView(_ tableView: UITableView, titleForHeaderInSection section: Int) -> String? {
-    chatSectionIndex(for: section).map { groupedChats[$0].group.label }
+    guard !isSearching, section == 1, !sections[section].isEmpty else { return nil }
+    return "Recent"
   }
 
   func tableView(_ tableView: UITableView, willDisplayHeaderView view: UIView, forSection section: Int) {
@@ -342,20 +302,14 @@ extension SidebarViewController: UITableViewDataSource, UITableViewDelegate {
     cell.backgroundColor = .clear
 
     switch sections[indexPath.section][indexPath.row] {
+    case .chats:
+      content.text = "Chats"
+      content.image = UIImage(systemName: "bubble.left.and.bubble.right")
+      content.imageProperties.tintColor = .secondaryLabel
     case .projects:
       content.text = "Projects"
       content.image = UIImage(systemName: "square.grid.2x2")
       content.imageProperties.tintColor = .secondaryLabel
-    case .inbox:
-      content.text = "Inbox"
-      content.image = UIImage(systemName: "bell")
-      content.imageProperties.tintColor = .secondaryLabel
-      let n = ApprovalCenter.shared.count
-      if n > 0 {
-        content.secondaryText = "\(min(n, 99))"
-        content.secondaryTextProperties.color = .systemOrange
-        content.secondaryTextProperties.font = .app(ofSize: 13, weight: .semibold)
-      }
     case .chat(let chat):
       content.text = chat.title ?? "Untitled chat"
       content.textProperties.numberOfLines = 1
@@ -379,9 +333,60 @@ extension SidebarViewController: UITableViewDataSource, UITableViewDelegate {
   func tableView(_ tableView: UITableView, didSelectRowAt indexPath: IndexPath) {
     tableView.deselectRow(at: indexPath, animated: true)
     switch sections[indexPath.section][indexPath.row] {
+    case .chats: onShowChats?()
     case .projects: onShowProjects?()
-    case .inbox: onShowInbox?()
     case .chat(let chat): onSelectChat?(chat)
     }
   }
+}
+
+/// Full-width footer row mirroring web's bottom account menu: avatar + email,
+/// tappable to open Settings. Pinned to the view's bottom, no divider above it.
+private final class SidebarFooterView: UIView {
+  var onTap: (() -> Void)?
+
+  private let avatar = UILabel()
+  private let label = UILabel()
+
+  override init(frame: CGRect) {
+    super.init(frame: frame)
+    backgroundColor = .systemBackground
+
+    avatar.backgroundColor = .tintColor
+    avatar.textColor = .white
+    avatar.font = .app(ofSize: 13, weight: .semibold)
+    avatar.textAlignment = .center
+    avatar.layer.cornerRadius = 14
+    avatar.clipsToBounds = true
+    avatar.translatesAutoresizingMaskIntoConstraints = false
+
+    label.font = .app(ofSize: 14, weight: .medium)
+    label.textColor = .label
+
+    let row = UIStackView(arrangedSubviews: [avatar, label])
+    row.axis = .horizontal
+    row.spacing = 10
+    row.alignment = .center
+    row.translatesAutoresizingMaskIntoConstraints = false
+    addSubview(row)
+    NSLayoutConstraint.activate([
+      avatar.widthAnchor.constraint(equalToConstant: 28),
+      avatar.heightAnchor.constraint(equalToConstant: 28),
+      row.leadingAnchor.constraint(equalTo: leadingAnchor, constant: 16),
+      row.trailingAnchor.constraint(lessThanOrEqualTo: trailingAnchor, constant: -16),
+      row.topAnchor.constraint(equalTo: topAnchor, constant: 10),
+      row.bottomAnchor.constraint(equalTo: bottomAnchor, constant: -10),
+    ])
+
+    isUserInteractionEnabled = true
+    addGestureRecognizer(UITapGestureRecognizer(target: self, action: #selector(tapped)))
+  }
+  required init?(coder: NSCoder) { fatalError() }
+
+  func configure(email: String) {
+    avatar.text = email.first.map { String($0).uppercased() } ?? "•"
+    label.text = email
+  }
+
+  @objc private func tapped() { onTap?() }
 }

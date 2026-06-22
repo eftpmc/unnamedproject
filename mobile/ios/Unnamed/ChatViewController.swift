@@ -380,18 +380,24 @@ final class ChatViewController: UIViewController {
     composeBar.layer.borderWidth = 1
     composeBar.layer.borderColor = AppPalette.inputBorder.cgColor
     composeBar.layer.shadowColor = UIColor.black.cgColor
-    composeBar.layer.shadowOpacity = 0.08
-    composeBar.layer.shadowRadius = 12
-    composeBar.layer.shadowOffset = CGSize(width: 0, height: 4)
+    composeBar.layer.shadowOpacity = 0.06
+    composeBar.layer.shadowRadius = 3
+    composeBar.layer.shadowOffset = CGSize(width: 0, height: 1)
 
     textView.placeholder = "Message..."
 
     sendButton.configuration = .filled()
     sendButton.configuration?.cornerStyle = .medium
-    sendButton.configuration?.baseBackgroundColor = AppPalette.accent
-    sendButton.configuration?.baseForegroundColor = AppPalette.accentForeground
     sendButton.configuration?.image = UIImage(systemName: "arrow.up")
     sendButton.configuration?.contentInsets = NSDirectionalEdgeInsets(top: 8, leading: 8, bottom: 8, trailing: 8)
+    sendButton.configurationUpdateHandler = { [weak self] btn in
+      let hasContent = !(self?.textView.text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ?? true)
+                    || !(self?.pendingAttachments.isEmpty ?? true)
+      var cfg = btn.configuration
+      cfg?.baseBackgroundColor = hasContent ? AppPalette.accent : AppPalette.muted
+      cfg?.baseForegroundColor = hasContent ? AppPalette.accentForeground : AppPalette.foregroundSoft
+      btn.configuration = cfg
+    }
     sendButton.addTarget(self, action: #selector(sendTapped), for: .touchUpInside)
     NSLayoutConstraint.activate([
       sendButton.widthAnchor.constraint(equalToConstant: 32),
@@ -506,6 +512,9 @@ final class ChatViewController: UIViewController {
       self, selector: #selector(keyboardChanged(_:)),
       name: UIResponder.keyboardWillChangeFrameNotification, object: nil
     )
+    NotificationCenter.default.addObserver(forName: UITextView.textDidChangeNotification, object: textView, queue: .main) { [weak self] _ in
+      self?.sendButton.setNeedsUpdateConfiguration()
+    }
   }
 
   // MARK: - Keyboard
@@ -877,6 +886,7 @@ final class ChatViewController: UIViewController {
       attachmentsStack.addArrangedSubview(makeAttachmentChip(attachment, index: index))
     }
     attachmentsRow.isHidden = pendingAttachments.isEmpty
+    sendButton.setNeedsUpdateConfiguration()
   }
 
   private func makeAttachmentChip(_ attachment: PendingAttachment, index: Int) -> UIView {

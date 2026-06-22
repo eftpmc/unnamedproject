@@ -51,7 +51,7 @@ enum AppPalette {
 
   /// Composer card border (web --input — more opaque than --border-soft in dark mode).
   static let inputBorder = dynamic(
-    light: UIColor(red: 0.886, green: 0.890, blue: 0.902, alpha: 1),
+    light: UIColor(red: 0.910, green: 0.914, blue: 0.926, alpha: 1),
     dark: UIColor.white.withAlphaComponent(0.18)
   )
 

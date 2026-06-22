@@ -1,7 +1,94 @@
 import UIKit
+import Speech
+import AVFoundation
 
 extension Notification.Name {
   static let approvalBadgeCleared = Notification.Name("ApprovalBadgeCleared")
+}
+
+/// Bridges the web app's design tokens (web/src/index.css) into UIKit dynamic
+/// colors, so native screens read as the same product rather than stock iOS.
+/// Approximated from the web app's oklch tokens — not pixel-exact conversions.
+enum AppPalette {
+  private static func dynamic(light: UIColor, dark: UIColor) -> UIColor {
+    UIColor { $0.userInterfaceStyle == .dark ? dark : light }
+  }
+
+  /// Desaturated indigo accent (web --primary), replaces system blue.
+  static let accent = dynamic(
+    light: UIColor(red: 0.36, green: 0.43, blue: 0.74, alpha: 1),
+    dark: UIColor(red: 0.58, green: 0.64, blue: 0.88, alpha: 1)
+  )
+  static let accentForeground = dynamic(
+    light: .white,
+    dark: UIColor(red: 0.10, green: 0.11, blue: 0.15, alpha: 1)
+  )
+
+  /// Neutral chip surface (web --muted) — used for the user message bubble
+  /// and tool icon badges instead of a colored/tinted fill.
+  static let muted = dynamic(
+    light: UIColor(red: 0.961, green: 0.965, blue: 0.973, alpha: 1),
+    dark: UIColor(red: 0.137, green: 0.149, blue: 0.192, alpha: 1)
+  )
+
+  /// Slightly softer body text for assistant messages (web --fg-soft).
+  static let foregroundSoft = dynamic(
+    light: UIColor(red: 0.31, green: 0.32, blue: 0.36, alpha: 1),
+    dark: UIColor(red: 0.79, green: 0.80, blue: 0.83, alpha: 1)
+  )
+
+  /// Hairline border (web --border-soft).
+  static let borderSoft = dynamic(
+    light: UIColor(red: 0.925, green: 0.929, blue: 0.941, alpha: 1),
+    dark: UIColor.white.withAlphaComponent(0.045)
+  )
+
+  /// Composer card surface (web --card).
+  static let card = dynamic(
+    light: UIColor.white,
+    dark: UIColor(red: 0.149, green: 0.157, blue: 0.184, alpha: 1)
+  )
+
+  /// Composer card border (web --input — more opaque than --border-soft in dark mode).
+  static let inputBorder = dynamic(
+    light: UIColor(red: 0.886, green: 0.890, blue: 0.902, alpha: 1),
+    dark: UIColor.white.withAlphaComponent(0.18)
+  )
+
+  /// Code blocks always render GitHub-dark, in both appearances (web behavior).
+  static let codeBackground = UIColor(red: 0x0d / 255.0, green: 0x11 / 255.0, blue: 0x17 / 255.0, alpha: 1)
+  static let codeForeground = UIColor(red: 0xc9 / 255.0, green: 0xd1 / 255.0, blue: 0xd9 / 255.0, alpha: 1)
+
+  static let success = dynamic(
+    light: UIColor(red: 0.30, green: 0.62, blue: 0.45, alpha: 1),
+    dark: UIColor(red: 0.52, green: 0.78, blue: 0.62, alpha: 1)
+  )
+  static let warning = dynamic(
+    light: UIColor(red: 0.72, green: 0.55, blue: 0.18, alpha: 1),
+    dark: UIColor(red: 0.85, green: 0.70, blue: 0.35, alpha: 1)
+  )
+  static let destructive = dynamic(
+    light: UIColor(red: 0.75, green: 0.32, blue: 0.30, alpha: 1),
+    dark: UIColor(red: 0.85, green: 0.50, blue: 0.48, alpha: 1)
+  )
+}
+
+/// Strips emoji from assistant text so chat reads like an agent transcript
+/// rather than a texting app, mirroring the web app's stripEmoji behavior.
+func stripEmoji(_ text: String) -> String {
+  // `isEmoji` (Unicode "Emoji" property) mirrors the web app's
+  // \p{Extended_Pictographic} regex more closely than `isEmojiPresentation`
+  // alone — it also catches symbols like ✓ or ➡ that default to text
+  // presentation but still render as emoji glyphs in most fonts. It also
+  // covers ASCII digits/'#'/'*' (used in keycap sequences like 1️⃣), so those
+  // are explicitly excluded to avoid eating plain numbers. 0x200D is ZWJ
+  // (joins emoji sequences like family/profession emoji into one grapheme).
+  let stripped = String(text.unicodeScalars.filter { scalar in
+    if scalar.value == 0xFE0F || scalar.value == 0x200D { return false }
+    if scalar.isASCII { return true }
+    return !scalar.properties.isEmoji
+  })
+  return stripped.replacingOccurrences(of: "[ \t]{2,}", with: " ", options: .regularExpression)
 }
 
 func relativeTime(from epoch: Int) -> String {
@@ -14,6 +101,13 @@ func relativeTime(from epoch: Int) -> String {
   fmt.dateStyle = .short
   fmt.timeStyle = .none
   return fmt.string(from: Date(timeIntervalSince1970: TimeInterval(epoch)))
+}
+
+extension UIFont {
+  func withWeight(_ weight: UIFont.Weight) -> UIFont {
+    let descriptor = fontDescriptor.addingAttributes([.traits: [UIFontDescriptor.TraitKey.weight: weight]])
+    return UIFont(descriptor: descriptor, size: pointSize)
+  }
 }
 
 extension UIView {
@@ -73,6 +167,16 @@ func groupChatsByTime(_ chats: [ChatSession], now: Date = Date()) -> [(group: Ch
 }
 
 extension UIViewController {
+  /// Removes the standard 1px hairline under the nav bar for screens whose
+  /// content doesn't butt up against it (e.g. centered onboarding forms).
+  func hideNavBarHairline() {
+    let appearance = UINavigationBarAppearance()
+    appearance.configureWithTransparentBackground()
+    navigationItem.standardAppearance = appearance
+    navigationItem.scrollEdgeAppearance = appearance
+    navigationItem.compactAppearance = appearance
+  }
+
   func showError(_ error: Error) {
     let alert = UIAlertController(
       title: "Something went wrong",
@@ -126,48 +230,21 @@ final class FormTextField: UITextField {
     self.placeholder = placeholder
     self.keyboardType = keyboardType
     self.isSecureTextEntry = secure
-    borderStyle = .roundedRect
     autocorrectionType = .no
     autocapitalizationType = .none
     backgroundColor = .secondarySystemBackground
-    layer.borderColor = UIColor.separator.cgColor
-    layer.borderWidth = 1
     layer.cornerRadius = 12
     layer.cornerCurve = .continuous
+    let inset = UIView(frame: CGRect(x: 0, y: 0, width: 14, height: 1))
+    leftView = inset
+    leftViewMode = .always
+    rightView = inset
+    rightViewMode = .always
     heightAnchor.constraint(greaterThanOrEqualToConstant: 48).isActive = true
   }
 
   required init?(coder: NSCoder) {
     fatalError("init(coder:) has not been implemented")
-  }
-
-  override func traitCollectionDidChange(_ previousTraitCollection: UITraitCollection?) {
-    super.traitCollectionDidChange(previousTraitCollection)
-    if traitCollection.hasDifferentColorAppearance(comparedTo: previousTraitCollection) {
-      layer.borderColor = UIColor.separator.cgColor
-    }
-  }
-}
-
-final class SurfaceView: UIView {
-  init() {
-    super.init(frame: .zero)
-    backgroundColor = .secondarySystemBackground
-    layer.cornerRadius = 18
-    layer.cornerCurve = .continuous
-    layer.borderColor = UIColor.separator.cgColor
-    layer.borderWidth = 1
-  }
-
-  required init?(coder: NSCoder) {
-    fatalError("init(coder:) has not been implemented")
-  }
-
-  override func traitCollectionDidChange(_ previousTraitCollection: UITraitCollection?) {
-    super.traitCollectionDidChange(previousTraitCollection)
-    if traitCollection.hasDifferentColorAppearance(comparedTo: previousTraitCollection) {
-      layer.borderColor = UIColor.separator.cgColor
-    }
   }
 }
 
@@ -265,46 +342,44 @@ func parseMessageSegments(_ raw: String) -> [MessageSegment] {
 
 // MARK: - Markdown Rendering
 
-func markdownAttributedString(_ raw: String, baseFont: UIFont, textColor: UIColor) -> NSAttributedString {
+/// Line-aware markdown rendering for a text segment (code fences are already
+/// split out upstream by `parseMessageSegments`, so this only has to handle
+/// headers, bullet lists, horizontal rules, and inline emphasis/code).
+func markdownAttributedString(_ raw: String, baseFont: UIFont, textColor: UIColor, codeBg: UIColor, lineSpacing: CGFloat = 0) -> NSAttributedString {
   let output = NSMutableAttributedString()
-  var codeBuffer = ""
-  var inFence = false
-  let monoFont = UIFont.monospacedSystemFont(ofSize: baseFont.pointSize * 0.88, weight: .regular)
-  let codeBg = UIColor.label.withAlphaComponent(0.08)
   let lines = raw.components(separatedBy: "\n")
 
-  for (i, line) in lines.enumerated() {
-    if line.hasPrefix("```") {
-      if inFence {
-        output.append(NSAttributedString(string: codeBuffer, attributes: [
-          .font: monoFont, .foregroundColor: textColor, .backgroundColor: codeBg,
-        ]))
-        codeBuffer = ""
-        inFence = false
-      } else {
-        inFence = true
-      }
-    } else if inFence {
-      codeBuffer += (codeBuffer.isEmpty ? "" : "\n") + line
-    } else {
-      var lineText = line
-      var lineFont = baseFont
-      if line.hasPrefix("### ")      { lineText = String(line.dropFirst(4)); lineFont = .systemFont(ofSize: baseFont.pointSize + 1, weight: .semibold) }
-      else if line.hasPrefix("## ") { lineText = String(line.dropFirst(3)); lineFont = .systemFont(ofSize: baseFont.pointSize + 2, weight: .bold) }
-      else if line.hasPrefix("# ")  { lineText = String(line.dropFirst(2)); lineFont = .systemFont(ofSize: baseFont.pointSize + 4, weight: .bold) }
-      output.append(applyInlineMarkdown(lineText, font: lineFont, color: textColor, codeBg: codeBg))
-      if i < lines.count - 1 {
-        output.append(NSAttributedString(string: "\n", attributes: [.font: baseFont, .foregroundColor: textColor]))
-      }
-    }
+  func isRule(_ line: String) -> Bool {
+    let trimmed = line.trimmingCharacters(in: .whitespaces)
+    guard trimmed.count >= 3 else { return false }
+    return trimmed.allSatisfy { $0 == "-" } || trimmed.allSatisfy { $0 == "*" } || trimmed.allSatisfy { $0 == "_" }
   }
-  if inFence && !codeBuffer.isEmpty {
-    output.append(applyInlineMarkdown(codeBuffer, font: baseFont, color: textColor, codeBg: codeBg))
+
+  var renderedAny = false
+  for line in lines {
+    if isRule(line) { continue }
+
+    var lineText = line
+    var lineFont = baseFont
+    var bulletPrefix = ""
+    if line.hasPrefix("### ")      { lineText = String(line.dropFirst(4)); lineFont = .systemFont(ofSize: baseFont.pointSize + 1, weight: .semibold) }
+    else if line.hasPrefix("## ")  { lineText = String(line.dropFirst(3)); lineFont = .systemFont(ofSize: baseFont.pointSize + 2, weight: .bold) }
+    else if line.hasPrefix("# ")   { lineText = String(line.dropFirst(2)); lineFont = .systemFont(ofSize: baseFont.pointSize + 4, weight: .bold) }
+    else if line.hasPrefix("- ") || line.hasPrefix("* ") { lineText = String(line.dropFirst(2)); bulletPrefix = "•  " }
+
+    if renderedAny {
+      output.append(NSAttributedString(string: "\n", attributes: [.font: baseFont, .foregroundColor: textColor]))
+    }
+    if !bulletPrefix.isEmpty {
+      output.append(NSAttributedString(string: bulletPrefix, attributes: [.font: lineFont, .foregroundColor: textColor]))
+    }
+    output.append(applyInlineMarkdown(lineText, font: lineFont, color: textColor, codeBg: codeBg, lineSpacing: lineSpacing))
+    renderedAny = true
   }
   return output
 }
 
-func applyInlineMarkdown(_ text: String, font: UIFont, color: UIColor, codeBg: UIColor) -> NSAttributedString {
+func applyInlineMarkdown(_ text: String, font: UIFont, color: UIColor, codeBg: UIColor, lineSpacing: CGFloat = 0) -> NSAttributedString {
   let boldFont = UIFont.boldSystemFont(ofSize: font.pointSize)
   let italicDesc = font.fontDescriptor.withSymbolicTraits(.traitItalic) ?? font.fontDescriptor
   let italicFont = UIFont(descriptor: italicDesc, size: font.pointSize)
@@ -347,7 +422,12 @@ func applyInlineMarkdown(_ text: String, font: UIFont, color: UIColor, codeBg: U
 
   let result = NSMutableAttributedString()
   var cursor = text.startIndex
-  let base: [NSAttributedString.Key: Any] = [.font: font, .foregroundColor: color]
+  var base: [NSAttributedString.Key: Any] = [.font: font, .foregroundColor: color]
+  if lineSpacing > 0 {
+    let paragraph = NSMutableParagraphStyle()
+    paragraph.lineSpacing = lineSpacing
+    base[.paragraphStyle] = paragraph
+  }
 
   for span in filtered {
     if cursor < span.fullRange.lowerBound {
@@ -473,5 +553,102 @@ final class ComposerTextView: UITextView {
 
   private func updatePlaceholder() {
     placeholderLabel.isHidden = !text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+  }
+}
+
+/// Wraps SFSpeechRecognizer + AVAudioEngine for live dictation — the iOS
+/// equivalent of the web app's browser SpeechRecognition API. One session at
+/// a time; call `stop()` before `start()`-ing again.
+final class SpeechDictationController {
+  enum SpeechDictationError: LocalizedError {
+    case notAuthorized
+    case unavailable
+
+    var errorDescription: String? {
+      switch self {
+      case .notAuthorized: return "Speech recognition permission was denied."
+      case .unavailable: return "Speech recognition is not available right now."
+      }
+    }
+  }
+
+  var onTranscript: ((String) -> Void)?
+  var onError: ((Error) -> Void)?
+  var onEnd: (() -> Void)?
+
+  private let recognizer = SFSpeechRecognizer(locale: .current)
+  private let audioEngine = AVAudioEngine()
+  private var request: SFSpeechAudioBufferRecognitionRequest?
+  private var task: SFSpeechRecognitionTask?
+
+  func start() {
+    SFSpeechRecognizer.requestAuthorization { [weak self] status in
+      DispatchQueue.main.async {
+        guard status == .authorized else {
+          self?.onError?(SpeechDictationError.notAuthorized)
+          return
+        }
+        self?.beginSession()
+      }
+    }
+  }
+
+  private func beginSession() {
+    guard let recognizer, recognizer.isAvailable else {
+      onError?(SpeechDictationError.unavailable)
+      return
+    }
+
+    let audioSession = AVAudioSession.sharedInstance()
+    do {
+      try audioSession.setCategory(.record, mode: .measurement, options: .duckOthers)
+      try audioSession.setActive(true, options: .notifyOthersOnDeactivation)
+    } catch {
+      onError?(error)
+      return
+    }
+
+    let request = SFSpeechAudioBufferRecognitionRequest()
+    request.shouldReportPartialResults = true
+    if recognizer.supportsOnDeviceRecognition {
+      request.requiresOnDeviceRecognition = true
+    }
+    self.request = request
+
+    let inputNode = audioEngine.inputNode
+    let format = inputNode.outputFormat(forBus: 0)
+    inputNode.removeTap(onBus: 0)
+    inputNode.installTap(onBus: 0, bufferSize: 1024, format: format) { buffer, _ in
+      request.append(buffer)
+    }
+
+    audioEngine.prepare()
+    do {
+      try audioEngine.start()
+    } catch {
+      onError?(error)
+      return
+    }
+
+    task = recognizer.recognitionTask(with: request) { [weak self] result, error in
+      if let result {
+        self?.onTranscript?(result.bestTranscription.formattedString)
+      }
+      if error != nil || result?.isFinal == true {
+        self?.stop()
+      }
+    }
+  }
+
+  func stop() {
+    guard audioEngine.isRunning else { return }
+    audioEngine.stop()
+    audioEngine.inputNode.removeTap(onBus: 0)
+    request?.endAudio()
+    task?.cancel()
+    task = nil
+    request = nil
+    try? AVAudioSession.sharedInstance().setActive(false, options: .notifyOthersOnDeactivation)
+    onEnd?()
   }
 }

@@ -24,6 +24,7 @@ final class LoginViewController: UIViewController {
     super.viewDidLoad()
     title = "Sign In"
     view.backgroundColor = .systemBackground
+    hideNavBarHairline()
     navigationItem.rightBarButtonItem = UIBarButtonItem(title: "Server", style: .plain, target: self, action: #selector(changeServerTapped))
 
     passwordField.returnKeyType = .go
@@ -60,23 +61,12 @@ final class LoginViewController: UIViewController {
     serverLabel.textAlignment = .center
     serverLabel.numberOfLines = 2
 
-    let card = SurfaceView()
     let formStack = UIStackView(arrangedSubviews: [serverLabel, emailField, passwordField, signInButton, activity])
     formStack.axis = .vertical
     formStack.alignment = .fill
     formStack.spacing = 12
-    formStack.isLayoutMarginsRelativeArrangement = true
-    formStack.directionalLayoutMargins = NSDirectionalEdgeInsets(top: 14, leading: 14, bottom: 14, trailing: 14)
-    card.addSubview(formStack)
-    formStack.translatesAutoresizingMaskIntoConstraints = false
-    NSLayoutConstraint.activate([
-      formStack.leadingAnchor.constraint(equalTo: card.leadingAnchor),
-      formStack.trailingAnchor.constraint(equalTo: card.trailingAnchor),
-      formStack.topAnchor.constraint(equalTo: card.topAnchor),
-      formStack.bottomAnchor.constraint(equalTo: card.bottomAnchor)
-    ])
 
-    let stack = UIStackView(arrangedSubviews: [brandMark, titleLabel, helpLabel, card])
+    let stack = UIStackView(arrangedSubviews: [brandMark, titleLabel, helpLabel, formStack])
     stack.axis = .vertical
     stack.alignment = .fill
     stack.spacing = 16

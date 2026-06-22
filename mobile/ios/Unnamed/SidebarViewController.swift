@@ -48,12 +48,8 @@ final class SidebarViewController: UIViewController {
     navigationItem.largeTitleDisplayMode = .always
     navigationController?.navigationBar.prefersLargeTitles = true
 
-    // Full-width drawer has no scrim to tap away, so give it an explicit
-    // dismiss affordance (leading close, native full-screen pattern).
-    navigationItem.leftBarButtonItem = UIBarButtonItem(
-      image: UIImage(systemName: "xmark"),
-      style: .plain, target: self, action: #selector(closeTapped))
     navigationItem.rightBarButtonItem = makeAccountButton()
+    updateCloseButtonVisibility()
 
     searchController.searchResultsUpdater = self
     searchController.obscuresBackgroundDuringPresentation = false
@@ -65,6 +61,22 @@ final class SidebarViewController: UIViewController {
     setupNewChatButton()
     NotificationCenter.default.addObserver(self, selector: #selector(approvalCountChanged), name: .approvalCountChanged, object: nil)
     reload()
+  }
+
+  override func viewWillAppear(_ animated: Bool) {
+    super.viewWillAppear(animated)
+    updateCloseButtonVisibility()
+  }
+
+  override func traitCollectionDidChange(_ previous: UITraitCollection?) {
+    super.traitCollectionDidChange(previous)
+    updateCloseButtonVisibility()
+  }
+
+  private lazy var closeButton = UIBarButtonItem(image: UIImage(systemName: "xmark"), style: .plain, target: self, action: #selector(closeTapped))
+
+  private func updateCloseButtonVisibility() {
+    navigationItem.leftBarButtonItem = (splitViewController?.isCollapsed ?? true) ? closeButton : nil
   }
 
   // MARK: - Account button (replaces the old tappable avatar row)
@@ -172,8 +184,8 @@ final class SidebarViewController: UIViewController {
 
   @objc private func newChatTapped() { onNewChat?() }
   @objc private func settingsTapped() { onShowSettings?() }
-  @objc private func closeTapped() { onClose?() }
   @objc private func approvalCountChanged() { applyFilterAndRender() }
+  @objc private func closeTapped() { onClose?() }
 }
 
 extension SidebarViewController: UISearchResultsUpdating {

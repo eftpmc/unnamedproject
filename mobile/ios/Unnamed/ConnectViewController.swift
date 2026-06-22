@@ -23,6 +23,7 @@ final class ConnectViewController: UIViewController {
     super.viewDidLoad()
     title = "Connect"
     view.backgroundColor = .systemBackground
+    hideNavBarHairline()
 
     urlField.text = session.serverURL?.absoluteString ?? "http://"
     urlField.textContentType = .URL
@@ -52,23 +53,12 @@ final class ConnectViewController: UIViewController {
     helpLabel.numberOfLines = 0
     helpLabel.textAlignment = .center
 
-    let card = SurfaceView()
     let formStack = UIStackView(arrangedSubviews: [urlField, connectButton, activity])
     formStack.axis = .vertical
     formStack.alignment = .fill
     formStack.spacing = 12
-    formStack.isLayoutMarginsRelativeArrangement = true
-    formStack.directionalLayoutMargins = NSDirectionalEdgeInsets(top: 14, leading: 14, bottom: 14, trailing: 14)
-    card.addSubview(formStack)
-    formStack.translatesAutoresizingMaskIntoConstraints = false
-    NSLayoutConstraint.activate([
-      formStack.leadingAnchor.constraint(equalTo: card.leadingAnchor),
-      formStack.trailingAnchor.constraint(equalTo: card.trailingAnchor),
-      formStack.topAnchor.constraint(equalTo: card.topAnchor),
-      formStack.bottomAnchor.constraint(equalTo: card.bottomAnchor)
-    ])
 
-    let stack = UIStackView(arrangedSubviews: [brandMark, titleLabel, helpLabel, card])
+    let stack = UIStackView(arrangedSubviews: [brandMark, titleLabel, helpLabel, formStack])
     stack.axis = .vertical
     stack.alignment = .fill
     stack.spacing = 16

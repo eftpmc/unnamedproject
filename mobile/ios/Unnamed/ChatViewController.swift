@@ -1,7 +1,9 @@
 import UIKit
+import UniformTypeIdentifiers
 
 final class ChatViewController: UIViewController {
   var onOpenSidebar: (() -> Void)?
+  var onDeleted: (() -> Void)?
   private let isNew: Bool
   private let appSession: AppSession
   private let chatSession: ChatSession
@@ -10,6 +12,14 @@ final class ChatViewController: UIViewController {
   /// chat (empty id) is lazily created on first send.
   private var activeSessionId: String
   private lazy var client = APIClient(session: appSession)
+  private var currentEffort: String
+  private var currentModel: String?
+  /// Populated as model lists are fetched for the options menu, so the
+  /// composer pill can show "Sonnet 4.6" instead of a raw model id.
+  private var modelDisplayNames: [String: String] = [:]
+  /// Stored independently of `UIViewController.title`/`navigationItem.title`
+  /// since the chat header no longer displays a title at all.
+  private var chatTitle: String
 
   private var messages: [ChatMessage] = []
   private var toolEvents: [ToolEvent] = []
@@ -26,6 +36,20 @@ final class ChatViewController: UIViewController {
   private let textView = ComposerTextView()
   private let sendButton = UIButton(type: .system)
   private let sendActivity = UIActivityIndicatorView(style: .medium)
+  /// Effort/model picker pinned to the composer's toolbar row, mirroring the
+  /// web app's ChatConfigPopover placement (it used to live in the nav bar).
+  private let configPill = UIButton(type: .system)
+  private let attachButton = UIButton(type: .system)
+  private let micButton = UIButton(type: .system)
+  private let attachmentsScroll = UIScrollView()
+  private let attachmentsStack = UIStackView()
+  private var attachmentsRow: UIStackView!
+  private var pendingAttachments: [PendingAttachment] = []
+  private let maxAttachments = 8
+  private let maxAttachmentBytes = 10 * 1024 * 1024
+  private let dictation = SpeechDictationController()
+  private var isDictating = false
+  private var dictationBaseText = ""
   private var composeBarBottom: NSLayoutConstraint!
   private var pollTimer: Timer?
 
@@ -45,6 +69,9 @@ final class ChatViewController: UIViewController {
     self.chatSession = chatSession
     self.activeSessionId = chatSession.id
     self.isNew = isNew
+    self.currentEffort = chatSession.effort ?? "medium"
+    self.currentModel = chatSession.model
+    self.chatTitle = isNew ? "New chat" : (chatSession.title ?? "Chat")
     super.init(nibName: nil, bundle: nil)
     hidesBottomBarWhenPushed = true
   }
@@ -67,16 +94,17 @@ final class ChatViewController: UIViewController {
     super.viewDidLoad()
     view.backgroundColor = .systemBackground
 
-    title = isNew ? "New chat" : (chatSession.title ?? "Chat")
-    // Chat is a conversation/detail surface: always compact, even though the
-    // shared shell nav bar allows large titles for pushed list screens.
+    // The chat header carries no title text or hairline — just the sidebar
+    // and options controls floating over the conversation.
     navigationItem.largeTitleDisplayMode = .never
+    hideNavBarHairline()
     navigationItem.leftBarButtonItem = UIBarButtonItem(
       image: UIImage(systemName: "sidebar.left"),
       style: .plain, target: self, action: #selector(openSidebarTapped))
-    navigationItem.rightBarButtonItem = UIBarButtonItem(
-      image: UIImage(systemName: "square.and.pencil"),
-      style: .plain, target: self, action: #selector(composeNewTapped))
+    navigationItem.leftBarButtonItem?.tintColor = AppPalette.accent
+    let optionsButton = UIBarButtonItem(image: UIImage(systemName: "ellipsis.circle"), menu: makeChatSettingsMenu())
+    optionsButton.tintColor = AppPalette.accent
+    navigationItem.rightBarButtonItem = optionsButton
 
     setupTable()
     setupAgentStatusBar()
@@ -84,6 +112,18 @@ final class ChatViewController: UIViewController {
     setupReconnectBanner()
     observeKeyboard()
     loadMessages()
+  }
+
+  override func viewDidLayoutSubviews() {
+    super.viewDidLayoutSubviews()
+    // The composer floats over the table view now, so its inset has to be
+    // measured each layout pass (text growth, keyboard, agent status row)
+    // instead of being a fixed constant.
+    let bottomInset = view.bounds.height - composeBar.frame.minY + 8
+    if tableView.contentInset.bottom != bottomInset {
+      tableView.contentInset.bottom = bottomInset
+      tableView.verticalScrollIndicatorInsets.bottom = bottomInset
+    }
   }
 
   deinit {
@@ -135,7 +175,7 @@ final class ChatViewController: UIViewController {
     case .messageDelta(let sid, let messageId, let delta) where sid == activeSessionId:
       guard let idx = messages.firstIndex(where: { $0.id == messageId }) else { return }
       let old = messages[idx]
-      messages[idx] = ChatMessage(id: old.id, role: old.role, content: old.content + delta, createdAt: old.createdAt)
+      messages[idx] = ChatMessage(id: old.id, role: old.role, content: old.content + delta, createdAt: old.createdAt, attachments: old.attachments)
       tableView.reloadRows(at: [IndexPath(row: idx, section: 0)], with: .none)
       if isNearBottom() { scrollToBottom(animated: false) }
 
@@ -165,7 +205,7 @@ final class ChatViewController: UIViewController {
       handleExecutionUpdate(executionId: executionId, tool: tool, status: status, chunk: chunk, result: result)
 
     case .sessionTitleUpdated(let sid, let t) where sid == activeSessionId:
-      title = t
+      chatTitle = t
 
     case .connected:
       pendingBannerItem?.cancel()
@@ -324,45 +364,108 @@ final class ChatViewController: UIViewController {
   }
 
   private func setupComposeBar() {
-    // A floating, rounded card rather than an edge-to-edge bottom bar.
-    composeBar.backgroundColor = .secondarySystemBackground
-    composeBar.layer.cornerRadius = 22
-    composeBar.layer.cornerCurve = .continuous
-    composeBar.layer.borderColor = UIColor.separator.cgColor
-    composeBar.layer.borderWidth = 0.5
+    composeBar.backgroundColor = AppPalette.card
+    composeBar.layer.cornerRadius = 18
+    composeBar.layer.borderWidth = 1
+    composeBar.layer.borderColor = AppPalette.inputBorder.cgColor
     composeBar.layer.shadowColor = UIColor.black.cgColor
-    composeBar.layer.shadowOpacity = 0.12
+    composeBar.layer.shadowOpacity = 0.08
     composeBar.layer.shadowRadius = 12
-    composeBar.layer.shadowOffset = CGSize(width: 0, height: 3)
+    composeBar.layer.shadowOffset = CGSize(width: 0, height: 4)
 
     textView.placeholder = "Message..."
 
     sendButton.configuration = .filled()
-    sendButton.configuration?.cornerStyle = .capsule
+    sendButton.configuration?.cornerStyle = .medium
+    sendButton.configuration?.baseBackgroundColor = AppPalette.accent
+    sendButton.configuration?.baseForegroundColor = AppPalette.accentForeground
     sendButton.configuration?.image = UIImage(systemName: "arrow.up")
     sendButton.configuration?.contentInsets = NSDirectionalEdgeInsets(top: 8, leading: 8, bottom: 8, trailing: 8)
     sendButton.addTarget(self, action: #selector(sendTapped), for: .touchUpInside)
     NSLayoutConstraint.activate([
-      sendButton.widthAnchor.constraint(equalToConstant: 36),
-      sendButton.heightAnchor.constraint(equalToConstant: 36),
+      sendButton.widthAnchor.constraint(equalToConstant: 32),
+      sendButton.heightAnchor.constraint(equalToConstant: 32),
     ])
 
     sendActivity.hidesWhenStopped = true
 
-    let row = UIStackView(arrangedSubviews: [textView, sendActivity, sendButton])
-    row.axis = .horizontal
-    row.alignment = .bottom
-    row.spacing = 8
-    row.isLayoutMarginsRelativeArrangement = true
-    row.directionalLayoutMargins = NSDirectionalEdgeInsets(top: 8, leading: 18, bottom: 8, trailing: 10)
+    configPill.configuration = .gray()
+    configPill.configuration?.cornerStyle = .medium
+    configPill.configuration?.baseForegroundColor = AppPalette.foregroundSoft
+    configPill.configuration?.contentInsets = NSDirectionalEdgeInsets(top: 5, leading: 10, bottom: 5, trailing: 10)
+    configPill.menu = makeConfigMenu()
+    configPill.showsMenuAsPrimaryAction = true
+    refreshConfigPill()
 
-    composeBar.addSubview(row)
-    row.translatesAutoresizingMaskIntoConstraints = false
+    attachButton.configuration = .plain()
+    attachButton.configuration?.image = UIImage(systemName: "paperclip")
+    attachButton.configuration?.baseForegroundColor = AppPalette.foregroundSoft
+    attachButton.configuration?.contentInsets = NSDirectionalEdgeInsets(top: 6, leading: 6, bottom: 6, trailing: 6)
+    attachButton.addTarget(self, action: #selector(attachTapped), for: .touchUpInside)
     NSLayoutConstraint.activate([
-      row.leadingAnchor.constraint(equalTo: composeBar.leadingAnchor),
-      row.trailingAnchor.constraint(equalTo: composeBar.trailingAnchor),
-      row.topAnchor.constraint(equalTo: composeBar.topAnchor),
-      row.bottomAnchor.constraint(equalTo: composeBar.bottomAnchor),
+      attachButton.widthAnchor.constraint(equalToConstant: 32),
+      attachButton.heightAnchor.constraint(equalToConstant: 32),
+    ])
+
+    micButton.configuration = .plain()
+    micButton.configuration?.image = UIImage(systemName: "mic")
+    micButton.configuration?.baseForegroundColor = AppPalette.foregroundSoft
+    micButton.configuration?.contentInsets = NSDirectionalEdgeInsets(top: 6, leading: 6, bottom: 6, trailing: 6)
+    micButton.addTarget(self, action: #selector(micTapped), for: .touchUpInside)
+    NSLayoutConstraint.activate([
+      micButton.widthAnchor.constraint(equalToConstant: 32),
+      micButton.heightAnchor.constraint(equalToConstant: 32),
+    ])
+
+    attachmentsStack.axis = .horizontal
+    attachmentsStack.spacing = 6
+    attachmentsScroll.addSubview(attachmentsStack)
+    attachmentsScroll.showsHorizontalScrollIndicator = false
+    attachmentsStack.translatesAutoresizingMaskIntoConstraints = false
+    NSLayoutConstraint.activate([
+      attachmentsStack.leadingAnchor.constraint(equalTo: attachmentsScroll.contentLayoutGuide.leadingAnchor),
+      attachmentsStack.trailingAnchor.constraint(equalTo: attachmentsScroll.contentLayoutGuide.trailingAnchor),
+      attachmentsStack.topAnchor.constraint(equalTo: attachmentsScroll.contentLayoutGuide.topAnchor),
+      attachmentsStack.bottomAnchor.constraint(equalTo: attachmentsScroll.contentLayoutGuide.bottomAnchor),
+      attachmentsStack.heightAnchor.constraint(equalTo: attachmentsScroll.frameLayoutGuide.heightAnchor),
+    ])
+    let attachmentsRow = UIStackView(arrangedSubviews: [attachmentsScroll])
+    attachmentsRow.isLayoutMarginsRelativeArrangement = true
+    attachmentsRow.directionalLayoutMargins = NSDirectionalEdgeInsets(top: 6, leading: 14, bottom: 0, trailing: 14)
+    NSLayoutConstraint.activate([
+      attachmentsScroll.heightAnchor.constraint(equalToConstant: 28),
+    ])
+    attachmentsRow.isHidden = true
+
+    let textRow = UIStackView(arrangedSubviews: [textView])
+    textRow.isLayoutMarginsRelativeArrangement = true
+    textRow.directionalLayoutMargins = NSDirectionalEdgeInsets(top: 4, leading: 16, bottom: 0, trailing: 16)
+
+    let toolbarLeading = UIStackView(arrangedSubviews: [attachButton, configPill])
+    toolbarLeading.axis = .horizontal
+    toolbarLeading.alignment = .center
+    toolbarLeading.spacing = 4
+
+    let toolbarSpacer = UIView()
+    let toolbarRow = UIStackView(arrangedSubviews: [toolbarLeading, toolbarSpacer, micButton, sendActivity, sendButton])
+    toolbarRow.axis = .horizontal
+    toolbarRow.alignment = .center
+    toolbarRow.spacing = 6
+    toolbarRow.isLayoutMarginsRelativeArrangement = true
+    toolbarRow.directionalLayoutMargins = NSDirectionalEdgeInsets(top: 0, leading: 10, bottom: 8, trailing: 10)
+
+    let column = UIStackView(arrangedSubviews: [attachmentsRow, textRow, toolbarRow])
+    column.axis = .vertical
+    column.spacing = 4
+    self.attachmentsRow = attachmentsRow
+
+    composeBar.addSubview(column)
+    column.translatesAutoresizingMaskIntoConstraints = false
+    NSLayoutConstraint.activate([
+      column.leadingAnchor.constraint(equalTo: composeBar.leadingAnchor),
+      column.trailingAnchor.constraint(equalTo: composeBar.trailingAnchor),
+      column.topAnchor.constraint(equalTo: composeBar.topAnchor),
+      column.bottomAnchor.constraint(equalTo: composeBar.bottomAnchor),
     ])
 
     view.addSubview(composeBar)
@@ -371,10 +474,13 @@ final class ChatViewController: UIViewController {
       equalTo: view.safeAreaLayoutGuide.bottomAnchor, constant: -composeFloatingGap)
 
     NSLayoutConstraint.activate([
-      tableView.topAnchor.constraint(equalTo: view.safeAreaLayoutGuide.topAnchor),
+      // Full-bleed top-to-bottom so messages scroll visibly underneath the
+      // transparent nav bar and the floating composer card, rather than
+      // stopping at a hard edge that reveals the plain page background.
+      tableView.topAnchor.constraint(equalTo: view.topAnchor),
       tableView.leadingAnchor.constraint(equalTo: view.leadingAnchor),
       tableView.trailingAnchor.constraint(equalTo: view.trailingAnchor),
-      tableView.bottomAnchor.constraint(equalTo: agentStatusBar.topAnchor),
+      tableView.bottomAnchor.constraint(equalTo: view.bottomAnchor),
       agentStatusBar.leadingAnchor.constraint(equalTo: view.leadingAnchor),
       agentStatusBar.trailingAnchor.constraint(equalTo: view.trailingAnchor),
       agentStatusBar.bottomAnchor.constraint(equalTo: composeBar.topAnchor, constant: -8),
@@ -508,7 +614,134 @@ final class ChatViewController: UIViewController {
   }
 
   @objc private func openSidebarTapped() { onOpenSidebar?() }
-  @objc private func composeNewTapped() { onOpenSidebar?() }
+
+  /// Effort/model only — the composer pill's menu. Quick, frequent toggles
+  /// live here; anything that touches the chat as a whole (rename, delete)
+  /// belongs in `makeChatSettingsMenu` instead.
+  private func makeConfigMenu() -> UIMenu {
+    guard !activeSessionId.isEmpty else {
+      return UIMenu(children: [])
+    }
+    let effortMenu = UIMenu(title: "Effort", image: UIImage(systemName: "gauge.with.dots.needle.50percent"), options: .displayInline, children:
+      ["low", "medium", "high"].map { level in
+        UIAction(title: level.capitalized, state: level == currentEffort ? .on : .off) { [weak self] _ in
+          self?.setEffort(level)
+        }
+      })
+
+    let modelMenu = UIDeferredMenuElement.uncached { [weak self] completion in
+      guard let self else { completion([]); return }
+      Task {
+        let models = (try? await self.client.modelsForEffort(self.currentEffort)) ?? []
+        for info in models { self.modelDisplayNames[info.id] = info.displayName }
+        self.refreshConfigPill()
+        let autoAction = UIAction(title: "Auto", state: self.currentModel == nil ? .on : .off) { [weak self] _ in
+          self?.setModel(nil)
+        }
+        let modelActions = models.map { info in
+          UIAction(title: info.displayName, state: info.id == self.currentModel ? .on : .off) { [weak self] _ in
+            self?.setModel(info.id)
+          }
+        }
+        completion([autoAction] + modelActions)
+      }
+    }
+    let modelSubmenu = UIMenu(title: "Model", image: UIImage(systemName: "cpu"), children: [modelMenu])
+
+    return UIMenu(children: [effortMenu, modelSubmenu])
+  }
+
+  /// Nav-bar ellipsis menu — chat-level settings rather than per-message
+  /// config, so it includes Rename/Delete alongside the same effort/model
+  /// effort/model live on the composer pill instead — this menu is just
+  /// chat-level actions.
+  private func makeChatSettingsMenu() -> UIMenu {
+    guard !activeSessionId.isEmpty else {
+      return UIMenu(children: [])
+    }
+    let renameAction = UIAction(title: "Rename Chat", image: UIImage(systemName: "pencil")) { [weak self] _ in
+      self?.promptRename()
+    }
+    let deleteAction = UIAction(title: "Delete Chat", image: UIImage(systemName: "trash"), attributes: .destructive) { [weak self] _ in
+      self?.confirmDeleteChat()
+    }
+    return UIMenu(children: [renameAction, UIMenu(options: .displayInline, children: [deleteAction])])
+  }
+
+  private func refreshOptionsMenu() {
+    navigationItem.rightBarButtonItem?.menu = makeChatSettingsMenu()
+    configPill.menu = makeConfigMenu()
+    refreshConfigPill()
+  }
+
+  private func refreshConfigPill() {
+    let modelLabel = currentModel.flatMap { modelDisplayNames[$0] } ?? currentModel ?? "Auto"
+    let label = "\(currentEffort.capitalized) · \(modelLabel)"
+    var config = configPill.configuration
+    config?.attributedTitle = AttributedString(label, attributes: AttributeContainer([.font: UIFont.preferredFont(forTextStyle: .caption1)]))
+    config?.image = nil
+    configPill.configuration = config
+  }
+
+  private func confirmDeleteChat() {
+    let alert = UIAlertController(title: "Delete Chat?", message: "This can't be undone.", preferredStyle: .alert)
+    alert.addAction(UIAlertAction(title: "Cancel", style: .cancel))
+    alert.addAction(UIAlertAction(title: "Delete", style: .destructive) { [weak self] _ in
+      guard let self, !self.activeSessionId.isEmpty else { return }
+      Task {
+        try? await self.client.deleteSession(id: self.activeSessionId)
+        self.onDeleted?()
+      }
+    })
+    present(alert, animated: true)
+  }
+
+  private func setEffort(_ effort: String) {
+    let previous = currentEffort
+    currentEffort = effort
+    refreshOptionsMenu()
+    Task {
+      do {
+        try await client.updateSessionConfig(id: activeSessionId, effort: effort)
+      } catch {
+        currentEffort = previous
+        refreshOptionsMenu()
+        showError(error)
+      }
+    }
+  }
+
+  private func setModel(_ model: String?) {
+    let previous = currentModel
+    currentModel = model
+    refreshOptionsMenu()
+    Task {
+      do {
+        try await client.updateSessionConfig(id: activeSessionId, model: model)
+      } catch {
+        currentModel = previous
+        refreshOptionsMenu()
+        showError(error)
+      }
+    }
+  }
+
+  private func promptRename() {
+    let alert = UIAlertController(title: "Rename Chat", message: nil, preferredStyle: .alert)
+    alert.addTextField { field in
+      field.text = self.chatTitle
+      field.placeholder = "Chat title"
+    }
+    alert.addAction(UIAlertAction(title: "Cancel", style: .cancel))
+    alert.addAction(UIAlertAction(title: "Save", style: .default) { [weak self, weak alert] _ in
+      guard let self, let text = alert?.textFields?.first?.text?.trimmingCharacters(in: .whitespacesAndNewlines), !text.isEmpty else { return }
+      self.chatTitle = text
+      Task {
+        try? await self.client.updateSessionConfig(id: self.activeSessionId, title: text)
+      }
+    })
+    present(alert, animated: true)
+  }
 
   @objc private func refreshPulled() {
     Task {
@@ -519,13 +752,16 @@ final class ChatViewController: UIViewController {
 
   @objc private func sendTapped() {
     let text = textView.text.trimmingCharacters(in: .whitespacesAndNewlines)
-    guard !text.isEmpty else { return }
+    guard !text.isEmpty || !pendingAttachments.isEmpty else { return }
+    if isDictating { stopDictation() }
 
+    let attachmentsToSend = pendingAttachments
     textView.text = ""
+    clearAttachments()
     setSending(true)
     setAgentStatus("Working…")
 
-    let optimistic = ChatMessage(id: UUID().uuidString, role: "user", content: text, createdAt: nil)
+    let optimistic = ChatMessage(id: UUID().uuidString, role: "user", content: text, createdAt: nil, attachments: nil)
     messages.append(optimistic)
     let ip = IndexPath(row: messages.count - 1, section: 0)
     tableView.insertRows(at: [ip], with: .automatic)
@@ -536,9 +772,10 @@ final class ChatViewController: UIViewController {
         if activeSessionId.isEmpty {
           let created = try await client.createSession(title: String(text.prefix(80)))
           activeSessionId = created.id
-          if title == "New chat" { title = String(text.prefix(80)) }
+          if chatTitle == "New chat" { chatTitle = String(text.prefix(80)) }
+          refreshOptionsMenu()
         }
-        _ = try await client.sendMessage(sessionId: activeSessionId, content: text)
+        _ = try await client.sendMessage(sessionId: activeSessionId, content: text, attachments: attachmentsToSend)
         UIImpactFeedbackGenerator(style: .light).impactOccurred()
         // Brief pause to catch fast agent responses before first reload
         try? await Task.sleep(nanoseconds: 800_000_000)
@@ -552,6 +789,8 @@ final class ChatViewController: UIViewController {
         UINotificationFeedbackGenerator().notificationOccurred(.error)
         setAgentStatus(nil)
         textView.text = text
+        pendingAttachments = attachmentsToSend
+        refreshAttachmentsUI()
         showError(error)
       }
       setSending(false)
@@ -577,6 +816,110 @@ final class ChatViewController: UIViewController {
     textView.isEditable = !active
     active ? sendActivity.startAnimating() : sendActivity.stopAnimating()
   }
+
+  // MARK: - Attachments
+
+  @objc private func attachTapped() {
+    guard pendingAttachments.count < maxAttachments else {
+      showError(NSError(domain: "Unnamed", code: 0, userInfo: [NSLocalizedDescriptionKey: "Attach up to \(maxAttachments) files."]))
+      return
+    }
+    let picker = UIDocumentPickerViewController(forOpeningContentTypes: [.item], asCopy: true)
+    picker.allowsMultipleSelection = true
+    picker.delegate = self
+    present(picker, animated: true)
+  }
+
+  private func addAttachments(from urls: [URL]) {
+    let available = maxAttachments - pendingAttachments.count
+    guard available > 0 else { return }
+    for url in urls.prefix(available) {
+      guard let data = try? Data(contentsOf: url), data.count <= maxAttachmentBytes else { continue }
+      let mimeType = UTType(filenameExtension: url.pathExtension)?.preferredMIMEType ?? "application/octet-stream"
+      pendingAttachments.append(PendingAttachment(filename: url.lastPathComponent, mimeType: mimeType, data: data))
+    }
+    refreshAttachmentsUI()
+  }
+
+  private func removeAttachment(at index: Int) {
+    guard pendingAttachments.indices.contains(index) else { return }
+    pendingAttachments.remove(at: index)
+    refreshAttachmentsUI()
+  }
+
+  private func clearAttachments() {
+    pendingAttachments = []
+    refreshAttachmentsUI()
+  }
+
+  private func refreshAttachmentsUI() {
+    attachmentsStack.arrangedSubviews.forEach { $0.removeFromSuperview() }
+    for (index, attachment) in pendingAttachments.enumerated() {
+      attachmentsStack.addArrangedSubview(makeAttachmentChip(attachment, index: index))
+    }
+    attachmentsRow.isHidden = pendingAttachments.isEmpty
+  }
+
+  private func makeAttachmentChip(_ attachment: PendingAttachment, index: Int) -> UIView {
+    var config = UIButton.Configuration.gray()
+    config.cornerStyle = .capsule
+    config.baseForegroundColor = AppPalette.foregroundSoft
+    config.image = UIImage(systemName: "xmark.circle.fill")
+    config.imagePlacement = .trailing
+    config.imagePadding = 4
+    config.contentInsets = NSDirectionalEdgeInsets(top: 4, leading: 10, bottom: 4, trailing: 8)
+    config.attributedTitle = AttributedString(
+      attachment.filename, attributes: AttributeContainer([.font: UIFont.preferredFont(forTextStyle: .caption2)]))
+    config.titleLineBreakMode = .byTruncatingMiddle
+    let button = UIButton(configuration: config)
+    button.tag = index
+    button.addAction(UIAction { [weak self] _ in self?.removeAttachment(at: index) }, for: .touchUpInside)
+    return button
+  }
+
+  // MARK: - Voice dictation
+
+  @objc private func micTapped() {
+    isDictating ? stopDictation() : startDictation()
+  }
+
+  private func startDictation() {
+    dictationBaseText = textView.text
+    dictation.onTranscript = { [weak self] transcript in
+      guard let self else { return }
+      let base = self.dictationBaseText.trimmingCharacters(in: .whitespacesAndNewlines)
+      self.textView.text = base.isEmpty ? transcript : "\(base) \(transcript)"
+    }
+    dictation.onError = { [weak self] error in
+      self?.isDictating = false
+      self?.updateMicButtonState()
+      self?.showError(error)
+    }
+    dictation.onEnd = { [weak self] in
+      self?.isDictating = false
+      self?.updateMicButtonState()
+    }
+    dictation.start()
+    isDictating = true
+    updateMicButtonState()
+  }
+
+  private func stopDictation() {
+    dictation.stop()
+    isDictating = false
+    updateMicButtonState()
+  }
+
+  private func updateMicButtonState() {
+    micButton.configuration?.image = UIImage(systemName: isDictating ? "mic.fill" : "mic")
+    micButton.configuration?.baseForegroundColor = isDictating ? AppPalette.destructive : AppPalette.foregroundSoft
+  }
+}
+
+extension ChatViewController: UIDocumentPickerDelegate {
+  func documentPicker(_ controller: UIDocumentPickerViewController, didPickDocumentsAt urls: [URL]) {
+    addAttachments(from: urls)
+  }
 }
 
 // MARK: - UITableViewDataSource
@@ -600,6 +943,37 @@ extension ChatViewController: UITableViewDataSource {
   }
 }
 
+// MARK: - Bubble shape
+
+/// A view that can mask its corners with independent radii per corner —
+/// UIKit's `maskedCorners` only varies *which* corners round, not by how
+/// much, but the web bubble (`rounded-[18px] rounded-tr-md`) needs both.
+private final class CornerMaskedView: UIView {
+  var cornerRadii: (topLeft: CGFloat, topRight: CGFloat, bottomLeft: CGFloat, bottomRight: CGFloat) = (18, 18, 18, 18) {
+    didSet { setNeedsLayout() }
+  }
+
+  override func layoutSubviews() {
+    super.layoutSubviews()
+    let r = cornerRadii
+    let path = UIBezierPath()
+    let w = bounds.width, h = bounds.height
+    path.move(to: CGPoint(x: r.topLeft, y: 0))
+    path.addLine(to: CGPoint(x: w - r.topRight, y: 0))
+    path.addArc(withCenter: CGPoint(x: w - r.topRight, y: r.topRight), radius: r.topRight, startAngle: -.pi / 2, endAngle: 0, clockwise: true)
+    path.addLine(to: CGPoint(x: w, y: h - r.bottomRight))
+    path.addArc(withCenter: CGPoint(x: w - r.bottomRight, y: h - r.bottomRight), radius: r.bottomRight, startAngle: 0, endAngle: .pi / 2, clockwise: true)
+    path.addLine(to: CGPoint(x: r.bottomLeft, y: h))
+    path.addArc(withCenter: CGPoint(x: r.bottomLeft, y: h - r.bottomLeft), radius: r.bottomLeft, startAngle: .pi / 2, endAngle: .pi, clockwise: true)
+    path.addLine(to: CGPoint(x: 0, y: r.topLeft))
+    path.addArc(withCenter: CGPoint(x: r.topLeft, y: r.topLeft), radius: r.topLeft, startAngle: .pi, endAngle: .pi * 1.5, clockwise: true)
+    path.close()
+    let mask = CAShapeLayer()
+    mask.path = path.cgPath
+    layer.mask = mask
+  }
+}
+
 // MARK: - MessageCell
 
 private final class MessageCell: UITableViewCell {
@@ -608,7 +982,7 @@ private final class MessageCell: UITableViewCell {
   private var rawContent = ""
 
   private let bubbleStack = UIStackView()
-  private let bubble = UIView()
+  private let bubble = CornerMaskedView()
   private let contentStack = UIStackView()
   private let timeLabel = UILabel()
   private var stackLeading: NSLayoutConstraint!
@@ -622,10 +996,6 @@ private final class MessageCell: UITableViewCell {
 
     let longPress = UILongPressGestureRecognizer(target: self, action: #selector(handleLongPress))
     contentView.addGestureRecognizer(longPress)
-
-    bubble.layer.cornerRadius = 18
-    bubble.layer.cornerCurve = .continuous
-    bubble.clipsToBounds = true
 
     contentStack.axis = .vertical
     contentStack.spacing = 0
@@ -672,25 +1042,32 @@ private final class MessageCell: UITableViewCell {
     rawContent = message.content
     let isUser = message.role == "user"
     let baseFont = UIFont.preferredFont(forTextStyle: .callout)
-    let codeBg = UIColor.label.withAlphaComponent(0.08)
-    let textColor: UIColor = isUser ? .white : .label
+    let codeBg = AppPalette.muted
+    let textColor: UIColor = isUser ? .label : AppPalette.foregroundSoft
 
-    // User keeps a bubble; assistant renders full-width on the canvas.
-    bubble.backgroundColor = isUser ? .tintColor : .clear
+    // User keeps a neutral chip bubble with a squared "tail" corner; assistant
+    // renders full-width on the canvas, matching the web app's message list.
+    bubble.backgroundColor = isUser ? AppPalette.muted : .clear
+    bubble.cornerRadii = isUser ? (18, 6, 18, 18) : (0, 0, 0, 0)
 
     contentStack.arrangedSubviews.forEach {
       contentStack.removeArrangedSubview($0); $0.removeFromSuperview()
     }
-    for segment in parseMessageSegments(message.content) {
+    // Assistant text drops emoji to read like an agent/tool transcript rather
+    // than a texting app, matching the web app's stripEmoji behavior.
+    let content = isUser ? message.content : stripEmoji(message.content)
+    for segment in parseMessageSegments(content) {
       switch segment {
-      case .text(let str): contentStack.addArrangedSubview(makeTextSegment(str, font: baseFont, textColor: textColor, codeBg: codeBg, hInset: isUser ? 14 : 0))
-      case .code(let code): contentStack.addArrangedSubview(makeCodeSegment(code, textColor: textColor))
+      case .text(let str): contentStack.addArrangedSubview(makeTextSegment(str, font: baseFont, textColor: textColor, codeBg: codeBg, hInset: isUser ? 14 : 0, lineSpacing: isUser ? 0 : 4))
+      case .code(let code): contentStack.addArrangedSubview(makeCodeSegment(code))
       }
     }
 
-    if let epoch = message.createdAt {
+    // User bubbles skip the timestamp entirely — this is a chat-with-an-agent
+    // surface, not a texting app where message timing matters.
+    if !isUser, let epoch = message.createdAt {
       timeLabel.text = messageTime(epoch)
-      timeLabel.textAlignment = isUser ? .right : .left
+      timeLabel.textAlignment = .left
       timeLabel.isHidden = false
     } else {
       timeLabel.isHidden = true
@@ -704,12 +1081,12 @@ private final class MessageCell: UITableViewCell {
     stackLeading.isActive = !isUser
   }
 
-  private func makeTextSegment(_ text: String, font: UIFont, textColor: UIColor, codeBg: UIColor, hInset: CGFloat = 14) -> UIView {
+  private func makeTextSegment(_ text: String, font: UIFont, textColor: UIColor, codeBg: UIColor, hInset: CGFloat = 14, lineSpacing: CGFloat = 0) -> UIView {
     let label = UILabel()
     label.numberOfLines = 0
     label.font = font
     label.adjustsFontForContentSizeCategory = true
-    label.attributedText = applyInlineMarkdown(text, font: font, color: textColor, codeBg: codeBg)
+    label.attributedText = markdownAttributedString(text, baseFont: font, textColor: textColor, codeBg: codeBg, lineSpacing: lineSpacing)
 
     let wrapper = UIView()
     wrapper.addSubview(label)
@@ -723,9 +1100,15 @@ private final class MessageCell: UITableViewCell {
     return wrapper
   }
 
-  private func makeCodeSegment(_ code: String, textColor: UIColor) -> UIView {
+  private func makeCodeSegment(_ code: String) -> UIView {
+    // Code blocks always render GitHub-dark, in both appearances, matching the web app.
     let container = UIView()
-    container.backgroundColor = UIColor.label.withAlphaComponent(0.1)
+    container.backgroundColor = AppPalette.codeBackground
+    container.layer.cornerRadius = 12
+    container.layer.cornerCurve = .continuous
+    container.layer.borderWidth = 1
+    container.layer.borderColor = UIColor.white.withAlphaComponent(0.08).cgColor
+    container.clipsToBounds = true
 
     let scrollView = UIScrollView()
     scrollView.showsHorizontalScrollIndicator = true
@@ -737,7 +1120,7 @@ private final class MessageCell: UITableViewCell {
     codeLabel.lineBreakMode = .byClipping
     codeLabel.font = UIFont.monospacedSystemFont(ofSize: 12, weight: .regular)
     codeLabel.text = code
-    codeLabel.textColor = textColor
+    codeLabel.textColor = AppPalette.codeForeground
 
     scrollView.addSubview(codeLabel)
     codeLabel.translatesAutoresizingMaskIntoConstraints = false
@@ -780,12 +1163,18 @@ private func messageTime(_ epoch: Int) -> String {
 private final class ToolEventCell: UITableViewCell {
   static let reuseID = "ToolEventCell"
 
-  private let pill = UIView()
+  // Matches the web ExecutionCard: a neutral bordered card with a square
+  // icon badge, tool name, and a colored status pill on the trailing edge —
+  // status drives only the pill, not the whole card.
+  private let card = UIView()
+  private let badge = UIView()
   private let iconView = UIImageView()
   private let nameLabel = UILabel()
-  private let statusLabel = UILabel()
-  private let outputLabel = UILabel()
+  private let pill = UIView()
+  private let pillIcon = UIImageView()
+  private let pillLabel = UILabel()
   private let spinner = UIActivityIndicatorView(style: .medium)
+  private let outputLabel = UILabel()
 
   override init(style: UITableViewCell.CellStyle, reuseIdentifier: String?) {
     super.init(style: style, reuseIdentifier: reuseIdentifier)
@@ -797,30 +1186,65 @@ private final class ToolEventCell: UITableViewCell {
   required init?(coder: NSCoder) { fatalError() }
 
   private func buildLayout() {
-    pill.layer.cornerRadius = 8
-    pill.layer.cornerCurve = .continuous
-    pill.layer.borderWidth = 0.5
+    card.backgroundColor = .systemBackground
+    card.layer.cornerRadius = 10
+    card.layer.cornerCurve = .continuous
+    card.layer.borderWidth = 1
+    card.layer.borderColor = AppPalette.borderSoft.cgColor
 
-    iconView.contentMode = .scaleAspectFit
-    iconView.translatesAutoresizingMaskIntoConstraints = false
+    badge.backgroundColor = AppPalette.muted
+    badge.layer.cornerRadius = 6
+    badge.layer.cornerCurve = .continuous
+    badge.translatesAutoresizingMaskIntoConstraints = false
     NSLayoutConstraint.activate([
-      iconView.widthAnchor.constraint(equalToConstant: 15),
-      iconView.heightAnchor.constraint(equalToConstant: 15),
+      badge.widthAnchor.constraint(equalToConstant: 26),
+      badge.heightAnchor.constraint(equalToConstant: 26),
     ])
 
-    nameLabel.font = UIFont.preferredFont(forTextStyle: .footnote)
+    iconView.contentMode = .scaleAspectFit
+    badge.addSubview(iconView)
+    iconView.translatesAutoresizingMaskIntoConstraints = false
+    NSLayoutConstraint.activate([
+      iconView.centerXAnchor.constraint(equalTo: badge.centerXAnchor),
+      iconView.centerYAnchor.constraint(equalTo: badge.centerYAnchor),
+      iconView.widthAnchor.constraint(equalToConstant: 13),
+      iconView.heightAnchor.constraint(equalToConstant: 13),
+    ])
+
+    nameLabel.font = UIFont.preferredFont(forTextStyle: .footnote).withWeight(.medium)
     nameLabel.textColor = .label
 
     spinner.hidesWhenStopped = true
-    spinner.transform = CGAffineTransform(scaleX: 0.7, y: 0.7)
+    spinner.transform = CGAffineTransform(scaleX: 0.55, y: 0.55)
 
-    statusLabel.font = UIFont.preferredFont(forTextStyle: .caption2)
-    statusLabel.textColor = .tertiaryLabel
+    pillIcon.contentMode = .scaleAspectFit
+    pillIcon.translatesAutoresizingMaskIntoConstraints = false
+    NSLayoutConstraint.activate([
+      pillIcon.widthAnchor.constraint(equalToConstant: 10),
+      pillIcon.heightAnchor.constraint(equalToConstant: 10),
+    ])
+    pillLabel.font = UIFont.preferredFont(forTextStyle: .caption2).withWeight(.medium)
 
-    let headerRow = UIStackView(arrangedSubviews: [iconView, nameLabel, UIView(), spinner, statusLabel])
+    let pillRow = UIStackView(arrangedSubviews: [spinner, pillIcon, pillLabel])
+    pillRow.axis = .horizontal
+    pillRow.alignment = .center
+    pillRow.spacing = 4
+    pillRow.isLayoutMarginsRelativeArrangement = true
+    pillRow.directionalLayoutMargins = NSDirectionalEdgeInsets(top: 3, leading: 8, bottom: 3, trailing: 8)
+    pill.layer.cornerRadius = 9
+    pill.addSubview(pillRow)
+    pillRow.translatesAutoresizingMaskIntoConstraints = false
+    NSLayoutConstraint.activate([
+      pillRow.leadingAnchor.constraint(equalTo: pill.leadingAnchor),
+      pillRow.trailingAnchor.constraint(equalTo: pill.trailingAnchor),
+      pillRow.topAnchor.constraint(equalTo: pill.topAnchor),
+      pillRow.bottomAnchor.constraint(equalTo: pill.bottomAnchor),
+    ])
+
+    let headerRow = UIStackView(arrangedSubviews: [badge, nameLabel, UIView(), pill])
     headerRow.axis = .horizontal
     headerRow.alignment = .center
-    headerRow.spacing = 6
+    headerRow.spacing = 9
 
     outputLabel.font = UIFont.monospacedSystemFont(ofSize: 11, weight: .regular)
     outputLabel.textColor = .secondaryLabel
@@ -829,62 +1253,71 @@ private final class ToolEventCell: UITableViewCell {
 
     let stack = UIStackView(arrangedSubviews: [headerRow, outputLabel])
     stack.axis = .vertical
-    stack.spacing = 6
+    stack.spacing = 8
     stack.isLayoutMarginsRelativeArrangement = true
-    stack.directionalLayoutMargins = NSDirectionalEdgeInsets(top: 10, leading: 12, bottom: 10, trailing: 12)
+    stack.directionalLayoutMargins = NSDirectionalEdgeInsets(top: 11, leading: 13, bottom: 11, trailing: 13)
 
-    pill.addSubview(stack)
+    card.addSubview(stack)
     stack.translatesAutoresizingMaskIntoConstraints = false
     NSLayoutConstraint.activate([
-      stack.leadingAnchor.constraint(equalTo: pill.leadingAnchor),
-      stack.trailingAnchor.constraint(equalTo: pill.trailingAnchor),
-      stack.topAnchor.constraint(equalTo: pill.topAnchor),
-      stack.bottomAnchor.constraint(equalTo: pill.bottomAnchor),
+      stack.leadingAnchor.constraint(equalTo: card.leadingAnchor),
+      stack.trailingAnchor.constraint(equalTo: card.trailingAnchor),
+      stack.topAnchor.constraint(equalTo: card.topAnchor),
+      stack.bottomAnchor.constraint(equalTo: card.bottomAnchor),
     ])
 
-    contentView.addSubview(pill)
-    pill.translatesAutoresizingMaskIntoConstraints = false
+    contentView.addSubview(card)
+    card.translatesAutoresizingMaskIntoConstraints = false
     NSLayoutConstraint.activate([
-      pill.leadingAnchor.constraint(equalTo: contentView.leadingAnchor, constant: 16),
-      pill.trailingAnchor.constraint(lessThanOrEqualTo: contentView.trailingAnchor, constant: -16),
-      pill.topAnchor.constraint(equalTo: contentView.topAnchor, constant: 4),
-      pill.bottomAnchor.constraint(equalTo: contentView.bottomAnchor, constant: -4),
+      card.leadingAnchor.constraint(equalTo: contentView.leadingAnchor, constant: 16),
+      card.trailingAnchor.constraint(lessThanOrEqualTo: contentView.trailingAnchor, constant: -48),
+      card.topAnchor.constraint(equalTo: contentView.topAnchor, constant: 4),
+      card.bottomAnchor.constraint(equalTo: contentView.bottomAnchor, constant: -4),
     ])
   }
 
   func configure(with event: ToolEvent) {
     let name = event.tool.split(separator: "_").map { $0.capitalized }.joined(separator: " ")
     nameLabel.text = name
+    iconView.image = UIImage(systemName: "wrench.and.screwdriver")
+    iconView.tintColor = .secondaryLabel
 
     switch event.status {
     case "running":
-      iconView.image = UIImage(systemName: "gear")
-      iconView.tintColor = .tintColor
-      pill.backgroundColor = .secondarySystemBackground
-      pill.layer.borderColor = UIColor.separator.cgColor
+      pill.backgroundColor = AppPalette.accent.withAlphaComponent(0.14)
+      pillLabel.textColor = AppPalette.accent
+      pillLabel.text = "Running"
+      pillIcon.isHidden = true
+      spinner.isHidden = false
+      spinner.color = AppPalette.accent
       spinner.startAnimating()
-      statusLabel.text = nil
     case "done":
-      iconView.image = UIImage(systemName: "checkmark.circle.fill")
-      iconView.tintColor = .systemGreen
-      pill.backgroundColor = UIColor.systemGreen.withAlphaComponent(0.06)
-      pill.layer.borderColor = UIColor.systemGreen.withAlphaComponent(0.25).cgColor
+      pill.backgroundColor = AppPalette.success.withAlphaComponent(0.14)
+      pillLabel.textColor = AppPalette.success
+      pillLabel.text = "Done"
+      pillIcon.image = UIImage(systemName: "checkmark")
+      pillIcon.tintColor = AppPalette.success
+      pillIcon.isHidden = false
+      spinner.isHidden = true
       spinner.stopAnimating()
-      statusLabel.text = "done"
     case "error":
-      iconView.image = UIImage(systemName: "xmark.circle.fill")
-      iconView.tintColor = .systemRed
-      pill.backgroundColor = UIColor.systemRed.withAlphaComponent(0.06)
-      pill.layer.borderColor = UIColor.systemRed.withAlphaComponent(0.25).cgColor
+      pill.backgroundColor = AppPalette.destructive.withAlphaComponent(0.12)
+      pillLabel.textColor = AppPalette.destructive
+      pillLabel.text = "Error"
+      pillIcon.image = UIImage(systemName: "exclamationmark.circle")
+      pillIcon.tintColor = AppPalette.destructive
+      pillIcon.isHidden = false
+      spinner.isHidden = true
       spinner.stopAnimating()
-      statusLabel.text = "error"
     default:
-      iconView.image = UIImage(systemName: "gear")
-      iconView.tintColor = .secondaryLabel
-      pill.backgroundColor = .secondarySystemBackground
-      pill.layer.borderColor = UIColor.separator.cgColor
+      pill.backgroundColor = AppPalette.muted
+      pillLabel.textColor = .secondaryLabel
+      pillLabel.text = "Pending"
+      pillIcon.image = UIImage(systemName: "circle.fill")
+      pillIcon.tintColor = .secondaryLabel
+      pillIcon.isHidden = false
+      spinner.isHidden = true
       spinner.stopAnimating()
-      statusLabel.text = nil
     }
 
     let output = event.output.trimmingCharacters(in: .whitespacesAndNewlines)

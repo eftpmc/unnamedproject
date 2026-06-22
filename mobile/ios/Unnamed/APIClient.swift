@@ -48,12 +48,74 @@ final class APIClient {
     try await request(path: "/sessions", method: "POST", body: CreateSessionRequest(title: title, model: model, effort: effort))
   }
 
+  func modelsForEffort(_ effort: String) async throws -> [ClaudeModelInfo] {
+    try await request(path: "/sessions/models?effort=\(effort)")
+  }
+
+  @discardableResult
+  func updateSessionConfig(id: String, effort: String? = nil, model: String?? = nil, title: String? = nil) async throws -> OKResponse {
+    var body = UpdateSessionConfigRequest(effort: effort, title: title)
+    if let model {
+      body.model = model
+      body.modelIncluded = true
+    }
+    return try await request(path: "/sessions/\(id)", method: "PATCH", body: body)
+  }
+
   func messages(sessionId: String) async throws -> [ChatMessage] {
     try await request(path: "/sessions/\(sessionId)/messages")
   }
 
-  func sendMessage(sessionId: String, content: String) async throws -> ChatMessage {
-    try await request(path: "/sessions/\(sessionId)/messages", method: "POST", body: SendMessageRequest(content: content))
+  func sendMessage(sessionId: String, content: String, attachments: [PendingAttachment] = []) async throws -> ChatMessage {
+    guard !attachments.isEmpty else {
+      return try await request(path: "/sessions/\(sessionId)/messages", method: "POST", body: SendMessageRequest(content: content))
+    }
+    return try await uploadMultipart(path: "/sessions/\(sessionId)/messages", content: content, attachments: attachments)
+  }
+
+  /// Mirrors the web app's multipart POST (content + repeated `attachments`
+  /// fields) since the server expects the message and its files in one
+  /// request rather than a separate upload step.
+  private func uploadMultipart<Response: Decodable>(path: String, content: String, attachments: [PendingAttachment]) async throws -> Response {
+    guard let baseURL = session.serverURL else { throw APIError.missingServer }
+    guard let url = URL(string: path, relativeTo: baseURL)?.absoluteURL else { throw APIError.invalidURL }
+
+    let boundary = "Boundary-\(UUID().uuidString)"
+    var body = Data()
+    func appendField(name: String, value: String) {
+      body.append("--\(boundary)\r\n".data(using: .utf8)!)
+      body.append("Content-Disposition: form-data; name=\"\(name)\"\r\n\r\n".data(using: .utf8)!)
+      body.append("\(value)\r\n".data(using: .utf8)!)
+    }
+    appendField(name: "content", value: content)
+    for attachment in attachments {
+      body.append("--\(boundary)\r\n".data(using: .utf8)!)
+      body.append("Content-Disposition: form-data; name=\"attachments\"; filename=\"\(attachment.filename)\"\r\n".data(using: .utf8)!)
+      body.append("Content-Type: \(attachment.mimeType)\r\n\r\n".data(using: .utf8)!)
+      body.append(attachment.data)
+      body.append("\r\n".data(using: .utf8)!)
+    }
+    body.append("--\(boundary)--\r\n".data(using: .utf8)!)
+
+    var request = URLRequest(url: url)
+    request.httpMethod = "POST"
+    request.timeoutInterval = 60
+    request.setValue("application/json", forHTTPHeaderField: "Accept")
+    request.setValue("multipart/form-data; boundary=\(boundary)", forHTTPHeaderField: "Content-Type")
+    if let token = session.token {
+      request.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
+    }
+    request.httpBody = body
+
+    let (data, response) = try await urlSession.data(for: request)
+    guard let http = response as? HTTPURLResponse else { throw APIError.emptyResponse }
+    if http.statusCode == 401 { throw APIError.unauthorized }
+    guard (200..<300).contains(http.statusCode) else {
+      let error = try? JSONDecoder().decode(ServerError.self, from: data)
+      throw APIError.server(status: http.statusCode, message: error?.error ?? String(data: data, encoding: .utf8) ?? "")
+    }
+    guard !data.isEmpty else { throw APIError.emptyResponse }
+    return try JSONDecoder().decode(Response.self, from: data)
   }
 
   func pendingApprovals() async throws -> [PendingApproval] {

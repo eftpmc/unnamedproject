@@ -27,17 +27,47 @@ struct SendMessageRequest: Encodable {
   let content: String
 }
 
+struct MessageAttachment: Decodable {
+  let id: String
+  let filename: String
+  let mimeType: String
+  let sizeBytes: Int
+  /// Relative API path; fetching bytes requires the same Bearer auth header
+  /// as any other request (no public/anonymous URL).
+  let url: String
+  let createdAt: Int
+
+  enum CodingKeys: String, CodingKey {
+    case id
+    case filename
+    case mimeType = "mimeType"
+    case sizeBytes = "sizeBytes"
+    case url
+    case createdAt = "createdAt"
+  }
+}
+
+/// A file picked locally, not yet uploaded — built fresh for each send and
+/// discarded once the multipart request completes.
+struct PendingAttachment {
+  let filename: String
+  let mimeType: String
+  let data: Data
+}
+
 struct ChatMessage: Decodable {
   let id: String
   let role: String
   let content: String
   let createdAt: Int?
+  let attachments: [MessageAttachment]?
 
   enum CodingKeys: String, CodingKey {
     case id
     case role
     case content
     case createdAt = "created_at"
+    case attachments
   }
 }
 
@@ -62,6 +92,37 @@ struct ChatSession: Decodable {
     case pinnedProjectId = "pinned_project_id"
     case createdAt = "created_at"
     case updatedAt = "updated_at"
+  }
+}
+
+struct ClaudeModelInfo: Decodable {
+  let id: String
+  let displayName: String
+  let supportsEffort: Bool
+
+  enum CodingKeys: String, CodingKey {
+    case id
+    case displayName = "display_name"
+    case supportsEffort = "supports_effort"
+  }
+}
+
+/// PATCH /sessions/:id body. Only fields explicitly set are encoded — `model`
+/// is a tri-state (omit vs. send `null` for Auto), so it tracks separately
+/// from whether a new value was provided.
+struct UpdateSessionConfigRequest: Encodable {
+  var effort: String?
+  var model: String?
+  var modelIncluded = false
+  var title: String?
+
+  enum CodingKeys: String, CodingKey { case effort, model, title }
+
+  func encode(to encoder: Encoder) throws {
+    var container = encoder.container(keyedBy: CodingKeys.self)
+    if let effort { try container.encode(effort, forKey: .effort) }
+    if modelIncluded { try container.encode(model, forKey: .model) }
+    if let title { try container.encode(title, forKey: .title) }
   }
 }
 

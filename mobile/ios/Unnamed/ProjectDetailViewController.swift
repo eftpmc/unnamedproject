@@ -15,6 +15,7 @@ final class ProjectDetailViewController: UIViewController {
   private let emptyLabel = UILabel()
   private let segmentedControl = UISegmentedControl(items: ["Chats", "Plans", "Files"])
   private var segmentedControlContainer: UIView!
+  private var projectInfoContainer: UIView!
   private var hasLoaded = false
 
   init(appSession: AppSession, project: Project) {
@@ -40,10 +41,75 @@ final class ProjectDetailViewController: UIViewController {
       action: #selector(composeTapped)
     )
 
+    setupProjectInfo()
     setupSegmentedControl()
     setupTable()
     setupEmptyState()
     load()
+  }
+
+  private func setupProjectInfo() {
+    let container = UIView()
+    container.backgroundColor = .systemBackground
+    view.addSubview(container)
+    container.translatesAutoresizingMaskIntoConstraints = false
+    NSLayoutConstraint.activate([
+      container.topAnchor.constraint(equalTo: view.safeAreaLayoutGuide.topAnchor),
+      container.leadingAnchor.constraint(equalTo: view.leadingAnchor),
+      container.trailingAnchor.constraint(equalTo: view.trailingAnchor),
+    ])
+    projectInfoContainer = container
+    populateInfoView()
+  }
+
+  private func populateInfoView() {
+    projectInfoContainer.subviews.forEach { $0.removeFromSuperview() }
+    let stack = makeInfoStack()
+    projectInfoContainer.addSubview(stack)
+    stack.translatesAutoresizingMaskIntoConstraints = false
+    NSLayoutConstraint.activate([
+      stack.topAnchor.constraint(equalTo: projectInfoContainer.topAnchor),
+      stack.leadingAnchor.constraint(equalTo: projectInfoContainer.leadingAnchor),
+      stack.trailingAnchor.constraint(equalTo: projectInfoContainer.trailingAnchor),
+      stack.bottomAnchor.constraint(equalTo: projectInfoContainer.bottomAnchor),
+    ])
+  }
+
+  private func makeInfoStack() -> UIStackView {
+    let stack = UIStackView()
+    stack.axis = .vertical
+    stack.spacing = 10
+    stack.isLayoutMarginsRelativeArrangement = true
+    stack.directionalLayoutMargins = NSDirectionalEdgeInsets(top: 14, leading: 16, bottom: 14, trailing: 16)
+
+    let metaRow = UIStackView()
+    metaRow.axis = .horizontal
+    metaRow.spacing = 8
+    metaRow.alignment = .center
+    metaRow.addArrangedSubview(makeMetricPill(icon: "bubble.left.and.bubble.right", text: chatCountText))
+    if activeCount > 0 {
+      metaRow.addArrangedSubview(makeMetricPill(icon: "dot.radiowaves.left.and.right", text: "\(activeCount) active", tintColor: AppPalette.success))
+    }
+    if let created = project.createdAt {
+      metaRow.addArrangedSubview(makeMetricPill(icon: "calendar", text: relativeTime(from: created)))
+    }
+    metaRow.addArrangedSubview(UIView())
+    stack.addArrangedSubview(metaRow)
+
+    if let desc = project.description, !desc.isEmpty {
+      let label = UILabel()
+      label.text = desc
+      label.font = UIFont.app(forTextStyle: .subheadline)
+      label.textColor = .secondaryLabel
+      label.numberOfLines = 0
+      stack.addArrangedSubview(label)
+    }
+
+    if let repo = project.repoPath {
+      stack.addArrangedSubview(makeRepoRow(repo))
+    }
+
+    return stack
   }
 
   private func setupSegmentedControl() {
@@ -66,7 +132,7 @@ final class ProjectDetailViewController: UIViewController {
     NSLayoutConstraint.activate([
       container.leadingAnchor.constraint(equalTo: view.leadingAnchor),
       container.trailingAnchor.constraint(equalTo: view.trailingAnchor),
-      container.topAnchor.constraint(equalTo: view.safeAreaLayoutGuide.topAnchor),
+      container.topAnchor.constraint(equalTo: projectInfoContainer.bottomAnchor),
     ])
     segmentedControlContainer = container
   }
@@ -208,7 +274,6 @@ final class ProjectDetailViewController: UIViewController {
     tableView.register(UITableViewCell.self, forCellReuseIdentifier: "cell")
     tableView.dataSource = self
     tableView.delegate = self
-    tableView.tableHeaderView = makeHeaderView()
     tableView.backgroundView = makeLoadingView()
     tableView.refreshControl = refreshControl
     refreshControl.addTarget(self, action: #selector(refreshPulled), for: .valueChanged)
@@ -221,61 +286,6 @@ final class ProjectDetailViewController: UIViewController {
       tableView.topAnchor.constraint(equalTo: segmentedControlContainer.bottomAnchor),
       tableView.bottomAnchor.constraint(equalTo: view.bottomAnchor),
     ])
-  }
-
-  private func makeHeaderView() -> UIView {
-    let wrapper = UIView()
-    let stack = UIStackView()
-    stack.axis = .vertical
-    stack.spacing = 10
-    stack.isLayoutMarginsRelativeArrangement = true
-    stack.directionalLayoutMargins = NSDirectionalEdgeInsets(top: 14, leading: 16, bottom: 14, trailing: 16)
-
-    let metaRow = UIStackView()
-    metaRow.axis = .horizontal
-    metaRow.spacing = 8
-    metaRow.alignment = .center
-    metaRow.addArrangedSubview(makeMetricPill(icon: "bubble.left.and.bubble.right", text: chatCountText))
-    if activeCount > 0 {
-      metaRow.addArrangedSubview(makeMetricPill(icon: "dot.radiowaves.left.and.right", text: "\(activeCount) active", tintColor: AppPalette.success))
-    }
-    if let created = project.createdAt {
-      metaRow.addArrangedSubview(makeMetricPill(icon: "calendar", text: relativeTime(from: created)))
-    }
-    metaRow.addArrangedSubview(UIView())
-    stack.addArrangedSubview(metaRow)
-
-    if let desc = project.description, !desc.isEmpty {
-      let label = UILabel()
-      label.text = desc
-      label.font = UIFont.app(forTextStyle: .subheadline)
-      label.textColor = .secondaryLabel
-      label.numberOfLines = 0
-      stack.addArrangedSubview(label)
-    }
-
-    if let repo = project.repoPath {
-      stack.addArrangedSubview(makeRepoRow(repo))
-    }
-
-    wrapper.addSubview(stack)
-    stack.translatesAutoresizingMaskIntoConstraints = false
-    NSLayoutConstraint.activate([
-      stack.leadingAnchor.constraint(equalTo: wrapper.leadingAnchor),
-      stack.trailingAnchor.constraint(equalTo: wrapper.trailingAnchor),
-      stack.topAnchor.constraint(equalTo: wrapper.topAnchor),
-      stack.bottomAnchor.constraint(equalTo: wrapper.bottomAnchor),
-    ])
-
-    // Size the header view
-    stack.layoutIfNeeded()
-    let height = stack.systemLayoutSizeFitting(
-      CGSize(width: UIScreen.main.bounds.width, height: UIView.layoutFittingCompressedSize.height),
-      withHorizontalFittingPriority: .required,
-      verticalFittingPriority: .fittingSizeLevel
-    ).height
-    wrapper.frame = CGRect(x: 0, y: 0, width: UIScreen.main.bounds.width, height: max(height, 1))
-    return wrapper
   }
 
   private var activeCount: Int {
@@ -333,7 +343,7 @@ final class ProjectDetailViewController: UIViewController {
   }
 
   private func refreshHeader() {
-    tableView.tableHeaderView = makeHeaderView()
+    populateInfoView()
   }
 
   @objc private func refreshPulled() { load() }

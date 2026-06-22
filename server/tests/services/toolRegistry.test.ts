@@ -67,4 +67,49 @@ describe('toolRegistry', () => {
     const result = await dispatchRegistryTool(userId, 'not_a_real_tool', {});
     expect(result).toBeUndefined();
   });
+
+  it('throws a clear, actionable error when ingestMcpTools hits malformed args JSON', async () => {
+    const { getDecryptedConfig } = await import('../../src/routes/connections.js');
+    (getDecryptedConfig as ReturnType<typeof vi.fn>).mockReturnValueOnce({
+      command: 'mock-mcp',
+      args: '{not valid json',
+      env: '{}',
+    });
+
+    const { ingestMcpTools } = await import('../../src/services/toolRegistry.js');
+    await expect(ingestMcpTools(userId, connId)).rejects.toThrow(
+      new RegExp(`Malformed MCP connection config.*"args".*${connId}`),
+    );
+  });
+
+  it('throws a clear, actionable error when ingestMcpTools hits malformed env JSON', async () => {
+    const { getDecryptedConfig } = await import('../../src/routes/connections.js');
+    (getDecryptedConfig as ReturnType<typeof vi.fn>).mockReturnValueOnce({
+      command: 'mock-mcp',
+      args: '[]',
+      env: '{not valid json',
+    });
+
+    const { ingestMcpTools } = await import('../../src/services/toolRegistry.js');
+    await expect(ingestMcpTools(userId, connId)).rejects.toThrow(
+      new RegExp(`Malformed MCP connection config.*"env".*${connId}`),
+    );
+  });
+
+  it('throws a clear, actionable error when dispatchRegistryTool hits malformed config JSON', async () => {
+    const { ingestMcpTools, dispatchRegistryTool } = await import('../../src/services/toolRegistry.js');
+    await ingestMcpTools(userId, connId);
+    const qualifiedName = (await import('../../src/db/index.js')).getMcpRegistryToolsForUser(userId)[0].tool_name;
+
+    const { getDecryptedConfig } = await import('../../src/routes/connections.js');
+    (getDecryptedConfig as ReturnType<typeof vi.fn>).mockReturnValueOnce({
+      command: 'mock-mcp',
+      args: '[invalid',
+      env: '{}',
+    });
+
+    await expect(dispatchRegistryTool(userId, qualifiedName, {})).rejects.toThrow(
+      new RegExp(`Malformed MCP connection config.*"args".*${connId}`),
+    );
+  });
 });

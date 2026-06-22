@@ -3,10 +3,36 @@ import { upsertMcpRegistryTools, getMcpRegistryToolsForUser, getMcpRegistryTool 
 import { getDecryptedConfig } from '../routes/connections.js';
 import { listMcpTools, callMcpTool } from '../lib/mcp-pool.js';
 
+function parseMcpConfig(connectionId: string, cfg: Record<string, string>): { args: string[]; env: Record<string, string> } {
+  let args: string[] = [];
+  let env: Record<string, string> = {};
+
+  if (cfg.args) {
+    try {
+      args = JSON.parse(cfg.args);
+    } catch (err) {
+      throw new Error(
+        `Malformed MCP connection config: failed to parse "args" JSON for connection ${connectionId}: ${(err as Error).message}`,
+      );
+    }
+  }
+
+  if (cfg.env) {
+    try {
+      env = JSON.parse(cfg.env);
+    } catch (err) {
+      throw new Error(
+        `Malformed MCP connection config: failed to parse "env" JSON for connection ${connectionId}: ${(err as Error).message}`,
+      );
+    }
+  }
+
+  return { args, env };
+}
+
 export async function ingestMcpTools(userId: string, connectionId: string): Promise<void> {
   const cfg = getDecryptedConfig(connectionId, userId);
-  const mcpArgs = cfg.args ? JSON.parse(cfg.args) : [];
-  const mcpEnv = cfg.env ? JSON.parse(cfg.env) : {};
+  const { args: mcpArgs, env: mcpEnv } = parseMcpConfig(connectionId, cfg);
   const tools = await listMcpTools(connectionId, cfg.command, mcpArgs, mcpEnv);
   upsertMcpRegistryTools(
     userId,
@@ -37,7 +63,6 @@ export async function dispatchRegistryTool(
   const row = getMcpRegistryTool(userId, toolName);
   if (!row) return undefined;
   const cfg = getDecryptedConfig(row.connection_id, userId);
-  const mcpArgs = cfg.args ? JSON.parse(cfg.args) : [];
-  const mcpEnv = cfg.env ? JSON.parse(cfg.env) : {};
+  const { args: mcpArgs, env: mcpEnv } = parseMcpConfig(row.connection_id, cfg);
   return callMcpTool(row.connection_id, cfg.command, mcpArgs, mcpEnv, row.mcp_tool_name, toolInput);
 }

@@ -80,6 +80,7 @@ final class ChatViewController: UIViewController {
 
   override func viewDidAppear(_ animated: Bool) {
     super.viewDidAppear(animated)
+    updateSidebarButtonVisibility()
     startPolling()
     subscribeWebSocket()
   }
@@ -98,10 +99,7 @@ final class ChatViewController: UIViewController {
     // and options controls floating over the conversation.
     navigationItem.largeTitleDisplayMode = .never
     hideNavBarHairline()
-    navigationItem.leftBarButtonItem = UIBarButtonItem(
-      image: UIImage(systemName: "sidebar.left"),
-      style: .plain, target: self, action: #selector(openSidebarTapped))
-    navigationItem.leftBarButtonItem?.tintColor = AppPalette.accent
+    updateSidebarButtonVisibility()
     let optionsButton = UIBarButtonItem(image: UIImage(systemName: "ellipsis.circle"), menu: makeChatSettingsMenu())
     optionsButton.tintColor = AppPalette.accent
     navigationItem.rightBarButtonItem = optionsButton
@@ -112,6 +110,16 @@ final class ChatViewController: UIViewController {
     setupReconnectBanner()
     observeKeyboard()
     loadMessages()
+  }
+
+  override func viewWillAppear(_ animated: Bool) {
+    super.viewWillAppear(animated)
+    updateSidebarButtonVisibility()
+  }
+
+  override func traitCollectionDidChange(_ previousTraitCollection: UITraitCollection?) {
+    super.traitCollectionDidChange(previousTraitCollection)
+    updateSidebarButtonVisibility()
   }
 
   override func viewDidLayoutSubviews() {
@@ -130,6 +138,20 @@ final class ChatViewController: UIViewController {
     pollTimer?.invalidate()
     if let id = wsSubscriptionId { WebSocketService.shared.unsubscribe(id) }
     NotificationCenter.default.removeObserver(self)
+  }
+
+  /// On iPhone (collapsed split view) the system back chevron returns to the
+  /// sidebar, so the custom sidebar toggle is only useful on expanded iPad.
+  private func updateSidebarButtonVisibility() {
+    guard splitViewController?.isCollapsed == false else {
+      navigationItem.leftBarButtonItem = nil
+      return
+    }
+    let button = UIBarButtonItem(
+      image: UIImage(systemName: "sidebar.left"),
+      style: .plain, target: self, action: #selector(openSidebarTapped))
+    button.tintColor = AppPalette.accent
+    navigationItem.leftBarButtonItem = button
   }
 
   private func startPolling() {

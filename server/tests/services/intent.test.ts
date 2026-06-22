@@ -51,6 +51,12 @@ describe('classifyIntent', () => {
     expect(intent.model).toBe('haiku');
   });
 
+  it('keeps short plan-like messages at medium complexity / sonnet, not low / haiku', () => {
+    const intent = classifyIntent('batch these emails');
+    expect(intent.complexity).toBe('medium');
+    expect(intent.model).toBe('sonnet');
+  });
+
   it('classifies a message with multiple domain signals as multi', () => {
     const intent = classifyIntent('research and implement a caching layer');
     expect(intent.domain).toBe('multi');

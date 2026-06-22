@@ -18,9 +18,10 @@ final class ApprovalDetailViewController: UIViewController {
   override func viewDidLoad() {
     super.viewDidLoad()
     title = approval.action
-    view.backgroundColor = .systemBackground
-    navigationItem.leftBarButtonItem = UIBarButtonItem(
-      barButtonSystemItem: .close, target: self, action: #selector(closeTapped)
+    view.backgroundColor = .systemGroupedBackground
+    removeNavBarBackground()
+    navigationItem.rightBarButtonItem = UIBarButtonItem(
+      image: UIImage(systemName: "xmark"), style: .plain, target: self, action: #selector(closeTapped)
     )
     pairs = approval.payload?.displayPairs ?? []
     setupTableView()
@@ -28,12 +29,14 @@ final class ApprovalDetailViewController: UIViewController {
   }
 
   private func setupTableView() {
-    tableView.backgroundColor = .systemBackground
+    tableView.backgroundColor = .systemGroupedBackground
+    tableView.separatorStyle = .none
     tableView.register(UITableViewCell.self, forCellReuseIdentifier: "detail")
     tableView.dataSource = self
     tableView.rowHeight = UITableView.automaticDimension
-    tableView.estimatedRowHeight = 60
+    tableView.estimatedRowHeight = 68
     tableView.allowsSelection = false
+    tableView.contentInset = UIEdgeInsets(top: 8, left: 0, bottom: 10, right: 0)
 
     view.addSubview(tableView)
     tableView.translatesAutoresizingMaskIntoConstraints = false
@@ -48,21 +51,23 @@ final class ApprovalDetailViewController: UIViewController {
   private func setupFooter() {
     let approveBtn = UIButton(type: .system)
     approveBtn.configuration = .filled()
-    approveBtn.configuration?.cornerStyle = .medium
+    approveBtn.configuration?.cornerStyle = .capsule
+    approveBtn.configuration?.baseBackgroundColor = AppPalette.accent
+    approveBtn.configuration?.baseForegroundColor = AppPalette.accentForeground
     approveBtn.configuration?.image = UIImage(systemName: "checkmark")
     approveBtn.configuration?.title = "Approve"
     approveBtn.configuration?.imagePadding = 6
-    approveBtn.configuration?.contentInsets = NSDirectionalEdgeInsets(top: 14, leading: 0, bottom: 14, trailing: 0)
+    approveBtn.configuration?.contentInsets = NSDirectionalEdgeInsets(top: 12, leading: 16, bottom: 12, trailing: 16)
     approveBtn.addTarget(self, action: #selector(approveTapped), for: .touchUpInside)
 
     let denyBtn = UIButton(type: .system)
-    denyBtn.configuration = .bordered()
-    denyBtn.configuration?.cornerStyle = .medium
-    denyBtn.configuration?.baseForegroundColor = .systemRed
+    denyBtn.configuration = .borderedTinted()
+    denyBtn.configuration?.cornerStyle = .capsule
+    denyBtn.configuration?.baseForegroundColor = AppPalette.destructive
     denyBtn.configuration?.image = UIImage(systemName: "xmark")
     denyBtn.configuration?.title = "Deny"
     denyBtn.configuration?.imagePadding = 6
-    denyBtn.configuration?.contentInsets = NSDirectionalEdgeInsets(top: 14, leading: 0, bottom: 14, trailing: 0)
+    denyBtn.configuration?.contentInsets = NSDirectionalEdgeInsets(top: 12, leading: 16, bottom: 12, trailing: 16)
     denyBtn.addTarget(self, action: #selector(denyTapped), for: .touchUpInside)
 
     let buttonStack = UIStackView(arrangedSubviews: [denyBtn, approveBtn])
@@ -70,13 +75,13 @@ final class ApprovalDetailViewController: UIViewController {
     buttonStack.spacing = 12
     buttonStack.distribution = .fillEqually
 
-    let footer = UIView(frame: CGRect(x: 0, y: 0, width: 0, height: 88))
+    let footer = UIView(frame: CGRect(x: 0, y: 0, width: 0, height: 82))
     footer.addSubview(buttonStack)
     buttonStack.translatesAutoresizingMaskIntoConstraints = false
     NSLayoutConstraint.activate([
       buttonStack.leadingAnchor.constraint(equalTo: footer.leadingAnchor, constant: 20),
       buttonStack.trailingAnchor.constraint(equalTo: footer.trailingAnchor, constant: -20),
-      buttonStack.topAnchor.constraint(equalTo: footer.topAnchor, constant: 16),
+      buttonStack.topAnchor.constraint(equalTo: footer.topAnchor, constant: 14),
     ])
     tableView.tableFooterView = footer
   }
@@ -114,22 +119,30 @@ extension ApprovalDetailViewController: UITableViewDataSource {
     var content = cell.defaultContentConfiguration()
 
     if indexPath.section == 0 {
+      content = UIListContentConfiguration.subtitleCell()
       content.text = approval.action
       content.secondaryText = approval.payload?.summary
+      content.textProperties.font = .app(forTextStyle: .headline, weight: .semibold)
       content.secondaryTextProperties.numberOfLines = 0
+      content.secondaryTextProperties.font = .app(forTextStyle: .subheadline)
+      content.secondaryTextProperties.color = .secondaryLabel
       content.image = UIImage(systemName: "bell.badge")
       content.imageProperties.tintColor = .systemOrange
+      content.imageProperties.preferredSymbolConfiguration = UIImage.SymbolConfiguration(pointSize: 24, weight: .regular)
     } else {
       let pair = pairs[indexPath.row]
+      content = UIListContentConfiguration.subtitleCell()
       content.text = pair.label
       content.secondaryText = pair.value
+      content.textProperties.font = .app(forTextStyle: .subheadline, weight: .medium)
+      content.textProperties.color = .secondaryLabel
       content.secondaryTextProperties.font = .monospacedSystemFont(ofSize: 12, weight: .regular)
-      content.secondaryTextProperties.color = .secondaryLabel
+      content.secondaryTextProperties.color = .label
       content.secondaryTextProperties.numberOfLines = 0
     }
 
     cell.contentConfiguration = content
-    cell.backgroundColor = .secondarySystemBackground
+    cell.backgroundColor = .secondarySystemGroupedBackground
     return cell
   }
 }

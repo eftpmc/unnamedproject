@@ -192,9 +192,7 @@ func groupChatsByTime(_ chats: [ChatSession], now: Date = Date()) -> [(group: Ch
 }
 
 extension UIViewController {
-  /// Removes the standard 1px hairline under the nav bar for screens whose
-  /// content doesn't butt up against it (e.g. centered onboarding forms).
-  func hideNavBarHairline() {
+  func removeNavBarBackground() {
     let appearance = UINavigationBarAppearance()
     appearance.configureWithTransparentBackground()
     navigationItem.standardAppearance = appearance

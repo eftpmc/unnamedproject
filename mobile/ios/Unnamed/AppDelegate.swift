@@ -13,6 +13,7 @@ final class AppDelegate: UIResponder, UIApplicationDelegate {
     UNUserNotificationCenter.current().delegate = self
 
     let window = UIWindow(frame: UIScreen.main.bounds)
+    window.backgroundColor = .systemBackground
     let navigationController = UINavigationController()
     let coordinator = AppCoordinator(window: window, navigationController: navigationController)
     window.rootViewController = navigationController

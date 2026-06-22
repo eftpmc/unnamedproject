@@ -27,6 +27,7 @@ final class ChatsViewController: UIViewController {
     super.viewDidLoad()
     view.backgroundColor = .systemBackground
     title = "Chats"
+    removeNavBarBackground()
 
     searchController.searchResultsUpdater = self
     searchController.obscuresBackgroundDuringPresentation = false
@@ -35,11 +36,18 @@ final class ChatsViewController: UIViewController {
     navigationItem.hidesSearchBarWhenScrolling = false
 
     tableView.backgroundColor = .systemBackground
+    tableView.separatorStyle = .none
     tableView.register(UITableViewCell.self, forCellReuseIdentifier: "row")
     tableView.dataSource = self
     tableView.delegate = self
     view.addSubview(tableView)
-    tableView.pinToSuperviewEdges()
+    tableView.translatesAutoresizingMaskIntoConstraints = false
+    NSLayoutConstraint.activate([
+      tableView.topAnchor.constraint(equalTo: view.topAnchor),
+      tableView.leadingAnchor.constraint(equalTo: view.leadingAnchor),
+      tableView.trailingAnchor.constraint(equalTo: view.trailingAnchor),
+      tableView.bottomAnchor.constraint(equalTo: view.bottomAnchor),
+    ])
 
     reload()
   }

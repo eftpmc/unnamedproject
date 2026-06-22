@@ -98,7 +98,7 @@ final class ChatViewController: UIViewController {
     // The chat header carries no title text or hairline — just the sidebar
     // and options controls floating over the conversation.
     navigationItem.largeTitleDisplayMode = .never
-    hideNavBarHairline()
+    removeNavBarBackground()
     updateSidebarButtonVisibility()
     let optionsButton = UIBarButtonItem(image: UIImage(systemName: "ellipsis.circle"), menu: makeChatSettingsMenu())
     optionsButton.tintColor = AppPalette.accent
@@ -288,17 +288,6 @@ final class ChatViewController: UIViewController {
   private func setupAgentStatusBar() {
     agentStatusBar.backgroundColor = .secondarySystemBackground
     agentStatusBar.clipsToBounds = true
-
-    let border = UIView()
-    border.backgroundColor = .separator
-    agentStatusBar.addSubview(border)
-    border.translatesAutoresizingMaskIntoConstraints = false
-    NSLayoutConstraint.activate([
-      border.topAnchor.constraint(equalTo: agentStatusBar.topAnchor),
-      border.leadingAnchor.constraint(equalTo: agentStatusBar.leadingAnchor),
-      border.trailingAnchor.constraint(equalTo: agentStatusBar.trailingAnchor),
-      border.heightAnchor.constraint(equalToConstant: 0.5),
-    ])
 
     agentStatusSpinner.color = .tertiaryLabel
     agentStatusSpinner.startAnimating()

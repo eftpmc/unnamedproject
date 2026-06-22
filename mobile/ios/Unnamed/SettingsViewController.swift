@@ -25,8 +25,10 @@ final class SettingsViewController: UIViewController {
     title = "Settings"
     view.backgroundColor = .systemBackground
     navigationItem.largeTitleDisplayMode = .always
+    removeNavBarBackground()
 
     tableView.backgroundColor = .systemBackground
+    tableView.separatorStyle = .none
     tableView.dataSource = self
     tableView.delegate = self
     tableView.register(UITableViewCell.self, forCellReuseIdentifier: "cell")
@@ -86,14 +88,18 @@ extension SettingsViewController: UITableViewDataSource, UITableViewDelegate {
     case .server:
       let cell = tableView.dequeueReusableCell(withIdentifier: "cell", for: indexPath)
       cell.backgroundColor = .secondarySystemBackground
-      var content = cell.defaultContentConfiguration()
+      var content = UIListContentConfiguration.valueCell()
       if indexPath.row == 0 {
         content.text = "Address"
         content.secondaryText = serverAddressText
+        content.secondaryTextProperties.color = .secondaryLabel
         cell.selectionStyle = .none
       } else {
+        content = UIListContentConfiguration.cell()
         content.text = "Change Server"
-        content.textProperties.color = .tintColor
+        content.image = UIImage(systemName: "server.rack")
+        content.imageProperties.tintColor = AppPalette.accent
+        content.textProperties.color = AppPalette.accent
         cell.selectionStyle = .default
       }
       cell.contentConfiguration = content
@@ -106,6 +112,8 @@ extension SettingsViewController: UITableViewDataSource, UITableViewDelegate {
       cell.selectionStyle = .none
       var content = cell.defaultContentConfiguration()
       content.text = "Approval Alerts"
+      content.image = UIImage(systemName: "bell.badge")
+      content.imageProperties.tintColor = AppPalette.accent
       cell.contentConfiguration = content
       let switchView = UISwitch()
       switchView.isOn = approvalAlertsEnabled
@@ -136,38 +144,17 @@ extension SettingsViewController: UITableViewDataSource, UITableViewDelegate {
   }
 
   private func configureAccountCell(_ cell: UITableViewCell) {
-    cell.contentView.subviews.forEach { $0.removeFromSuperview() }
-
-    let avatar = UILabel()
-    avatar.backgroundColor = .tintColor
-    avatar.textColor = .white
-    avatar.font = .app(ofSize: 14, weight: .semibold)
-    avatar.textAlignment = .center
-    avatar.layer.cornerRadius = 16
-    avatar.clipsToBounds = true
-    avatar.text = email.first.map { String($0).uppercased() } ?? "•"
-    avatar.translatesAutoresizingMaskIntoConstraints = false
-    avatar.widthAnchor.constraint(equalToConstant: 32).isActive = true
-    avatar.heightAnchor.constraint(equalToConstant: 32).isActive = true
-
-    let emailLabel = UILabel()
-    emailLabel.font = UIFont.app(forTextStyle: .body)
-    emailLabel.textColor = .label
-    emailLabel.text = email
-
-    let stack = UIStackView(arrangedSubviews: [avatar, emailLabel])
-    stack.axis = .horizontal
-    stack.spacing = 10
-    stack.alignment = .center
-    stack.translatesAutoresizingMaskIntoConstraints = false
-
-    cell.contentView.addSubview(stack)
-    NSLayoutConstraint.activate([
-      stack.leadingAnchor.constraint(equalTo: cell.contentView.leadingAnchor, constant: 16),
-      stack.trailingAnchor.constraint(lessThanOrEqualTo: cell.contentView.trailingAnchor, constant: -16),
-      stack.topAnchor.constraint(equalTo: cell.contentView.topAnchor, constant: 8),
-      stack.bottomAnchor.constraint(equalTo: cell.contentView.bottomAnchor, constant: -8),
-    ])
+    var content = UIListContentConfiguration.subtitleCell()
+    content.text = email
+    content.secondaryText = "Signed in"
+    content.image = UIImage(systemName: "person.crop.circle.fill")
+    content.imageProperties.tintColor = AppPalette.accent
+    content.imageProperties.preferredSymbolConfiguration = UIImage.SymbolConfiguration(pointSize: 28, weight: .regular)
+    content.textProperties.font = .app(forTextStyle: .body, weight: .medium)
+    content.secondaryTextProperties.font = .app(forTextStyle: .caption1)
+    content.secondaryTextProperties.color = .secondaryLabel
+    cell.contentConfiguration = content
+    cell.accessoryType = .none
   }
 
   func tableView(_ tableView: UITableView, didSelectRowAt indexPath: IndexPath) {

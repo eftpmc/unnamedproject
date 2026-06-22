@@ -24,7 +24,7 @@ final class LoginViewController: UIViewController {
     super.viewDidLoad()
     title = "Sign In"
     view.backgroundColor = .systemBackground
-    hideNavBarHairline()
+    removeNavBarBackground()
     navigationItem.rightBarButtonItem = UIBarButtonItem(title: "Server", style: .plain, target: self, action: #selector(changeServerTapped))
 
     passwordField.returnKeyType = .go

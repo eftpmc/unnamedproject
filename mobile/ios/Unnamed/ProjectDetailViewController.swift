@@ -15,6 +15,7 @@ final class ProjectDetailViewController: UIViewController {
   private let emptyLabel = UILabel()
   private let segmentedControl = UISegmentedControl(items: ["Chats", "Plans", "Files"])
   private var segmentedControlContainer: UIView!
+  private var hasLoaded = false
 
   init(appSession: AppSession, project: Project) {
     self.appSession = appSession
@@ -30,6 +31,7 @@ final class ProjectDetailViewController: UIViewController {
     // Detail screen: compact title even though the shell allows large titles.
     navigationItem.largeTitleDisplayMode = .never
     view.backgroundColor = .systemBackground
+    removeNavBarBackground()
 
     navigationItem.rightBarButtonItem = UIBarButtonItem(
       image: UIImage(systemName: "square.and.pencil"),
@@ -76,36 +78,114 @@ final class ProjectDetailViewController: UIViewController {
   private func updateContentForSegment() {
     switch segmentedControl.selectedSegmentIndex {
     case 0:
-      tableView.backgroundView = nil
-      emptyLabel.isHidden = !chats.isEmpty
+      emptyLabel.isHidden = true
+      tableView.backgroundView = hasLoaded && chats.isEmpty ? makeEmptyChatsView() : nil
     default:
       emptyLabel.isHidden = true
-      let title = segmentedControl.selectedSegmentIndex == 1 ? "Plans" : "Files"
-      tableView.backgroundView = makeComingSoonView(title: title)
+      let isPlans = segmentedControl.selectedSegmentIndex == 1
+      tableView.backgroundView = makeComingSoonView(
+        systemName: isPlans ? "list.bullet.clipboard" : "doc",
+        title: isPlans ? "Plans coming soon" : "Files coming soon",
+        subtitle: isPlans ? "Project plans will collect longer-running work." : "Files linked to this project will appear here."
+      )
     }
     tableView.reloadData()
   }
 
-  private func makeComingSoonView(title: String) -> UIView {
+  private func makeComingSoonView(systemName: String, title: String, subtitle subtitleText: String) -> UIView {
     let container = UIView()
-    let label = UILabel()
-    label.text = "Coming soon"
-    label.font = UIFont.app(forTextStyle: .subheadline)
-    label.textColor = .tertiaryLabel
-    label.textAlignment = .center
-    container.addSubview(label)
-    label.translatesAutoresizingMaskIntoConstraints = false
+    let icon = UIImageView(image: UIImage(systemName: systemName))
+    icon.tintColor = .tertiaryLabel
+    icon.contentMode = .scaleAspectFit
+    icon.translatesAutoresizingMaskIntoConstraints = false
     NSLayoutConstraint.activate([
-      label.centerXAnchor.constraint(equalTo: container.centerXAnchor),
-      label.centerYAnchor.constraint(equalTo: container.centerYAnchor),
-      label.leadingAnchor.constraint(greaterThanOrEqualTo: container.leadingAnchor, constant: 32),
-      label.trailingAnchor.constraint(lessThanOrEqualTo: container.trailingAnchor, constant: -32),
+      icon.widthAnchor.constraint(equalToConstant: 36),
+      icon.heightAnchor.constraint(equalToConstant: 36),
+    ])
+
+    let label = UILabel()
+    label.text = title
+    label.font = UIFont.app(forTextStyle: .headline)
+    label.textColor = .secondaryLabel
+    label.textAlignment = .center
+
+    let subtitle = UILabel()
+    subtitle.text = subtitleText
+    subtitle.font = UIFont.app(forTextStyle: .subheadline)
+    subtitle.textColor = .tertiaryLabel
+    subtitle.textAlignment = .center
+    subtitle.numberOfLines = 0
+
+    let stack = UIStackView(arrangedSubviews: [icon, label, subtitle])
+    stack.axis = .vertical
+    stack.alignment = .center
+    stack.spacing = 8
+    stack.setCustomSpacing(14, after: icon)
+    container.addSubview(stack)
+    stack.translatesAutoresizingMaskIntoConstraints = false
+    NSLayoutConstraint.activate([
+      stack.centerXAnchor.constraint(equalTo: container.centerXAnchor),
+      stack.centerYAnchor.constraint(equalTo: container.centerYAnchor),
+      stack.leadingAnchor.constraint(greaterThanOrEqualTo: container.leadingAnchor, constant: 32),
+      stack.trailingAnchor.constraint(lessThanOrEqualTo: container.trailingAnchor, constant: -32),
+    ])
+    return container
+  }
+
+  private func makeLoadingView() -> UIView {
+    let container = UIView()
+    let spinner = UIActivityIndicatorView(style: .medium)
+    spinner.startAnimating()
+    container.addSubview(spinner)
+    spinner.translatesAutoresizingMaskIntoConstraints = false
+    NSLayoutConstraint.activate([
+      spinner.centerXAnchor.constraint(equalTo: container.centerXAnchor),
+      spinner.centerYAnchor.constraint(equalTo: container.centerYAnchor),
+    ])
+    return container
+  }
+
+  private func makeEmptyChatsView() -> UIView {
+    let container = UIView()
+    let icon = UIImageView(image: UIImage(systemName: "bubble.left.and.bubble.right"))
+    icon.tintColor = .tertiaryLabel
+    icon.contentMode = .scaleAspectFit
+    icon.translatesAutoresizingMaskIntoConstraints = false
+    NSLayoutConstraint.activate([
+      icon.widthAnchor.constraint(equalToConstant: 38),
+      icon.heightAnchor.constraint(equalToConstant: 38),
+    ])
+
+    let title = UILabel()
+    title.text = "No chats yet"
+    title.font = .app(forTextStyle: .headline)
+    title.textAlignment = .center
+
+    let subtitle = UILabel()
+    subtitle.text = "Start a project chat with the compose button."
+    subtitle.font = .app(forTextStyle: .subheadline)
+    subtitle.textColor = .secondaryLabel
+    subtitle.textAlignment = .center
+    subtitle.numberOfLines = 0
+
+    let stack = UIStackView(arrangedSubviews: [icon, title, subtitle])
+    stack.axis = .vertical
+    stack.alignment = .center
+    stack.spacing = 8
+    stack.setCustomSpacing(14, after: icon)
+    container.addSubview(stack)
+    stack.translatesAutoresizingMaskIntoConstraints = false
+    NSLayoutConstraint.activate([
+      stack.centerXAnchor.constraint(equalTo: container.centerXAnchor),
+      stack.centerYAnchor.constraint(equalTo: container.centerYAnchor),
+      stack.leadingAnchor.constraint(greaterThanOrEqualTo: container.leadingAnchor, constant: 32),
+      stack.trailingAnchor.constraint(lessThanOrEqualTo: container.trailingAnchor, constant: -32),
     ])
     return container
   }
 
   private func setupEmptyState() {
-    emptyLabel.text = "No chats yet.\nTap compose to start one."
+    emptyLabel.text = nil
     emptyLabel.numberOfLines = 0
     emptyLabel.textAlignment = .center
     emptyLabel.font = UIFont.app(forTextStyle: .subheadline)
@@ -124,11 +204,12 @@ final class ProjectDetailViewController: UIViewController {
 
   private func setupTable() {
     tableView.backgroundColor = .systemBackground
-    tableView.separatorInset = UIEdgeInsets(top: 0, left: 56, bottom: 0, right: 0)
+    tableView.separatorStyle = .none
     tableView.register(UITableViewCell.self, forCellReuseIdentifier: "cell")
     tableView.dataSource = self
     tableView.delegate = self
     tableView.tableHeaderView = makeHeaderView()
+    tableView.backgroundView = makeLoadingView()
     tableView.refreshControl = refreshControl
     refreshControl.addTarget(self, action: #selector(refreshPulled), for: .valueChanged)
 
@@ -146,9 +227,23 @@ final class ProjectDetailViewController: UIViewController {
     let wrapper = UIView()
     let stack = UIStackView()
     stack.axis = .vertical
-    stack.spacing = 6
+    stack.spacing = 10
     stack.isLayoutMarginsRelativeArrangement = true
-    stack.directionalLayoutMargins = NSDirectionalEdgeInsets(top: 16, leading: 16, bottom: 16, trailing: 16)
+    stack.directionalLayoutMargins = NSDirectionalEdgeInsets(top: 14, leading: 16, bottom: 14, trailing: 16)
+
+    let metaRow = UIStackView()
+    metaRow.axis = .horizontal
+    metaRow.spacing = 8
+    metaRow.alignment = .center
+    metaRow.addArrangedSubview(makeMetricPill(icon: "bubble.left.and.bubble.right", text: chatCountText))
+    if activeCount > 0 {
+      metaRow.addArrangedSubview(makeMetricPill(icon: "dot.radiowaves.left.and.right", text: "\(activeCount) active", tintColor: AppPalette.success))
+    }
+    if let created = project.createdAt {
+      metaRow.addArrangedSubview(makeMetricPill(icon: "calendar", text: relativeTime(from: created)))
+    }
+    metaRow.addArrangedSubview(UIView())
+    stack.addArrangedSubview(metaRow)
 
     if let desc = project.description, !desc.isEmpty {
       let label = UILabel()
@@ -160,28 +255,7 @@ final class ProjectDetailViewController: UIViewController {
     }
 
     if let repo = project.repoPath {
-      let repoStack = UIStackView()
-      repoStack.axis = .horizontal
-      repoStack.spacing = 6
-      repoStack.alignment = .center
-
-      let icon = UIImageView(image: UIImage(systemName: "folder"))
-      icon.tintColor = .tertiaryLabel
-      icon.contentMode = .scaleAspectFit
-      NSLayoutConstraint.activate([
-        icon.widthAnchor.constraint(equalToConstant: 14),
-        icon.heightAnchor.constraint(equalToConstant: 14),
-      ])
-
-      let label = UILabel()
-      label.text = repo
-      label.font = UIFont.monospacedSystemFont(ofSize: 12, weight: .regular)
-      label.textColor = .tertiaryLabel
-      label.numberOfLines = 1
-
-      repoStack.addArrangedSubview(icon)
-      repoStack.addArrangedSubview(label)
-      stack.addArrangedSubview(repoStack)
+      stack.addArrangedSubview(makeRepoRow(repo))
     }
 
     wrapper.addSubview(stack)
@@ -204,6 +278,64 @@ final class ProjectDetailViewController: UIViewController {
     return wrapper
   }
 
+  private var activeCount: Int {
+    chats.filter { activeIds.contains($0.id) }.count
+  }
+
+  private var chatCountText: String {
+    chats.count == 1 ? "1 chat" : "\(chats.count) chats"
+  }
+
+  private func makeMetricPill(icon: String, text: String, tintColor: UIColor = .secondaryLabel) -> UIView {
+    let imageView = UIImageView(image: UIImage(systemName: icon))
+    imageView.tintColor = tintColor
+    imageView.contentMode = .scaleAspectFit
+    imageView.translatesAutoresizingMaskIntoConstraints = false
+    NSLayoutConstraint.activate([
+      imageView.widthAnchor.constraint(equalToConstant: 13),
+      imageView.heightAnchor.constraint(equalToConstant: 13),
+    ])
+
+    let label = UILabel()
+    label.text = text
+    label.font = .app(ofSize: 12, weight: .medium)
+    label.textColor = tintColor
+
+    let stack = UIStackView(arrangedSubviews: [imageView, label])
+    stack.axis = .horizontal
+    stack.spacing = 5
+    stack.alignment = .center
+    return stack
+  }
+
+  private func makeRepoRow(_ repo: String) -> UIView {
+    let icon = UIImageView(image: UIImage(systemName: "folder"))
+    icon.tintColor = .tertiaryLabel
+    icon.contentMode = .scaleAspectFit
+    icon.translatesAutoresizingMaskIntoConstraints = false
+    NSLayoutConstraint.activate([
+      icon.widthAnchor.constraint(equalToConstant: 14),
+      icon.heightAnchor.constraint(equalToConstant: 14),
+    ])
+
+    let label = UILabel()
+    label.text = repo
+    label.font = UIFont.monospacedSystemFont(ofSize: 12, weight: .regular)
+    label.textColor = .tertiaryLabel
+    label.numberOfLines = 1
+    label.lineBreakMode = .byTruncatingMiddle
+
+    let repoStack = UIStackView(arrangedSubviews: [icon, label])
+    repoStack.axis = .horizontal
+    repoStack.spacing = 6
+    repoStack.alignment = .center
+    return repoStack
+  }
+
+  private func refreshHeader() {
+    tableView.tableHeaderView = makeHeaderView()
+  }
+
   @objc private func refreshPulled() { load() }
 
   private func load() {
@@ -214,6 +346,8 @@ final class ProjectDetailViewController: UIViewController {
         let sessions = try await all
         activeIds = Set(try await active)
         chats = sessions.filter { $0.pinnedProjectId == project.id }
+        hasLoaded = true
+        refreshHeader()
         updateContentForSegment()
       } catch {
         showError(error)
@@ -252,13 +386,16 @@ extension ProjectDetailViewController: UITableViewDataSource, UITableViewDelegat
     let chat = chats[indexPath.row]
     let isActive = activeIds.contains(chat.id)
 
-    var content = cell.defaultContentConfiguration()
+    var content = UIListContentConfiguration.subtitleCell()
     content.text = chat.title ?? "Untitled"
+    content.textProperties.font = .app(ofSize: 15, weight: .medium)
     let timePart = (chat.updatedAt ?? chat.createdAt).map { relativeTime(from: $0) }
     let metaParts = [chat.model ?? chat.effort, timePart].compactMap { $0 }
     content.secondaryText = metaParts.isEmpty ? nil : metaParts.joined(separator: " · ")
+    content.secondaryTextProperties.font = .app(ofSize: 12)
+    content.secondaryTextProperties.color = .secondaryLabel
     content.image = UIImage(systemName: "message")
-    content.imageProperties.tintColor = isActive ? .systemGreen : .tintColor
+    content.imageProperties.tintColor = isActive ? AppPalette.success : AppPalette.accent
     cell.contentConfiguration = content
     cell.backgroundColor = .systemBackground
 

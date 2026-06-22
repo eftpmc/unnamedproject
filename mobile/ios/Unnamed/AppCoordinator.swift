@@ -7,7 +7,7 @@ final class AppCoordinator {
   private let session: AppSession
   private var splitVC: UISplitViewController?
   /// The single persistent nav stack behind the slide-over: chat is always its
-  /// root; Projects/Project detail/Settings push onto it like normal drill-downs.
+  /// root; Projects/Project detail push onto it like normal drill-downs.
   private var mainNav: UINavigationController?
   private var sidebarNav: UINavigationController?
   private lazy var client = APIClient(session: session)
@@ -19,9 +19,8 @@ final class AppCoordinator {
     self.navigationController.navigationBar.prefersLargeTitles = true
 
     let appearance = UINavigationBarAppearance()
-    appearance.configureWithOpaqueBackground()
-    appearance.backgroundColor = .systemBackground
-    appearance.shadowColor = .separator
+    appearance.configureWithTransparentBackground()
+    appearance.shadowColor = nil
     appearance.titleTextAttributes = [.font: UIFont.app(forTextStyle: .headline)]
     appearance.largeTitleTextAttributes = [.font: UIFont.app(forTextStyle: .largeTitle, weight: .bold)]
     UINavigationBar.appearance().standardAppearance = appearance
@@ -85,8 +84,8 @@ final class AppCoordinator {
       }
       let chats = (try? await client.sessions()) ?? []
       let mainNav = UINavigationController(rootViewController: makeChatVC(for: chats.first))
-      // Allow large titles on the shell so pushed list screens (Projects,
-      // Settings) get them; Chat opts out per-VC via largeTitleDisplayMode.
+      // Allow large titles on the shell so pushed list screens (Projects)
+      // get them; Chat opts out per-VC via largeTitleDisplayMode.
       mainNav.navigationBar.prefersLargeTitles = true
       mainNav.navigationBar.tintColor = AppPalette.accent
       self.mainNav = mainNav
@@ -150,7 +149,7 @@ final class AppCoordinator {
 
   /// Pushes the full chat history onto the sidebar's own nav stack — back
   /// returns to the sidebar (this is a sidebar-column destination, unlike
-  /// Projects/Settings which live in the chat-area stack).
+  /// Projects which live in the chat-area stack).
   private func showChats() {
     let controller = ChatsViewController(appSession: session)
     controller.onSelectChat = { [weak self] chat in self?.openChat(chat) }
@@ -158,7 +157,7 @@ final class AppCoordinator {
   }
 
   /// Switch the active chat: resets the visible content stack down to just
-  /// the new chat (clearing any pushed Projects/Settings/etc. above it).
+  /// the new chat (clearing any pushed Projects/etc. above it).
   private func openChat(_ chat: ChatSession?) {
     guard splitVC != nil else { return }
     if let chat {
@@ -191,17 +190,24 @@ final class AppCoordinator {
     splitVC.show(.secondary)
   }
 
-  /// Pushes Projects onto the active chat-area stack — back returns to chat.
   private func showProjects() {
     let controller = ProjectsViewController(appSession: session)
     controller.onSelectProject = { [weak self] project in self?.pushProjectDetail(project) }
-    pushMainContent(controller)
+    if splitVC?.isCollapsed == true {
+      sidebarNav?.pushViewController(controller, animated: true)
+    } else {
+      pushMainContent(controller)
+    }
   }
 
   private func pushProjectDetail(_ project: Project) {
     let controller = ProjectDetailViewController(appSession: session, project: project)
     controller.onShowChat = { [weak self] chat in self?.openChat(chat) }
-    mainNav?.pushViewController(controller, animated: true)
+    if splitVC?.isCollapsed == true {
+      sidebarNav?.pushViewController(controller, animated: true)
+    } else {
+      mainNav?.pushViewController(controller, animated: true)
+    }
   }
 
   /// Public entry point for deep-linking into the Inbox (e.g. from a notification tap).
@@ -209,7 +215,7 @@ final class AppCoordinator {
     presentInbox()
   }
 
-  /// Inbox stays a sheet — a transient, quick-action surface, unlike Projects/Settings.
+  /// Inbox stays a sheet — a transient, quick-action surface, unlike Projects.
   private func presentInbox() {
     let controller = ApprovalsViewController(appSession: session)
     let nav = UINavigationController(rootViewController: controller)
@@ -217,21 +223,54 @@ final class AppCoordinator {
     nav.navigationBar.tintColor = AppPalette.accent
     if let sheet = nav.sheetPresentationController {
       sheet.detents = [.medium(), .large()]
+      sheet.selectedDetentIdentifier = .large
       sheet.prefersGrabberVisible = true
     }
-    window?.rootViewController?.present(nav, animated: true)
+    presentSheet(nav)
   }
 
-  /// Pushes Settings onto the active chat-area stack — back returns to chat.
+  /// Settings is an account surface, so it appears as a transient sheet instead
+  /// of becoming part of the chat navigation stack.
   private func showSettings() {
     let vc = SettingsViewController(email: session.cachedEmail ?? "—", serverURL: session.serverURL)
-    vc.onChangeServer = { [weak self] in self?.showConnect() }
+    vc.navigationItem.rightBarButtonItem = UIBarButtonItem(image: UIImage(systemName: "xmark"), style: .plain, target: self, action: #selector(dismissPresentedSheet))
+    vc.onChangeServer = { [weak self] in
+      self?.window?.rootViewController?.dismiss(animated: true) {
+        self?.showConnect()
+      }
+    }
     vc.onSignOut = { [weak self] in
       WebSocketService.shared.disconnect()
       self?.session.clearToken()
-      self?.showLogin()
+      self?.window?.rootViewController?.dismiss(animated: true) {
+        self?.showLogin()
+      }
     }
-    pushMainContent(vc)
+    let nav = UINavigationController(rootViewController: vc)
+    nav.navigationBar.prefersLargeTitles = true
+    nav.navigationBar.tintColor = AppPalette.accent
+    if let sheet = nav.sheetPresentationController {
+      sheet.detents = [.medium(), .large()]
+      sheet.selectedDetentIdentifier = .large
+      sheet.prefersGrabberVisible = true
+    }
+    presentSheet(nav)
+  }
+
+  /// Presents a sheet, dismissing any already-presented sheet first so that
+  /// a second call (e.g. tapping Settings while Inbox is open) never silently
+  /// no-ops due to UIKit's single-presenter constraint.
+  private func presentSheet(_ nav: UINavigationController) {
+    guard let root = window?.rootViewController else { return }
+    if root.presentedViewController != nil {
+      root.dismiss(animated: true) { root.present(nav, animated: true) }
+    } else {
+      root.present(nav, animated: true)
+    }
+  }
+
+  @objc private func dismissPresentedSheet() {
+    window?.rootViewController?.dismiss(animated: true)
   }
 }
 

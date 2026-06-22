@@ -55,16 +55,26 @@ final class SidebarViewController: UIViewController {
     super.viewDidLoad()
     view.backgroundColor = .systemBackground
     navigationItem.largeTitleDisplayMode = .never
-    hideNavBarHairline()
+    removeNavBarBackground()
     navigationItem.leftBarButtonItem = UIBarButtonItem(customView: makeBrandView())
 
     searchController.searchResultsUpdater = self
     searchController.delegate = self
     searchController.obscuresBackgroundDuringPresentation = false
     searchController.searchBar.placeholder = "Search chats"
-    let searchItem = UIBarButtonItem(image: UIImage(systemName: "magnifyingglass"), style: .plain, target: self, action: #selector(searchTapped))
-    searchItem.accessibilityLabel = "Search"
-    navigationItem.rightBarButtonItems = [makeInboxButton(), searchItem]
+    if #available(iOS 26.0, *) {
+      navigationItem.searchController = searchController
+      navigationItem.preferredSearchBarPlacement = .integratedButton
+      navigationItem.searchBarPlacementAllowsToolbarIntegration = false
+      navigationItem.rightBarButtonItems = [makeInboxButton()]
+    } else {
+      // On older iOS, attach the search controller on demand via a button so the
+      // bar doesn't permanently occupy the nav area on short lists where
+      // hidesSearchBarWhenScrolling can never hide it.
+      let searchItem = UIBarButtonItem(image: UIImage(systemName: "magnifyingglass"), style: .plain, target: self, action: #selector(searchTapped))
+      searchItem.accessibilityLabel = "Search"
+      navigationItem.rightBarButtonItems = [makeInboxButton(), searchItem]
+    }
 
     setupTable()
     setupFooter()
@@ -80,30 +90,11 @@ final class SidebarViewController: UIViewController {
   // MARK: - Brand (top-left nav slot, replaces the old header block + close button)
 
   private func makeBrandView() -> UIView {
-    let mark = UILabel()
-    mark.text = "u"
-    mark.textColor = AppPalette.accentForeground
-    mark.font = .app(ofSize: 13, weight: .semibold)
-    mark.textAlignment = .center
-    mark.backgroundColor = AppPalette.accent
-    mark.layer.cornerRadius = 7
-    mark.clipsToBounds = true
-    mark.translatesAutoresizingMaskIntoConstraints = false
-    NSLayoutConstraint.activate([
-      mark.widthAnchor.constraint(equalToConstant: 24),
-      mark.heightAnchor.constraint(equalToConstant: 24),
-    ])
-
     let name = UILabel()
     name.text = "unnamed"
-    name.font = .app(ofSize: 15, weight: .semibold)
+    name.font = .app(ofSize: 17, weight: .semibold)
     name.textColor = .label
-
-    let row = UIStackView(arrangedSubviews: [mark, name])
-    row.axis = .horizontal
-    row.spacing = 8
-    row.alignment = .center
-    return row
+    return name
   }
 
   // MARK: - Inbox bell (top-right nav bar)
@@ -130,11 +121,11 @@ final class SidebarViewController: UIViewController {
     let container = UIView()
 
     let newChatButton = UIButton(type: .system)
-    var config = UIButton.Configuration.filled()
+    var config = UIButton.Configuration.borderedProminent()
     config.title = "New chat"
     config.image = UIImage(systemName: "plus")
     config.imagePadding = 6
-    config.cornerStyle = .large
+    config.cornerStyle = .capsule
     config.baseBackgroundColor = AppPalette.accent
     config.baseForegroundColor = AppPalette.accentForeground
     config.contentInsets = NSDirectionalEdgeInsets(top: 10, leading: 16, bottom: 10, trailing: 16)
@@ -253,11 +244,12 @@ final class SidebarViewController: UIViewController {
 
   @objc private func newChatTapped() { onNewChat?() }
   @objc private func inboxTapped() { onShowInbox?() }
+  @objc private func approvalCountChanged() { updateInboxBadge() }
+
   @objc private func searchTapped() {
     navigationItem.searchController = searchController
     searchController.isActive = true
   }
-  @objc private func approvalCountChanged() { updateInboxBadge() }
 }
 
 extension SidebarViewController: UISearchResultsUpdating {
@@ -269,7 +261,9 @@ extension SidebarViewController: UISearchResultsUpdating {
 
 extension SidebarViewController: UISearchControllerDelegate {
   func didDismissSearchController(_ searchController: UISearchController) {
-    navigationItem.searchController = nil
+    if #unavailable(iOS 26.0) {
+      navigationItem.searchController = nil
+    }
     filter = ""
     applyFilterAndRender()
   }
@@ -340,52 +334,62 @@ extension SidebarViewController: UITableViewDataSource, UITableViewDelegate {
   }
 }
 
-/// Full-width footer row mirroring web's bottom account menu: avatar + email,
-/// tappable to open Settings. Pinned to the view's bottom, no divider above it.
-private final class SidebarFooterView: UIView {
+/// Full-width native account row pinned to the bottom, opening Settings.
+private final class SidebarFooterView: UIControl {
   var onTap: (() -> Void)?
 
-  private let avatar = UILabel()
-  private let label = UILabel()
+  private let contentView = UIListContentView(configuration: UIListContentConfiguration.cell())
+  private let chevronView = UIImageView(image: UIImage(systemName: "chevron.right"))
 
   override init(frame: CGRect) {
     super.init(frame: frame)
     backgroundColor = .systemBackground
+    accessibilityTraits = [.button]
+    addTarget(self, action: #selector(tapped), for: .touchUpInside)
 
-    avatar.backgroundColor = .tintColor
-    avatar.textColor = .white
-    avatar.font = .app(ofSize: 13, weight: .semibold)
-    avatar.textAlignment = .center
-    avatar.layer.cornerRadius = 14
-    avatar.clipsToBounds = true
-    avatar.translatesAutoresizingMaskIntoConstraints = false
+    contentView.translatesAutoresizingMaskIntoConstraints = false
+    contentView.isUserInteractionEnabled = false
+    addSubview(contentView)
 
-    label.font = .app(ofSize: 14, weight: .medium)
-    label.textColor = .label
+    chevronView.tintColor = .tertiaryLabel
+    chevronView.preferredSymbolConfiguration = UIImage.SymbolConfiguration(pointSize: 13, weight: .semibold)
+    chevronView.translatesAutoresizingMaskIntoConstraints = false
+    addSubview(chevronView)
 
-    let row = UIStackView(arrangedSubviews: [avatar, label])
-    row.axis = .horizontal
-    row.spacing = 10
-    row.alignment = .center
-    row.translatesAutoresizingMaskIntoConstraints = false
-    addSubview(row)
     NSLayoutConstraint.activate([
-      avatar.widthAnchor.constraint(equalToConstant: 28),
-      avatar.heightAnchor.constraint(equalToConstant: 28),
-      row.leadingAnchor.constraint(equalTo: leadingAnchor, constant: 16),
-      row.trailingAnchor.constraint(lessThanOrEqualTo: trailingAnchor, constant: -16),
-      row.topAnchor.constraint(equalTo: topAnchor, constant: 10),
-      row.bottomAnchor.constraint(equalTo: bottomAnchor, constant: -10),
+      contentView.leadingAnchor.constraint(equalTo: leadingAnchor, constant: 16),
+      contentView.trailingAnchor.constraint(equalTo: chevronView.leadingAnchor, constant: -8),
+      contentView.topAnchor.constraint(equalTo: topAnchor, constant: 8),
+      contentView.bottomAnchor.constraint(equalTo: bottomAnchor, constant: -8),
+      chevronView.centerYAnchor.constraint(equalTo: contentView.centerYAnchor),
+      chevronView.trailingAnchor.constraint(equalTo: trailingAnchor, constant: -20),
     ])
-
-    isUserInteractionEnabled = true
-    addGestureRecognizer(UITapGestureRecognizer(target: self, action: #selector(tapped)))
+    configure(email: "—")
   }
   required init?(coder: NSCoder) { fatalError() }
 
+  override var isHighlighted: Bool {
+    didSet {
+      UIView.animate(withDuration: 0.12) {
+        self.contentView.alpha = self.isHighlighted ? 0.55 : 1
+        self.chevronView.alpha = self.isHighlighted ? 0.55 : 1
+      }
+    }
+  }
+
   func configure(email: String) {
-    avatar.text = email.first.map { String($0).uppercased() } ?? "•"
-    label.text = email
+    var config = UIListContentConfiguration.subtitleCell()
+    config.text = email
+    config.secondaryText = "Settings"
+    config.image = UIImage(systemName: "person.crop.circle.fill")
+    config.imageProperties.tintColor = AppPalette.accent
+    config.imageProperties.preferredSymbolConfiguration = UIImage.SymbolConfiguration(pointSize: 28, weight: .regular)
+    config.textProperties.font = .app(ofSize: 15, weight: .medium)
+    config.secondaryTextProperties.font = .app(ofSize: 12, weight: .regular)
+    config.secondaryTextProperties.color = .secondaryLabel
+    config.directionalLayoutMargins = NSDirectionalEdgeInsets(top: 8, leading: 0, bottom: 8, trailing: 0)
+    contentView.configuration = config
+    accessibilityLabel = "Settings, \(email)"
   }
 
   @objc private func tapped() { onTap?() }

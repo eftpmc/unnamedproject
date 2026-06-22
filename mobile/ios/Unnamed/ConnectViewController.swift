@@ -23,7 +23,7 @@ final class ConnectViewController: UIViewController {
     super.viewDidLoad()
     title = "Connect"
     view.backgroundColor = .systemBackground
-    hideNavBarHairline()
+    removeNavBarBackground()
 
     urlField.text = session.serverURL?.absoluteString ?? "http://"
     urlField.textContentType = .URL

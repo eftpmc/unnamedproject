@@ -22,8 +22,9 @@ final class ApprovalsViewController: UIViewController {
     title = "Inbox"
     navigationItem.largeTitleDisplayMode = .always
     view.backgroundColor = .systemBackground
+    removeNavBarBackground()
     navigationItem.rightBarButtonItem = UIBarButtonItem(
-      barButtonSystemItem: .done, target: self, action: #selector(doneTapped)
+      image: UIImage(systemName: "xmark"), style: .plain, target: self, action: #selector(doneTapped)
     )
 
     setupTable()
@@ -57,7 +58,7 @@ final class ApprovalsViewController: UIViewController {
     tableView.dataSource = self
     tableView.delegate = self
     tableView.rowHeight = UITableView.automaticDimension
-    tableView.estimatedRowHeight = 140
+    tableView.estimatedRowHeight = 112
     tableView.contentInset = UIEdgeInsets(top: 12, left: 0, bottom: 24, right: 0)
     tableView.refreshControl = refreshControl
     refreshControl.addTarget(self, action: #selector(refreshPulled), for: .valueChanged)
@@ -73,7 +74,7 @@ final class ApprovalsViewController: UIViewController {
   }
 
   private func setupEmptyView() {
-    let icon = UIImageView(image: UIImage(systemName: "checkmark.circle"))
+    let icon = UIImageView(image: UIImage(systemName: "tray"))
     icon.tintColor = .tertiaryLabel
     icon.contentMode = .scaleAspectFit
     icon.translatesAutoresizingMaskIntoConstraints = false
@@ -163,13 +164,12 @@ final class ApprovalsViewController: UIViewController {
     tableView.reloadData()
   }
 
-  func handleApprove(at index: Int) {
-    let approval = approvals[index]
+  func handleApprove(_ approval: PendingApproval) {
     Task {
       do {
         try await client.approveExecution(id: approval.executionId)
         UIImpactFeedbackGenerator(style: .medium).impactOccurred()
-        approvals.remove(at: index)
+        approvals.removeAll { $0.executionId == approval.executionId }
         updateUI()
       } catch {
         UINotificationFeedbackGenerator().notificationOccurred(.error)
@@ -178,13 +178,12 @@ final class ApprovalsViewController: UIViewController {
     }
   }
 
-  func handleDeny(at index: Int) {
-    let approval = approvals[index]
+  func handleDeny(_ approval: PendingApproval) {
     Task {
       do {
         try await client.rejectExecution(id: approval.executionId)
         UIImpactFeedbackGenerator(style: .medium).impactOccurred()
-        approvals.remove(at: index)
+        approvals.removeAll { $0.executionId == approval.executionId }
         updateUI()
       } catch {
         UINotificationFeedbackGenerator().notificationOccurred(.error)
@@ -201,12 +200,13 @@ extension ApprovalsViewController: UITableViewDelegate {
     tableView.deselectRow(at: indexPath, animated: true)
     let approval = approvals[indexPath.row]
     let detail = ApprovalDetailViewController(approval: approval)
-    detail.onApprove = { [weak self] in self?.handleApprove(at: indexPath.row) }
-    detail.onDeny = { [weak self] in self?.handleDeny(at: indexPath.row) }
+    detail.onApprove = { [weak self] in self?.handleApprove(approval) }
+    detail.onDeny = { [weak self] in self?.handleDeny(approval) }
     let nav = UINavigationController(rootViewController: detail)
     nav.modalPresentationStyle = .pageSheet
     if let sheet = nav.sheetPresentationController {
       sheet.detents = [.medium(), .large()]
+      sheet.selectedDetentIdentifier = .large
       sheet.prefersGrabberVisible = true
     }
     present(nav, animated: true)
@@ -222,8 +222,8 @@ extension ApprovalsViewController: UITableViewDataSource {
     let cell = tableView.dequeueReusableCell(withIdentifier: ApprovalCell.reuseID, for: indexPath) as! ApprovalCell
     let approval = approvals[indexPath.row]
     cell.configure(action: approval.action, summary: approval.payload?.summary)
-    cell.onApprove = { [weak self] in self?.handleApprove(at: indexPath.row) }
-    cell.onDeny = { [weak self] in self?.handleDeny(at: indexPath.row) }
+    cell.onApprove = { [weak self] in self?.handleApprove(approval) }
+    cell.onDeny = { [weak self] in self?.handleDeny(approval) }
     return cell
   }
 }
@@ -236,10 +236,9 @@ private final class ApprovalCell: UITableViewCell {
   var onApprove: (() -> Void)?
   var onDeny: (() -> Void)?
 
-  private let actionLabel = UILabel()
-  private let summaryLabel = UILabel()
   private let approveButton = UIButton(type: .system)
   private let denyButton = UIButton(type: .system)
+  private let content = UIListContentView(configuration: UIListContentConfiguration.subtitleCell())
 
   override init(style: UITableViewCell.CellStyle, reuseIdentifier: String?) {
     super.init(style: style, reuseIdentifier: reuseIdentifier)
@@ -251,88 +250,57 @@ private final class ApprovalCell: UITableViewCell {
   required init?(coder: NSCoder) { fatalError() }
 
   private func buildLayout() {
-    let card = UIView()
-    card.backgroundColor = .systemOrange.withAlphaComponent(0.06)
-    card.layer.cornerRadius = 16
-    card.layer.cornerCurve = .continuous
-    card.layer.borderColor = UIColor.systemOrange.withAlphaComponent(0.3).cgColor
-    card.layer.borderWidth = 1
+    content.translatesAutoresizingMaskIntoConstraints = false
 
-    let iconBadge = IconBadgeView(systemName: "bell.badge", tintColor: .systemOrange)
-
-    actionLabel.font = UIFont.app(forTextStyle: .subheadline)
-    actionLabel.adjustsFontForContentSizeCategory = true
-    actionLabel.numberOfLines = 0
-
-    summaryLabel.font = UIFont.monospacedSystemFont(ofSize: 11, weight: .regular)
-    summaryLabel.textColor = .secondaryLabel
-    summaryLabel.numberOfLines = 1
-
-    let textStack = UIStackView(arrangedSubviews: [actionLabel, summaryLabel])
-    textStack.axis = .vertical
-    textStack.spacing = 3
-
-    let headerRow = UIStackView(arrangedSubviews: [iconBadge, textStack])
-    headerRow.axis = .horizontal
-    headerRow.alignment = .top
-    headerRow.spacing = 12
-
-    // Approve button
     approveButton.configuration = .filled()
-    approveButton.configuration?.cornerStyle = .medium
+    approveButton.configuration?.cornerStyle = .capsule
     approveButton.configuration?.image = UIImage(systemName: "checkmark")
     approveButton.configuration?.title = "Approve"
     approveButton.configuration?.imagePadding = 5
-    approveButton.configuration?.contentInsets = NSDirectionalEdgeInsets(top: 9, leading: 14, bottom: 9, trailing: 14)
+    approveButton.configuration?.contentInsets = NSDirectionalEdgeInsets(top: 8, leading: 13, bottom: 8, trailing: 13)
     approveButton.addTarget(self, action: #selector(approveTapped), for: .touchUpInside)
 
-    // Deny button
-    denyButton.configuration = .bordered()
-    denyButton.configuration?.cornerStyle = .medium
+    denyButton.configuration = .borderedTinted()
+    denyButton.configuration?.cornerStyle = .capsule
     denyButton.configuration?.baseForegroundColor = .secondaryLabel
     denyButton.configuration?.image = UIImage(systemName: "xmark")
     denyButton.configuration?.title = "Deny"
     denyButton.configuration?.imagePadding = 5
-    denyButton.configuration?.contentInsets = NSDirectionalEdgeInsets(top: 9, leading: 14, bottom: 9, trailing: 14)
+    denyButton.configuration?.contentInsets = NSDirectionalEdgeInsets(top: 8, leading: 13, bottom: 8, trailing: 13)
     denyButton.addTarget(self, action: #selector(denyTapped), for: .touchUpInside)
 
     let buttonRow = UIStackView(arrangedSubviews: [approveButton, denyButton, UIView()])
     buttonRow.axis = .horizontal
     buttonRow.spacing = 8
 
-    let divider = UIView()
-    divider.backgroundColor = .systemOrange.withAlphaComponent(0.15)
-    divider.heightAnchor.constraint(equalToConstant: 1).isActive = true
+    let stack = UIStackView(arrangedSubviews: [content, buttonRow])
+    stack.axis = .vertical
+    stack.spacing = 10
+    stack.isLayoutMarginsRelativeArrangement = true
+    stack.directionalLayoutMargins = NSDirectionalEdgeInsets(top: 10, leading: 16, bottom: 10, trailing: 16)
 
-    let cardStack = UIStackView(arrangedSubviews: [headerRow, divider, buttonRow])
-    cardStack.axis = .vertical
-    cardStack.spacing = 12
-    cardStack.isLayoutMarginsRelativeArrangement = true
-    cardStack.directionalLayoutMargins = NSDirectionalEdgeInsets(top: 14, leading: 14, bottom: 14, trailing: 14)
-
-    card.addSubview(cardStack)
-    cardStack.translatesAutoresizingMaskIntoConstraints = false
+    contentView.addSubview(stack)
+    stack.translatesAutoresizingMaskIntoConstraints = false
     NSLayoutConstraint.activate([
-      cardStack.leadingAnchor.constraint(equalTo: card.leadingAnchor),
-      cardStack.trailingAnchor.constraint(equalTo: card.trailingAnchor),
-      cardStack.topAnchor.constraint(equalTo: card.topAnchor),
-      cardStack.bottomAnchor.constraint(equalTo: card.bottomAnchor),
-    ])
-
-    contentView.addSubview(card)
-    card.translatesAutoresizingMaskIntoConstraints = false
-    NSLayoutConstraint.activate([
-      card.leadingAnchor.constraint(equalTo: contentView.leadingAnchor, constant: 16),
-      card.trailingAnchor.constraint(equalTo: contentView.trailingAnchor, constant: -16),
-      card.topAnchor.constraint(equalTo: contentView.topAnchor, constant: 6),
-      card.bottomAnchor.constraint(equalTo: contentView.bottomAnchor, constant: -6),
+      stack.leadingAnchor.constraint(equalTo: contentView.leadingAnchor),
+      stack.trailingAnchor.constraint(equalTo: contentView.trailingAnchor),
+      stack.topAnchor.constraint(equalTo: contentView.topAnchor),
+      stack.bottomAnchor.constraint(equalTo: contentView.bottomAnchor),
     ])
   }
 
   func configure(action: String, summary: String?) {
-    actionLabel.text = action
-    summaryLabel.text = summary
-    summaryLabel.isHidden = summary == nil
+    var config = UIListContentConfiguration.subtitleCell()
+    config.text = action
+    config.secondaryText = summary
+    config.image = UIImage(systemName: "bell.badge")
+    config.imageProperties.tintColor = .systemOrange
+    config.textProperties.font = .app(forTextStyle: .subheadline, weight: .medium)
+    config.textProperties.numberOfLines = 0
+    config.secondaryTextProperties.font = .monospacedSystemFont(ofSize: 11, weight: .regular)
+    config.secondaryTextProperties.color = .secondaryLabel
+    config.secondaryTextProperties.numberOfLines = 1
+    content.configuration = config
   }
 
   @objc private func approveTapped() { onApprove?() }

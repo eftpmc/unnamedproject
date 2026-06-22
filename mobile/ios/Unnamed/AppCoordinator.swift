@@ -9,6 +9,7 @@ final class AppCoordinator {
   /// The single persistent nav stack behind the slide-over: chat is always its
   /// root; Projects/Project detail/Settings push onto it like normal drill-downs.
   private var mainNav: UINavigationController?
+  private var sidebarNav: UINavigationController?
   private lazy var client = APIClient(session: session)
 
   init(window: UIWindow, navigationController: UINavigationController, session: AppSession = .shared) {
@@ -95,18 +96,24 @@ final class AppCoordinator {
       let sidebarNav = UINavigationController(rootViewController: sidebar)
       sidebarNav.navigationBar.prefersLargeTitles = true
       sidebarNav.navigationBar.tintColor = AppPalette.accent
+      self.sidebarNav = sidebarNav
 
       let split = UISplitViewController(style: .doubleColumn)
       split.viewControllers = [sidebarNav, mainNav]
-      // Visible-by-default but user-collapsible, matching the HIG guidance for
-      // sidebars: discoverable on first launch, but the chat's sidebar-toggle
-      // button (and the system's own edge-swipe) can still hide it on iPad.
+      // Visible-by-default but user-collapsible on iPad, matching HIG guidance.
+      // On iPhone (collapsed), the sidebar is the navigation root — selecting a
+      // chat pushes it on top, with the system back chevron returning to the
+      // sidebar, so there's nothing for the sidebar to "close" to.
       split.preferredDisplayMode = .oneBesideSecondary
       split.preferredSplitBehavior = .tile
       split.presentsWithGesture = true
+      split.delegate = self
       self.splitVC = split
 
       self.showRoot(split)
+      if split.isCollapsed {
+        split.show(.primary)
+      }
     }
   }
 
@@ -134,11 +141,20 @@ final class AppCoordinator {
     let sidebar = SidebarViewController(appSession: session)
     sidebar.onNewChat = { [weak self] in self?.openChat(nil) }
     sidebar.onSelectChat = { [weak self] chat in self?.openChat(chat) }
+    sidebar.onShowChats = { [weak self] in self?.showChats() }
     sidebar.onShowProjects = { [weak self] in self?.showProjects() }
     sidebar.onShowInbox = { [weak self] in self?.presentInbox() }
     sidebar.onShowSettings = { [weak self] in self?.showSettings() }
-    sidebar.onClose = { [weak self] in self?.splitVC?.show(.secondary) }
     return sidebar
+  }
+
+  /// Pushes the full chat history onto the sidebar's own nav stack — back
+  /// returns to the sidebar (this is a sidebar-column destination, unlike
+  /// Projects/Settings which live in the chat-area stack).
+  private func showChats() {
+    let controller = ChatsViewController(appSession: session)
+    controller.onSelectChat = { [weak self] chat in self?.openChat(chat) }
+    sidebarNav?.pushViewController(controller, animated: true)
   }
 
   /// Switch the active chat: resets the visible content stack down to just
@@ -211,5 +227,13 @@ final class AppCoordinator {
       self?.showLogin()
     }
     present(vc, resettingStack: false)
+  }
+}
+
+extension AppCoordinator: UISplitViewControllerDelegate {
+  /// On iPhone the split view collapses to a single stack. Returning `.primary`
+  /// here keeps the sidebar as that stack's root instead of the chat.
+  func splitViewController(_ splitViewController: UISplitViewController, topColumnForCollapsingToProposedTopColumn proposedTopColumn: UISplitViewController.Column) -> UISplitViewController.Column {
+    .primary
   }
 }

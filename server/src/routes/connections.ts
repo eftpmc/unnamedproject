@@ -4,6 +4,7 @@ import { getDb } from '../db/index.js';
 import { newId } from '../lib/ids.js';
 import { encrypt, decrypt, deriveKey } from '../lib/crypto.js';
 import { requireAuth, type AuthedRequest } from '../middleware/auth.js';
+import { ingestMcpTools } from '../services/toolRegistry.js';
 
 const router = Router();
 router.use(requireAuth);
@@ -57,6 +58,9 @@ router.post('/', (req, res) => {
     return;
   }
   res.status(201).json({ id });
+  if (type === 'mcp') {
+    ingestMcpTools(userId, id).catch(() => {});
+  }
 });
 
 router.get('/:id/test', async (req, res) => {

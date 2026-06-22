@@ -2,7 +2,7 @@ import Anthropic from '@anthropic-ai/sdk';
 import { exec as execCallback } from 'child_process';
 import fs from 'fs';
 import { promisify } from 'util';
-import { createSessionEvent, getDb, getProjectForUser, linkSessionProject, setAgentWorktreeSession, updatePlanStepStatus, maybeCompletePlan, getPlanForStep, getPlanSummaries, getPlanById, getPlanSteps, getExecutionById, getScheduledTasksForUser, createScheduledTask, updateScheduledTask, deleteScheduledTask, resumePlan, getPermissionProfile, createPipeline, getPipelineById, getPipelineTasks, listPipelinesForUser, createPlan, recordAgentUsage, addSessionDiscoveredTools, getSessionDiscoveredTools, type DbPlan, type DbPlanStep } from '../db/index.js';
+import { createSessionEvent, getDb, getProjectForUser, linkSessionProject, setAgentWorktreeSession, updatePlanStepStatus, maybeCompletePlan, getPlanForStep, getPlanSummaries, getPlanById, getPlanSteps, getExecutionById, getScheduledTasksForUser, createScheduledTask, updateScheduledTask, deleteScheduledTask, resumePlan, getPermissionProfile, createPipeline, getPipelineById, getPipelineTasks, listPipelinesForUser, createPlan, recordAgentUsage, addSessionDiscoveredTools, getSessionDiscoveredTools, upsertMcpRegistryTools, type DbPlan, type DbPlanStep } from '../db/index.js';
 
 const execAsync = promisify(execCallback);
 import { runAgentPipeline, type AgentPipelineCtx } from './agent_pipeline.js';
@@ -865,6 +865,7 @@ async function dispatchTool(
             const mcpArgs = cfg.args ? JSON.parse(cfg.args) : [];
             const mcpEnv = cfg.env ? JSON.parse(cfg.env) : {};
             const tools = await listMcpTools(c.id, cfg.command, mcpArgs, mcpEnv);
+            upsertMcpRegistryTools(userId, c.id, tools.map(t => ({ name: t.name, description: t.description ?? '', inputSchema: t.inputSchema })));
             return { ...c, mcp_tools: tools.map(t => ({ name: t.name, description: t.description })) };
           } catch {
             return { ...c, mcp_tools: [] };

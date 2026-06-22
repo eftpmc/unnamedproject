@@ -67,6 +67,12 @@ vi.mock('../../src/tools/file_ops.js', async () => {
 vi.mock('../../src/services/video.js', () => ({
   renderVideo: vi.fn().mockResolvedValue('test-video.mp4'),
 }));
+vi.mock('../../src/lib/mcp-pool.js', () => ({
+  listMcpTools: vi.fn().mockResolvedValue([
+    { name: 'create_pr', description: 'Create a pull request', inputSchema: { type: 'object', properties: { title: { type: 'string' } }, required: ['title'] } },
+  ]),
+  callMcpTool: vi.fn().mockResolvedValue('mcp tool result'),
+}));
 
 const userId = newId();
 let sessionId: string;
@@ -957,5 +963,54 @@ describe('tool discovery in runAgentTurn', () => {
     addSessionDiscoveredTools(discoverySessionId, ['generate_video']);
     const tools = resolveToolsForTurn(userId, discoverySessionId);
     expect(tools.map(t => t.name)).toContain('generate_video');
+  });
+
+  it('list_connections ingests MCP tools into the registry as a side effect', async () => {
+    const db = getDb();
+    const { encrypt, deriveKey } = await import('../../src/lib/crypto.js');
+    const connId = newId();
+    db.prepare('INSERT INTO connections (id, user_id, name, type, encrypted_config) VALUES (?,?,?,?,?)')
+      .run(connId, userId, 'gh-mcp', 'mcp', encrypt(JSON.stringify({ command: 'mock-mcp', args: '[]', env: '{}' }), deriveKey()));
+
+    streamMock.mockImplementationOnce(() => {
+      const listeners: Record<string, ((...args: unknown[]) => void)[]> = {};
+      return {
+        on: (event: string, cb: (...args: unknown[]) => void) => {
+          (listeners[event] ??= []).push(cb);
+          return { on: () => ({ finalMessage: async () => ({}) }) };
+        },
+        finalMessage: async () => ({
+          stop_reason: 'tool_use',
+          usage: { input_tokens: 10, output_tokens: 5 },
+          content: [{ type: 'tool_use', id: 'tool-list-conns', name: 'list_connections', input: {} }],
+        }),
+      };
+    });
+    streamMock.mockImplementationOnce(() => {
+      const listeners: Record<string, ((...args: unknown[]) => void)[]> = {};
+      return {
+        on: (event: string, cb: (...args: unknown[]) => void) => {
+          (listeners[event] ??= []).push(cb);
+          return { on: () => ({ finalMessage: async () => ({}) }) };
+        },
+        finalMessage: async () => {
+          for (const cb of listeners.text ?? []) cb('done');
+          return {
+            stop_reason: 'end_turn',
+            usage: { input_tokens: 10, output_tokens: 10 },
+            content: [{ type: 'text', text: 'done' }],
+          };
+        },
+      };
+    });
+
+    const msgId = newId();
+    db.prepare('INSERT INTO messages (id, session_id, role, content) VALUES (?,?,?,?)').run(msgId, sessionId, 'user', 'list connections');
+
+    await runAgentTurn(userId, sessionId, msgId);
+
+    const { getMcpRegistryToolsForUser } = await import('../../src/db/index.js');
+    const registered = getMcpRegistryToolsForUser(userId);
+    expect(registered.some(t => t.connection_id === connId && t.mcp_tool_name === 'create_pr')).toBe(true);
   });
 });

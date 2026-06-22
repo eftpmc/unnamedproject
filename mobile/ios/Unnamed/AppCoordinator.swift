@@ -162,27 +162,32 @@ final class AppCoordinator {
   private func openChat(_ chat: ChatSession?) {
     guard splitVC != nil else { return }
     if let chat {
-      present(makeChatVC(for: chat), resettingStack: true)
+      showChat(chat)
     } else {
       Task { @MainActor [weak self] in
         guard let self else { return }
         let created = try? await client.createSession(title: nil)
         let new = ChatSession(id: created?.id ?? "", title: nil, effort: nil, model: nil, pinnedProjectId: nil, createdAt: nil, updatedAt: nil)
-        self.present(self.makeChatVC(for: new), resettingStack: true)
+        self.showChat(new)
       }
     }
   }
 
-  /// Shows `vc` as the active chat-area content. When `resettingStack` is
-  /// true (switching chats), any previously pushed Projects/Settings/etc.
-  /// above the current chat is dropped first.
-  private func present(_ vc: UIViewController, resettingStack: Bool) {
+  private func showChat(_ chat: ChatSession) {
     guard let splitVC else { return }
-    if resettingStack {
-      mainNav?.setViewControllers([vc], animated: false)
+    mainNav?.setViewControllers([makeChatVC(for: chat)], animated: false)
+
+    if splitVC.isCollapsed, let sidebarNav, let root = sidebarNav.viewControllers.first {
+      sidebarNav.setViewControllers([root, makeChatVC(for: chat)], animated: true)
     } else {
-      mainNav?.pushViewController(vc, animated: true)
+      splitVC.show(.secondary)
     }
+  }
+
+  /// Pushes `vc` onto the active chat-area stack.
+  private func pushMainContent(_ vc: UIViewController) {
+    guard let splitVC else { return }
+    mainNav?.pushViewController(vc, animated: true)
     splitVC.show(.secondary)
   }
 
@@ -190,7 +195,7 @@ final class AppCoordinator {
   private func showProjects() {
     let controller = ProjectsViewController(appSession: session)
     controller.onSelectProject = { [weak self] project in self?.pushProjectDetail(project) }
-    present(controller, resettingStack: false)
+    pushMainContent(controller)
   }
 
   private func pushProjectDetail(_ project: Project) {
@@ -226,7 +231,7 @@ final class AppCoordinator {
       self?.session.clearToken()
       self?.showLogin()
     }
-    present(vc, resettingStack: false)
+    pushMainContent(vc)
   }
 }
 

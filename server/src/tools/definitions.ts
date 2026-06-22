@@ -281,7 +281,7 @@ export const toolDefinitions: Anthropic.Tool[] = [
   },
   {
     name: 'list_connections',
-    description: 'List configured connections (API keys, GitHub, MCP servers). For MCP connections, includes available tool names so you know what to pass to mcp_call.',
+    description: 'List configured connections (API keys, GitHub, MCP servers). For MCP connections, includes available tool names — use tool_search to discover and call them by name.',
     input_schema: {
       type: 'object',
       properties: {},

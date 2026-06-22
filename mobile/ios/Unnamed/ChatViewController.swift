@@ -548,7 +548,7 @@ final class ChatViewController: UIViewController {
     if messages.isEmpty {
       let container = UIView()
       let icon = UIImageView(image: UIImage(systemName: "bubble.left.and.bubble.right"))
-      icon.tintColor = .tertiaryLabel
+      icon.tintColor = .secondaryLabel
       icon.contentMode = .scaleAspectFit
       icon.translatesAutoresizingMaskIntoConstraints = false
       NSLayoutConstraint.activate([
@@ -685,8 +685,16 @@ final class ChatViewController: UIViewController {
     refreshConfigPill()
   }
 
+  private static func shortModelName(_ id: String) -> String {
+    // claude-sonnet-4-6 → "Sonnet 4.6", claude-opus-4-8 → "Opus 4.8", etc.
+    let parts = id.lowercased().replacingOccurrences(of: "claude-", with: "").split(separator: "-")
+    guard let family = parts.first else { return id }
+    let version = parts.dropFirst().joined(separator: ".")
+    return "\(family.capitalized) \(version)"
+  }
+
   private func refreshConfigPill() {
-    let modelLabel = currentModel.flatMap { modelDisplayNames[$0] } ?? currentModel ?? "Auto"
+    let modelLabel = currentModel.flatMap { modelDisplayNames[$0] ?? Self.shortModelName($0) } ?? "Auto"
     let label = "\(currentEffort.capitalized) · \(modelLabel)"
     var config = configPill.configuration
     config?.attributedTitle = AttributedString(label, attributes: AttributeContainer([.font: UIFont.app(forTextStyle: .caption1)]))

@@ -141,7 +141,6 @@ final class SidebarViewController: UIViewController {
     NSLayoutConstraint.activate([
       newChatButton.topAnchor.constraint(equalTo: container.topAnchor, constant: 12),
       newChatButton.leadingAnchor.constraint(equalTo: container.leadingAnchor, constant: 16),
-      newChatButton.trailingAnchor.constraint(equalTo: container.trailingAnchor, constant: -16),
       newChatButton.bottomAnchor.constraint(equalTo: container.bottomAnchor, constant: -12),
     ])
     return container
@@ -281,7 +280,7 @@ extension SidebarViewController: UITableViewDataSource, UITableViewDelegate {
   func tableView(_ tableView: UITableView, willDisplayHeaderView view: UIView, forSection section: Int) {
     guard let header = view as? UITableViewHeaderFooterView else { return }
     header.textLabel?.font = .app(ofSize: 12, weight: .semibold)
-    header.textLabel?.textColor = .secondaryLabel
+    header.textLabel?.textColor = .label
   }
 
   func tableView(_ tableView: UITableView, cellForRowAt indexPath: IndexPath) -> UITableViewCell {
@@ -299,11 +298,11 @@ extension SidebarViewController: UITableViewDataSource, UITableViewDelegate {
     case .chats:
       content.text = "Chats"
       content.image = UIImage(systemName: "bubble.left.and.bubble.right")
-      content.imageProperties.tintColor = .secondaryLabel
+      content.imageProperties.tintColor = .label
     case .projects:
       content.text = "Projects"
       content.image = UIImage(systemName: "square.grid.2x2")
-      content.imageProperties.tintColor = .secondaryLabel
+      content.imageProperties.tintColor = .label
     case .chat(let chat):
       content.text = chat.title ?? "Untitled chat"
       content.textProperties.numberOfLines = 1

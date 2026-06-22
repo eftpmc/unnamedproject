@@ -22,6 +22,7 @@ export function getDataDir(): string {
 const migrations: Migration[] = [
   { version: 1, name: 'baseline-schema', noTransaction: true, up: () => applySchema() },
   { version: 2, name: 'repair-plan-foreign-keys', noTransaction: true, up: repairPlanForeignKeys },
+  { version: 3, name: 'tool-registry', up: addToolRegistry },
 ];
 
 function tableSql(database: Database.Database, name: string): string | undefined {
@@ -109,6 +110,29 @@ function repairPlanForeignKeys(database: Database.Database): void {
       DROP TABLE artifacts_fk_repair;
       PRAGMA foreign_keys = ON;
     `);
+  }
+}
+
+function addToolRegistry(database: Database.Database): void {
+  database.exec(`
+    CREATE TABLE IF NOT EXISTS tool_registry (
+      id TEXT PRIMARY KEY,
+      user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+      connection_id TEXT NOT NULL REFERENCES connections(id) ON DELETE CASCADE,
+      tool_name TEXT NOT NULL,
+      mcp_tool_name TEXT NOT NULL,
+      description TEXT NOT NULL DEFAULT '',
+      input_schema TEXT NOT NULL DEFAULT '{}',
+      created_at INTEGER NOT NULL DEFAULT (unixepoch()),
+      updated_at INTEGER NOT NULL DEFAULT (unixepoch()),
+      UNIQUE(connection_id, mcp_tool_name),
+      UNIQUE(user_id, tool_name)
+    );
+  `);
+
+  const sessionCols = database.prepare("PRAGMA table_info(sessions)").all() as Array<{ name: string }>;
+  if (!sessionCols.some(c => c.name === 'discovered_tools')) {
+    database.exec("ALTER TABLE sessions ADD COLUMN discovered_tools TEXT NOT NULL DEFAULT '[]'");
   }
 }
 
@@ -1304,6 +1328,74 @@ export function getPipelineById(id: string, userId: string): DbPipeline | undefi
 
 export function getPipelineTasks(pipelineId: string): DbPipelineTask[] {
   return getDb().prepare('SELECT * FROM pipeline_tasks WHERE pipeline_id = ? ORDER BY position').all(pipelineId) as DbPipelineTask[];
+}
+
+export interface DbRegistryTool {
+  id: string;
+  user_id: string;
+  connection_id: string;
+  tool_name: string;
+  mcp_tool_name: string;
+  description: string;
+  input_schema: string;
+  created_at: number;
+  updated_at: number;
+}
+
+export function upsertMcpRegistryTools(
+  userId: string,
+  connectionId: string,
+  tools: Array<{ name: string; description: string; inputSchema: Record<string, unknown> }>,
+): void {
+  const upsert = getDb().prepare(`
+    INSERT INTO tool_registry (id, user_id, connection_id, tool_name, mcp_tool_name, description, input_schema, updated_at)
+    VALUES (?, ?, ?, ?, ?, ?, ?, unixepoch())
+    ON CONFLICT(connection_id, mcp_tool_name) DO UPDATE SET
+      tool_name = excluded.tool_name,
+      description = excluded.description,
+      input_schema = excluded.input_schema,
+      updated_at = unixepoch()
+  `);
+  const tx = getDb().transaction((rows: typeof tools) => {
+    for (const t of rows) {
+      const qualifiedName = qualifyMcpToolName(connectionId, t.name);
+      upsert.run(newId(), userId, connectionId, qualifiedName, t.name, t.description ?? '', JSON.stringify(t.inputSchema ?? {}));
+    }
+  });
+  tx(tools);
+}
+
+function qualifyMcpToolName(connectionId: string, mcpToolName: string): string {
+  const sanitized = mcpToolName.replace(/[^a-zA-Z0-9_-]/g, '_');
+  const shortConn = connectionId.replace(/[^a-zA-Z0-9_-]/g, '_').slice(0, 8);
+  return `mcp_${shortConn}_${sanitized}`.slice(0, 128);
+}
+
+export function getMcpRegistryToolsForUser(userId: string): DbRegistryTool[] {
+  return getDb()
+    .prepare('SELECT * FROM tool_registry WHERE user_id = ? ORDER BY tool_name')
+    .all(userId) as DbRegistryTool[];
+}
+
+export function getMcpRegistryTool(userId: string, toolName: string): DbRegistryTool | undefined {
+  return getDb()
+    .prepare('SELECT * FROM tool_registry WHERE user_id = ? AND tool_name = ?')
+    .get(userId, toolName) as DbRegistryTool | undefined;
+}
+
+export function getSessionDiscoveredTools(sessionId: string): string[] {
+  const row = getDb()
+    .prepare('SELECT discovered_tools FROM sessions WHERE id = ?')
+    .get(sessionId) as { discovered_tools: string } | undefined;
+  return row ? JSON.parse(row.discovered_tools) as string[] : [];
+}
+
+export function addSessionDiscoveredTools(sessionId: string, toolNames: string[]): void {
+  const existing = new Set(getSessionDiscoveredTools(sessionId));
+  for (const name of toolNames) existing.add(name);
+  getDb()
+    .prepare('UPDATE sessions SET discovered_tools = ? WHERE id = ?')
+    .run(JSON.stringify([...existing]), sessionId);
 }
 
 export function listPipelinesForUser(userId: string): DbPipeline[] {

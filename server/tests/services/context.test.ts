@@ -20,9 +20,9 @@ beforeAll(() => {
   getDb().prepare('INSERT INTO sessions (id, user_id) VALUES (?,?)').run(sessionId, userId);
 });
 
-const codeIntent: Intent = { ...DEFAULT_INTENT, domain: 'code', scope: 'delegate' };
-const writingIntent: Intent = { ...DEFAULT_INTENT, domain: 'writing', scope: 'inline' };
-const researchIntent: Intent = { ...DEFAULT_INTENT, domain: 'research', scope: 'inline' };
+const codeIntent: Intent = { ...DEFAULT_INTENT, domain: 'code' };
+const writingIntent: Intent = { ...DEFAULT_INTENT, domain: 'writing' };
+const researchIntent: Intent = { ...DEFAULT_INTENT, domain: 'research' };
 
 describe('buildContext', () => {
   it('always includes base identity and approval tier content', () => {

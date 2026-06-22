@@ -2,10 +2,9 @@ import { describe, it, expect } from 'vitest';
 import { classifyIntent, DEFAULT_INTENT } from '../../src/services/intent.js';
 
 describe('classifyIntent', () => {
-  it('classifies a code task and delegates it', () => {
+  it('classifies a code task', () => {
     const intent = classifyIntent('fix the login bug in the api');
     expect(intent.domain).toBe('code');
-    expect(intent.scope).toBe('delegate');
     expect(intent.ambiguous).toBe(false);
     expect(intent.tools).toEqual([]);
   });
@@ -14,13 +13,11 @@ describe('classifyIntent', () => {
     const intent = classifyIntent('explain how photosynthesis works');
     expect(intent.domain).toBe('research');
     expect(intent.needs_research).toBe(true);
-    expect(intent.scope).toBe('inline');
   });
 
   it('classifies a writing task', () => {
     const intent = classifyIntent('draft an email to the team');
     expect(intent.domain).toBe('writing');
-    expect(intent.scope).toBe('inline');
     expect(intent.needs_research).toBe(false);
   });
 
@@ -52,11 +49,6 @@ describe('classifyIntent', () => {
     const intent = classifyIntent('draft an email to the team');
     expect(intent.complexity).toBe('low');
     expect(intent.model).toBe('haiku');
-  });
-
-  it('routes coordinated multi-step work to plan scope', () => {
-    const intent = classifyIntent('plan and run multiple tasks to launch the product');
-    expect(intent.scope).toBe('plan');
   });
 
   it('classifies a message with multiple domain signals as multi', () => {

@@ -27,6 +27,7 @@
 		B11F48422D0307B40044C1D9 /* ApprovalDetailViewController.swift in Sources */ = {isa = PBXBuildFile; fileRef = E11748412D0307B40044C1D9 /* ApprovalDetailViewController.swift */; };
 		B21F48422D0307B40044C1D9 /* ApprovalCenter.swift in Sources */ = {isa = PBXBuildFile; fileRef = D11748412D0307B40044C1D9 /* ApprovalCenter.swift */; };
 		D21F48422D0307B40044C1D9 /* SidebarViewController.swift in Sources */ = {isa = PBXBuildFile; fileRef = D21748412D0307B40044C1D9 /* SidebarViewController.swift */; };
+		739AF0E0BE024BAEB11F5E2F /* ChatsViewController.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9C391D4A3C7347D3A58ADAAA /* ChatsViewController.swift */; };
 		C11748422D0307B40044C1DA /* Inter-Variable.ttf in Resources */ = {isa = PBXBuildFile; fileRef = C01748412D0307B40044C1DA /* Inter-Variable.ttf */; };
 /* End PBXBuildFile section */
 
@@ -53,6 +54,7 @@
 		E11748412D0307B40044C1D9 /* ApprovalDetailViewController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = ApprovalDetailViewController.swift; path = Unnamed/ApprovalDetailViewController.swift; sourceTree = "<group>"; };
 		D11748412D0307B40044C1D9 /* ApprovalCenter.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = ApprovalCenter.swift; path = Unnamed/ApprovalCenter.swift; sourceTree = "<group>"; };
 		D21748412D0307B40044C1D9 /* SidebarViewController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = SidebarViewController.swift; path = Unnamed/SidebarViewController.swift; sourceTree = "<group>"; };
+		9C391D4A3C7347D3A58ADAAA /* ChatsViewController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = ChatsViewController.swift; path = Unnamed/ChatsViewController.swift; sourceTree = "<group>"; };
 		C01748412D0307B40044C1DA /* Inter-Variable.ttf */ = {isa = PBXFileReference; lastKnownFileType = file; name = "Inter-Variable.ttf"; path = "Unnamed/Fonts/Inter-Variable.ttf"; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
@@ -87,6 +89,7 @@
 				E11748412D0307B40044C1D9 /* ApprovalDetailViewController.swift */,
 				D11748412D0307B40044C1D9 /* ApprovalCenter.swift */,
 				D21748412D0307B40044C1D9 /* SidebarViewController.swift */,
+				9C391D4A3C7347D3A58ADAAA /* ChatsViewController.swift */,
 				C01748412D0307B40044C1DA /* Inter-Variable.ttf */,
 				13B07FB51A68108700A75B9A /* Images.xcassets */,
 				13B07FB61A68108700A75B9A /* Info.plist */,
@@ -218,6 +221,7 @@
 				B11F48422D0307B40044C1D9 /* ApprovalDetailViewController.swift in Sources */,
 				B21F48422D0307B40044C1D9 /* ApprovalCenter.swift in Sources */,
 				D21F48422D0307B40044C1D9 /* SidebarViewController.swift in Sources */,
+				739AF0E0BE024BAEB11F5E2F /* ChatsViewController.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};

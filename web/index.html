@@ -3,6 +3,7 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
     <title>unnamedproject</title>
     <script>
       (function () {
@@ -11,6 +12,14 @@
           ? stored
           : (window.matchMedia('(prefers-color-scheme: light)').matches ? 'unnamed-light' : 'unnamed-dark');
         document.documentElement.setAttribute('data-theme', theme);
+
+        try {
+          var storedAccent = JSON.parse(localStorage.getItem('accent') || 'null');
+          if (storedAccent && typeof storedAccent.h === 'number' && typeof storedAccent.c === 'number') {
+            document.documentElement.style.setProperty('--accent-h', String(storedAccent.h));
+            document.documentElement.style.setProperty('--accent-c', String(storedAccent.c));
+          }
+        } catch {}
       })();
     </script>
   </head>

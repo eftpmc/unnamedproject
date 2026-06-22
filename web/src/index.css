@@ -1,14 +1,14 @@
 @import "tailwindcss";
 @import "tw-animate-css";
 @import "shadcn/tailwind.css";
-@import "@fontsource-variable/hanken-grotesk";
+@import "@fontsource-variable/inter";
 
 @custom-variant dark (&:where([data-theme="unnamed-dark"], [data-theme="unnamed-dark"] *));
 
 @theme inline {
   /* ---- Typography ---- */
   --font-heading: var(--font-sans);
-  --font-sans: "Hanken Grotesk Variable", system-ui, sans-serif;
+  --font-sans: "Inter Variable", system-ui, sans-serif;
 
   /* ---- Colour aliases → Tailwind classes ---- */
   --color-background:          var(--background);
@@ -63,6 +63,10 @@
 [data-theme="unnamed-light"] {
   color-scheme: light;
 
+  /* Accent hue/chroma — user-changeable (see lib/accent.ts) */
+  --accent-h: 252;
+  --accent-c: 0.085;
+
   /* Surfaces */
   --background:  oklch(0.983 0.004 250);
   --card:        oklch(1 0 0);
@@ -83,10 +87,10 @@
   --input:       oklch(0.925 0.006 250);
 
   /* Interactive blue */
-  --primary:             oklch(0.58 0.085 252);
+  --primary:             oklch(0.58 var(--accent-c) var(--accent-h));
   --primary-foreground:  oklch(0.99 0.004 250);
-  --accent-tint:         oklch(0.95 0.025 252);
-  --on-accent-soft:      oklch(0.5 0.09 252);
+  --accent-tint:         oklch(0.95 calc(var(--accent-c) * 0.3) var(--accent-h));
+  --on-accent-soft:      oklch(0.5 calc(var(--accent-c) * 1.05) var(--accent-h));
 
   /* Shadcn accent (hover surfaces — neutral) */
   --accent:            oklch(0.97 0.005 250);
@@ -103,20 +107,20 @@
   --destructive: oklch(0.58 0.2 25);
 
   /* Focus ring */
-  --ring: color-mix(in oklch, oklch(0.58 0.085 252) 55%, transparent);
+  --ring: color-mix(in oklch, oklch(0.58 var(--accent-c) var(--accent-h)) 55%, transparent);
 
   /* Sidebar */
   --sidebar:                     oklch(0.97 0.005 250);
   --sidebar-foreground:          oklch(0.31 0.013 258);
-  --sidebar-primary:             oklch(0.58 0.085 252);
+  --sidebar-primary:             oklch(0.58 var(--accent-c) var(--accent-h));
   --sidebar-primary-foreground:  oklch(0.99 0.004 250);
   --sidebar-accent:              oklch(1 0 0);
   --sidebar-accent-foreground:   oklch(0.31 0.013 258);
   --sidebar-border:              oklch(0.955 0.005 250);
   --sidebar-ring:                var(--ring);
 
-  /* Base radius = 18px */
-  --radius: 1.125rem;
+  /* Base radius = 10px */
+  --radius: 0.625rem;
 }
 
 /* ================================================================
@@ -124,6 +128,9 @@
    ================================================================ */
 [data-theme="unnamed-dark"] {
   color-scheme: dark;
+
+  /* Accent chroma override — dark surfaces read slightly more saturated at the same hue */
+  --accent-c: 0.1;
 
   /* Surfaces */
   --background: oklch(0.19 0.011 258);
@@ -145,10 +152,10 @@
   --input:       oklch(1 0 0 / 18%);
 
   /* Interactive blue */
-  --primary:             oklch(0.7 0.1 256);
+  --primary:             oklch(0.7 var(--accent-c) var(--accent-h));
   --primary-foreground:  oklch(0.18 0.02 258);
-  --accent-tint:         oklch(0.5 0.1 256 / 0.2);
-  --on-accent-soft:      oklch(0.78 0.09 256);
+  --accent-tint:         oklch(0.5 var(--accent-c) var(--accent-h) / 0.2);
+  --on-accent-soft:      oklch(0.78 var(--accent-c) var(--accent-h));
 
   /* Shadcn accent (hover surfaces — neutral) */
   --accent:            oklch(0.214 0.012 258);
@@ -165,12 +172,12 @@
   --destructive: oklch(0.68 0.19 24);
 
   /* Focus ring */
-  --ring: color-mix(in oklch, oklch(0.7 0.1 256) 55%, transparent);
+  --ring: color-mix(in oklch, oklch(0.7 var(--accent-c) var(--accent-h)) 55%, transparent);
 
   /* Sidebar */
   --sidebar:                     oklch(0.214 0.012 258);
   --sidebar-foreground:          oklch(0.93 0.006 258);
-  --sidebar-primary:             oklch(0.7 0.1 256);
+  --sidebar-primary:             oklch(0.7 var(--accent-c) var(--accent-h));
   --sidebar-primary-foreground:  oklch(0.18 0.02 258);
   --sidebar-accent:              oklch(0.255 0.014 258);
   --sidebar-accent-foreground:   oklch(0.93 0.006 258);

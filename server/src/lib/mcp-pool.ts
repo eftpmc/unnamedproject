@@ -91,12 +91,18 @@ function sendRequest(conn: McpConn, method: string, params: unknown): Promise<st
   });
 }
 
+export interface McpToolInfo {
+  name: string;
+  description?: string;
+  inputSchema: Record<string, unknown>;
+}
+
 export async function listMcpTools(
   connectionId: string,
   command: string,
   args: string[],
   env: Record<string, string>,
-): Promise<Array<{ name: string; description?: string }>> {
+): Promise<McpToolInfo[]> {
   let connPromise = pool.get(connectionId);
   if (!connPromise) {
     connPromise = createConn(command, args, env).catch(err => {
@@ -107,8 +113,12 @@ export async function listMcpTools(
   }
   const conn = await connPromise;
   const raw = await sendRequest(conn, 'tools/list', {});
-  const parsed = JSON.parse(raw) as { tools?: Array<{ name: string; description?: string }> };
-  return parsed.tools ?? [];
+  const parsed = JSON.parse(raw) as { tools?: Array<{ name: string; description?: string; inputSchema?: Record<string, unknown> }> };
+  return (parsed.tools ?? []).map(t => ({
+    name: t.name,
+    description: t.description,
+    inputSchema: t.inputSchema ?? { type: 'object', properties: {} },
+  }));
 }
 
 export async function callMcpTool(

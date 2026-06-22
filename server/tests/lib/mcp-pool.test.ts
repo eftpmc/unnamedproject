@@ -38,7 +38,7 @@ vi.mock('child_process', () => ({
   }),
 }));
 
-import { callMcpTool, closeMcpConnections } from '../../src/lib/mcp-pool.js';
+import { callMcpTool, listMcpTools, closeMcpConnections } from '../../src/lib/mcp-pool.js';
 
 afterEach(() => {
   closeMcpConnections();
@@ -121,5 +121,40 @@ describe('mcp-pool', () => {
     const t2 = stdinWrites[0].map(c => JSON.parse(c.trim())).find(m => m.method === 'tools/call' && m.params.name === 'tool2');
     stdoutEmitters[0].emit('data', Buffer.from(JSON.stringify({ jsonrpc: '2.0', id: t2.id, result: { x: 2 } }) + '\n'));
     await p2;
+  });
+
+  it('includes inputSchema in returned tool info', async () => {
+    const toolsPromise = listMcpTools('conn-e', 'node', ['srv.js'], {});
+
+    await new Promise(r => setTimeout(r, 10));
+
+    const toolsListMsg = stdinWrites[0].map(c => JSON.parse(c.trim())).find(m => m.method === 'tools/list');
+    expect(toolsListMsg).toBeDefined();
+
+    stdoutEmitters[0].emit('data', Buffer.from(JSON.stringify({
+      jsonrpc: '2.0', id: toolsListMsg.id,
+      result: { tools: [{ name: 'create_pr', description: 'Create a PR', inputSchema: { type: 'object', properties: { title: { type: 'string' } } } }] },
+    }) + '\n'));
+
+    const tools = await toolsPromise;
+    expect(tools[0].name).toBe('create_pr');
+    expect(tools[0].description).toBe('Create a PR');
+    expect(tools[0].inputSchema).toEqual({ type: 'object', properties: { title: { type: 'string' } } });
+  });
+
+  it('defaults inputSchema to an empty object schema when missing', async () => {
+    const toolsPromise = listMcpTools('conn-f', 'node', ['srv.js'], {});
+
+    await new Promise(r => setTimeout(r, 10));
+
+    const toolsListMsg = stdinWrites[0].map(c => JSON.parse(c.trim())).find(m => m.method === 'tools/list');
+
+    stdoutEmitters[0].emit('data', Buffer.from(JSON.stringify({
+      jsonrpc: '2.0', id: toolsListMsg.id,
+      result: { tools: [{ name: 'no_schema_tool' }] },
+    }) + '\n'));
+
+    const tools = await toolsPromise;
+    expect(tools[0].inputSchema).toEqual({ type: 'object', properties: {} });
   });
 });

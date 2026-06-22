@@ -35,7 +35,7 @@ describe('buildContext', () => {
     const ctx = buildContext(userId, sessionId, DEFAULT_INTENT);
     expect(ctx).toContain('Research discipline');
     expect(ctx).toContain('Web search and fetch are provided by MCP servers');
-    expect(ctx).toContain('mcp_call');
+    expect(ctx).toContain('tool_search');
   });
 
   it('includes worktree isolation guidance for code domain', () => {
@@ -154,7 +154,7 @@ describe('getToolSubset', () => {
     const tools = getToolSubset(codeIntent);
     const names = tools.map(t => t.name);
     expect(names).toContain('list_connections');
-    expect(names).toContain('mcp_call');
+    expect(names).toContain('tool_search');
   });
 
   it('writing domain excludes invoke_claude_code', () => {

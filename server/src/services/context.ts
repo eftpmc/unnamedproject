@@ -27,8 +27,8 @@ function readWorkspaceMd(project: DbProject): string | null {
 function baseBlock(intent: Intent): string {
   const isCode = intent.domain === 'code' || intent.domain === 'multi' || intent.domain === 'general';
   const autoApproved = isCode
-    ? 'invoke_claude_code, invoke_codex, generate_video, git_op add/commit, run_command, create_project, update_project, project_query, rebuild_graph, search_files, read_file, list_dir, recall, remember, forget, list_chats, read_chat, register_artifact, list_artifacts, read_artifact, list_connections, test_connection, mcp_call, create_plan, resume_plan, list_plans, get_plan, get_execution_output, list_scheduled_tasks, create_scheduled_task, update_scheduled_task'
-    : 'create_project, search_files, read_file, list_dir, recall, remember, forget, write_file, run_command, list_chats, read_chat, list_artifacts, read_artifact, list_connections, test_connection, mcp_call';
+    ? 'invoke_claude_code, invoke_codex, generate_video, git_op add/commit, run_command, create_project, update_project, project_query, rebuild_graph, search_files, read_file, list_dir, recall, remember, forget, list_chats, read_chat, register_artifact, list_artifacts, read_artifact, list_connections, test_connection, tool_search, create_plan, resume_plan, list_plans, get_plan, get_execution_output, list_scheduled_tasks, create_scheduled_task, update_scheduled_task'
+    : 'create_project, search_files, read_file, list_dir, recall, remember, forget, write_file, run_command, list_chats, read_chat, list_artifacts, read_artifact, list_connections, test_connection, tool_search';
 
   return `You are a personal AI operator and orchestrator. You decide how work gets done — you never implement code, write files, or run git operations yourself when the task belongs to a coding agent.
 
@@ -48,7 +48,7 @@ Before starting work on the active project, check what already exists there:
 Only check other projects when the user's request explicitly involves them.
 
 ## MCP connections
-GitHub, web search, and other external service integrations are provided through MCP servers configured in Settings → MCP. Before calling mcp_call, use list_connections to discover available MCP servers and their tool names — never guess a connection_id or tool name. Use test_connection to verify an MCP server is reachable before dispatching dependent work. If the user asks you to do something that requires GitHub or web search and no suitable MCP is configured, tell them which type of MCP server to add (e.g. GitHub MCP for repo/PR/issue operations, a search MCP like Brave or Exa for web research).
+GitHub, web search, and other external service integrations are provided through MCP servers configured in Settings → MCP. To use an MCP tool, first use tool_search to discover available tools by describing what you need, or use list_connections to see all configured servers and their tools. Never guess a connection_id or tool name. Use test_connection to verify an MCP server is reachable before dispatching dependent work. If the user asks you to do something that requires GitHub or web search and no suitable MCP is configured, tell them which type of MCP server to add (e.g. GitHub MCP for repo/PR/issue operations, a search MCP like Brave or Exa for web research).
 
 ## File search
 Use search_files for fast codebase lookups (finding where a function is defined, tracing usages, locating config). Only fall back to project_query for broad architectural questions that need reasoning across the whole codebase.`;
@@ -68,7 +68,7 @@ Active profile: ${profile}. ${description}`;
 function researchBlock(): string {
   return `## Research discipline
 Use recall before searching; the answer may already be in memory.
-Web search and fetch are provided by MCP servers (e.g. Brave, Exa, Tavily) — use list_connections to find the available search tool, then call it via mcp_call. Always read the full source after getting search results before drawing conclusions.
+Web search and fetch are provided by MCP servers (e.g. Brave, Exa, Tavily) — use tool_search to find the available search tool by describing what you need. Always read the full source after getting search results before drawing conclusions.
 When a coding task requires external knowledge (library APIs, patterns, examples): complete the research pass first and include findings in the agent brief.`;
 }
 
@@ -113,7 +113,7 @@ Do not invoke coding agents for writing, documentation, or note-taking tasks.`;
 
     case 'research':
       return `## Research tasks
-Use list_connections to find the configured search MCP, then mcp_call for searches. Always fetch and read the full source page after getting results — snippets alone are insufficient.
+Use tool_search to find the configured search MCP tool by describing what you need, then call it. Always fetch and read the full source page after getting results — snippets alone are insufficient.
 Cite sources in your response.
 Check recall first before any web search.`;
 
@@ -270,7 +270,7 @@ const SHARED = [
   'remember', 'recall', 'forget',
   'list_chats', 'read_chat',
   'register_artifact', 'list_artifacts', 'read_artifact',
-  'list_connections', 'test_connection', 'mcp_call',
+  'list_connections', 'test_connection', 'tool_search',
   'search_files', 'read_file', 'list_dir',
   'create_project', 'update_project',
 ];
@@ -285,7 +285,6 @@ const TOOL_SETS: Record<string, string[]> = {
     'project_query', 'rebuild_graph',
     'create_plan', 'resume_plan', 'list_plans', 'get_plan', 'get_execution_output',
     'write_file', 'create_artifact', 'generate_video',
-    'mcp_call',
     ...SCHEDULED,
     ...SHARED,
   ],

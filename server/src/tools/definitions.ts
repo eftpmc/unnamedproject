@@ -30,17 +30,14 @@ export const toolDefinitions: Anthropic.Tool[] = [
     },
   },
   {
-    name: 'mcp_call',
-    description: 'Call a tool on a configured MCP server.',
+    name: 'tool_search',
+    description: 'Search for a tool by describing what you need to do. Returns the best-matching tools (name + description) across first-party tools and connected MCP servers. Once a tool is returned here, you can call it directly by name on this or any later turn in the conversation — it stays available for the rest of the session. If nothing relevant comes back, try rephrasing the query. Does not search agent roles — use delegate_to_agent directly for sub-agent delegation.',
     input_schema: {
       type: 'object',
       properties: {
-        connection_id: { type: 'string', description: 'ID of the MCP connection to use' },
-        tool_name: { type: 'string', description: 'Name of the MCP tool to call' },
-        tool_input: { type: 'object', description: 'Input for the MCP tool', additionalProperties: true },
-        plan_step_id: { type: 'string', description: 'Plan step ID to link this execution to (from create_plan response)' },
+        query: { type: 'string', description: 'Describe the capability you need, e.g. "create a github pull request" or "render a video from scenes"' },
       },
-      required: ['connection_id', 'tool_name', 'tool_input'],
+      required: ['query'],
     },
   },
   {

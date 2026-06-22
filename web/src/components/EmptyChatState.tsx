@@ -22,7 +22,7 @@ export default function EmptyChatState({
       ];
 
   return (
-    <div className="flex flex-1 items-center justify-center px-4">
+    <div className="flex flex-1 items-center justify-center px-4 pb-16 sm:pb-20">
       <div className="w-full max-w-xl text-center">
         <div className="text-sm font-semibold text-foreground">
           {projectName ? `Start with ${projectName}` : 'Start a chat'}

@@ -393,7 +393,7 @@ export default function MessageList({ messages, executions, streamingIds, sessio
           )}
         </button>
       )}
-      <div role="log" aria-live="polite" aria-relevant="additions text" className="mx-auto flex w-full max-w-[46rem] flex-col gap-6 px-4 py-7 sm:px-6 sm:py-8">
+      <div role="log" aria-live="polite" aria-relevant="additions text" className="mx-auto flex w-full max-w-[46rem] flex-col gap-6 px-4 pb-6 pt-7 sm:px-6 sm:pb-8 sm:pt-8">
         {renderItems.map(item => {
           if (item.type === 'execution-group') {
             const firstId = item.executions[0].executionId;

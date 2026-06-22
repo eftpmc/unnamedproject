@@ -2,6 +2,8 @@ import { useEffect, useRef, useState, type ChangeEvent, type KeyboardEvent } fro
 import { ArrowUp, FileText, Mic, MicOff, Paperclip, Pencil, X } from 'lucide-react';
 import { Textarea } from '@/components/ui/textarea';
 import { cn } from '@/lib/utils';
+import ChatConfigPopover from './ChatConfigPopover.js';
+import type { ClaudeModelInfo, EffortLevel } from '../types.js';
 
 interface SpeechRecognitionAlternative {
   transcript: string;
@@ -56,12 +58,16 @@ interface MessageInputProps {
   onCancelEdit?: () => void;
   pendingFiles?: File[];
   onPendingFilesConsumed?: () => void;
+  effort: EffortLevel;
+  model: string | null;
+  models: ClaudeModelInfo[];
+  onConfigChange: (config: { effort?: EffortLevel; model?: string | null }) => void;
 }
 
 const MAX_ATTACHMENTS = 8;
 const MAX_ATTACHMENT_BYTES = 10 * 1024 * 1024;
 
-export default function MessageInput({ value, onChange, onSend, disabled, isEditing, onCancelEdit, pendingFiles, onPendingFilesConsumed }: MessageInputProps) {
+export default function MessageInput({ value, onChange, onSend, disabled, isEditing, onCancelEdit, pendingFiles, onPendingFilesConsumed, effort, model, models, onConfigChange }: MessageInputProps) {
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const recognitionRef = useRef<SpeechRecognition | null>(null);
@@ -181,7 +187,7 @@ export default function MessageInput({ value, onChange, onSend, disabled, isEdit
   const canSend = !disabled && (!!value.trim() || attachments.length > 0);
 
   return (
-    <div className="shrink-0 px-4 pb-5 pt-3 sm:px-6">
+    <div className="shrink-0 px-4 pb-5 sm:px-6">
       <div className={cn('mx-auto max-w-[46rem] rounded-[18px] border bg-card px-3 pb-2.5 pt-2.5 shadow-sm', isEditing ? 'border-primary/50' : 'border-input')}>
         {isEditing && (
           <div className="mb-2 flex items-center justify-between gap-2 rounded-lg bg-primary/8 px-2.5 py-1.5">
@@ -219,63 +225,73 @@ export default function MessageInput({ value, onChange, onSend, disabled, isEdit
         )}
         {attachmentError && <div className="mb-2 text-xs text-destructive">{attachmentError}</div>}
         {speechError && <div className="mb-2 text-xs text-destructive">{speechError}</div>}
-        <div className="flex items-center gap-2">
-          <input
-            ref={fileInputRef}
-            type="file"
-            multiple
-            className="hidden"
-            onChange={handleFilesSelected}
-            accept="image/png,image/jpeg,image/gif,image/webp,application/pdf,text/*,.csv,.json,.md,.tsx,.ts,.jsx,.js,.css,.html,.xml,.yaml,.yml,.toml,.sql,.py,.rb,.go,.rs,.java,.kt,.swift,.c,.cc,.cpp,.h,.hpp,.sh,.zsh,.env"
-          />
-          <button
-            type="button"
-            onClick={() => fileInputRef.current?.click()}
-            disabled={disabled || attachments.length >= MAX_ATTACHMENTS}
-            title="Attach files"
-            className="self-end mb-0.5 grid h-9 w-9 shrink-0 place-items-center rounded-lg text-muted-foreground transition-colors hover:bg-muted hover:text-foreground disabled:cursor-default disabled:opacity-50"
-          >
-            <Paperclip size={16} strokeWidth={2} />
-          </button>
-          <Textarea
-            ref={textareaRef}
-            value={value}
-            onChange={e => onChange(e.target.value)}
-            onKeyDown={handleKeyDown}
-            placeholder={disabled ? 'Agent is responding…' : 'Message…'}
-            disabled={disabled}
-            rows={1}
-            className="max-h-44 min-h-[1.5rem] flex-1 resize-none border-0 bg-transparent dark:bg-transparent px-1 py-1 text-[15px] shadow-none placeholder:text-faint-fg focus-visible:ring-0"
-          />
-          <button
-            type="button"
-            onClick={toggleDictation}
-            disabled={disabled || !supportsSpeech}
-            title={supportsSpeech ? (isListening ? 'Stop voice input' : 'Start voice input') : 'Voice input is not supported in this browser'}
-            aria-pressed={isListening}
-            className={cn(
-              'self-end mb-0.5 grid h-9 w-9 shrink-0 place-items-center rounded-lg transition-colors disabled:cursor-default disabled:opacity-50',
-              isListening
-                ? 'bg-destructive/10 text-destructive hover:bg-destructive/20'
-                : 'text-muted-foreground hover:bg-muted hover:text-foreground',
-            )}
-          >
-            {isListening ? <MicOff size={16} strokeWidth={2} /> : <Mic size={16} strokeWidth={2} />}
-          </button>
-          <button
-            type="button"
-            onClick={submit}
-            disabled={!canSend}
-            title="Send"
-            className={cn(
-              'self-end mb-0.5 grid h-9 w-9 shrink-0 place-items-center rounded-lg transition-[filter,transform] active:translate-y-px',
-              canSend
-                ? 'bg-primary text-primary-foreground hover:brightness-105'
-                : 'bg-muted text-faint-fg cursor-default',
-            )}
-          >
-            <ArrowUp size={16} strokeWidth={2} />
-          </button>
+        <Textarea
+          ref={textareaRef}
+          value={value}
+          onChange={e => onChange(e.target.value)}
+          onKeyDown={handleKeyDown}
+          placeholder={disabled ? 'Agent is responding…' : 'Message…'}
+          disabled={disabled}
+          rows={1}
+          className="max-h-44 min-h-[1.5rem] w-full resize-none border-0 bg-transparent dark:bg-transparent px-1 py-1 text-[15px] shadow-none placeholder:text-faint-fg focus-visible:ring-0"
+        />
+        <div className="mt-1.5 flex items-center justify-between gap-2">
+          <div className="flex items-center gap-1">
+            <input
+              ref={fileInputRef}
+              type="file"
+              multiple
+              className="hidden"
+              onChange={handleFilesSelected}
+              accept="image/png,image/jpeg,image/gif,image/webp,application/pdf,text/*,.csv,.json,.md,.tsx,.ts,.jsx,.js,.css,.html,.xml,.yaml,.yml,.toml,.sql,.py,.rb,.go,.rs,.java,.kt,.swift,.c,.cc,.cpp,.h,.hpp,.sh,.zsh,.env"
+            />
+            <button
+              type="button"
+              onClick={() => fileInputRef.current?.click()}
+              disabled={disabled || attachments.length >= MAX_ATTACHMENTS}
+              title="Attach files"
+              className="grid h-8 w-8 shrink-0 place-items-center rounded-lg text-muted-foreground transition-colors hover:bg-muted hover:text-foreground disabled:cursor-default disabled:opacity-50"
+            >
+              <Paperclip size={16} strokeWidth={2} />
+            </button>
+            <ChatConfigPopover
+              effort={effort}
+              model={model}
+              models={models}
+              onConfigChange={onConfigChange}
+            />
+          </div>
+          <div className="flex items-center gap-1">
+            <button
+              type="button"
+              onClick={toggleDictation}
+              disabled={disabled || !supportsSpeech}
+              title={supportsSpeech ? (isListening ? 'Stop voice input' : 'Start voice input') : 'Voice input is not supported in this browser'}
+              aria-pressed={isListening}
+              className={cn(
+                'grid h-8 w-8 shrink-0 place-items-center rounded-lg transition-colors disabled:cursor-default disabled:opacity-50',
+                isListening
+                  ? 'bg-destructive/10 text-destructive hover:bg-destructive/20'
+                  : 'text-muted-foreground hover:bg-muted hover:text-foreground',
+              )}
+            >
+              {isListening ? <MicOff size={16} strokeWidth={2} /> : <Mic size={16} strokeWidth={2} />}
+            </button>
+            <button
+              type="button"
+              onClick={submit}
+              disabled={!canSend}
+              title="Send"
+              className={cn(
+                'grid h-8 w-8 shrink-0 place-items-center rounded-lg transition-[filter,transform] active:translate-y-px',
+                canSend
+                  ? 'bg-primary text-primary-foreground hover:brightness-105'
+                  : 'bg-muted text-faint-fg cursor-default',
+              )}
+            >
+              <ArrowUp size={16} strokeWidth={2} />
+            </button>
+          </div>
         </div>
       </div>
     </div>

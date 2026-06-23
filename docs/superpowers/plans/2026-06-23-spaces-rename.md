@@ -34,13 +34,14 @@
 ```typescript
 // server/tests/db/migration-v5.test.ts
 import { describe, it, expect, beforeAll } from 'vitest';
-import fs from 'fs';
 import path from 'path';
 import Database from 'better-sqlite3';
 import { runMigrations } from '../../src/db/migrate.js';
 
-// Build a v4 database by hand (pre-migration shape) so the test exercises
-// the actual upgrade path, not a fresh install.
+// Build a v4 database by hand (pre-migration shape, matching the REAL current
+// schema's columns -- not a simplified stand-in -- so this test actually
+// exercises the foreign-key and CHECK-constraint edge cases the migration
+// must handle) so the test exercises the actual upgrade path, not a fresh install.
 function buildV4Database(dbPath: string): Database.Database {
   const db = new Database(dbPath);
   db.pragma('foreign_keys = ON');
@@ -67,6 +68,20 @@ function buildV4Database(dbPath: string): Database.Database {
     CREATE TABLE plans (id TEXT PRIMARY KEY, project_id TEXT NOT NULL REFERENCES projects(id) ON DELETE CASCADE, title TEXT NOT NULL, created_at INTEGER NOT NULL DEFAULT (unixepoch()));
     CREATE TABLE plan_steps (id TEXT PRIMARY KEY, plan_id TEXT NOT NULL REFERENCES plans(id) ON DELETE CASCADE, title TEXT NOT NULL, status TEXT NOT NULL DEFAULT 'waiting', position INTEGER NOT NULL, created_at INTEGER NOT NULL DEFAULT (unixepoch()));
     CREATE TABLE pipelines (id TEXT PRIMARY KEY, user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE, title TEXT NOT NULL, description TEXT, created_at INTEGER NOT NULL DEFAULT (unixepoch()));
+    CREATE TABLE executions (id TEXT PRIMARY KEY, project_id TEXT REFERENCES projects(id) ON DELETE SET NULL, created_at INTEGER NOT NULL DEFAULT (unixepoch()));
+    CREATE TABLE memories (id TEXT PRIMARY KEY, project_id TEXT REFERENCES projects(id) ON DELETE SET NULL, content TEXT NOT NULL, created_at INTEGER NOT NULL DEFAULT (unixepoch()));
+    CREATE TABLE session_project_links (session_id TEXT NOT NULL REFERENCES sessions(id) ON DELETE CASCADE, project_id TEXT NOT NULL REFERENCES projects(id) ON DELETE CASCADE, PRIMARY KEY (session_id, project_id));
+    CREATE TABLE agent_worktrees (
+      id TEXT PRIMARY KEY,
+      project_id TEXT NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
+      session_id TEXT NOT NULL REFERENCES sessions(id) ON DELETE CASCADE,
+      branch TEXT NOT NULL,
+      worktree_path TEXT NOT NULL,
+      claude_session_id TEXT,
+      codex_session_id TEXT,
+      created_at INTEGER NOT NULL DEFAULT (unixepoch()),
+      UNIQUE(project_id, session_id)
+    );
     CREATE TABLE artifacts (
       id TEXT PRIMARY KEY,
       project_id TEXT NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
@@ -82,7 +97,19 @@ function buildV4Database(dbPath: string): Database.Database {
       source_step_id TEXT REFERENCES plan_steps(id) ON DELETE SET NULL,
       created_at INTEGER NOT NULL DEFAULT (unixepoch())
     );
-    CREATE TABLE session_events (id TEXT PRIMARY KEY, session_id TEXT NOT NULL REFERENCES sessions(id) ON DELETE CASCADE, type TEXT NOT NULL, artifact_id TEXT REFERENCES artifacts(id) ON DELETE SET NULL, created_at INTEGER NOT NULL DEFAULT (unixepoch()));
+    CREATE TABLE session_events (
+      id TEXT PRIMARY KEY,
+      session_id TEXT NOT NULL REFERENCES sessions(id) ON DELETE CASCADE,
+      type TEXT NOT NULL CHECK(type IN ('scope_changed','project_linked','project_created','plan_created','artifact_created','approval_requested','approval_resolved','mcp_required','subagent_started','subagent_completed','connection_created')),
+      title TEXT NOT NULL,
+      body TEXT,
+      project_id TEXT REFERENCES projects(id) ON DELETE SET NULL,
+      plan_id TEXT REFERENCES plans(id) ON DELETE SET NULL,
+      artifact_id TEXT REFERENCES artifacts(id) ON DELETE SET NULL,
+      execution_id TEXT REFERENCES executions(id) ON DELETE SET NULL,
+      metadata TEXT NOT NULL DEFAULT '{}',
+      created_at INTEGER NOT NULL DEFAULT (unixepoch())
+    );
   `);
   db.pragma('user_version = 4');
   return db;
@@ -105,7 +132,17 @@ describe('migration v5: spaces rename and item model', () => {
       VALUES ('art1', 'p1', 'report', 'Generated Report', 'text/markdown', 'artifacts/art1.md', 'plan1', 'step1')
     `).run();
     db.prepare(`INSERT INTO sessions (id, user_id, pinned_project_id) VALUES ('s1', ?, 'p1')`).run(userId);
-    db.prepare(`INSERT INTO session_events (id, session_id, type, artifact_id) VALUES ('ev1', 's1', 'artifact_created', 'art1')`).run();
+    db.prepare(`
+      INSERT INTO session_events (id, session_id, type, title, project_id, artifact_id)
+      VALUES ('ev1', 's1', 'artifact_created', 'Artifact created', 'p1', 'art1')
+    `).run();
+    db.prepare(`INSERT INTO session_project_links (session_id, project_id) VALUES ('s1', 'p1')`).run();
+    db.prepare(`
+      INSERT INTO agent_worktrees (id, project_id, session_id, branch, worktree_path)
+      VALUES ('wt1', 'p1', 's1', 'main', '/worktrees/wt1')
+    `).run();
+    db.prepare(`INSERT INTO executions (id, project_id) VALUES ('ex1', 'p1')`).run();
+    db.prepare(`INSERT INTO memories (id, project_id, content) VALUES ('mem1', 'p1', 'remember this')`).run();
 
     const { migrations } = await import('../../src/db/index.js');
     runMigrations(db, migrations);
@@ -114,6 +151,21 @@ describe('migration v5: spaces rename and item model', () => {
   it('renames projects to spaces, preserving rows', () => {
     const space = db.prepare('SELECT * FROM spaces WHERE id = ?').get('p1') as { name: string };
     expect(space.name).toBe('My Project');
+  });
+
+  it('rewrites every child table\'s FK to point at spaces, not the now-gone projects table', () => {
+    // A literal regression test for the orphaned-FK bug: if the rename had used
+    // legacy_alter_table=ON, every one of these REFERENCES clauses would still
+    // say "projects" and the next insert with foreign_keys=ON would throw
+    // "no such table: projects".
+    const tables = ['plans', 'executions', 'memories', 'session_project_links', 'agent_worktrees', 'session_events'];
+    for (const table of tables) {
+      const row = db.prepare("SELECT sql FROM sqlite_master WHERE name = ?").get(table) as { sql: string };
+      expect(row.sql.toLowerCase()).not.toContain('references projects');
+    }
+    // Prove it at runtime too, not just by reading the schema text.
+    expect(() => db.prepare(`INSERT INTO plans (id, project_id, title) VALUES ('plan2', 'p1', 'Plan Two')`).run())
+      .not.toThrow();
   });
 
   it('drops repo_path from spaces and backfills it as a repo item', () => {
@@ -126,21 +178,29 @@ describe('migration v5: spaces rename and item model', () => {
     expect(repo.repo_path).toBe('/repos/p1');
   });
 
-  it('backfills the artifacts row as a note item with provenance, then drops artifacts', () => {
+  it('backfills the artifacts row as a FILE item pointing at its existing on-disk path (no content read, no data loss), then drops artifacts', () => {
     const tables = db.prepare("SELECT name FROM sqlite_master WHERE type = 'table'").all() as Array<{ name: string }>;
     expect(tables.map(t => t.name)).not.toContain('artifacts');
 
-    const item = db.prepare(`SELECT * FROM space_items WHERE space_id = 'p1' AND type = 'note'`).get() as {
+    const item = db.prepare(`SELECT * FROM space_items WHERE space_id = 'p1' AND type = 'file'`).get() as {
       id: string; source_plan_id: string | null; source_step_id: string | null;
     };
     expect(item.source_plan_id).toBe('plan1');
     expect(item.source_step_id).toBe('step1');
 
-    const note = db.prepare('SELECT * FROM space_notes WHERE item_id = ?').get(item.id);
-    expect(note).toBeDefined();
+    const file = db.prepare('SELECT * FROM space_files WHERE item_id = ?').get(item.id) as { file_path: string };
+    expect(file.file_path).toBe('artifacts/art1.md'); // the original on-disk path is preserved verbatim
 
     const event = db.prepare('SELECT * FROM session_events WHERE id = ?').get('ev1') as { item_id: string };
     expect(event.item_id).toBe(item.id);
+  });
+
+  it('extends session_events.type to allow item_created without breaking historical rows', () => {
+    expect(() =>
+      db.prepare(`INSERT INTO session_events (id, session_id, type, title, item_id) VALUES ('ev2', 's1', 'item_created', 'Item created', NULL)`).run(),
+    ).not.toThrow();
+    const historical = db.prepare(`SELECT type FROM session_events WHERE id = 'ev1'`).get() as { type: string };
+    expect(historical.type).toBe('artifact_created'); // old rows keep their original type value
   });
 
   it('renames sessions.pinned_project_id to pinned_space_id', () => {
@@ -148,8 +208,30 @@ describe('migration v5: spaces rename and item model', () => {
     expect(session.pinned_space_id).toBe('p1');
   });
 
+  it('re-keys agent_worktrees to (item_id, session_id), pointing at the backfilled repo item', () => {
+    const repoItem = db.prepare(`SELECT id FROM space_items WHERE space_id = 'p1' AND type = 'repo'`).get() as { id: string };
+    const worktree = db.prepare('SELECT * FROM agent_worktrees WHERE id = ?').get('wt1') as { item_id: string; session_id: string };
+    expect(worktree.item_id).toBe(repoItem.id);
+    expect(worktree.session_id).toBe('s1');
+  });
+
+  it('renames every other project_id FK column to space_id (generic sweep)', () => {
+    const link = db.prepare('SELECT * FROM session_project_links WHERE session_id = ?').get('s1') as { space_id: string };
+    expect(link.space_id).toBe('p1');
+    const exec = db.prepare("SELECT * FROM executions WHERE id = 'ex1'").get() as { space_id: string };
+    expect(exec.space_id).toBe('p1');
+    const mem = db.prepare("SELECT * FROM memories WHERE id = 'mem1'").get() as { space_id: string };
+    expect(mem.space_id).toBe('p1');
+  });
+
   it('lands on user_version 5', () => {
     expect(db.pragma('user_version', { simple: true })).toBe(5);
+  });
+
+  it('is idempotent: re-running the migration function directly does not throw', async () => {
+    const { migrations } = await import('../../src/db/index.js');
+    const v5 = migrations.find(m => m.version === 5)!;
+    expect(() => v5.up(db)).not.toThrow();
   });
 });
 ```
@@ -165,13 +247,25 @@ Add to `server/src/db/index.ts`, after `widenConnectionsTypeForLocal` (line 162)
 
 ```typescript
 function renameProjectsToSpacesAndAddItems(database: Database.Database): void {
-  database.exec(`
-    PRAGMA foreign_keys = OFF;
-    PRAGMA legacy_alter_table = ON;
-    ALTER TABLE projects RENAME TO spaces;
-    PRAGMA legacy_alter_table = OFF;
+  database.exec(`PRAGMA foreign_keys = OFF;`);
 
-    CREATE TABLE space_items (
+  // IMPORTANT: do NOT set legacy_alter_table=ON for this rename. With it OFF
+  // (SQLite's modern default since 3.25), ALTER TABLE ... RENAME TO automatically
+  // rewrites every other table's `REFERENCES projects(id)` to `REFERENCES spaces(id)`.
+  // Setting it ON here -- the way `repairPlanForeignKeys` above had to clean up after
+  // the historical campaigns->plans rename -- would silently orphan every child FK
+  // and the next insert under foreign_keys=ON would throw "no such table: projects".
+  // Guarded so re-running this migration after a crash doesn't fail on a table that
+  // no longer exists.
+  const projectsTableExists = database
+    .prepare("SELECT name FROM sqlite_master WHERE type = 'table' AND name = 'projects'")
+    .get();
+  if (projectsTableExists) {
+    database.exec(`PRAGMA legacy_alter_table = OFF; ALTER TABLE projects RENAME TO spaces;`);
+  }
+
+  database.exec(`
+    CREATE TABLE IF NOT EXISTS space_items (
       id TEXT PRIMARY KEY,
       space_id TEXT NOT NULL REFERENCES spaces(id) ON DELETE CASCADE,
       type TEXT NOT NULL CHECK(type IN ('repo','file','note')),
@@ -182,40 +276,90 @@ function renameProjectsToSpacesAndAddItems(database: Database.Database): void {
       created_at INTEGER NOT NULL DEFAULT (unixepoch())
     );
 
-    CREATE TABLE space_repos (
+    CREATE TABLE IF NOT EXISTS space_repos (
       item_id TEXT PRIMARY KEY REFERENCES space_items(id) ON DELETE CASCADE,
       repo_path TEXT NOT NULL,
       default_branch TEXT
     );
 
-    CREATE TABLE space_files (
+    CREATE TABLE IF NOT EXISTS space_files (
       item_id TEXT PRIMARY KEY REFERENCES space_items(id) ON DELETE CASCADE,
       file_path TEXT NOT NULL,
       size_bytes INTEGER,
       mime_type TEXT
     );
 
-    CREATE TABLE space_notes (
+    CREATE TABLE IF NOT EXISTS space_notes (
       item_id TEXT PRIMARY KEY REFERENCES space_items(id) ON DELETE CASCADE,
       content TEXT NOT NULL
     );
   `);
 
-  // Backfill repo_path -> a repo item, one per space that has one.
-  const spacesWithRepo = database
-    .prepare(`SELECT id, name, repo_path FROM spaces WHERE repo_path IS NOT NULL`)
-    .all() as Array<{ id: string; name: string; repo_path: string }>;
-  const insertItem = database.prepare(
-    `INSERT INTO space_items (id, space_id, type, name) VALUES (?, ?, 'repo', ?)`,
-  );
-  const insertRepo = database.prepare(`INSERT INTO space_repos (item_id, repo_path) VALUES (?, ?)`);
-  for (const space of spacesWithRepo) {
-    const itemId = `item_${space.id}_repo`;
-    insertItem.run(itemId, space.id, space.name);
-    insertRepo.run(itemId, space.repo_path);
+  // Backfill repo_path -> a repo item, one per space that has one. Idempotent:
+  // skip a space whose repo item was already created by a prior, interrupted run.
+  const repoPathColumnExists = (database.prepare("PRAGMA table_info(spaces)").all() as Array<{ name: string }>)
+    .some(c => c.name === 'repo_path');
+  if (repoPathColumnExists) {
+    const spacesWithRepo = database
+      .prepare(`SELECT id, name, repo_path FROM spaces WHERE repo_path IS NOT NULL`)
+      .all() as Array<{ id: string; name: string; repo_path: string }>;
+    const insertItem = database.prepare(
+      `INSERT INTO space_items (id, space_id, type, name) VALUES (?, ?, 'repo', ?)`,
+    );
+    const insertRepo = database.prepare(`INSERT INTO space_repos (item_id, repo_path) VALUES (?, ?)`);
+    const itemExists = database.prepare(`SELECT 1 FROM space_items WHERE id = ?`);
+    for (const space of spacesWithRepo) {
+      const itemId = `item_${space.id}_repo`;
+      if (itemExists.get(itemId)) continue;
+      insertItem.run(itemId, space.id, space.name);
+      insertRepo.run(itemId, space.repo_path);
+    }
   }
 
-  // Backfill artifacts -> note (had text content on disk) or file items, with provenance.
+  // Re-key agent_worktrees to (item_id, session_id): a space can now contain
+  // multiple repos, so the old (project_id, session_id) key -- which assumed
+  // exactly one repo per space -- no longer identifies a worktree uniquely.
+  // Every pre-migration space had at most one repo_path, so mapping each
+  // existing worktree row to that space's backfilled repo item (created just
+  // above) is unambiguous. Changing the UNIQUE constraint's columns requires a
+  // full rebuild, not just a column rename.
+  const worktreesTableExists = database
+    .prepare("SELECT name FROM sqlite_master WHERE type = 'table' AND name = 'agent_worktrees'")
+    .get();
+  const worktreesAlreadyRekeyed = worktreesTableExists
+    ? (database.prepare("PRAGMA table_info(agent_worktrees)").all() as Array<{ name: string }>).some(c => c.name === 'item_id')
+    : false;
+  if (worktreesTableExists && !worktreesAlreadyRekeyed) {
+    database.exec(`
+      ALTER TABLE agent_worktrees RENAME COLUMN project_id TO space_id;
+      ALTER TABLE agent_worktrees RENAME TO agent_worktrees_pre_v5;
+      CREATE TABLE agent_worktrees (
+        id TEXT PRIMARY KEY,
+        item_id TEXT NOT NULL REFERENCES space_items(id) ON DELETE CASCADE,
+        session_id TEXT NOT NULL REFERENCES sessions(id) ON DELETE CASCADE,
+        branch TEXT NOT NULL,
+        worktree_path TEXT NOT NULL,
+        claude_session_id TEXT,
+        codex_session_id TEXT,
+        created_at INTEGER NOT NULL DEFAULT (unixepoch()),
+        UNIQUE(item_id, session_id)
+      );
+      INSERT INTO agent_worktrees (id, item_id, session_id, branch, worktree_path, claude_session_id, codex_session_id, created_at)
+      SELECT w.id, 'item_' || w.space_id || '_repo', w.session_id, w.branch, w.worktree_path, w.claude_session_id, w.codex_session_id, w.created_at
+      FROM agent_worktrees_pre_v5 w
+      WHERE EXISTS (SELECT 1 FROM space_items WHERE id = 'item_' || w.space_id || '_repo');
+      DROP TABLE agent_worktrees_pre_v5;
+    `);
+  }
+
+  // Backfill artifacts -> FILE items pointing at their existing on-disk path.
+  // Deliberately NOT split into note/file by mime type and NOT re-reading file
+  // contents here: every backfilled artifact becomes a `file` item referencing
+  // the same `path` the artifacts row already had, so nothing is read, moved,
+  // or re-encoded during migration -- the original file stays exactly where it
+  // was. (An earlier draft of this migration wrote empty `space_notes.content`
+  // for text artifacts, silently discarding the real content stored on disk --
+  // this file-item approach is the fix.)
   const artifactsExists = database
     .prepare("SELECT name FROM sqlite_master WHERE type = 'table' AND name = 'artifacts'")
     .get();
@@ -224,78 +368,88 @@ function renameProjectsToSpacesAndAddItems(database: Database.Database): void {
       id: string; project_id: string; title: string; mime_type: string; path: string | null;
       source_plan_id: string | null; source_step_id: string | null;
     }>;
-    const insertNoteItem = database.prepare(
-      `INSERT INTO space_items (id, space_id, type, name, source_plan_id, source_step_id) VALUES (?, ?, 'note', ?, ?, ?)`,
-    );
     const insertFileItem = database.prepare(
       `INSERT INTO space_items (id, space_id, type, name, source_plan_id, source_step_id) VALUES (?, ?, 'file', ?, ?, ?)`,
     );
-    const insertNote = database.prepare(`INSERT INTO space_notes (item_id, content) VALUES (?, ?)`);
     const insertFile = database.prepare(`INSERT INTO space_files (item_id, file_path, mime_type) VALUES (?, ?, ?)`);
-    const isTextMime = (mimeType: string) =>
-      mimeType.startsWith('text/') || mimeType === 'application/json';
+    const itemExists = database.prepare(`SELECT 1 FROM space_items WHERE id = ?`);
 
     for (const artifact of artifacts) {
       const itemId = `item_${artifact.id}`;
-      if (isTextMime(artifact.mime_type)) {
-        insertNoteItem.run(itemId, artifact.project_id, artifact.title, artifact.source_plan_id, artifact.source_step_id);
-        insertNote.run(itemId, '');
-      } else {
-        insertFileItem.run(itemId, artifact.project_id, artifact.title, artifact.source_plan_id, artifact.source_step_id);
-        insertFile.run(itemId, artifact.path ?? '', artifact.mime_type);
-      }
+      if (itemExists.get(itemId)) continue;
+      insertFileItem.run(itemId, artifact.project_id, artifact.title, artifact.source_plan_id, artifact.source_step_id);
+      insertFile.run(itemId, artifact.path ?? '', artifact.mime_type);
     }
 
-    // session_events.artifact_id -> session_events.item_id, mapped through the same id scheme.
-    const eventsSql = database
-      .prepare("SELECT sql FROM sqlite_master WHERE name = 'session_events'")
-      .get() as { sql: string };
+    // session_events.artifact_id -> session_events.item_id, plus widen the type
+    // CHECK to allow 'item_created' going forward. Historical type values
+    // (including 'artifact_created' on old rows) are preserved as-is -- this is
+    // a deliberate scope boundary: only the new value is added, old event type
+    // strings are not retroactively renamed.
     database.exec(`
-      ALTER TABLE session_events RENAME TO session_events_pre_item_rename;
+      ALTER TABLE session_events RENAME COLUMN project_id TO space_id;
+      ALTER TABLE session_events RENAME TO session_events_pre_v5;
       CREATE TABLE session_events (
         id TEXT PRIMARY KEY,
         session_id TEXT NOT NULL REFERENCES sessions(id) ON DELETE CASCADE,
-        type TEXT NOT NULL,
+        type TEXT NOT NULL CHECK(type IN (
+          'scope_changed','project_linked','project_created','plan_created',
+          'artifact_created','item_created','approval_requested','approval_resolved',
+          'mcp_required','subagent_started','subagent_completed','connection_created'
+        )),
+        title TEXT NOT NULL,
+        body TEXT,
+        space_id TEXT REFERENCES spaces(id) ON DELETE SET NULL,
+        plan_id TEXT REFERENCES plans(id) ON DELETE SET NULL,
         item_id TEXT REFERENCES space_items(id) ON DELETE SET NULL,
+        execution_id TEXT REFERENCES executions(id) ON DELETE SET NULL,
+        metadata TEXT NOT NULL DEFAULT '{}',
         created_at INTEGER NOT NULL DEFAULT (unixepoch())
       );
-      INSERT INTO session_events (id, session_id, type, item_id, created_at)
-      SELECT id, session_id, type, CASE WHEN artifact_id IS NOT NULL THEN 'item_' || artifact_id ELSE NULL END, created_at
-      FROM session_events_pre_item_rename;
-      DROP TABLE session_events_pre_item_rename;
+      INSERT INTO session_events (id, session_id, type, title, body, space_id, plan_id, item_id, execution_id, metadata, created_at)
+      SELECT id, session_id, type, title, body, space_id, plan_id,
+             CASE WHEN artifact_id IS NOT NULL THEN 'item_' || artifact_id ELSE NULL END,
+             execution_id, metadata, created_at
+      FROM session_events_pre_v5;
+      DROP TABLE session_events_pre_v5;
     `);
-    void eventsSql; // referenced only to document intent; rebuild above is unconditional
 
     database.exec(`DROP TABLE artifacts;`);
   }
 
-  // spaces no longer carries repo_path.
-  database.exec(`
-    CREATE TABLE spaces_without_repo_path (
-      id TEXT PRIMARY KEY,
-      user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
-      name TEXT NOT NULL,
-      description TEXT,
-      enabled_connection_ids TEXT NOT NULL DEFAULT '[]',
-      created_at INTEGER NOT NULL DEFAULT (unixepoch()),
-      UNIQUE(user_id, name)
-    );
-    INSERT INTO spaces_without_repo_path (id, user_id, name, description, enabled_connection_ids, created_at)
-    SELECT id, user_id, name, description, enabled_connection_ids, created_at FROM spaces;
-    DROP TABLE spaces;
-    ALTER TABLE spaces_without_repo_path RENAME TO spaces;
-  `);
+  // spaces no longer carries repo_path. DROP COLUMN (supported natively since
+  // SQLite 3.35, which better-sqlite3 bundles) avoids the rebuild-and-copy
+  // dance a full rebuild would otherwise need.
+  if (repoPathColumnExists) {
+    database.exec(`ALTER TABLE spaces DROP COLUMN repo_path;`);
+  }
 
   // sessions.pinned_project_id -> pinned_space_id; pipelines.user_id -> space_id.
+  // Neither column is literally named `project_id`, so the generic sweep below
+  // doesn't touch them -- handled explicitly, guarded for idempotency.
   const sessionCols = database.prepare("PRAGMA table_info(sessions)").all() as Array<{ name: string }>;
   if (sessionCols.some(c => c.name === 'pinned_project_id')) {
     database.exec(`ALTER TABLE sessions RENAME COLUMN pinned_project_id TO pinned_space_id;`);
   }
   const pipelineCols = database.prepare("PRAGMA table_info(pipelines)").all() as Array<{ name: string }>;
   if (pipelineCols.some(c => c.name === 'user_id')) {
-    database.exec(`
-      ALTER TABLE pipelines RENAME COLUMN user_id TO space_id;
-    `);
+    database.exec(`ALTER TABLE pipelines RENAME COLUMN user_id TO space_id;`);
+  }
+
+  // Generic sweep: rename every remaining `project_id` column to `space_id`,
+  // across whatever tables still have one (session_project_links, executions,
+  // memories, campaigns, and anything else) -- querying the schema instead of
+  // hand-listing tables, since a hand-curated list is exactly how one of these
+  // gets missed.
+  const tablesWithProjectId = database
+    .prepare(`
+      SELECT m.name AS table_name FROM sqlite_master m
+      JOIN pragma_table_info(m.name) p ON p.name = 'project_id'
+      WHERE m.type = 'table'
+    `)
+    .all() as Array<{ table_name: string }>;
+  for (const { table_name } of tablesWithProjectId) {
+    database.exec(`ALTER TABLE "${table_name}" RENAME COLUMN project_id TO space_id;`);
   }
 
   database.exec(`PRAGMA foreign_keys = ON;`);
@@ -314,7 +468,7 @@ const migrations: Migration[] = [
 ];
 ```
 
-Also rename every remaining `project_id` FK column across other tables that reference `projects(id)` (e.g. any `session_project_links`-style join table, `plans.project_id`) to `space_id` using the same rebuild-and-copy pattern as above. Grep `server/src/db/index.ts` for `REFERENCES projects` to find every column needing this and add one more `ALTER TABLE ... RENAME COLUMN project_id TO space_id;` per table inside `renameProjectsToSpacesAndAddItems` (SQLite's `RENAME COLUMN` doesn't require a full rebuild, just `legacy_alter_table` is not needed for this specific operation).
+This single function deliberately replaces the earlier draft's per-table hand-listing of `project_id` renames — the generic `pragma_table_info` sweep at the end catches `session_project_links`, `executions`, `memories`, and any other table with a `project_id` column without needing to enumerate them, which is the safer approach given that an earlier review pass found the hand-curated list missed several real tables.
 
 - [ ] **Step 4: Run the test to verify it passes**
 
@@ -323,7 +477,7 @@ Expected: PASS — all 5 assertions green.
 
 - [ ] **Step 5: Update `applySchema()` so fresh installs land directly on the new shape**
 
-Modify `server/src/db/index.ts` inside `applySchema()` (the `projects` table definition around line 217-226): replace it with the final `spaces` table (no `repo_path`), and add `space_items`/`space_repos`/`space_files`/`space_notes` table definitions matching migration v5's `CREATE TABLE` statements exactly. Remove the `artifacts` table definition entirely. Update `session_events`'s `artifact_id` column to `item_id REFERENCES space_items(id) ON DELETE SET NULL`. Update `pipelines.user_id` to `pipelines.space_id REFERENCES spaces(id) ON DELETE CASCADE`. Update `sessions.pinned_project_id` to `sessions.pinned_space_id REFERENCES spaces(id) ON DELETE SET NULL`.
+Modify `server/src/db/index.ts` inside `applySchema()` (the `projects` table definition around line 217-226): replace it with the final `spaces` table (no `repo_path`), and add `space_items`/`space_repos`/`space_files`/`space_notes` table definitions matching migration v5's `CREATE TABLE` statements exactly. Remove the `artifacts` table definition entirely. Update `session_events` to match migration v5's rebuilt shape exactly: `project_id` → `space_id`, `artifact_id` → `item_id REFERENCES space_items(id) ON DELETE SET NULL`, and the `type` CHECK constraint extended to include `'item_created'` (keep `'artifact_created'` in the list too, since it's still a legitimate historical value an upgraded database may contain). Update `pipelines.user_id` to `pipelines.space_id REFERENCES spaces(id) ON DELETE CASCADE`. Update `sessions.pinned_project_id` to `sessions.pinned_space_id REFERENCES spaces(id) ON DELETE SET NULL`. Update `agent_worktrees` to the re-keyed shape: `item_id TEXT NOT NULL REFERENCES space_items(id) ON DELETE CASCADE` replacing `project_id`, and `UNIQUE(item_id, session_id)` replacing `UNIQUE(project_id, session_id)`. Rename every other `project_id` column found in `applySchema()` (e.g. `session_project_links`, `executions`, `memories`) to `space_id`, referencing `spaces(id)`.
 
 - [ ] **Step 6: Run the full server test suite to check for regressions**
 
@@ -382,7 +536,7 @@ git commit -m "feat(db): migration v5 - rename projects to spaces, add space_ite
   export function getItemById(itemId: string): SpaceItem | undefined;
   export function deleteItem(itemId: string): void;
   ```
-  These signatures are used by Task 3 (routes), Task 4 (`agent.ts`/`video.ts`), and Task 5 (web API parity).
+  These signatures are used by Task 3 (routes), Task 5 (`agent.ts`/`video.ts`), and Task 6 (web API parity).
 
 - [ ] **Step 1: Write failing tests**
 
@@ -615,7 +769,7 @@ git commit -m "feat(items): add space_items service with per-type subtable invar
 
 **Interfaces:**
 - Consumes: `createRepoItem`, `getItemsForSpace`, `getItemById`, `deleteItem` from Task 2 (`server/src/services/items.ts`).
-- Produces: mounted router at `/spaces` consumed by the web API client renames in Task 5.
+- Produces: mounted router at `/spaces` consumed by the web API client renames in Task 6.
 
 - [ ] **Step 1: Write failing route tests**
 
@@ -801,7 +955,147 @@ git commit -m "feat(routes): rename projects routes to spaces, scope filesystem 
 
 ---
 
-## Task 4: `agent.ts` and `video.ts` — replace artifact creation with item creation
+## Task 4: Agent worktree re-keying — `(repo_item_id, session_id)` instead of `(space_id, session_id)`
+
+**Files:**
+- Modify: `server/src/lib/worktree.ts` (`ensureWorktree` and any helper reading/writing `agent_worktrees`)
+- Modify: `server/src/db/index.ts` (`getAgentWorktree`, `createAgentWorktree`, `setAgentWorktreeSession`, `updateAgentWorktreePath` — around lines 966-987 in the current codebase)
+- Modify: `server/src/services/agent.ts:446,453,473,480,492,514` (every `ensureWorktree(project, sessionId)` call site)
+- Test: `server/tests/lib/worktree.test.ts`
+
+**Interfaces:**
+- Consumes: `agent_worktrees` table re-keyed by Task 1's migration to `(item_id, session_id)`; `getItemsForSpace`, `getItemById` from Task 2.
+- Produces: `ensureWorktree(repoItem: SpaceItem, sessionId: string)` — signature changes from `(project, sessionId)`. Consumed by `agent.ts`'s 6 call sites.
+
+This task exists because the spec requires worktrees to be keyed by which *repo item* they're for, not which Space — a Space can now contain more than one repo, so `(space_id, session_id)` no longer identifies a worktree uniquely. The DB-level re-key already happened in Task 1's migration (`agent_worktrees.item_id` replacing `project_id`); this task updates the code that reads/writes that table to match.
+
+- [ ] **Step 1: Write the failing test**
+
+```typescript
+// server/tests/lib/worktree.test.ts
+import { describe, it, expect, beforeAll } from 'vitest';
+import fs from 'fs';
+import { initDb, getDb } from '../../src/db/index.js';
+import { createRepoItem } from '../../src/services/items.js';
+import { ensureWorktree } from '../../src/lib/worktree.js';
+
+beforeAll(() => {
+  process.env.DATA_DIR = `/tmp/worktree-test-${Date.now()}`;
+  fs.mkdirSync(process.env.DATA_DIR, { recursive: true });
+  initDb();
+  const db = getDb();
+  db.prepare(`INSERT INTO users (id, email, hashed_password) VALUES ('u1', 'a@b.com', 'h')`).run();
+  db.prepare(`INSERT INTO spaces (id, user_id, name) VALUES ('sp1', 'u1', 'Space One')`).run();
+  db.prepare(`INSERT INTO sessions (id, user_id) VALUES ('sess1', 'u1')`).run();
+});
+
+describe('ensureWorktree', () => {
+  it('keys the worktree by (item_id, session_id), so two repo items in the same Space and session get distinct worktrees', async () => {
+    const repoA = createRepoItem({ space_id: 'sp1', name: 'repo-a', repo_path: '/repos/a' });
+    const repoB = createRepoItem({ space_id: 'sp1', name: 'repo-b', repo_path: '/repos/b' });
+
+    const worktreeA = await ensureWorktree(repoA, 'sess1');
+    const worktreeB = await ensureWorktree(repoB, 'sess1');
+
+    expect(worktreeA.id).not.toBe(worktreeB.id);
+
+    const row = getDb().prepare('SELECT item_id FROM agent_worktrees WHERE id = ?').get(worktreeA.id) as { item_id: string };
+    expect(row.item_id).toBe(repoA.id);
+  });
+
+  it('reuses the same worktree for the same (item_id, session_id) pair', async () => {
+    const repo = createRepoItem({ space_id: 'sp1', name: 'repo-c', repo_path: '/repos/c' });
+    const first = await ensureWorktree(repo, 'sess1');
+    const second = await ensureWorktree(repo, 'sess1');
+    expect(first.id).toBe(second.id);
+  });
+});
+```
+
+- [ ] **Step 2: Run to verify failure**
+
+Run: `cd server && npx vitest run tests/lib/worktree.test.ts`
+Expected: FAIL — `ensureWorktree` still expects a `project`/`project_id` shape, not a `SpaceItem`.
+
+- [ ] **Step 3: Implement**
+
+In `server/src/db/index.ts`, update the four worktree DB functions (around lines 966-987) to take `itemId` instead of `projectId`:
+
+```typescript
+// Before: getAgentWorktree(projectId: string, sessionId: string)
+// After:
+export function getAgentWorktree(itemId: string, sessionId: string): AgentWorktree | undefined {
+  return getDb()
+    .prepare('SELECT * FROM agent_worktrees WHERE item_id = ? AND session_id = ?')
+    .get(itemId, sessionId) as AgentWorktree | undefined;
+}
+
+// Before: createAgentWorktree(projectId: string, sessionId: string, branch: string, worktreePath: string)
+// After:
+export function createAgentWorktree(itemId: string, sessionId: string, branch: string, worktreePath: string): AgentWorktree {
+  const id = newId();
+  getDb()
+    .prepare('INSERT INTO agent_worktrees (id, item_id, session_id, branch, worktree_path) VALUES (?, ?, ?, ?, ?)')
+    .run(id, itemId, sessionId, branch, worktreePath);
+  return getAgentWorktree(itemId, sessionId)!;
+}
+```
+
+(`setAgentWorktreeSession` and `updateAgentWorktreePath` are unaffected beyond their existing `worktreeId` parameter — no `project_id`/`item_id` reference in their bodies, leave as-is.)
+
+In `server/src/lib/worktree.ts`, update `ensureWorktree`'s signature and body to take the repo `SpaceItem` instead of a project:
+
+```typescript
+// Before: export async function ensureWorktree(project: Project, sessionId: string): Promise<AgentWorktree>
+// After:
+import type { SpaceItem } from '../services/items.js';
+
+export async function ensureWorktree(repoItem: SpaceItem & { type: 'repo' }, sessionId: string): Promise<AgentWorktree> {
+  const existing = getAgentWorktree(repoItem.id, sessionId);
+  if (existing) return existing;
+  const branch = `agent/${sessionId}`;
+  const worktreePath = await createGitWorktree(repoItem.repo_path, branch); // existing helper, unchanged
+  return createAgentWorktree(repoItem.id, sessionId, branch, worktreePath);
+}
+```
+
+In `server/src/services/agent.ts`, update each of the 6 call sites (lines 446, 453, 473, 480, 492, 514) from `await ensureWorktree(project, sessionId)` to pass the resolved repo item instead. Since these call sites currently have a `project` in scope, replace that lookup with a repo-item lookup:
+
+```typescript
+// Before (repeated pattern at all 6 call sites):
+// const worktree = await ensureWorktree(project, sessionId);
+
+// After — resolve the Space's repo item once per call site (a Space may have
+// zero or multiple repo items; per the spec's out-of-scope note, the UI
+// preselects when there's exactly one, so this pass picks the first repo item
+// found and throws clearly if there isn't one):
+const repoItem = getItemsForSpace(space.id).find((item): item is SpaceItem & { type: 'repo' } => item.type === 'repo');
+if (!repoItem) throw new Error(`Space ${space.id} has no repo item to run this tool against`);
+const worktree = await ensureWorktree(repoItem, sessionId);
+```
+
+Add `import { getItemsForSpace } from './items.js';` near the top of `agent.ts` (Task 5 also needs this same import for its own item-creation changes — if Task 5 already added it by the time this task runs, skip the duplicate).
+
+- [ ] **Step 4: Run to verify pass**
+
+Run: `cd server && npx vitest run tests/lib/worktree.test.ts`
+Expected: PASS.
+
+- [ ] **Step 5: Run the full server suite**
+
+Run: `cd server && npx vitest run`
+Expected: No failures referencing `ensureWorktree`, `agent_worktrees.project_id`, or the old `(project, sessionId)` signature.
+
+- [ ] **Step 6: Commit**
+
+```bash
+git add server/src/db/index.ts server/src/lib/worktree.ts server/src/services/agent.ts server/tests/lib/worktree.test.ts
+git commit -m "feat(worktrees): re-key agent_worktrees by repo item instead of space, supporting multi-repo spaces"
+```
+
+---
+
+## Task 5: `agent.ts` and `video.ts` — replace artifact creation with item creation
 
 **Files:**
 - Modify: `server/src/services/agent.ts:987-1013` (create_artifact dispatch block), `:346` (`SUB_TOOLS` set), `server/src/tools/definitions.ts` (tool schema for `create_artifact`)
@@ -886,7 +1180,7 @@ case 'create_item': {
 }
 ```
 
-Add `import { createNoteItem, createRepoItem, createFileItem } from './items.js';` near the top of `agent.ts`. Rename `'create_artifact'` to `'create_item'` in the `SUB_TOOLS` set at line 346 (and remove `'list_artifacts'`/`'read_artifact'` if no replacement tool exists yet — out of scope per the spec's item-CRUD-via-routes approach; agents read items via the same `getItemsForSpace`/`getItemById` functions directly, not a separate tool, so drop those two from `SUB_TOOLS`).
+Add `import { createNoteItem, createRepoItem, createFileItem } from './items.js';` near the top of `agent.ts`. Rename `'create_artifact'` to `'create_item'` in the `SUB_TOOLS` set at line 346, and remove `'list_artifacts'`/`'read_artifact'` from that same set — no replacement tool exists yet (agents read items via direct `getItemsForSpace`/`getItemById` calls from within tool-handling code, not a separate dispatchable tool). Also delete the `list_artifacts` and `read_artifact` tool *definitions* themselves from `server/src/tools/definitions.ts` (their schema entries, not just the `SUB_TOOLS` set membership) — leaving the definitions in place while removing them from `SUB_TOOLS` would leave dead, unreachable schema entries.
 
 In `server/src/services/video.ts`, replace the `createArtifact()` call at lines 77-86:
 
@@ -928,7 +1222,7 @@ git commit -m "feat(agent): replace create_artifact tool with create_item, foldi
 
 ---
 
-## Task 5: Web types and API client rename
+## Task 6: Web types and API client rename
 
 **Files:**
 - Modify: `web/src/types.ts:1-9,93-116` (`Session`, `Project`, `ProjectArtifact`)
@@ -936,7 +1230,7 @@ git commit -m "feat(agent): replace create_artifact tool with create_item, foldi
 - Test: `web/src/lib/api.test.ts` (new, if no existing test file covers `api.ts` — check first with `ls web/src/lib/*.test.ts`)
 
 **Interfaces:**
-- Produces: `Space`, `SpaceItem` types; `getSpaces`, `createSpace`, `deleteSpace`, `updateSpace`, `getSpaceItems`, `createSpaceItem`, `deleteSpaceItem`, `getItemTree`, `getItemFile`, `getItemWorkspace`, `updateItemWorkspace`, `getItemCapabilities` functions — consumed by Task 6/7 (Sidebar, SpacePage).
+- Produces: `Space`, `SpaceItem` types; `getSpaces`, `createSpace`, `deleteSpace`, `updateSpace`, `getSpaceItems`, `createSpaceItem`, `deleteSpaceItem`, `getItemTree`, `getItemFile`, `getItemWorkspace`, `updateItemWorkspace`, `getItemCapabilities` functions — consumed by Task 7/8 (Sidebar, SpacePage).
 
 - [ ] **Step 1: Update types**
 
@@ -1039,14 +1333,14 @@ git commit -m "feat(web): rename Project->Space and Project APIs->Space/Item API
 
 ---
 
-## Task 6: Sidebar — contextual Space-scoped navigation
+## Task 7: Sidebar — contextual Space-scoped navigation
 
 **Files:**
 - Modify: `web/src/components/Sidebar.tsx` (full rewrite of the nav section; header/footer largely unchanged)
 - Create: `web/src/components/SpaceSidebarSections.tsx` (the Space-scoped section list, rendered inside `Sidebar.tsx` when a Space is active)
 
 **Interfaces:**
-- Consumes: `getSpaces`, `Space` from Task 5.
+- Consumes: `getSpaces`, `Space` from Task 6.
 - Produces: `Sidebar` renders Space-scoped sections when `location.pathname` starts with `/spaces/:id`; no second sidebar component is introduced.
 
 - [ ] **Step 1: Determine active-Space context**
@@ -1054,11 +1348,14 @@ git commit -m "feat(web): rename Project->Space and Project APIs->Space/Item API
 In `web/src/components/Sidebar.tsx`, replace the `Projects` `NavItem` (lines 124-130) and add Space-context detection:
 
 ```typescript
-import { useParams } from 'react-router-dom';
+// NOTE: don't use useParams() here — Sidebar is rendered at the layout level,
+// outside the <Route path="/spaces/:id/*"> element's component tree (that's
+// SpacePage, a sibling, not an ancestor/descendant of Sidebar), so useParams()
+// in Sidebar would never see `:id` regardless of what it's named. Parse the
+// pathname directly instead.
 // ...inside Sidebar component, alongside existing `location`/`navigate`:
-const params = useParams<{ spaceId?: string }>();
-const activeSpaceId = location.pathname.startsWith('/spaces/') ? params.spaceId ?? location.pathname.split('/')[2] : null;
-const activeSpace = activeSpaceId ? projectById[activeSpaceId] : null; // projectById renamed to spaceById, see Step 2
+const activeSpaceId = location.pathname.startsWith('/spaces/') ? location.pathname.split('/')[2] : null;
+const activeSpace = activeSpaceId ? spaceById[activeSpaceId] : null; // spaceById, see Step 2 below
 ```
 
 - [ ] **Step 2: Rename the `projects` query and add the switcher**
@@ -1193,7 +1490,7 @@ function SectionLink({ href, icon, label, active, onClick }: { href: string; ico
 }
 ```
 
-(Pipelines is intentionally not a separate `SectionLink` — Task 7 nests it inside the Plans page itself, per the spec's "Pipelines becomes a sub-item under Plans" decision.)
+(Pipelines is intentionally not a separate `SectionLink` — Task 8 nests it inside the Plans page itself, per the spec's "Pipelines becomes a sub-item under Plans" decision.)
 
 - [ ] **Step 2: Manual verification**
 
@@ -1208,7 +1505,7 @@ git commit -m "feat(web): make Sidebar contextual for Space-scoped navigation, r
 
 ---
 
-## Task 7: `SpacePage` — replace `ProjectPage`'s tab strip with routed sections; Items list with type filter
+## Task 8: `SpacePage` — replace `ProjectPage`'s tab strip with routed sections; Items list with type filter
 
 **Files:**
 - Create: `web/src/pages/SpacePage.tsx` (replaces `web/src/pages/ProjectPage.tsx`)
@@ -1217,7 +1514,7 @@ git commit -m "feat(web): make Sidebar contextual for Space-scoped navigation, r
 - Modify: routing config (likely `web/src/App.tsx:30-37`) and `web/src/pages/ProjectsPage.tsx` → rename to `SpacesPage.tsx`
 
 **Interfaces:**
-- Consumes: `getSpaces`, `getSpaceItems`, `createSpaceItem`, `deleteSpaceItem`, `Space`, `SpaceItem` from Task 5; `SpaceSidebarSections` from Task 6 (rendered by the global `Sidebar`, not by this page).
+- Consumes: `getSpaces`, `getSpaceItems`, `createSpaceItem`, `deleteSpaceItem`, `Space`, `SpaceItem` from Task 6; `SpaceSidebarSections` from Task 7 (rendered by the global `Sidebar`, not by this page).
 
 - [ ] **Step 1: Update routing**
 
@@ -1338,7 +1635,7 @@ function FilterChip({ label, active, onClick }: { label: string; active: boolean
 
 ```bash
 git rm web/src/pages/ProjectPage.tsx
-find web/src -iname "ArtifactsTab.tsx" -exec git rm {} \;
+find web/src -iname "ArtifactsTab.tsx" -o -iname "ArtifactPreviewCard.tsx" -o -iname "ArtifactsTab.test.tsx" | xargs -r git rm
 ```
 
 - [ ] **Step 6: Type-check and manual verification**
@@ -1357,14 +1654,14 @@ git commit -m "feat(web): replace ProjectPage's 7-tab strip with routed Space se
 
 ---
 
-## Task 8: Final sweep — verify no `project`/`artifact` identifiers remain, full test pass
+## Task 9: Final sweep — verify no `project`/`artifact` identifiers remain, full test pass
 
 **Files:** none new — verification only.
 
 - [ ] **Step 1: Grep for stragglers**
 
 ```bash
-grep -rln "project_id\|ProjectPage\|getProjectArtifacts\|ProjectArtifact\|pinned_project_id" server/src web/src
+grep -rln "project_id\|ProjectPage\|getProjectArtifacts\|ProjectArtifact\|pinned_project_id\|ensureWorktree(project\|agent_worktrees.*project_id" server/src web/src
 ```
 
 Expected: no output. Fix any remaining hit by applying the same rename used in its neighboring code (Tasks 1-7 cover every category of reference; a straggler means a missed call site, not a new pattern).

@@ -448,6 +448,9 @@ function applySchema(): void {
   if (!userSettingsCols.some(c => c.name === 'expo_push_token')) {
     db.exec('ALTER TABLE user_settings ADD COLUMN expo_push_token TEXT');
   }
+  if (!userSettingsCols.some(c => c.name === 'apns_device_token')) {
+    db.exec('ALTER TABLE user_settings ADD COLUMN apns_device_token TEXT');
+  }
 
   const sessionCols = db.prepare("SELECT name FROM pragma_table_info('sessions')").all() as { name: string }[];
   if (!sessionCols.some(c => c.name === 'effort')) {
@@ -1597,5 +1600,20 @@ export function setExpoPushToken(userId: string, token: string | null): void {
     INSERT INTO user_settings (user_id, expo_push_token)
     VALUES (?, ?)
     ON CONFLICT(user_id) DO UPDATE SET expo_push_token = excluded.expo_push_token
+  `).run(userId, token);
+}
+
+export function getApnsDeviceToken(userId: string): string | null {
+  const row = getDb()
+    .prepare('SELECT apns_device_token FROM user_settings WHERE user_id = ?')
+    .get(userId) as { apns_device_token: string | null } | undefined;
+  return row?.apns_device_token ?? null;
+}
+
+export function setApnsDeviceToken(userId: string, token: string | null): void {
+  getDb().prepare(`
+    INSERT INTO user_settings (user_id, apns_device_token)
+    VALUES (?, ?)
+    ON CONFLICT(user_id) DO UPDATE SET apns_device_token = excluded.apns_device_token
   `).run(userId, token);
 }

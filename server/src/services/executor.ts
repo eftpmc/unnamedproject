@@ -1,4 +1,5 @@
-import { createSessionEvent, getDb, getExpoPushToken, setExpoPushToken } from '../db/index.js';
+import { createSessionEvent, getDb, getExpoPushToken, setExpoPushToken, getApnsDeviceToken, setApnsDeviceToken } from '../db/index.js';
+import { sendApprovalPush } from './push.js';
 import { newId } from '../lib/ids.js';
 import { broadcast } from './socket.js';
 import { waitForApproval } from '../lib/approval.js';
@@ -104,13 +105,13 @@ export async function requestApproval(
     });
   }
   broadcast(userId, { type: 'approval_requested', sessionId: executionContext?.sessionId ?? null, executionId, approvalId, action, payload });
-  const pushToken = getExpoPushToken(userId);
-  if (pushToken) {
+  const expoToken = getExpoPushToken(userId);
+  if (expoToken) {
     fetch('https://exp.host/--/api/v2/push/send', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
-        to: pushToken,
+        to: expoToken,
         title: 'Action needed',
         body: `${action} is waiting for your approval`,
         data: { sessionId: executionContext?.sessionId ?? null, executionId, approvalId },
@@ -123,7 +124,22 @@ export async function requestApproval(
       if (ticket?.status === 'error' && ticket.message === 'DeviceNotRegistered') {
         setExpoPushToken(userId, null);
       }
-    }).catch(err => console.error('[push] Failed to send notification:', err));
+    }).catch(err => console.error('[push] Failed to send Expo notification:', err));
+  }
+  const apnsToken = getApnsDeviceToken(userId);
+  if (apnsToken) {
+    sendApprovalPush(apnsToken, {
+      sessionId: executionContext?.sessionId ?? null,
+      executionId,
+      approvalId,
+      action,
+    }).catch(err => {
+      if (err instanceof Error && err.message === 'DeviceNotRegistered') {
+        setApnsDeviceToken(userId, null);
+      } else {
+        console.error('[apns] Failed to send notification:', err);
+      }
+    });
   }
   const decision = await waitForApproval(approvalId);
   getDb()

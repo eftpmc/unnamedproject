@@ -151,6 +151,11 @@ final class APIClient {
     try await request(path: "/projects")
   }
 
+  func registerApnsToken(_ hex: String) async throws {
+    struct Body: Encodable { let apnsDeviceToken: String }
+    _ = try await request(path: "/settings", method: "PUT", body: Body(apnsDeviceToken: hex)) as OKResponse
+  }
+
   func projectPlans(projectId: String) async throws -> [Plan] {
     try await request(path: "/projects/\(projectId)/plans")
   }

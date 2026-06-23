@@ -218,6 +218,30 @@ final class AppCoordinator {
     presentInbox()
   }
 
+  /// Called by AppDelegate after APNs returns a device token.
+  func uploadPushToken(_ hex: String) {
+    Task {
+      try? await client.registerApnsToken(hex)
+    }
+  }
+
+  /// Deep-link into a chat by session ID (e.g. from a push notification tap).
+  func openChatById(_ sessionId: String) {
+    Task { @MainActor in
+      // If home isn't loaded yet, wait briefly and retry once.
+      guard splitVC != nil else {
+        try? await Task.sleep(nanoseconds: 1_000_000_000)
+        guard splitVC != nil else { return }
+        openChatById(sessionId)
+        return
+      }
+      if let chats = try? await client.sessions(),
+         let chat = chats.first(where: { $0.id == sessionId }) {
+        showChat(chat)
+      }
+    }
+  }
+
   /// Inbox stays a sheet — a transient, quick-action surface, unlike Projects.
   private func presentInbox() {
     let controller = ApprovalsViewController(appSession: session)

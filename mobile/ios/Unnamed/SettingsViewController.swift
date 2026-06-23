@@ -1,4 +1,5 @@
 import UIKit
+import UserNotifications
 
 final class SettingsViewController: UIViewController {
   var onSignOut: (() -> Void)?
@@ -52,6 +53,18 @@ final class SettingsViewController: UIViewController {
 
   @objc private func approvalAlertsToggled(_ sender: UISwitch) {
     UserDefaults.standard.set(sender.isOn, forKey: "approvalAlertsEnabled")
+    if sender.isOn {
+      UNUserNotificationCenter.current().requestAuthorization(options: [.alert, .sound, .badge]) { granted, _ in
+        DispatchQueue.main.async {
+          if granted {
+            UIApplication.shared.registerForRemoteNotifications()
+          } else {
+            sender.setOn(false, animated: true)
+            UserDefaults.standard.set(false, forKey: "approvalAlertsEnabled")
+          }
+        }
+      }
+    }
   }
 }
 

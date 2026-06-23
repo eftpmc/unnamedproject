@@ -23,6 +23,7 @@ const migrations: Migration[] = [
   { version: 1, name: 'baseline-schema', noTransaction: true, up: () => applySchema() },
   { version: 2, name: 'repair-plan-foreign-keys', noTransaction: true, up: repairPlanForeignKeys },
   { version: 3, name: 'tool-registry', up: addToolRegistry },
+  { version: 4, name: 'widen-connection-type-for-local', noTransaction: true, up: widenConnectionsTypeForLocal },
 ];
 
 function tableSql(database: Database.Database, name: string): string | undefined {
@@ -134,6 +135,30 @@ function addToolRegistry(database: Database.Database): void {
   if (!sessionCols.some(c => c.name === 'discovered_tools')) {
     database.exec("ALTER TABLE sessions ADD COLUMN discovered_tools TEXT NOT NULL DEFAULT '[]'");
   }
+}
+
+function widenConnectionsTypeForLocal(database: Database.Database): void {
+  const sql = tableSql(database, 'connections');
+  if (!sql || sql.includes("'local'")) return; // already applied
+  database.exec(`
+    PRAGMA foreign_keys = OFF;
+    PRAGMA legacy_alter_table = ON;
+    ALTER TABLE connections RENAME TO connections_pre_local_type;
+    PRAGMA legacy_alter_table = OFF;
+    CREATE TABLE connections (
+      id TEXT PRIMARY KEY,
+      user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+      name TEXT NOT NULL,
+      type TEXT NOT NULL CHECK(type IN ('anthropic','openai','github','mcp','local')),
+      purpose TEXT NOT NULL DEFAULT 'tool',
+      encrypted_config TEXT NOT NULL,
+      created_at INTEGER NOT NULL DEFAULT (unixepoch()),
+      UNIQUE(user_id, name)
+    );
+    INSERT INTO connections SELECT * FROM connections_pre_local_type;
+    DROP TABLE connections_pre_local_type;
+    PRAGMA foreign_keys = ON;
+  `);
 }
 
 export function initDb(): void {

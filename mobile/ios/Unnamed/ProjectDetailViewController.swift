@@ -10,6 +10,7 @@ final class ProjectDetailViewController: UIViewController {
   private var chats: [ChatSession] = []
   private var activeIds: Set<String> = []
   private var plans: [Plan] = []
+  private var artifacts: [ProjectArtifact] = []
   private var treeItems: [TreeItem] = []
 
   private struct TreeItem {
@@ -22,11 +23,12 @@ final class ProjectDetailViewController: UIViewController {
   private let tableView = UITableView(frame: .zero, style: .plain)
   private let refreshControl = UIRefreshControl()
   private let emptyLabel = UILabel()
-  private let segmentedControl = UISegmentedControl(items: ["Chats", "Plans", "Files"])
+  private let segmentedControl = UISegmentedControl(items: ["Chats", "Plans", "Artifacts", "Files"])
   private var segmentedControlContainer: UIView!
   private var projectInfoContainer: UIView!
   private var hasLoaded = false
   private var plansLoaded = false
+  private var artifactsLoaded = false
   private var treeLoaded = false
 
   init(appSession: AppSession, project: Project) {
@@ -172,6 +174,19 @@ final class ProjectDetailViewController: UIViewController {
         tableView.reloadData()
       }
     case 2:
+      if !artifactsLoaded {
+        tableView.backgroundView = makeLoadingView()
+        tableView.reloadData()
+        loadArtifacts()
+      } else {
+        tableView.backgroundView = artifacts.isEmpty ? makeEmptyView(
+          systemName: "shippingbox",
+          title: "No artifacts yet",
+          subtitle: "Durable outputs produced by agents will appear here."
+        ) : nil
+        tableView.reloadData()
+      }
+    case 3:
       if !treeLoaded {
         tableView.backgroundView = makeLoadingView()
         tableView.reloadData()
@@ -205,11 +220,27 @@ final class ProjectDetailViewController: UIViewController {
     }
   }
 
+  private func loadArtifacts() {
+    Task {
+      let loaded = (try? await client.projectArtifacts(projectId: project.id)) ?? []
+      artifacts = loaded.sorted { $0.createdAt > $1.createdAt }
+      artifactsLoaded = true
+      if segmentedControl.selectedSegmentIndex == 2 {
+        tableView.backgroundView = artifacts.isEmpty ? makeEmptyView(
+          systemName: "shippingbox",
+          title: "No artifacts yet",
+          subtitle: "Durable outputs produced by agents will appear here."
+        ) : nil
+        tableView.reloadData()
+      }
+    }
+  }
+
   private func loadTree() {
     Task {
       guard let result = try? await client.projectTree(projectId: project.id) else {
         treeLoaded = true
-        if segmentedControl.selectedSegmentIndex == 2 {
+        if segmentedControl.selectedSegmentIndex == 3 {
           tableView.backgroundView = makeEmptyView(systemName: "doc", title: "No files found", subtitle: "Files from the linked repository will appear here.")
           tableView.reloadData()
         }
@@ -218,7 +249,7 @@ final class ProjectDetailViewController: UIViewController {
       let sorted = result.entries.sorted { a, b in a.isDir != b.isDir ? a.isDir : a.name < b.name }
       treeItems = sorted.map { TreeItem(entry: $0, depth: 0) }
       treeLoaded = true
-      if segmentedControl.selectedSegmentIndex == 2 {
+      if segmentedControl.selectedSegmentIndex == 3 {
         tableView.backgroundView = treeItems.isEmpty ? makeEmptyView(systemName: "doc", title: "No files found", subtitle: "Files from the linked repository will appear here.") : nil
         tableView.reloadData()
       }
@@ -381,6 +412,7 @@ final class ProjectDetailViewController: UIViewController {
     tableView.separatorStyle = .none
     tableView.register(UITableViewCell.self, forCellReuseIdentifier: "cell")
     tableView.register(UITableViewCell.self, forCellReuseIdentifier: "planCell")
+    tableView.register(UITableViewCell.self, forCellReuseIdentifier: "artifactCell")
     tableView.register(UITableViewCell.self, forCellReuseIdentifier: "treeCell")
     tableView.dataSource = self
     tableView.delegate = self
@@ -501,7 +533,8 @@ extension ProjectDetailViewController: UITableViewDataSource, UITableViewDelegat
     switch segmentedControl.selectedSegmentIndex {
     case 0: return chats.count
     case 1: return plans.count
-    case 2: return treeItems.count
+    case 2: return artifacts.count
+    case 3: return treeItems.count
     default: return 0
     }
   }
@@ -509,7 +542,8 @@ extension ProjectDetailViewController: UITableViewDataSource, UITableViewDelegat
   func tableView(_ tableView: UITableView, cellForRowAt indexPath: IndexPath) -> UITableViewCell {
     switch segmentedControl.selectedSegmentIndex {
     case 1: return planCell(at: indexPath)
-    case 2: return treeCell(at: indexPath)
+    case 2: return artifactCell(at: indexPath)
+    case 3: return treeCell(at: indexPath)
     default: return chatCell(at: indexPath)
     }
   }
@@ -555,6 +589,51 @@ extension ProjectDetailViewController: UITableViewDataSource, UITableViewDelegat
     cell.accessoryView = nil
     cell.accessoryType = .disclosureIndicator
     return cell
+  }
+
+  private func artifactCell(at indexPath: IndexPath) -> UITableViewCell {
+    let cell = tableView.dequeueReusableCell(withIdentifier: "artifactCell", for: indexPath)
+    let artifact = artifacts[indexPath.row]
+    var content = UIListContentConfiguration.subtitleCell()
+    content.text = artifact.title
+    content.textProperties.font = .app(ofSize: 15, weight: .medium)
+    let parts = [kindLabel(for: artifact.kind), artifact.mimeType, relativeTime(from: artifact.createdAt)]
+    content.secondaryText = parts.joined(separator: " · ")
+    content.secondaryTextProperties.font = .app(ofSize: 12)
+    content.secondaryTextProperties.color = .secondaryLabel
+    content.image = UIImage(systemName: artifactIcon(for: artifact))
+    content.imageProperties.tintColor = artifactColor(for: artifact.status)
+    cell.contentConfiguration = content
+    cell.backgroundColor = .systemBackground
+    cell.accessoryView = nil
+    cell.accessoryType = .disclosureIndicator
+    return cell
+  }
+
+  private func kindLabel(for kind: String) -> String {
+    kind
+      .replacingOccurrences(of: "_", with: " ")
+      .replacingOccurrences(of: "-", with: " ")
+      .split(separator: " ")
+      .map { $0.capitalized }
+      .joined(separator: " ")
+  }
+
+  private func artifactIcon(for artifact: ProjectArtifact) -> String {
+    if artifact.isVideo { return "play.rectangle" }
+    if artifact.isImage { return "photo" }
+    if artifact.isText { return "doc.text" }
+    return "shippingbox"
+  }
+
+  private func artifactColor(for status: String) -> UIColor {
+    switch status {
+    case "ready": return AppPalette.success
+    case "review": return AppPalette.warning
+    case "running": return AppPalette.accent
+    case "error": return .systemRed
+    default: return .secondaryLabel
+    }
   }
 
   private func treeCell(at indexPath: IndexPath) -> UITableViewCell {
@@ -615,6 +694,8 @@ extension ProjectDetailViewController: UITableViewDataSource, UITableViewDelegat
     case 1:
       break
     case 2:
+      pushArtifactContent(artifact: artifacts[indexPath.row])
+    case 3:
       let item = treeItems[indexPath.row]
       if item.entry.isDir {
         toggleFolder(at: indexPath.row)
@@ -628,6 +709,11 @@ extension ProjectDetailViewController: UITableViewDataSource, UITableViewDelegat
 
   private func pushFileContent(entry: FileEntry) {
     let vc = FileContentViewController(appSession: appSession, projectId: project.id, entry: entry, client: client)
+    navigationController?.pushViewController(vc, animated: true)
+  }
+
+  private func pushArtifactContent(artifact: ProjectArtifact) {
+    let vc = ArtifactContentViewController(artifact: artifact, client: client)
     navigationController?.pushViewController(vc, animated: true)
   }
 }

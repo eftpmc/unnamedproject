@@ -66,6 +66,14 @@ final class APIClient {
     try await request(path: "/sessions/\(sessionId)/messages")
   }
 
+  func sessionEvents(sessionId: String) async throws -> SessionEventsResult {
+    try await request(path: "/sessions/\(sessionId)/events")
+  }
+
+  func chatStatus(sessionId: String) async throws -> ChatStatus {
+    try await request(path: "/sessions/\(sessionId)/status")
+  }
+
   func sendMessage(sessionId: String, content: String, attachments: [PendingAttachment] = []) async throws -> ChatMessage {
     guard !attachments.isEmpty else {
       return try await request(path: "/sessions/\(sessionId)/messages", method: "POST", body: SendMessageRequest(content: content))
@@ -132,6 +140,11 @@ final class APIClient {
     try await request(path: "/executions/\(id)/reject", method: "POST")
   }
 
+  @discardableResult
+  func cancelExecution(id: String) async throws -> OKResponse {
+    try await request(path: "/executions/\(id)/cancel", method: "POST")
+  }
+
   func activeSessions() async throws -> [String] {
     let result: ActiveSessionsResult = try await request(path: "/sessions/active")
     return result.ids
@@ -160,6 +173,10 @@ final class APIClient {
     try await request(path: "/projects/\(projectId)/plans")
   }
 
+  func plan(planId: String) async throws -> PlanDetailResult {
+    try await request(path: "/plans/\(planId)")
+  }
+
   func projectTree(projectId: String, dirPath: String? = nil) async throws -> ProjectTreeResult {
     if let p = dirPath {
       let encoded = p.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed) ?? p
@@ -171,6 +188,33 @@ final class APIClient {
   func projectFile(projectId: String, filePath: String) async throws -> ProjectFileResult {
     let encoded = filePath.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed) ?? filePath
     return try await request(path: "/projects/\(projectId)/file?path=\(encoded)")
+  }
+
+  func projectArtifacts(projectId: String) async throws -> [ProjectArtifact] {
+    let result: ProjectArtifactsResult = try await request(path: "/projects/\(projectId)/artifacts")
+    return result.artifacts
+  }
+
+  func artifactContent(_ contentUrl: String) async throws -> String {
+    let data = try await authenticatedData(pathOrURL: contentUrl)
+    return String(data: data, encoding: .utf8) ?? ""
+  }
+
+  func artifactData(_ pathOrURL: String) async throws -> Data {
+    try await authenticatedData(pathOrURL: pathOrURL)
+  }
+
+  func sessionWorktree(sessionId: String) async throws -> SessionWorktree? {
+    try await request(path: "/sessions/\(sessionId)/worktree")
+  }
+
+  func worktreeDiff(sessionId: String) async throws -> WorktreeDiffResult {
+    try await request(path: "/sessions/\(sessionId)/worktree/diff")
+  }
+
+  @discardableResult
+  func mergeSessionBranch(sessionId: String) async throws -> OKResponse {
+    try await request(path: "/sessions/\(sessionId)/merge", method: "POST")
   }
 
   @discardableResult
@@ -220,6 +264,33 @@ final class APIClient {
     }
     guard !data.isEmpty else { throw APIError.emptyResponse }
     return try JSONDecoder().decode(Response.self, from: data)
+  }
+
+  private func authenticatedData(pathOrURL: String) async throws -> Data {
+    guard let baseURL = session.serverURL else { throw APIError.missingServer }
+    let url: URL?
+    if pathOrURL.hasPrefix("http://") || pathOrURL.hasPrefix("https://") {
+      url = URL(string: pathOrURL)
+    } else {
+      url = URL(string: pathOrURL, relativeTo: baseURL)?.absoluteURL
+    }
+    guard let url else { throw APIError.invalidURL }
+
+    var request = URLRequest(url: url)
+    request.httpMethod = "GET"
+    request.timeoutInterval = 60
+    if let token = session.token {
+      request.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
+    }
+
+    let (data, response) = try await urlSession.data(for: request)
+    guard let http = response as? HTTPURLResponse else { throw APIError.emptyResponse }
+    if http.statusCode == 401 { throw APIError.unauthorized }
+    guard (200..<300).contains(http.statusCode) else {
+      let error = try? JSONDecoder().decode(ServerError.self, from: data)
+      throw APIError.server(status: http.statusCode, message: error?.error ?? String(data: data, encoding: .utf8) ?? "")
+    }
+    return data
   }
 }
 

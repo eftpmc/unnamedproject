@@ -42,6 +42,11 @@ vi.mock('../lib/api.js', () => ({
   deleteProject: vi.fn(),
   updateProject: vi.fn(),
   getProjectFile: vi.fn().mockResolvedValue(null),
+  getProjectWorkspace: vi.fn().mockResolvedValue({ content: '' }),
+  updateProjectWorkspace: vi.fn(),
+  getPipelines: vi.fn().mockResolvedValue({ pipelines: [] }),
+  deletePipeline: vi.fn(),
+  runPipeline: vi.fn(),
 }));
 
 vi.mock('../components/FileBrowser.js', () => ({ default: () => <div>FileBrowser</div> }));

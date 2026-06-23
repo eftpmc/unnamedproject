@@ -1,6 +1,25 @@
 import UIKit
 import UniformTypeIdentifiers
 
+private enum ChatRenderItem {
+  case message(ChatMessage)
+  case tool(ToolEvent)
+  case toolGroup([ToolEvent])
+  case event(SessionEvent)
+  case plan(SessionEvent)
+  case artifact(ArtifactSummary)
+}
+
+private struct ArtifactSummary {
+  let id: String
+  let projectId: String
+  let title: String
+  let subtitle: String
+  let status: String
+  let contentURL: String?
+  let pathOrURL: String?
+}
+
 final class ChatViewController: UIViewController {
   var onOpenSidebar: (() -> Void)?
   var onDeleted: (() -> Void)?
@@ -25,6 +44,12 @@ final class ChatViewController: UIViewController {
 
   private var messages: [ChatMessage] = []
   private var toolEvents: [ToolEvent] = []
+  private var sessionEvents: [SessionEvent] = []
+  private var renderItems: [ChatRenderItem] = []
+  private var worktree: SessionWorktree?
+  private var expandedToolIds = Set<String>()
+  private var planCache: [String: PlanDetailResult] = [:]
+  private var artifactCache: [String: ProjectArtifact] = [:]
   private var wsSubscriptionId: UUID?
   private var isLoaded = false
 
@@ -97,8 +122,6 @@ final class ChatViewController: UIViewController {
     super.viewDidLoad()
     view.backgroundColor = .systemBackground
 
-    // The chat header carries no title text or hairline — just the sidebar
-    // and options controls floating over the conversation.
     navigationItem.largeTitleDisplayMode = .never
     removeNavBarBackground()
     updateSidebarButtonVisibility()
@@ -111,7 +134,10 @@ final class ChatViewController: UIViewController {
     setupComposeBar()
     setupReconnectBanner()
     observeKeyboard()
+    observeForeground()
     loadMessages()
+    Task { await refreshStatus() }
+    Task { await refreshWorktree() }
   }
 
   override func viewWillAppear(_ animated: Bool) {
@@ -160,7 +186,7 @@ final class ChatViewController: UIViewController {
     pollTimer?.invalidate()
     pollTimer = Timer.scheduledTimer(withTimeInterval: 3.0, repeats: true) { [weak self] _ in
       guard let self else { return }
-      Task { await self.pollMessages() }
+      Task { await self.pollMessagesAndStatus() }
     }
   }
 
@@ -192,27 +218,24 @@ final class ChatViewController: UIViewController {
       guard !messages.contains(where: { $0.id == message.id }) else { return }
       messages.append(message)
       updateEmptyState()
-      let ip = IndexPath(row: messages.count - 1, section: 0)
-      tableView.insertRows(at: [ip], with: .none)
+      reloadTimeline()
       if isNearBottom() { scrollToBottom(animated: true) }
 
     case .messageDelta(let sid, let messageId, let delta) where sid == activeSessionId:
       guard let idx = messages.firstIndex(where: { $0.id == messageId }) else { return }
       let old = messages[idx]
-      messages[idx] = ChatMessage(id: old.id, role: old.role, content: old.content + delta, createdAt: old.createdAt, attachments: old.attachments)
-      tableView.reloadRows(at: [IndexPath(row: idx, section: 0)], with: .none)
+      messages[idx] = ChatMessage(id: old.id, role: old.role, content: old.content + delta, createdAt: old.createdAt, attachments: old.attachments, executions: old.executions)
+      reloadTimeline()
       if isNearBottom() { scrollToBottom(animated: false) }
 
     case .messageCreated(let sid, let message) where sid == activeSessionId:
       if let idx = messages.firstIndex(where: { $0.id == message.id }) {
         messages[idx] = message
-        tableView.reloadRows(at: [IndexPath(row: idx, section: 0)], with: .none)
       } else {
         messages.append(message)
-        let ip = IndexPath(row: messages.count - 1, section: 0)
-        tableView.insertRows(at: [ip], with: .none)
-        if isNearBottom() { scrollToBottom(animated: true) }
       }
+      reloadTimeline()
+      if isNearBottom() { scrollToBottom(animated: true) }
 
     case .turnComplete(let sid, _) where sid == activeSessionId:
       setAgentStatus(nil)
@@ -221,12 +244,38 @@ final class ChatViewController: UIViewController {
       for i in toolEvents.indices where toolEvents[i].status == "running" {
         toolEvents[i].status = "done"
       }
-      tableView.reloadData()
-      Task { await reloadMessages() }
+      reloadTimeline()
+      Task {
+        await reloadMessages()
+        await refreshEvents()
+        await refreshWorktree()
+      }
 
     case .executionUpdate(let sid, let executionId, let tool, let status, let chunk, let result)
         where sid == activeSessionId:
       handleExecutionUpdate(executionId: executionId, tool: tool, status: status, chunk: chunk, result: result)
+
+    case .approvalRequested(let sid, let executionId, _, let action)
+        where sid == nil || sid == activeSessionId:
+      setAgentStatus("Waiting for approval...")
+      if !toolEvents.contains(where: { $0.executionId == executionId }) {
+        toolEvents.append(ToolEvent(executionId: executionId, tool: action, projectName: nil, status: "awaiting_approval", action: action))
+        reloadTimeline()
+      } else {
+        updateToolEvent(executionId: executionId) { $0.status = "awaiting_approval" }
+      }
+
+    case .sessionEventCreated(let sid, let event) where sid == activeSessionId:
+      if !sessionEvents.contains(where: { $0.id == event.id }) {
+        sessionEvents.append(event)
+        reloadTimeline()
+      }
+      if event.type == "artifact_created" || event.type == "plan_created" {
+        Task {
+          await refreshEvents()
+          await refreshWorktree()
+        }
+      }
 
     case .sessionTitleUpdated(let sid, let t) where sid == activeSessionId:
       chatTitle = t
@@ -235,6 +284,7 @@ final class ChatViewController: UIViewController {
       pendingBannerItem?.cancel()
       pendingBannerItem = nil
       hideReconnectBanner()
+      Task { await refreshRecoveryState() }
 
     case .disconnected:
       pendingBannerItem?.cancel()
@@ -259,9 +309,8 @@ final class ChatViewController: UIViewController {
         let name = tool.map { formatToolName($0) } ?? "Working"
         setAgentStatus("\(name)…")
         if !toolEvents.contains(where: { $0.executionId == executionId }) {
-          toolEvents.append(ToolEvent(executionId: executionId, tool: tool ?? "tool", status: "running"))
-          let ip = IndexPath(row: messages.count + toolEvents.count - 1, section: 0)
-          tableView.insertRows(at: [ip], with: .fade)
+          toolEvents.append(ToolEvent(executionId: executionId, tool: tool ?? "tool", projectName: nil, status: "running"))
+          reloadTimeline()
           if isNearBottom() { scrollToBottom(animated: true) }
         }
       case "awaiting_approval":
@@ -283,7 +332,7 @@ final class ChatViewController: UIViewController {
   private func updateToolEvent(executionId: String, update: (inout ToolEvent) -> Void) {
     guard let idx = toolEvents.firstIndex(where: { $0.executionId == executionId }) else { return }
     update(&toolEvents[idx])
-    tableView.reloadRows(at: [IndexPath(row: messages.count + idx, section: 0)], with: .none)
+    reloadTimeline()
   }
 
   // MARK: - Layout
@@ -364,12 +413,16 @@ final class ChatViewController: UIViewController {
     tableView.separatorStyle = .none
     tableView.register(MessageCell.self, forCellReuseIdentifier: MessageCell.reuseID)
     tableView.register(ToolEventCell.self, forCellReuseIdentifier: ToolEventCell.reuseID)
+    tableView.register(ToolGroupCell.self, forCellReuseIdentifier: ToolGroupCell.reuseID)
+    tableView.register(SessionEventCell.self, forCellReuseIdentifier: SessionEventCell.reuseID)
+    tableView.register(PlanPreviewCell.self, forCellReuseIdentifier: PlanPreviewCell.reuseID)
+    tableView.register(ArtifactPreviewCell.self, forCellReuseIdentifier: ArtifactPreviewCell.reuseID)
     tableView.dataSource = self
     tableView.rowHeight = UITableView.automaticDimension
     tableView.estimatedRowHeight = 80
     tableView.keyboardDismissMode = .interactive
     tableView.allowsSelection = false
-    tableView.contentInset = UIEdgeInsets(top: 12, left: 0, bottom: 12, right: 0)
+    tableView.contentInset = UIEdgeInsets(top: 16, left: 0, bottom: 12, right: 0)
     tableView.refreshControl = refreshControl
     refreshControl.addTarget(self, action: #selector(refreshPulled), for: .valueChanged)
 
@@ -494,10 +547,7 @@ final class ChatViewController: UIViewController {
       equalTo: view.safeAreaLayoutGuide.bottomAnchor, constant: -composeFloatingGap)
 
     NSLayoutConstraint.activate([
-      // Full-bleed top-to-bottom so messages scroll visibly underneath the
-      // transparent nav bar and the floating composer card, rather than
-      // stopping at a hard edge that reveals the plain page background.
-      tableView.topAnchor.constraint(equalTo: view.topAnchor),
+      tableView.topAnchor.constraint(equalTo: view.safeAreaLayoutGuide.topAnchor),
       tableView.leadingAnchor.constraint(equalTo: view.leadingAnchor),
       tableView.trailingAnchor.constraint(equalTo: view.trailingAnchor),
       tableView.bottomAnchor.constraint(equalTo: view.bottomAnchor),
@@ -508,6 +558,8 @@ final class ChatViewController: UIViewController {
       composeBar.trailingAnchor.constraint(equalTo: view.trailingAnchor, constant: -12),
       composeBarBottom,
     ])
+    view.bringSubviewToFront(agentStatusBar)
+    view.bringSubviewToFront(composeBar)
   }
 
   private func observeKeyboard() {
@@ -517,6 +569,16 @@ final class ChatViewController: UIViewController {
     )
     NotificationCenter.default.addObserver(forName: UITextView.textDidChangeNotification, object: textView, queue: .main) { [weak self] _ in
       self?.sendButton.setNeedsUpdateConfiguration()
+    }
+  }
+
+  private func observeForeground() {
+    NotificationCenter.default.addObserver(
+      forName: UIApplication.willEnterForegroundNotification,
+      object: nil,
+      queue: .main
+    ) { [weak self] _ in
+      Task { await self?.refreshRecoveryState() }
     }
   }
 
@@ -542,10 +604,16 @@ final class ChatViewController: UIViewController {
     guard !activeSessionId.isEmpty else { isLoaded = true; updateEmptyState(); return }
     Task {
       do {
-        let loaded = try await client.messages(sessionId: activeSessionId)
+        async let loadedMessages = client.messages(sessionId: activeSessionId)
+        async let loadedEvents = client.sessionEvents(sessionId: activeSessionId)
+        let loaded = try await loadedMessages
         messages = loaded
+        if let eventsResult = try? await loadedEvents {
+          sessionEvents = eventsResult.events
+        }
+        rebuildToolEventsFromMessages()
         isLoaded = true
-        tableView.reloadData()
+        reloadTimeline()
         updateEmptyState()
         scrollToBottom(animated: false)
       } catch {
@@ -604,10 +672,16 @@ final class ChatViewController: UIViewController {
   }
 
   @MainActor
+  private func pollMessagesAndStatus() async {
+    await refreshStatus()
+    await pollMessages()
+  }
+
+  @MainActor
   private func pollMessages() async {
     do {
       let updated = try await client.messages(sessionId: activeSessionId)
-      guard updated.count != messages.count || updated.last?.id != messages.last?.id else { return }
+      guard updated.count != messages.count || updated.last?.id != messages.last?.id || hasExecutionChanges(updated) else { return }
       let nearBottom = isNearBottom()
       applyMessages(updated, scrollAnimated: nearBottom)
     } catch {}
@@ -615,8 +689,84 @@ final class ChatViewController: UIViewController {
 
   private func applyMessages(_ updated: [ChatMessage], scrollAnimated: Bool) {
     messages = updated
-    tableView.reloadData()
+    rebuildToolEventsFromMessages()
+    reloadTimeline()
     if scrollAnimated { scrollToBottom(animated: true) }
+  }
+
+  private func hasExecutionChanges(_ updated: [ChatMessage]) -> Bool {
+    let oldSig = messages.flatMap { $0.executions ?? [] }.map { "\($0.executionId):\($0.status):\($0.outputLog.count):\($0.result ?? "")" }
+    let newSig = updated.flatMap { $0.executions ?? [] }.map { "\($0.executionId):\($0.status):\($0.outputLog.count):\($0.result ?? "")" }
+    return oldSig != newSig
+  }
+
+  private func rebuildToolEventsFromMessages() {
+    var next: [ToolEvent] = []
+    var seen = Set<String>()
+    for message in messages {
+      for execution in message.executions ?? [] {
+        guard !seen.contains(execution.executionId) else { continue }
+        seen.insert(execution.executionId)
+        next.append(ToolEvent(
+          executionId: execution.executionId,
+          tool: execution.action ?? execution.tool,
+          projectName: execution.projectName,
+          status: execution.status,
+          output: execution.outputLog,
+          result: execution.result,
+          createdAt: execution.createdAt,
+          action: execution.action,
+          payload: execution.payload
+        ))
+      }
+    }
+    let persisted = Set(next.map(\.executionId))
+    let liveOnly = toolEvents.filter { !persisted.contains($0.executionId) }
+    toolEvents = next + liveOnly
+  }
+
+  @MainActor
+  private func refreshRecoveryState() async {
+    await refreshStatus()
+    await reloadMessages()
+    await refreshEvents()
+    await refreshWorktree()
+  }
+
+  @MainActor
+  private func refreshEvents() async {
+    guard !activeSessionId.isEmpty else { return }
+    do {
+      let result = try await client.sessionEvents(sessionId: activeSessionId)
+      sessionEvents = result.events
+      reloadTimeline()
+    } catch {}
+  }
+
+  @MainActor
+  private func refreshStatus() async {
+    guard !activeSessionId.isEmpty else { return }
+    do {
+      let status = try await client.chatStatus(sessionId: activeSessionId)
+      if let execution = status.execution {
+        switch execution.status {
+        case "awaiting_approval":
+          setAgentStatus("Waiting for approval...")
+        case "running":
+          setAgentStatus("\(formatToolName(execution.tool))...")
+        default:
+          setAgentStatus(status.active ? "Working..." : nil)
+        }
+        if !toolEvents.contains(where: { $0.executionId == execution.id }) {
+          toolEvents.append(ToolEvent(executionId: execution.id, tool: execution.tool, projectName: nil, status: execution.status, createdAt: execution.createdAt))
+          reloadTimeline()
+        }
+      } else if status.active {
+        setAgentStatus("Working...")
+      } else {
+        setAgentStatus(nil)
+      }
+    } catch {}
   }
 
   private func isNearBottom() -> Bool {
@@ -624,8 +774,176 @@ final class ChatViewController: UIViewController {
     return tableView.contentOffset.y >= bottom - 80
   }
 
+  private func reloadTimeline() {
+    renderItems = buildRenderItems()
+    tableView.reloadData()
+  }
+
+  private func buildRenderItems() -> [ChatRenderItem] {
+    struct Entry {
+      let time: Int
+      let order: Int
+      let item: ChatRenderItem
+    }
+    var entries: [Entry] = []
+    var order = 0
+    for message in messages {
+      entries.append(Entry(time: message.createdAt ?? order, order: order, item: .message(message)))
+      order += 1
+    }
+    for event in sessionEvents {
+      if event.type == "plan_created", event.planId != nil, event.projectId != nil {
+        entries.append(Entry(time: event.createdAt, order: order, item: .plan(event)))
+      } else if let summary = artifactSummary(from: event) {
+        entries.append(Entry(time: event.createdAt, order: order, item: .artifact(summary)))
+      } else {
+        entries.append(Entry(time: event.createdAt, order: order, item: .event(event)))
+      }
+      order += 1
+    }
+    for event in toolEvents where !isHiddenExecutionCard(event) {
+      if let summary = artifactSummary(from: event) {
+        entries.append(Entry(time: event.createdAt, order: order, item: .artifact(summary)))
+      } else {
+        entries.append(Entry(time: event.createdAt, order: order, item: .tool(event)))
+      }
+      order += 1
+    }
+    let sorted = entries.sorted {
+      if $0.time == $1.time { return $0.order < $1.order }
+      return $0.time < $1.time
+    }.map(\.item)
+    return groupRoutineTools(sorted)
+  }
+
+  private func groupRoutineTools(_ items: [ChatRenderItem]) -> [ChatRenderItem] {
+    var result: [ChatRenderItem] = []
+    var buffer: [ToolEvent] = []
+    func flush() {
+      guard !buffer.isEmpty else { return }
+      if buffer.count >= 2 {
+        result.append(.toolGroup(buffer))
+      } else if let first = buffer.first {
+        result.append(.tool(first))
+      }
+      buffer.removeAll()
+    }
+    for item in items {
+      if case .tool(let event) = item, !isGroupExempt(event) {
+        buffer.append(event)
+      } else {
+        flush()
+        result.append(item)
+      }
+    }
+    flush()
+    return result
+  }
+
+  private func isGroupExempt(_ event: ToolEvent) -> Bool {
+    let delegates = ["invoke_claude_code", "invoke_codex", "delegate_to_agent"]
+    if delegates.contains(event.tool) { return true }
+    if event.status == "error" || event.status == "awaiting_approval" { return true }
+    return false
+  }
+
+  private func isHiddenExecutionCard(_ event: ToolEvent) -> Bool {
+    if event.tool == "create_plan" { return true }
+    return artifactSummary(from: event) != nil
+  }
+
+  private func artifactSummary(from event: SessionEvent) -> ArtifactSummary? {
+    guard event.type == "artifact_created", let artifactId = event.artifactId, let projectId = event.projectId else { return nil }
+    if let artifact = artifactCache[artifactId] {
+      return artifactSummary(from: artifact)
+    }
+    Task { await fetchArtifact(projectId: projectId, artifactId: artifactId) }
+    return ArtifactSummary(
+      id: artifactId,
+      projectId: projectId,
+      title: event.title,
+      subtitle: event.body ?? "Artifact",
+      status: "ready",
+      contentURL: nil,
+      pathOrURL: nil
+    )
+  }
+
+  private func artifactSummary(from event: ToolEvent) -> ArtifactSummary? {
+    guard (event.tool == "create_artifact" || event.tool == "register_artifact"),
+          event.status == "done",
+          let result = event.result?.data(using: .utf8),
+          let json = try? JSONSerialization.jsonObject(with: result) as? [String: Any],
+          let artifactId = json["artifact_id"] as? String,
+          let projectId = json["project_id"] as? String
+    else { return nil }
+    if let artifact = artifactCache[artifactId] {
+      return artifactSummary(from: artifact)
+    }
+    Task { await fetchArtifact(projectId: projectId, artifactId: artifactId) }
+    let title = (json["title"] as? String) ?? "Artifact"
+    let kind = (json["kind"] as? String) ?? "Artifact"
+    return ArtifactSummary(
+      id: artifactId,
+      projectId: projectId,
+      title: title,
+      subtitle: kind.capitalized,
+      status: "ready",
+      contentURL: json["content_url"] as? String,
+      pathOrURL: (json["path"] as? String) ?? (json["url"] as? String)
+    )
+  }
+
+  private func artifactSummary(from artifact: ProjectArtifact) -> ArtifactSummary {
+    ArtifactSummary(
+      id: artifact.id,
+      projectId: artifact.projectId,
+      title: artifact.title,
+      subtitle: artifact.mimeType,
+      status: artifact.status,
+      contentURL: artifact.contentUrl,
+      pathOrURL: artifact.path ?? artifact.url
+    )
+  }
+
+  @MainActor
+  private func fetchArtifact(projectId: String, artifactId: String) async {
+    guard artifactCache[artifactId] == nil else { return }
+    guard let artifact = try? await client.projectArtifacts(projectId: projectId).first(where: { $0.id == artifactId }) else { return }
+    artifactCache[artifactId] = artifact
+    reloadTimeline()
+  }
+
+  @MainActor
+  private func loadPlan(planId: String, cacheKey: String) async {
+    guard planCache[cacheKey] == nil else { return }
+    guard let detail = try? await client.plan(planId: planId) else { return }
+    planCache[cacheKey] = detail
+    reloadTimeline()
+  }
+
+  private func openArtifact(_ summary: ArtifactSummary) {
+    let artifact = artifactCache[summary.id] ?? ProjectArtifact(
+      id: summary.id,
+      projectId: summary.projectId,
+      kind: "artifact",
+      title: summary.title,
+      description: nil,
+      status: summary.status,
+      mimeType: summary.subtitle,
+      path: summary.pathOrURL,
+      url: nil,
+      contentUrl: summary.contentURL,
+      sourcePlanId: nil,
+      sourceStepId: nil,
+      createdAt: Int(Date().timeIntervalSince1970)
+    )
+    let vc = ArtifactContentViewController(artifact: artifact, client: client)
+    navigationController?.pushViewController(vc, animated: true)
+  }
+
   private func scrollToBottom(animated: Bool) {
-    let count = messages.count + toolEvents.count
+    let count = renderItems.count
     guard count > 0 else { return }
     tableView.scrollToRow(at: IndexPath(row: count - 1, section: 0), at: .bottom, animated: animated)
   }
@@ -688,13 +1006,63 @@ final class ChatViewController: UIViewController {
     let deleteAction = UIAction(title: "Delete Chat", image: UIImage(systemName: "trash"), attributes: .destructive) { [weak self] _ in
       self?.confirmDeleteChat()
     }
-    return UIMenu(children: [renameAction, UIMenu(options: .displayInline, children: [deleteAction])])
+    var children: [UIMenuElement] = [renameAction]
+    if let worktree {
+      let label = worktree.filesChanged > 0 ? "Worktree Diff (\(worktree.filesChanged))" : "Worktree Diff"
+      let diffAction = UIAction(title: label, image: UIImage(systemName: "doc.text.magnifyingglass")) { [weak self] _ in
+        self?.showWorktreeDiff()
+      }
+      let mergeAction = UIAction(title: "Merge \(worktree.branch)", image: UIImage(systemName: "arrow.triangle.merge"), attributes: worktree.ahead > 0 || worktree.filesChanged > 0 ? [] : .disabled) { [weak self] _ in
+        self?.confirmMergeWorktree()
+      }
+      children.append(UIMenu(title: "Worktree", image: UIImage(systemName: "arrow.triangle.branch"), children: [diffAction, mergeAction]))
+    }
+    children.append(UIMenu(options: .displayInline, children: [deleteAction]))
+    return UIMenu(children: children)
   }
 
   private func refreshOptionsMenu() {
     navigationItem.rightBarButtonItem?.menu = makeChatSettingsMenu()
     configPill.menu = makeConfigMenu()
     refreshConfigPill()
+  }
+
+  @MainActor
+  private func refreshWorktree() async {
+    guard !activeSessionId.isEmpty else { return }
+    worktree = try? await client.sessionWorktree(sessionId: activeSessionId)
+    refreshOptionsMenu()
+  }
+
+  private func showWorktreeDiff() {
+    guard !activeSessionId.isEmpty else { return }
+    Task {
+      do {
+        let result = try await client.worktreeDiff(sessionId: activeSessionId)
+        let vc = DiffTextViewController(title: worktree?.branch ?? "Worktree Diff", diff: result.diff)
+        navigationController?.pushViewController(vc, animated: true)
+      } catch {
+        showError(error)
+      }
+    }
+  }
+
+  private func confirmMergeWorktree() {
+    let branch = worktree?.branch ?? "branch"
+    let alert = UIAlertController(title: "Merge \(branch)?", message: "This merges the agent branch into the project repository.", preferredStyle: .alert)
+    alert.addAction(UIAlertAction(title: "Cancel", style: .cancel))
+    alert.addAction(UIAlertAction(title: "Merge", style: .default) { [weak self] _ in
+      guard let self else { return }
+      Task {
+        do {
+          try await self.client.mergeSessionBranch(sessionId: self.activeSessionId)
+          await self.refreshWorktree()
+        } catch {
+          self.showError(error)
+        }
+      }
+    })
+    present(alert, animated: true)
   }
 
   private static func shortModelName(_ id: String) -> String {
@@ -777,6 +1145,8 @@ final class ChatViewController: UIViewController {
   @objc private func refreshPulled() {
     Task {
       await reloadMessages()
+      await refreshEvents()
+      await refreshWorktree()
       refreshControl.endRefreshing()
     }
   }
@@ -792,10 +1162,9 @@ final class ChatViewController: UIViewController {
     setSending(true)
     setAgentStatus("Working…")
 
-    let optimistic = ChatMessage(id: UUID().uuidString, role: "user", content: text, createdAt: nil, attachments: nil)
+    let optimistic = ChatMessage(id: UUID().uuidString, role: "user", content: text, createdAt: nil, attachments: nil, executions: nil)
     messages.append(optimistic)
-    let ip = IndexPath(row: messages.count - 1, section: 0)
-    tableView.insertRows(at: [ip], with: .automatic)
+    reloadTimeline()
     scrollToBottom(animated: true)
 
     Task {
@@ -815,7 +1184,7 @@ final class ChatViewController: UIViewController {
         // Roll back optimistic message
         if let idx = messages.firstIndex(where: { $0.id == optimistic.id }) {
           messages.remove(at: idx)
-          tableView.deleteRows(at: [IndexPath(row: idx, section: 0)], with: .automatic)
+          reloadTimeline()
         }
         UINotificationFeedbackGenerator().notificationOccurred(.error)
         setAgentStatus(nil)
@@ -958,25 +1327,61 @@ extension ChatViewController: UIDocumentPickerDelegate {
 
 extension ChatViewController: UITableViewDataSource {
   func tableView(_ tableView: UITableView, numberOfRowsInSection section: Int) -> Int {
-    messages.count + toolEvents.count
+    renderItems.count
   }
 
   func tableView(_ tableView: UITableView, cellForRowAt indexPath: IndexPath) -> UITableViewCell {
-    if indexPath.row < messages.count {
+    switch renderItems[indexPath.row] {
+    case .message(let message):
       let cell = tableView.dequeueReusableCell(withIdentifier: MessageCell.reuseID, for: indexPath) as! MessageCell
-      cell.configure(with: messages[indexPath.row])
+      cell.configure(with: message)
       cell.onLongPress = { [weak self] text in self?.showMessageActions(text) }
       return cell
-    } else {
+    case .tool(let event):
       let cell = tableView.dequeueReusableCell(withIdentifier: ToolEventCell.reuseID, for: indexPath) as! ToolEventCell
-      let event = toolEvents[indexPath.row - messages.count]
-      cell.configure(with: event)
+      cell.configure(with: event, expanded: expandedToolIds.contains(event.executionId))
+      cell.onToggle = { [weak self] in
+        guard let self else { return }
+        if self.expandedToolIds.contains(event.executionId) {
+          self.expandedToolIds.remove(event.executionId)
+        } else {
+          self.expandedToolIds.insert(event.executionId)
+        }
+        self.reloadTimeline()
+      }
       cell.onApprove = { [weak self] in
         Task { try? await self?.client.approveExecution(id: event.executionId) }
       }
       cell.onDeny = { [weak self] in
         Task { try? await self?.client.rejectExecution(id: event.executionId) }
       }
+      cell.onCancel = { [weak self] in
+        Task {
+          try? await self?.client.cancelExecution(id: event.executionId)
+          await self?.reloadMessages()
+        }
+      }
+      return cell
+    case .toolGroup(let events):
+      let cell = tableView.dequeueReusableCell(withIdentifier: ToolGroupCell.reuseID, for: indexPath) as! ToolGroupCell
+      cell.configure(with: events)
+      return cell
+    case .event(let event):
+      let cell = tableView.dequeueReusableCell(withIdentifier: SessionEventCell.reuseID, for: indexPath) as! SessionEventCell
+      cell.configure(with: event)
+      return cell
+    case .plan(let event):
+      let cell = tableView.dequeueReusableCell(withIdentifier: PlanPreviewCell.reuseID, for: indexPath) as! PlanPreviewCell
+      let key = [event.projectId, event.planId].compactMap { $0 }.joined(separator: ":")
+      cell.configure(event: event, detail: planCache[key])
+      if event.projectId != nil, let planId = event.planId, planCache[key] == nil {
+        Task { await loadPlan(planId: planId, cacheKey: key) }
+      }
+      return cell
+    case .artifact(let summary):
+      let cell = tableView.dequeueReusableCell(withIdentifier: ArtifactPreviewCell.reuseID, for: indexPath) as! ArtifactPreviewCell
+      cell.configure(with: summary)
+      cell.onOpen = { [weak self] in self?.openArtifact(summary) }
       return cell
     }
   }
@@ -1062,10 +1467,10 @@ private final class MessageCell: UITableViewCell {
     stackLeading = bubbleStack.leadingAnchor.constraint(equalTo: contentView.leadingAnchor, constant: 16)
     stackTrailing = bubbleStack.trailingAnchor.constraint(equalTo: contentView.trailingAnchor, constant: -16)
 
-    bubbleMaxWidth = bubbleStack.widthAnchor.constraint(lessThanOrEqualTo: contentView.widthAnchor, multiplier: 0.75)
+    bubbleMaxWidth = bubbleStack.widthAnchor.constraint(lessThanOrEqualTo: contentView.widthAnchor, multiplier: 0.78)
     NSLayoutConstraint.activate([
-      bubbleStack.topAnchor.constraint(equalTo: contentView.topAnchor, constant: 3),
-      bubbleStack.bottomAnchor.constraint(equalTo: contentView.bottomAnchor, constant: -3),
+      bubbleStack.topAnchor.constraint(equalTo: contentView.topAnchor, constant: 5),
+      bubbleStack.bottomAnchor.constraint(equalTo: contentView.bottomAnchor, constant: -5),
     ])
     bubbleMaxWidth.isActive = true
   }
@@ -1097,20 +1502,23 @@ private final class MessageCell: UITableViewCell {
     let content = isUser ? message.content : stripEmoji(message.content)
     for segment in parseMessageSegments(content) {
       switch segment {
-      case .text(let str): contentStack.addArrangedSubview(makeTextSegment(str, font: baseFont, textColor: textColor, codeBg: codeBg, hInset: isUser ? 14 : 0, lineSpacing: isUser ? 0 : 4))
+      case .text(let str):
+        for block in splitTextAndTables(str) {
+          switch block {
+          case .text(let text):
+            contentStack.addArrangedSubview(makeTextSegment(text, font: baseFont, textColor: textColor, codeBg: codeBg, hInset: isUser ? 14 : 0, vInset: isUser ? 10 : 6, lineSpacing: isUser ? 0 : 4))
+          case .table(let rows):
+            contentStack.addArrangedSubview(makeTableSegment(rows: rows, isUser: isUser))
+          }
+        }
       case .code(let code): contentStack.addArrangedSubview(makeCodeSegment(code))
       }
     }
-
-    // User bubbles skip the timestamp entirely — this is a chat-with-an-agent
-    // surface, not a texting app where message timing matters.
-    if !isUser, let epoch = message.createdAt {
-      timeLabel.text = messageTime(epoch)
-      timeLabel.textAlignment = .left
-      timeLabel.isHidden = false
-    } else {
-      timeLabel.isHidden = true
+    if let attachments = message.attachments, !attachments.isEmpty {
+      contentStack.addArrangedSubview(makeAttachmentHistoryView(attachments, isUser: isUser))
     }
+
+    timeLabel.isHidden = true
 
     // Width: user bubble is capped (right-aligned via leading-inactive + trailing + width cap);
     // assistant spans full width (leading + trailing both active, no width cap) so the label wraps
@@ -1120,7 +1528,7 @@ private final class MessageCell: UITableViewCell {
     stackLeading.isActive = !isUser
   }
 
-  private func makeTextSegment(_ text: String, font: UIFont, textColor: UIColor, codeBg: UIColor, hInset: CGFloat = 14, lineSpacing: CGFloat = 0) -> UIView {
+  private func makeTextSegment(_ text: String, font: UIFont, textColor: UIColor, codeBg: UIColor, hInset: CGFloat = 14, vInset: CGFloat = 10, lineSpacing: CGFloat = 0) -> UIView {
     let label = UILabel()
     label.numberOfLines = 0
     label.font = font
@@ -1133,8 +1541,8 @@ private final class MessageCell: UITableViewCell {
     NSLayoutConstraint.activate([
       label.leadingAnchor.constraint(equalTo: wrapper.leadingAnchor, constant: hInset),
       label.trailingAnchor.constraint(equalTo: wrapper.trailingAnchor, constant: -hInset),
-      label.topAnchor.constraint(equalTo: wrapper.topAnchor, constant: 10),
-      label.bottomAnchor.constraint(equalTo: wrapper.bottomAnchor, constant: -10),
+      label.topAnchor.constraint(equalTo: wrapper.topAnchor, constant: vInset),
+      label.bottomAnchor.constraint(equalTo: wrapper.bottomAnchor, constant: -vInset),
     ])
     return wrapper
   }
@@ -1182,6 +1590,186 @@ private final class MessageCell: UITableViewCell {
 
     return container
   }
+
+  private enum RichTextBlock {
+    case text(String)
+    case table([[String]])
+  }
+
+  private func splitTextAndTables(_ text: String) -> [RichTextBlock] {
+    let lines = text.components(separatedBy: "\n")
+    var blocks: [RichTextBlock] = []
+    var textLines: [String] = []
+    var i = 0
+
+    func flushText() {
+      let joined = textLines.joined(separator: "\n").trimmingCharacters(in: .newlines)
+      if !joined.isEmpty { blocks.append(.text(joined)) }
+      textLines.removeAll()
+    }
+
+    while i < lines.count {
+      if i + 1 < lines.count, isMarkdownTableSeparator(lines[i + 1]), looksLikeTableRow(lines[i]) {
+        flushText()
+        var tableRows: [[String]] = [parseTableRow(lines[i])]
+        i += 2
+        while i < lines.count, looksLikeTableRow(lines[i]) {
+          tableRows.append(parseTableRow(lines[i]))
+          i += 1
+        }
+        if tableRows.count > 1 {
+          blocks.append(.table(tableRows))
+        }
+      } else {
+        textLines.append(lines[i])
+        i += 1
+      }
+    }
+    flushText()
+    return blocks
+  }
+
+  private func looksLikeTableRow(_ line: String) -> Bool {
+    let trimmed = line.trimmingCharacters(in: .whitespaces)
+    return trimmed.contains("|") && parseTableRow(trimmed).count >= 2
+  }
+
+  private func isMarkdownTableSeparator(_ line: String) -> Bool {
+    let cells = parseTableRow(line)
+    guard cells.count >= 2 else { return false }
+    return cells.allSatisfy { cell in
+      let trimmed = cell.trimmingCharacters(in: .whitespaces)
+      guard trimmed.count >= 3 else { return false }
+      return trimmed.allSatisfy { $0 == "-" || $0 == ":" }
+    }
+  }
+
+  private func parseTableRow(_ line: String) -> [String] {
+    var trimmed = line.trimmingCharacters(in: .whitespaces)
+    if trimmed.hasPrefix("|") { trimmed.removeFirst() }
+    if trimmed.hasSuffix("|") { trimmed.removeLast() }
+    return trimmed.split(separator: "|", omittingEmptySubsequences: false)
+      .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
+  }
+
+  private func makeTableSegment(rows: [[String]], isUser: Bool) -> UIView {
+    let scrollView = UIScrollView()
+    scrollView.showsHorizontalScrollIndicator = true
+    scrollView.alwaysBounceHorizontal = false
+
+    let tableStack = UIStackView()
+    tableStack.axis = .vertical
+    tableStack.spacing = 0
+    tableStack.backgroundColor = AppPalette.borderSoft
+    tableStack.layer.cornerRadius = 10
+    tableStack.layer.cornerCurve = .continuous
+    tableStack.layer.borderWidth = 1
+    tableStack.layer.borderColor = AppPalette.borderSoft.cgColor
+    tableStack.clipsToBounds = true
+
+    let columnCount = rows.map(\.count).max() ?? 0
+    for (rowIndex, row) in rows.enumerated() {
+      let rowStack = UIStackView()
+      rowStack.axis = .horizontal
+      rowStack.spacing = 1
+      rowStack.distribution = .fillEqually
+      for columnIndex in 0..<columnCount {
+        let label = UILabel()
+        label.numberOfLines = 0
+        label.font = rowIndex == 0 ? UIFont.app(forTextStyle: .caption1, weight: .semibold) : UIFont.app(forTextStyle: .caption1)
+        label.textColor = rowIndex == 0 ? .label : AppPalette.foregroundSoft
+        label.attributedText = applyInlineMarkdown(columnIndex < row.count ? row[columnIndex] : "", font: label.font, color: label.textColor, codeBg: AppPalette.muted)
+        label.backgroundColor = rowIndex == 0 ? AppPalette.muted : AppPalette.card
+        label.lineBreakMode = .byWordWrapping
+
+        let cell = UIView()
+        cell.backgroundColor = label.backgroundColor
+        cell.addSubview(label)
+        label.translatesAutoresizingMaskIntoConstraints = false
+        NSLayoutConstraint.activate([
+          cell.widthAnchor.constraint(greaterThanOrEqualToConstant: 112),
+          label.leadingAnchor.constraint(equalTo: cell.leadingAnchor, constant: 10),
+          label.trailingAnchor.constraint(equalTo: cell.trailingAnchor, constant: -10),
+          label.topAnchor.constraint(equalTo: cell.topAnchor, constant: 8),
+          label.bottomAnchor.constraint(equalTo: cell.bottomAnchor, constant: -8),
+        ])
+        rowStack.addArrangedSubview(cell)
+      }
+      tableStack.addArrangedSubview(rowStack)
+      if rowIndex < rows.count - 1 {
+        let divider = UIView()
+        divider.backgroundColor = AppPalette.borderSoft
+        NSLayoutConstraint.activate([divider.heightAnchor.constraint(equalToConstant: 1)])
+        tableStack.addArrangedSubview(divider)
+      }
+    }
+
+    scrollView.addSubview(tableStack)
+    tableStack.translatesAutoresizingMaskIntoConstraints = false
+    NSLayoutConstraint.activate([
+      tableStack.leadingAnchor.constraint(equalTo: scrollView.contentLayoutGuide.leadingAnchor),
+      tableStack.trailingAnchor.constraint(equalTo: scrollView.contentLayoutGuide.trailingAnchor),
+      tableStack.topAnchor.constraint(equalTo: scrollView.contentLayoutGuide.topAnchor),
+      tableStack.bottomAnchor.constraint(equalTo: scrollView.contentLayoutGuide.bottomAnchor),
+      tableStack.heightAnchor.constraint(equalTo: scrollView.frameLayoutGuide.heightAnchor),
+      tableStack.widthAnchor.constraint(greaterThanOrEqualTo: scrollView.frameLayoutGuide.widthAnchor),
+    ])
+
+    let wrapper = UIView()
+    wrapper.addSubview(scrollView)
+    scrollView.translatesAutoresizingMaskIntoConstraints = false
+    NSLayoutConstraint.activate([
+      scrollView.leadingAnchor.constraint(equalTo: wrapper.leadingAnchor, constant: isUser ? 12 : 0),
+      scrollView.trailingAnchor.constraint(equalTo: wrapper.trailingAnchor, constant: isUser ? -12 : 0),
+      scrollView.topAnchor.constraint(equalTo: wrapper.topAnchor, constant: 6),
+      scrollView.bottomAnchor.constraint(equalTo: wrapper.bottomAnchor, constant: -8),
+    ])
+    return wrapper
+  }
+
+  private func makeAttachmentHistoryView(_ attachments: [MessageAttachment], isUser: Bool) -> UIView {
+    let stack = UIStackView()
+    stack.axis = .vertical
+    stack.spacing = 6
+    for attachment in attachments {
+      let row = UIStackView()
+      row.axis = .horizontal
+      row.alignment = .center
+      row.spacing = 6
+      row.isLayoutMarginsRelativeArrangement = true
+      row.directionalLayoutMargins = NSDirectionalEdgeInsets(top: 5, leading: 9, bottom: 5, trailing: 10)
+      row.backgroundColor = isUser ? UIColor.systemBackground.withAlphaComponent(0.7) : AppPalette.muted
+      row.layer.cornerRadius = 8
+      row.layer.cornerCurve = .continuous
+
+      let icon = UIImageView(image: UIImage(systemName: "paperclip"))
+      icon.tintColor = .secondaryLabel
+      icon.contentMode = .scaleAspectFit
+      NSLayoutConstraint.activate([
+        icon.widthAnchor.constraint(equalToConstant: 12),
+        icon.heightAnchor.constraint(equalToConstant: 12),
+      ])
+      let label = UILabel()
+      label.font = UIFont.app(forTextStyle: .caption1)
+      label.textColor = .secondaryLabel
+      label.lineBreakMode = .byTruncatingMiddle
+      label.text = "\(attachment.filename) · \(byteCount(attachment.sizeBytes))"
+      row.addArrangedSubview(icon)
+      row.addArrangedSubview(label)
+      stack.addArrangedSubview(row)
+    }
+
+    let wrapper = UIView()
+    wrapper.addSubview(stack)
+    stack.translatesAutoresizingMaskIntoConstraints = false
+    NSLayoutConstraint.activate([
+      stack.leadingAnchor.constraint(equalTo: wrapper.leadingAnchor, constant: isUser ? 12 : 0),
+      stack.trailingAnchor.constraint(lessThanOrEqualTo: wrapper.trailingAnchor, constant: isUser ? -12 : 0),
+      stack.topAnchor.constraint(equalTo: wrapper.topAnchor, constant: 0),
+      stack.bottomAnchor.constraint(equalTo: wrapper.bottomAnchor, constant: isUser ? -10 : -4),
+    ])
+    return wrapper
+  }
 }
 
 private func messageTime(_ epoch: Int) -> String {
@@ -1204,6 +1792,8 @@ private final class ToolEventCell: UITableViewCell {
 
   var onApprove: (() -> Void)?
   var onDeny: (() -> Void)?
+  var onCancel: (() -> Void)?
+  var onToggle: (() -> Void)?
 
   private let card = UIView()
   private let badge = UIView()
@@ -1216,25 +1806,30 @@ private final class ToolEventCell: UITableViewCell {
   private let spinner = UIActivityIndicatorView(style: .medium)
   private let approveBtn = UIButton(type: .system)
   private let denyBtn = UIButton(type: .system)
+  private let cancelBtn = UIButton(type: .system)
   private let approvalRow = UIStackView()
+  private let outputLabel = UILabel()
+  private let detailStack = UIStackView()
 
   override init(style: UITableViewCell.CellStyle, reuseIdentifier: String?) {
     super.init(style: style, reuseIdentifier: reuseIdentifier)
     backgroundColor = .clear
     selectionStyle = .none
     buildLayout()
+    let tap = UITapGestureRecognizer(target: self, action: #selector(toggleTapped))
+    card.addGestureRecognizer(tap)
   }
 
   required init?(coder: NSCoder) { fatalError() }
 
   private func buildLayout() {
-    card.backgroundColor = .systemBackground
+    card.backgroundColor = AppPalette.card
     card.layer.cornerRadius = 10
     card.layer.cornerCurve = .continuous
     card.layer.borderWidth = 1
     card.layer.borderColor = AppPalette.borderSoft.cgColor
 
-    badge.backgroundColor = AppPalette.muted
+    badge.backgroundColor = AppPalette.accent.withAlphaComponent(0.12)
     badge.layer.cornerRadius = 6
     badge.layer.cornerCurve = .continuous
     badge.translatesAutoresizingMaskIntoConstraints = false
@@ -1257,7 +1852,7 @@ private final class ToolEventCell: UITableViewCell {
     nameLabel.textColor = .label
 
     hintLabel.font = UIFont.monospacedSystemFont(ofSize: 10, weight: .regular)
-    hintLabel.textColor = .tertiaryLabel
+    hintLabel.textColor = .secondaryLabel
     hintLabel.numberOfLines = 1
     hintLabel.isHidden = true
 
@@ -1314,6 +1909,15 @@ private final class ToolEventCell: UITableViewCell {
     denyBtn.configuration?.contentInsets = NSDirectionalEdgeInsets(top: 7, leading: 12, bottom: 7, trailing: 12)
     denyBtn.addTarget(self, action: #selector(denyTapped), for: .touchUpInside)
 
+    cancelBtn.configuration = .borderedTinted()
+    cancelBtn.configuration?.cornerStyle = .capsule
+    cancelBtn.configuration?.baseForegroundColor = AppPalette.destructive
+    cancelBtn.configuration?.image = UIImage(systemName: "xmark")
+    cancelBtn.configuration?.title = "Cancel"
+    cancelBtn.configuration?.imagePadding = 5
+    cancelBtn.configuration?.contentInsets = NSDirectionalEdgeInsets(top: 7, leading: 12, bottom: 7, trailing: 12)
+    cancelBtn.addTarget(self, action: #selector(cancelTapped), for: .touchUpInside)
+
     approvalRow.axis = .horizontal
     approvalRow.spacing = 8
     approvalRow.addArrangedSubview(approveBtn)
@@ -1321,7 +1925,21 @@ private final class ToolEventCell: UITableViewCell {
     approvalRow.addArrangedSubview(UIView())
     approvalRow.isHidden = true
 
-    let stack = UIStackView(arrangedSubviews: [headerRow, approvalRow])
+    outputLabel.numberOfLines = 0
+    outputLabel.font = UIFont.monospacedSystemFont(ofSize: 11, weight: .regular)
+    outputLabel.textColor = AppPalette.foregroundSoft
+    outputLabel.backgroundColor = AppPalette.codeBackground
+    outputLabel.layer.cornerRadius = 8
+    outputLabel.layer.cornerCurve = .continuous
+    outputLabel.clipsToBounds = true
+
+    detailStack.axis = .vertical
+    detailStack.spacing = 8
+    detailStack.addArrangedSubview(outputLabel)
+    detailStack.addArrangedSubview(cancelBtn)
+    detailStack.isHidden = true
+
+    let stack = UIStackView(arrangedSubviews: [headerRow, approvalRow, detailStack])
     stack.axis = .vertical
     stack.spacing = 10
     stack.isLayoutMarginsRelativeArrangement = true
@@ -1340,7 +1958,7 @@ private final class ToolEventCell: UITableViewCell {
     card.translatesAutoresizingMaskIntoConstraints = false
     NSLayoutConstraint.activate([
       card.leadingAnchor.constraint(equalTo: contentView.leadingAnchor, constant: 16),
-      card.trailingAnchor.constraint(lessThanOrEqualTo: contentView.trailingAnchor, constant: -48),
+      card.trailingAnchor.constraint(equalTo: contentView.trailingAnchor, constant: -16),
       card.topAnchor.constraint(equalTo: contentView.topAnchor, constant: 4),
       card.bottomAnchor.constraint(equalTo: contentView.bottomAnchor, constant: -4),
     ])
@@ -1361,25 +1979,31 @@ private final class ToolEventCell: UITableViewCell {
     return stripped.split(separator: "_").map { $0.capitalized }.joined(separator: " ")
   }
 
-  private static func hint(from output: String) -> String? {
-    output.split(separator: "\n")
+  private static func hint(from event: ToolEvent) -> String? {
+    if let payloadHint = event.payload?.summary, !payloadHint.isEmpty { return payloadHint }
+    if let project = event.projectName { return project }
+    let output = event.output.isEmpty ? (event.result ?? "") : event.output
+    return output.split(separator: "\n")
       .map { $0.trimmingCharacters(in: .whitespaces) }
       .first { $0.count > 3 && $0.count < 80 }
   }
 
-  func configure(with event: ToolEvent) {
+  func configure(with event: ToolEvent, expanded: Bool) {
     nameLabel.text = Self.toolName(event.tool)
     iconView.image = UIImage(systemName: Self.toolIcon(for: event.tool))
-    iconView.tintColor = .secondaryLabel
+    iconView.tintColor = AppPalette.accent
 
     let output = event.output.trimmingCharacters(in: .whitespacesAndNewlines)
     let text = output.isEmpty ? (event.result?.trimmingCharacters(in: .whitespacesAndNewlines) ?? "") : output
-    if let h = Self.hint(from: text) {
+    if let h = Self.hint(from: event) {
       hintLabel.text = h
       hintLabel.isHidden = false
     } else {
       hintLabel.isHidden = true
     }
+    outputLabel.attributedText = diffAwareAttributedText(text.isEmpty ? "No output yet." : text)
+    detailStack.isHidden = !expanded
+    cancelBtn.isHidden = event.status != "running"
 
     switch event.status {
     case "running":
@@ -1441,4 +2065,312 @@ private final class ToolEventCell: UITableViewCell {
 
   @objc private func approveTapped() { onApprove?() }
   @objc private func denyTapped() { onDeny?() }
+  @objc private func cancelTapped() { onCancel?() }
+  @objc private func toggleTapped() { onToggle?() }
+}
+
+// MARK: - Supporting timeline cells
+
+private final class ToolGroupCell: UITableViewCell {
+  static let reuseID = "ToolGroupCell"
+  private let card = UIView()
+  private let label = UILabel()
+  private let sublabel = UILabel()
+
+  override init(style: UITableViewCell.CellStyle, reuseIdentifier: String?) {
+    super.init(style: style, reuseIdentifier: reuseIdentifier)
+    backgroundColor = .clear
+    selectionStyle = .none
+    card.backgroundColor = AppPalette.card
+    card.layer.borderWidth = 1
+    card.layer.borderColor = AppPalette.borderSoft.cgColor
+    card.layer.cornerRadius = 9
+    card.layer.cornerCurve = .continuous
+    label.font = UIFont.app(forTextStyle: .footnote).withWeight(.medium)
+    sublabel.font = UIFont.app(forTextStyle: .caption2)
+    sublabel.textColor = .secondaryLabel
+    let stack = UIStackView(arrangedSubviews: [label, sublabel])
+    stack.axis = .vertical
+    stack.spacing = 2
+    stack.isLayoutMarginsRelativeArrangement = true
+    stack.directionalLayoutMargins = NSDirectionalEdgeInsets(top: 9, leading: 12, bottom: 9, trailing: 12)
+    card.addSubview(stack)
+    stack.translatesAutoresizingMaskIntoConstraints = false
+    contentView.addSubview(card)
+    card.translatesAutoresizingMaskIntoConstraints = false
+    NSLayoutConstraint.activate([
+      stack.leadingAnchor.constraint(equalTo: card.leadingAnchor),
+      stack.trailingAnchor.constraint(equalTo: card.trailingAnchor),
+      stack.topAnchor.constraint(equalTo: card.topAnchor),
+      stack.bottomAnchor.constraint(equalTo: card.bottomAnchor),
+      card.leadingAnchor.constraint(equalTo: contentView.leadingAnchor, constant: 16),
+      card.trailingAnchor.constraint(equalTo: contentView.trailingAnchor, constant: -16),
+      card.topAnchor.constraint(equalTo: contentView.topAnchor, constant: 4),
+      card.bottomAnchor.constraint(equalTo: contentView.bottomAnchor, constant: -4),
+    ])
+  }
+
+  required init?(coder: NSCoder) { fatalError() }
+
+  func configure(with events: [ToolEvent]) {
+    label.text = "Ran \(events.count) tools"
+    sublabel.text = events.map { $0.tool.replacingOccurrences(of: "_", with: " ") }.prefix(3).joined(separator: " · ")
+  }
+}
+
+private final class SessionEventCell: UITableViewCell {
+  static let reuseID = "SessionEventCell"
+  private let card = UIView()
+  private let icon = UIImageView()
+  private let titleLabel = UILabel()
+  private let bodyLabel = UILabel()
+
+  override init(style: UITableViewCell.CellStyle, reuseIdentifier: String?) {
+    super.init(style: style, reuseIdentifier: reuseIdentifier)
+    backgroundColor = .clear
+    selectionStyle = .none
+    card.backgroundColor = AppPalette.card
+    card.layer.borderWidth = 1
+    card.layer.borderColor = AppPalette.borderSoft.cgColor
+    card.layer.cornerRadius = 10
+    icon.contentMode = .scaleAspectFit
+    icon.tintColor = .secondaryLabel
+    NSLayoutConstraint.activate([
+      icon.widthAnchor.constraint(equalToConstant: 16),
+      icon.heightAnchor.constraint(equalToConstant: 16),
+    ])
+    titleLabel.font = UIFont.app(forTextStyle: .footnote).withWeight(.medium)
+    titleLabel.numberOfLines = 0
+    bodyLabel.font = UIFont.app(forTextStyle: .caption1)
+    bodyLabel.textColor = .secondaryLabel
+    bodyLabel.numberOfLines = 0
+    let textStack = UIStackView(arrangedSubviews: [titleLabel, bodyLabel])
+    textStack.axis = .vertical
+    textStack.spacing = 2
+    let row = UIStackView(arrangedSubviews: [icon, textStack])
+    row.axis = .horizontal
+    row.alignment = .top
+    row.spacing = 9
+    row.isLayoutMarginsRelativeArrangement = true
+    row.directionalLayoutMargins = NSDirectionalEdgeInsets(top: 10, leading: 12, bottom: 10, trailing: 12)
+    card.addSubview(row)
+    row.translatesAutoresizingMaskIntoConstraints = false
+    contentView.addSubview(card)
+    card.translatesAutoresizingMaskIntoConstraints = false
+    NSLayoutConstraint.activate([
+      row.leadingAnchor.constraint(equalTo: card.leadingAnchor),
+      row.trailingAnchor.constraint(equalTo: card.trailingAnchor),
+      row.topAnchor.constraint(equalTo: card.topAnchor),
+      row.bottomAnchor.constraint(equalTo: card.bottomAnchor),
+      card.leadingAnchor.constraint(equalTo: contentView.leadingAnchor, constant: 16),
+      card.trailingAnchor.constraint(equalTo: contentView.trailingAnchor, constant: -16),
+      card.topAnchor.constraint(equalTo: contentView.topAnchor, constant: 4),
+      card.bottomAnchor.constraint(equalTo: contentView.bottomAnchor, constant: -4),
+    ])
+  }
+
+  required init?(coder: NSCoder) { fatalError() }
+
+  func configure(with event: SessionEvent) {
+    titleLabel.text = event.title
+    bodyLabel.text = event.body
+    bodyLabel.isHidden = event.body?.isEmpty ?? true
+    switch event.type {
+    case "mcp_required":
+      icon.image = UIImage(systemName: "gearshape")
+      card.layer.borderColor = AppPalette.warning.withAlphaComponent(0.45).cgColor
+    case "project_created", "project_linked":
+      icon.image = UIImage(systemName: "folder")
+      card.layer.borderColor = AppPalette.borderSoft.cgColor
+    default:
+      icon.image = UIImage(systemName: "sparkles")
+      card.layer.borderColor = AppPalette.borderSoft.cgColor
+    }
+  }
+}
+
+private final class PlanPreviewCell: UITableViewCell {
+  static let reuseID = "PlanPreviewCell"
+  private let card = UIView()
+  private let titleLabel = UILabel()
+  private let statusLabel = UILabel()
+  private let stepsLabel = UILabel()
+
+  override init(style: UITableViewCell.CellStyle, reuseIdentifier: String?) {
+    super.init(style: style, reuseIdentifier: reuseIdentifier)
+    backgroundColor = .clear
+    selectionStyle = .none
+    card.backgroundColor = AppPalette.card
+    card.layer.borderWidth = 1
+    card.layer.borderColor = AppPalette.accent.withAlphaComponent(0.28).cgColor
+    card.layer.cornerRadius = 10
+    titleLabel.font = UIFont.app(forTextStyle: .subheadline).withWeight(.semibold)
+    titleLabel.numberOfLines = 0
+    statusLabel.font = UIFont.app(forTextStyle: .caption1).withWeight(.medium)
+    statusLabel.textColor = AppPalette.accent
+    stepsLabel.font = UIFont.app(forTextStyle: .caption1)
+    stepsLabel.textColor = .secondaryLabel
+    stepsLabel.numberOfLines = 4
+    let stack = UIStackView(arrangedSubviews: [titleLabel, statusLabel, stepsLabel])
+    stack.axis = .vertical
+    stack.spacing = 5
+    stack.isLayoutMarginsRelativeArrangement = true
+    stack.directionalLayoutMargins = NSDirectionalEdgeInsets(top: 12, leading: 13, bottom: 12, trailing: 13)
+    card.addSubview(stack)
+    stack.translatesAutoresizingMaskIntoConstraints = false
+    contentView.addSubview(card)
+    card.translatesAutoresizingMaskIntoConstraints = false
+    NSLayoutConstraint.activate([
+      stack.leadingAnchor.constraint(equalTo: card.leadingAnchor),
+      stack.trailingAnchor.constraint(equalTo: card.trailingAnchor),
+      stack.topAnchor.constraint(equalTo: card.topAnchor),
+      stack.bottomAnchor.constraint(equalTo: card.bottomAnchor),
+      card.leadingAnchor.constraint(equalTo: contentView.leadingAnchor, constant: 16),
+      card.trailingAnchor.constraint(equalTo: contentView.trailingAnchor, constant: -16),
+      card.topAnchor.constraint(equalTo: contentView.topAnchor, constant: 5),
+      card.bottomAnchor.constraint(equalTo: contentView.bottomAnchor, constant: -5),
+    ])
+  }
+
+  required init?(coder: NSCoder) { fatalError() }
+
+  func configure(event: SessionEvent, detail: PlanDetailResult?) {
+    titleLabel.text = detail?.plan.title ?? event.title
+    statusLabel.text = (detail?.plan.status ?? "plan").uppercased()
+    let steps = detail?.steps.sorted { $0.position < $1.position }.prefix(3).map { step in
+      "\(step.status == "done" ? "[x]" : "[ ]") \(step.title)"
+    }
+    stepsLabel.text = steps?.joined(separator: "\n") ?? (event.body ?? "Loading steps...")
+  }
+}
+
+private final class ArtifactPreviewCell: UITableViewCell {
+  static let reuseID = "ArtifactPreviewCell"
+  var onOpen: (() -> Void)?
+  private let card = UIView()
+  private let titleLabel = UILabel()
+  private let subtitleLabel = UILabel()
+  private let statusLabel = UILabel()
+
+  override init(style: UITableViewCell.CellStyle, reuseIdentifier: String?) {
+    super.init(style: style, reuseIdentifier: reuseIdentifier)
+    backgroundColor = .clear
+    selectionStyle = .none
+    card.backgroundColor = AppPalette.card
+    card.layer.borderWidth = 1
+    card.layer.borderColor = AppPalette.borderSoft.cgColor
+    card.layer.cornerRadius = 10
+    titleLabel.font = UIFont.app(forTextStyle: .subheadline).withWeight(.semibold)
+    titleLabel.numberOfLines = 0
+    subtitleLabel.font = UIFont.app(forTextStyle: .caption1)
+    subtitleLabel.textColor = .secondaryLabel
+    statusLabel.font = UIFont.app(forTextStyle: .caption2).withWeight(.medium)
+    statusLabel.textColor = AppPalette.success
+    let icon = UIImageView(image: UIImage(systemName: "doc.richtext"))
+    icon.tintColor = AppPalette.accent
+    icon.contentMode = .scaleAspectFit
+    NSLayoutConstraint.activate([
+      icon.widthAnchor.constraint(equalToConstant: 22),
+      icon.heightAnchor.constraint(equalToConstant: 22),
+    ])
+    let textStack = UIStackView(arrangedSubviews: [titleLabel, subtitleLabel, statusLabel])
+    textStack.axis = .vertical
+    textStack.spacing = 3
+    let row = UIStackView(arrangedSubviews: [icon, textStack])
+    row.axis = .horizontal
+    row.alignment = .top
+    row.spacing = 10
+    row.isLayoutMarginsRelativeArrangement = true
+    row.directionalLayoutMargins = NSDirectionalEdgeInsets(top: 12, leading: 13, bottom: 12, trailing: 13)
+    card.addSubview(row)
+    row.translatesAutoresizingMaskIntoConstraints = false
+    contentView.addSubview(card)
+    card.translatesAutoresizingMaskIntoConstraints = false
+    NSLayoutConstraint.activate([
+      row.leadingAnchor.constraint(equalTo: card.leadingAnchor),
+      row.trailingAnchor.constraint(equalTo: card.trailingAnchor),
+      row.topAnchor.constraint(equalTo: card.topAnchor),
+      row.bottomAnchor.constraint(equalTo: card.bottomAnchor),
+      card.leadingAnchor.constraint(equalTo: contentView.leadingAnchor, constant: 16),
+      card.trailingAnchor.constraint(equalTo: contentView.trailingAnchor, constant: -16),
+      card.topAnchor.constraint(equalTo: contentView.topAnchor, constant: 5),
+      card.bottomAnchor.constraint(equalTo: contentView.bottomAnchor, constant: -5),
+    ])
+    card.addGestureRecognizer(UITapGestureRecognizer(target: self, action: #selector(openTapped)))
+  }
+
+  required init?(coder: NSCoder) { fatalError() }
+
+  func configure(with summary: ArtifactSummary) {
+    titleLabel.text = summary.title
+    subtitleLabel.text = summary.subtitle
+    statusLabel.text = summary.status.uppercased()
+    statusLabel.textColor = summary.status == "error" ? AppPalette.destructive : AppPalette.success
+  }
+
+  @objc private func openTapped() { onOpen?() }
+}
+
+private final class DiffTextViewController: UIViewController {
+  private let diffTitle: String
+  private let diff: String
+
+  init(title: String, diff: String) {
+    self.diffTitle = title
+    self.diff = diff
+    super.init(nibName: nil, bundle: nil)
+  }
+
+  required init?(coder: NSCoder) { fatalError() }
+
+  override func viewDidLoad() {
+    super.viewDidLoad()
+    title = diffTitle
+    view.backgroundColor = .systemBackground
+    let textView = UITextView()
+    textView.isEditable = false
+    textView.backgroundColor = AppPalette.codeBackground
+    textView.textContainerInset = UIEdgeInsets(top: 14, left: 12, bottom: 14, right: 12)
+    textView.attributedText = diffAwareAttributedText(diff.isEmpty ? "No diff." : diff)
+    view.addSubview(textView)
+    textView.translatesAutoresizingMaskIntoConstraints = false
+    NSLayoutConstraint.activate([
+      textView.leadingAnchor.constraint(equalTo: view.leadingAnchor),
+      textView.trailingAnchor.constraint(equalTo: view.trailingAnchor),
+      textView.topAnchor.constraint(equalTo: view.topAnchor),
+      textView.bottomAnchor.constraint(equalTo: view.bottomAnchor),
+    ])
+  }
+}
+
+private func byteCount(_ bytes: Int) -> String {
+  ByteCountFormatter.string(fromByteCount: Int64(bytes), countStyle: .file)
+}
+
+private func looksLikeDiff(_ text: String) -> Bool {
+  text.range(of: #"(?m)^@@\s+-\d"#, options: .regularExpression) != nil ||
+  (text.contains("--- ") && text.contains("+++ "))
+}
+
+private func diffAwareAttributedText(_ text: String) -> NSAttributedString {
+  let result = NSMutableAttributedString()
+  let baseAttrs: [NSAttributedString.Key: Any] = [
+    .font: UIFont.monospacedSystemFont(ofSize: 11, weight: .regular),
+    .foregroundColor: AppPalette.codeForeground
+  ]
+  guard looksLikeDiff(text) else {
+    return NSAttributedString(string: text, attributes: baseAttrs)
+  }
+  for line in text.split(separator: "\n", omittingEmptySubsequences: false) {
+    var attrs = baseAttrs
+    if line.hasPrefix("+") && !line.hasPrefix("+++") {
+      attrs[.foregroundColor] = AppPalette.success
+    } else if line.hasPrefix("-") && !line.hasPrefix("---") {
+      attrs[.foregroundColor] = AppPalette.destructive
+    } else if line.hasPrefix("@@") {
+      attrs[.foregroundColor] = AppPalette.accent
+    }
+    result.append(NSAttributedString(string: String(line) + "\n", attributes: attrs))
+  }
+  return result
 }

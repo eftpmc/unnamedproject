@@ -9,6 +9,7 @@ enum WSEvent {
   case turnComplete(sessionId: String, status: String)
   case approvalRequested(sessionId: String?, executionId: String, approvalId: String, action: String)
   case executionUpdate(sessionId: String?, executionId: String, tool: String?, status: String?, chunk: String?, result: String?)
+  case sessionEventCreated(sessionId: String, event: SessionEvent)
   case sessionTitleUpdated(sessionId: String, title: String)
   case connected
   case disconnected
@@ -28,9 +29,10 @@ private struct RawWSEvent: Decodable {
   let title: String?
   let chunk: String?
   let result: String?
+  let event: SessionEvent?
 
   enum CodingKeys: String, CodingKey {
-    case type, sessionId, messageId, delta, message, status, action, tool, title, chunk, result
+    case type, sessionId, messageId, delta, message, status, action, tool, title, chunk, result, event
     case executionId = "executionId"
     case approvalId = "approvalId"
   }
@@ -56,6 +58,9 @@ private extension WSEvent {
       self = .approvalRequested(sessionId: raw.sessionId, executionId: eid, approvalId: aid, action: act)
     case "execution_update":
       self = .executionUpdate(sessionId: raw.sessionId, executionId: raw.executionId ?? "", tool: raw.tool, status: raw.status, chunk: raw.chunk, result: raw.result)
+    case "session_event_created":
+      guard let sid = raw.sessionId, let event = raw.event else { return nil }
+      self = .sessionEventCreated(sessionId: sid, event: event)
     case "session_title_updated":
       guard let sid = raw.sessionId, let t = raw.title else { return nil }
       self = .sessionTitleUpdated(sessionId: sid, title: t)

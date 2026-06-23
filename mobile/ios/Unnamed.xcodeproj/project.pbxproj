@@ -29,7 +29,7 @@
 		D21F48422D0307B40044C1D9 /* SidebarViewController.swift in Sources */ = {isa = PBXBuildFile; fileRef = D21748412D0307B40044C1D9 /* SidebarViewController.swift */; };
 		739AF0E0BE024BAEB11F5E2F /* ChatsViewController.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9C391D4A3C7347D3A58ADAAA /* ChatsViewController.swift */; };
 		8A3F5C21D4B047E8A1F62C30 /* FileContentViewController.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7B4D9E02C1A34F5DB0E83A71 /* FileContentViewController.swift */; };
-		3D7A2F10E5B94C1DA0F831E6 /* QuickSwitchViewController.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6C8E4A31F2D94B0DAE7C5912 /* QuickSwitchViewController.swift */; };
+		4E28C6A9B4C24C65B4D6A2E1 /* ArtifactContentViewController.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5F39D7BAC5D35D76C5E7B3F2 /* ArtifactContentViewController.swift */; };
 		C11748422D0307B40044C1DA /* Inter-Variable.ttf in Resources */ = {isa = PBXBuildFile; fileRef = C01748412D0307B40044C1DA /* Inter-Variable.ttf */; };
 /* End PBXBuildFile section */
 
@@ -58,7 +58,7 @@
 		D21748412D0307B40044C1D9 /* SidebarViewController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = SidebarViewController.swift; path = Unnamed/SidebarViewController.swift; sourceTree = "<group>"; };
 		9C391D4A3C7347D3A58ADAAA /* ChatsViewController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = ChatsViewController.swift; path = Unnamed/ChatsViewController.swift; sourceTree = "<group>"; };
 		7B4D9E02C1A34F5DB0E83A71 /* FileContentViewController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = FileContentViewController.swift; path = Unnamed/FileContentViewController.swift; sourceTree = "<group>"; };
-		6C8E4A31F2D94B0DAE7C5912 /* QuickSwitchViewController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = QuickSwitchViewController.swift; path = Unnamed/QuickSwitchViewController.swift; sourceTree = "<group>"; };
+		5F39D7BAC5D35D76C5E7B3F2 /* ArtifactContentViewController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = ArtifactContentViewController.swift; path = Unnamed/ArtifactContentViewController.swift; sourceTree = "<group>"; };
 		C01748412D0307B40044C1DA /* Inter-Variable.ttf */ = {isa = PBXFileReference; lastKnownFileType = file; name = "Inter-Variable.ttf"; path = "Unnamed/Fonts/Inter-Variable.ttf"; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
@@ -95,7 +95,7 @@
 				D21748412D0307B40044C1D9 /* SidebarViewController.swift */,
 				9C391D4A3C7347D3A58ADAAA /* ChatsViewController.swift */,
 				7B4D9E02C1A34F5DB0E83A71 /* FileContentViewController.swift */,
-				6C8E4A31F2D94B0DAE7C5912 /* QuickSwitchViewController.swift */,
+				5F39D7BAC5D35D76C5E7B3F2 /* ArtifactContentViewController.swift */,
 				C01748412D0307B40044C1DA /* Inter-Variable.ttf */,
 				13B07FB51A68108700A75B9A /* Images.xcassets */,
 				13B07FB61A68108700A75B9A /* Info.plist */,
@@ -229,7 +229,7 @@
 				D21F48422D0307B40044C1D9 /* SidebarViewController.swift in Sources */,
 				739AF0E0BE024BAEB11F5E2F /* ChatsViewController.swift in Sources */,
 				8A3F5C21D4B047E8A1F62C30 /* FileContentViewController.swift in Sources */,
-				3D7A2F10E5B94C1DA0F831E6 /* QuickSwitchViewController.swift in Sources */,
+				4E28C6A9B4C24C65B4D6A2E1 /* ArtifactContentViewController.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};

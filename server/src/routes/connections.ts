@@ -9,14 +9,16 @@ import { ingestMcpTools } from '../services/toolRegistry.js';
 const router = Router();
 router.use(requireAuth);
 
-const VALID_TYPES = ['anthropic', 'openai', 'github', 'mcp'] as const;
+const VALID_TYPES = ['anthropic', 'openai', 'github', 'mcp', 'local'] as const;
 const VALID_PURPOSES = ['lead_agent', 'claude_code', 'codex', 'github', 'mcp', 'tool'] as const;
-const PURPOSE_TYPE: Record<string, string> = {
-  lead_agent: 'anthropic',
-  claude_code: 'anthropic',
-  codex: 'openai',
-  github: 'github',
-  mcp: 'mcp',
+
+// For most purposes exactly one type is valid. lead_agent accepts all three provider types.
+const PURPOSE_ALLOWED_TYPES: Record<string, string[]> = {
+  lead_agent: ['anthropic', 'openai', 'local'],
+  claude_code: ['anthropic'],
+  codex: ['openai'],
+  github: ['github'],
+  mcp: ['mcp'],
 };
 
 router.get('/', (req, res) => {
@@ -43,9 +45,29 @@ router.post('/', (req, res) => {
     res.status(400).json({ error: `purpose must be one of ${VALID_PURPOSES.join(', ')}` });
     return;
   }
-  if (connectionPurpose !== 'tool' && PURPOSE_TYPE[connectionPurpose] !== type) {
-    res.status(400).json({ error: `${connectionPurpose} connections must use type ${PURPOSE_TYPE[connectionPurpose]}` });
+  const allowedTypes = PURPOSE_ALLOWED_TYPES[connectionPurpose];
+  if (allowedTypes && !allowedTypes.includes(type)) {
+    res.status(400).json({ error: `Purpose '${connectionPurpose}' does not support type '${type}'. Allowed: ${allowedTypes.join(', ')}` });
     return;
+  }
+  // Validate required config fields for lead_agent non-anthropic providers
+  if (connectionPurpose === 'lead_agent' && type === 'openai') {
+    const cfg = config as Record<string, unknown>;
+    if (!cfg.modelName || typeof cfg.modelName !== 'string') {
+      res.status(400).json({ error: "OpenAI lead agent connection requires 'modelName' in config (e.g. 'gpt-4o')" });
+      return;
+    }
+  }
+  if (connectionPurpose === 'lead_agent' && type === 'local') {
+    const cfg = config as Record<string, unknown>;
+    if (!cfg.baseUrl || typeof cfg.baseUrl !== 'string') {
+      res.status(400).json({ error: "Local lead agent connection requires 'baseUrl' in config (e.g. 'http://localhost:11434/v1')" });
+      return;
+    }
+    if (!cfg.modelName || typeof cfg.modelName !== 'string') {
+      res.status(400).json({ error: "Local lead agent connection requires 'modelName' in config (e.g. 'qwen2.5:14b')" });
+      return;
+    }
   }
   const id = newId();
   const encrypted = encrypt(JSON.stringify(config), deriveKey());
@@ -92,6 +114,15 @@ router.get('/:id/test', async (req, res) => {
         headers: { Authorization: `Bearer ${config.apiKey}`, 'User-Agent': 'unnamed-app' },
       });
       if (!r.ok) throw new Error(`HTTP ${r.status}`);
+    } else if (row.type === 'local') {
+      const baseUrl = config.baseUrl?.replace(/\/$/, '');
+      if (!baseUrl) throw new Error('Missing baseUrl in local connection config');
+      const headers: Record<string, string> = {};
+      if (config.apiKey) headers['Authorization'] = `Bearer ${config.apiKey}`;
+      const r = await fetch(`${baseUrl}/models`, { headers });
+      // Local servers (Ollama, LM Studio) may return 401 without a key — that still
+      // means the server is reachable, which is what the test cares about.
+      if (!r.ok && r.status !== 401) throw new Error(`HTTP ${r.status}`);
     } else {
       res.json({ ok: null }); // MCP — not testable via HTTP
       return;

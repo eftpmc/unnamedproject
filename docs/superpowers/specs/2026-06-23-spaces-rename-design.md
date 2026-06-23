@@ -61,9 +61,11 @@ CREATE TABLE space_notes (
 
 Opening an item: look up its `space_items` row for `type`, then join to the matching type table via `ref_id`. Adding a new item type later means one additive migration (new type table + new `type` enum value) — existing rows/queries are unaffected.
 
-### Chats, Plans, Artifacts, Pipelines
+### Chats, Plans, Pipelines
 
 These stay Space-wide collections, unchanged in relationship — no per-item scoping. `sessions.pinned_project_id` → `sessions.pinned_space_id`. `getPlansForProject()` and friends are renamed to their Space equivalents but keep their current Space-wide semantics.
+
+Artifacts (previously a separate concept: generated code/designs/media) are dropped as a distinct category — trying to draw a line between "durable content" and "generated output" breaks down as soon as the agent fully generates a repo, which is simultaneously both. Generated outputs become more `space_items` types instead (e.g. a future `image` or `doc-snapshot` type), shown in the same Items list rather than a parallel section. This pass only ships `repo`/`file`/`note`; other types arrive later via the same additive migration pattern once their shape is actually needed.
 
 ## Migration plan
 
@@ -77,9 +79,9 @@ Added as migration v5 in `server/src/db/index.ts` / `server/src/db/migrate.ts`:
 
 ## API & route renames
 
-- Routes: `/projects` → `/spaces`, `/projects/:id/*` → `/spaces/:id/*` (tree, file, plans, capabilities, artifacts, workspace, media, research stay as sub-resources, just re-rooted). Add `/spaces/:id/items` for the new item list/CRUD.
+- Routes: `/projects` → `/spaces`, `/projects/:id/*` → `/spaces/:id/*` (tree, file, plans, capabilities, workspace, media, research stay as sub-resources, just re-rooted). The old `/projects/:id/artifacts` route is dropped — generated outputs are just more `space_items`, served via `/spaces/:id/items`. Add `/spaces/:id/items` for the new item list/CRUD.
 - Server functions: `getProjectForUser` → `getSpaceForUser`, `getProjectsForUser` → `getSpacesForUser`, `getProjectBasePath` → `getSpaceBasePath`, `resolveInProject` → `resolveInSpace`, `getPlansForProject` → `getPlansForSpace`.
-- Web API client: `getProjects`/`createProject`/`deleteProject`/`updateProject`/`getProjectTree`/`getProjectFile`/`getProjectPlans`/`getProjectCapabilities`/`getProjectArtifacts` all renamed to their `Space` equivalents; add `getSpaceItems`/`createSpaceItem`/`deleteSpaceItem`.
+- Web API client: `getProjects`/`createProject`/`deleteProject`/`updateProject`/`getProjectTree`/`getProjectFile`/`getProjectPlans`/`getProjectCapabilities` all renamed to their `Space` equivalents; `getProjectArtifacts` is removed (no replacement — folded into `getSpaceItems`); add `getSpaceItems`/`createSpaceItem`/`deleteSpaceItem`.
 - Web routes/pages: `ProjectsPage` → `SpacesPage` at `/spaces`, `ProjectPage` → `SpacePage` at `/spaces/:id`.
 - Web types: `Project` → `Space`, add `SpaceItem` (discriminated union on `type`).
 
@@ -90,19 +92,18 @@ No second sidebar. The existing global `Sidebar` (`web/src/components/Sidebar.ts
 - **Outside a Space**: unchanged — global nav (Chats, Spaces, recents).
 - **Inside a Space**: the same sidebar swaps its content to Space-scoped sections, with a switcher header at top (current Space name + chevron) that pops back to the Space list or jumps directly to another Space — the same pattern Vercel uses for its project sidebar, reusing one component rather than stacking two.
 - Space-scoped sections, replacing the old 7 horizontal tabs:
-  - **Overview** — dashboard/landing (not a separate route the user has to "tab into" — it's just what renders when you land in a Space), cards for recent chats, active plans, items, artifacts.
+  - **Overview** — dashboard/landing (not a separate route the user has to "tab into" — it's just what renders when you land in a Space), cards for recent chats, active plans, items.
   - **Chats** — Space-wide pinned chats (unchanged behavior).
-  - **Items** — expandable group; lists all `space_items` (repos/files/notes) with type-specific icons; opening one drills into its detail (file browser for a repo/file item, editor for a note).
+  - **Items** — one list of all `space_items` (repos/files/notes today, more types later) with type-specific icons and filter chips by type; opening one drills into its detail (file browser for a repo/file item, editor for a note). No separate Artifacts section — generated outputs become more item types in this same list once that type is fleshed out.
   - **Plans** — expandable group; Pipelines becomes a sub-item under Plans rather than its own top-level section.
-  - **Artifacts** — generated outputs (code, designs, media) produced by agent runs; stays its own section since it's agent-produced output, not something the user attaches the way Items are.
   - **Settings** — Space name, description, connections, delete (repo_path field removed; replaced by item management under Items).
 - The horizontal tab bar in the old `ProjectPage` is removed entirely in favor of this sidebar-driven nav.
 
 ## Out of scope
 
-- Per-item-scoped chats/plans/artifacts (confirmed Space-wide only for this pass).
+- Per-item-scoped chats/plans (confirmed Space-wide only for this pass).
 - Nesting Spaces within Spaces, or nesting items within items — items are a flat list per Space.
-- New item types beyond `repo`/`file`/`note` (the schema supports adding them later without further redesign).
+- New item types beyond `repo`/`file`/`note`, including any replacement for the old "Artifacts" concept (generated images, doc snapshots, etc.) — the schema supports adding them later via the same additive migration pattern, once their shape is actually needed.
 - Visual polish of the Overview dashboard cards (covered by this restructure only at the "what sections exist" level, not pixel-level design).
 
 ## Testing considerations

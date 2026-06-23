@@ -133,6 +133,9 @@ final class AppCoordinator {
     let vc = ChatViewController(appSession: self.session, chatSession: chatSession, isNew: chat == nil)
     vc.onOpenSidebar = { [weak self] in self?.toggleSidebar() }
     vc.onDeleted = { [weak self] in self?.openChat(nil) }
+    vc.onJumpToChat = { [weak self] chat in self?.openChat(chat) }
+    vc.onNewChat = { [weak self] in self?.openChat(nil) }
+    vc.onShowSettings = { [weak self] in self?.showSettings() }
     return vc
   }
 

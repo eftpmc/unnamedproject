@@ -4,6 +4,9 @@ import UniformTypeIdentifiers
 final class ChatViewController: UIViewController {
   var onOpenSidebar: (() -> Void)?
   var onDeleted: (() -> Void)?
+  var onJumpToChat: ((ChatSession) -> Void)?
+  var onNewChat: (() -> Void)?
+  var onShowSettings: (() -> Void)?
   private let isNew: Bool
   private let appSession: AppSession
   private let chatSession: ChatSession
@@ -246,7 +249,8 @@ final class ChatViewController: UIViewController {
   }
 
   private func formatToolName(_ raw: String) -> String {
-    raw.split(separator: "_").map { $0.capitalized }.joined(separator: " ")
+    let stripped = raw.hasPrefix("invoke_") ? String(raw.dropFirst(7)) : raw
+    return stripped.split(separator: "_").map { $0.capitalized }.joined(separator: " ")
   }
 
   private func handleExecutionUpdate(executionId: String, tool: String?, status: String?, chunk: String?, result: String?) {
@@ -263,7 +267,7 @@ final class ChatViewController: UIViewController {
         }
       case "awaiting_approval":
         setAgentStatus("Waiting for approval…")
-        updateToolEvent(executionId: executionId) { $0.status = "running" }
+        updateToolEvent(executionId: executionId) { $0.status = "awaiting_approval" }
       case "done", "error":
         if status == "done" { setAgentStatus(nil) }
         updateToolEvent(executionId: executionId) {
@@ -676,8 +680,11 @@ final class ChatViewController: UIViewController {
   /// effort/model live on the composer pill instead — this menu is just
   /// chat-level actions.
   private func makeChatSettingsMenu() -> UIMenu {
+    let jumpAction = UIAction(title: "Jump to…", image: UIImage(systemName: "magnifyingglass")) { [weak self] _ in
+      self?.presentQuickSwitch()
+    }
     guard !activeSessionId.isEmpty else {
-      return UIMenu(children: [])
+      return UIMenu(children: [jumpAction])
     }
     let renameAction = UIAction(title: "Rename Chat", image: UIImage(systemName: "pencil")) { [weak self] _ in
       self?.promptRename()
@@ -685,7 +692,21 @@ final class ChatViewController: UIViewController {
     let deleteAction = UIAction(title: "Delete Chat", image: UIImage(systemName: "trash"), attributes: .destructive) { [weak self] _ in
       self?.confirmDeleteChat()
     }
-    return UIMenu(children: [renameAction, UIMenu(options: .displayInline, children: [deleteAction])])
+    return UIMenu(children: [jumpAction, renameAction, UIMenu(options: .displayInline, children: [deleteAction])])
+  }
+
+  private func presentQuickSwitch() {
+    let qs = QuickSwitchViewController(appSession: appSession)
+    qs.onSelectChat = { [weak self] chat in self?.onJumpToChat?(chat) }
+    qs.onNewChat = { [weak self] in self?.onNewChat?() }
+    qs.onShowSettings = { [weak self] in self?.onShowSettings?() }
+    let nav = UINavigationController(rootViewController: qs)
+    if let sheet = nav.sheetPresentationController {
+      sheet.detents = [.medium(), .large()]
+      sheet.selectedDetentIdentifier = .medium
+      sheet.prefersGrabberVisible = true
+    }
+    present(nav, animated: true)
   }
 
   private func refreshOptionsMenu() {
@@ -966,7 +987,14 @@ extension ChatViewController: UITableViewDataSource {
       return cell
     } else {
       let cell = tableView.dequeueReusableCell(withIdentifier: ToolEventCell.reuseID, for: indexPath) as! ToolEventCell
-      cell.configure(with: toolEvents[indexPath.row - messages.count])
+      let event = toolEvents[indexPath.row - messages.count]
+      cell.configure(with: event)
+      cell.onApprove = { [weak self] in
+        Task { try? await self?.client.approveExecution(id: event.executionId) }
+      }
+      cell.onDeny = { [weak self] in
+        Task { try? await self?.client.rejectExecution(id: event.executionId) }
+      }
       return cell
     }
   }
@@ -1192,18 +1220,21 @@ private func messageTime(_ epoch: Int) -> String {
 private final class ToolEventCell: UITableViewCell {
   static let reuseID = "ToolEventCell"
 
-  // Matches the web ExecutionCard: a neutral bordered card with a square
-  // icon badge, tool name, and a colored status pill on the trailing edge —
-  // status drives only the pill, not the whole card.
+  var onApprove: (() -> Void)?
+  var onDeny: (() -> Void)?
+
   private let card = UIView()
   private let badge = UIView()
   private let iconView = UIImageView()
   private let nameLabel = UILabel()
+  private let hintLabel = UILabel()
   private let pill = UIView()
   private let pillIcon = UIImageView()
   private let pillLabel = UILabel()
   private let spinner = UIActivityIndicatorView(style: .medium)
-  private let outputLabel = UILabel()
+  private let approveBtn = UIButton(type: .system)
+  private let denyBtn = UIButton(type: .system)
+  private let approvalRow = UIStackView()
 
   override init(style: UITableViewCell.CellStyle, reuseIdentifier: String?) {
     super.init(style: style, reuseIdentifier: reuseIdentifier)
@@ -1243,6 +1274,15 @@ private final class ToolEventCell: UITableViewCell {
     nameLabel.font = UIFont.app(forTextStyle: .footnote).withWeight(.medium)
     nameLabel.textColor = .label
 
+    hintLabel.font = UIFont.monospacedSystemFont(ofSize: 10, weight: .regular)
+    hintLabel.textColor = .tertiaryLabel
+    hintLabel.numberOfLines = 1
+    hintLabel.isHidden = true
+
+    let nameStack = UIStackView(arrangedSubviews: [nameLabel, hintLabel])
+    nameStack.axis = .vertical
+    nameStack.spacing = 2
+
     spinner.hidesWhenStopped = true
     spinner.transform = CGAffineTransform(scaleX: 0.55, y: 0.55)
 
@@ -1270,19 +1310,38 @@ private final class ToolEventCell: UITableViewCell {
       pillRow.bottomAnchor.constraint(equalTo: pill.bottomAnchor),
     ])
 
-    let headerRow = UIStackView(arrangedSubviews: [badge, nameLabel, UIView(), pill])
+    let headerRow = UIStackView(arrangedSubviews: [badge, nameStack, UIView(), pill])
     headerRow.axis = .horizontal
     headerRow.alignment = .center
     headerRow.spacing = 9
 
-    outputLabel.font = UIFont.monospacedSystemFont(ofSize: 11, weight: .regular)
-    outputLabel.textColor = .secondaryLabel
-    outputLabel.numberOfLines = 5
-    outputLabel.isHidden = true
+    approveBtn.configuration = .filled()
+    approveBtn.configuration?.cornerStyle = .capsule
+    approveBtn.configuration?.baseBackgroundColor = AppPalette.accent
+    approveBtn.configuration?.baseForegroundColor = AppPalette.accentForeground
+    approveBtn.configuration?.image = UIImage(systemName: "checkmark")
+    approveBtn.configuration?.title = "Approve"
+    approveBtn.configuration?.imagePadding = 5
+    approveBtn.configuration?.contentInsets = NSDirectionalEdgeInsets(top: 7, leading: 12, bottom: 7, trailing: 12)
+    approveBtn.addTarget(self, action: #selector(approveTapped), for: .touchUpInside)
 
-    let stack = UIStackView(arrangedSubviews: [headerRow, outputLabel])
+    denyBtn.configuration = .borderedTinted()
+    denyBtn.configuration?.cornerStyle = .capsule
+    denyBtn.configuration?.baseForegroundColor = .secondaryLabel
+    denyBtn.configuration?.title = "Deny"
+    denyBtn.configuration?.contentInsets = NSDirectionalEdgeInsets(top: 7, leading: 12, bottom: 7, trailing: 12)
+    denyBtn.addTarget(self, action: #selector(denyTapped), for: .touchUpInside)
+
+    approvalRow.axis = .horizontal
+    approvalRow.spacing = 8
+    approvalRow.addArrangedSubview(approveBtn)
+    approvalRow.addArrangedSubview(denyBtn)
+    approvalRow.addArrangedSubview(UIView())
+    approvalRow.isHidden = true
+
+    let stack = UIStackView(arrangedSubviews: [headerRow, approvalRow])
     stack.axis = .vertical
-    stack.spacing = 8
+    stack.spacing = 10
     stack.isLayoutMarginsRelativeArrangement = true
     stack.directionalLayoutMargins = NSDirectionalEdgeInsets(top: 11, leading: 13, bottom: 11, trailing: 13)
 
@@ -1305,14 +1364,44 @@ private final class ToolEventCell: UITableViewCell {
     ])
   }
 
+  private static func toolIcon(for tool: String) -> String {
+    let t = tool.lowercased()
+    if t.contains("github") { return "arrow.triangle.pull" }
+    if t.contains("git") { return "arrow.triangle.branch" }
+    if t.contains("file") || t.contains("read") || t.contains("write") { return "doc.text" }
+    if t.contains("claude") || t.contains("mcp") || t.contains("agent") { return "sparkles" }
+    if t.contains("code") || t.contains("project") { return "chevron.left.forwardslash.chevron.right" }
+    return "terminal"
+  }
+
+  private static func toolName(_ raw: String) -> String {
+    let stripped = raw.hasPrefix("invoke_") ? String(raw.dropFirst(7)) : raw
+    return stripped.split(separator: "_").map { $0.capitalized }.joined(separator: " ")
+  }
+
+  private static func hint(from output: String) -> String? {
+    output.split(separator: "\n")
+      .map { $0.trimmingCharacters(in: .whitespaces) }
+      .first { $0.count > 3 && $0.count < 80 }
+  }
+
   func configure(with event: ToolEvent) {
-    let name = event.tool.split(separator: "_").map { $0.capitalized }.joined(separator: " ")
-    nameLabel.text = name
-    iconView.image = UIImage(systemName: "wrench.and.screwdriver")
+    nameLabel.text = Self.toolName(event.tool)
+    iconView.image = UIImage(systemName: Self.toolIcon(for: event.tool))
     iconView.tintColor = .secondaryLabel
+
+    let output = event.output.trimmingCharacters(in: .whitespacesAndNewlines)
+    let text = output.isEmpty ? (event.result?.trimmingCharacters(in: .whitespacesAndNewlines) ?? "") : output
+    if let h = Self.hint(from: text) {
+      hintLabel.text = h
+      hintLabel.isHidden = false
+    } else {
+      hintLabel.isHidden = true
+    }
 
     switch event.status {
     case "running":
+      card.layer.borderColor = AppPalette.borderSoft.cgColor
       pill.backgroundColor = AppPalette.accent.withAlphaComponent(0.14)
       pillLabel.textColor = AppPalette.accent
       pillLabel.text = "Running"
@@ -1320,7 +1409,20 @@ private final class ToolEventCell: UITableViewCell {
       spinner.isHidden = false
       spinner.color = AppPalette.accent
       spinner.startAnimating()
+      approvalRow.isHidden = true
+    case "awaiting_approval":
+      card.layer.borderColor = AppPalette.warning.withAlphaComponent(0.4).cgColor
+      pill.backgroundColor = AppPalette.warning.withAlphaComponent(0.14)
+      pillLabel.textColor = AppPalette.warning
+      pillLabel.text = "Approval"
+      pillIcon.image = UIImage(systemName: "clock")
+      pillIcon.tintColor = AppPalette.warning
+      pillIcon.isHidden = false
+      spinner.isHidden = true
+      spinner.stopAnimating()
+      approvalRow.isHidden = false
     case "done":
+      card.layer.borderColor = AppPalette.borderSoft.cgColor
       pill.backgroundColor = AppPalette.success.withAlphaComponent(0.14)
       pillLabel.textColor = AppPalette.success
       pillLabel.text = "Done"
@@ -1329,7 +1431,9 @@ private final class ToolEventCell: UITableViewCell {
       pillIcon.isHidden = false
       spinner.isHidden = true
       spinner.stopAnimating()
+      approvalRow.isHidden = true
     case "error":
+      card.layer.borderColor = AppPalette.borderSoft.cgColor
       pill.backgroundColor = AppPalette.destructive.withAlphaComponent(0.12)
       pillLabel.textColor = AppPalette.destructive
       pillLabel.text = "Error"
@@ -1338,7 +1442,9 @@ private final class ToolEventCell: UITableViewCell {
       pillIcon.isHidden = false
       spinner.isHidden = true
       spinner.stopAnimating()
+      approvalRow.isHidden = true
     default:
+      card.layer.borderColor = AppPalette.borderSoft.cgColor
       pill.backgroundColor = AppPalette.muted
       pillLabel.textColor = .secondaryLabel
       pillLabel.text = "Pending"
@@ -1347,15 +1453,10 @@ private final class ToolEventCell: UITableViewCell {
       pillIcon.isHidden = false
       spinner.isHidden = true
       spinner.stopAnimating()
-    }
-
-    let output = event.output.trimmingCharacters(in: .whitespacesAndNewlines)
-    let display = output.isEmpty ? (event.result?.trimmingCharacters(in: .whitespacesAndNewlines) ?? "") : output
-    if display.isEmpty {
-      outputLabel.isHidden = true
-    } else {
-      outputLabel.text = display
-      outputLabel.isHidden = false
+      approvalRow.isHidden = true
     }
   }
+
+  @objc private func approveTapped() { onApprove?() }
+  @objc private func denyTapped() { onDeny?() }
 }

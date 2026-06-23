@@ -254,6 +254,8 @@ private final class ApprovalCell: UITableViewCell {
 
     approveButton.configuration = .filled()
     approveButton.configuration?.cornerStyle = .capsule
+    approveButton.configuration?.baseBackgroundColor = AppPalette.accent
+    approveButton.configuration?.baseForegroundColor = AppPalette.accentForeground
     approveButton.configuration?.image = UIImage(systemName: "checkmark")
     approveButton.configuration?.title = "Approve"
     approveButton.configuration?.imagePadding = 5
@@ -299,7 +301,7 @@ private final class ApprovalCell: UITableViewCell {
     config.textProperties.numberOfLines = 0
     config.secondaryTextProperties.font = .monospacedSystemFont(ofSize: 11, weight: .regular)
     config.secondaryTextProperties.color = .secondaryLabel
-    config.secondaryTextProperties.numberOfLines = 1
+    config.secondaryTextProperties.numberOfLines = 2
     content.configuration = config
   }
 

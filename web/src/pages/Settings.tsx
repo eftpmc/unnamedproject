@@ -277,6 +277,10 @@ export default function Settings() {
   const [mcpExtraArg, setMcpExtraArg] = useState('');
   const [mcpEnvValues, setMcpEnvValues] = useState<Record<string, string>>({});
   const [setupError, setSetupError] = useState('');
+  const [leadAgentProvider, setLeadAgentProvider] = useState<'anthropic' | 'openai' | 'local'>('anthropic');
+  const [openaiModelName, setOpenaiModelName] = useState('');
+  const [localBaseUrl, setLocalBaseUrl] = useState('');
+  const [localModelName, setLocalModelName] = useState('');
 
   const [projectsRoot, setProjectsRoot] = useState('');
   const [permissionProfile, setPermissionProfile] = useState<PermissionProfile>('fast');
@@ -336,6 +340,24 @@ export default function Settings() {
           }
           config = { command: mcpCommand.trim(), args: mcpArgs.trim() || '[]', env: mcpEnv.trim() || '{}' };
         }
+      } else if (activeSetup === 'lead_agent') {
+        if (leadAgentProvider === 'anthropic') {
+          if (!secret.trim()) throw new Error('Anthropic API key required');
+          config = { apiKey: secret.trim() };
+        } else if (leadAgentProvider === 'openai') {
+          if (!secret.trim()) throw new Error('OpenAI API key required');
+          if (!openaiModelName.trim()) throw new Error('Model name required');
+          config = { apiKey: secret.trim(), modelName: openaiModelName.trim() };
+        } else {
+          if (!localBaseUrl.trim()) throw new Error('Base URL required');
+          if (!localModelName.trim()) throw new Error('Model name required');
+          config = {
+            baseUrl: localBaseUrl.trim(),
+            modelName: localModelName.trim(),
+            ...(secret.trim() ? { apiKey: secret.trim() } : {}),
+          };
+        }
+        return createConnection({ name: setupName.trim() || meta.title, type: leadAgentProvider, purpose: activeSetup, config });
       } else {
         if (!secret.trim() && !meta.secretOptional) throw new Error(`${meta.secretLabel} required`);
         config = { apiKey: secret.trim() };
@@ -404,6 +426,7 @@ export default function Settings() {
     setSetupName(SETUP_META[kind].title);
     setSecret(''); setMcpCommand(''); setMcpArgs(''); setMcpEnv('{}');
     setMcpPreset('custom'); setMcpExtraArg(''); setMcpEnvValues({}); setSetupError('');
+    setLeadAgentProvider('anthropic'); setOpenaiModelName(''); setLocalBaseUrl(''); setLocalModelName('');
   }
 
   function openMcpPresetModal(presetId: string) {
@@ -419,6 +442,7 @@ export default function Settings() {
     setActiveSetup(null);
     setSetupName(''); setSecret(''); setMcpCommand(''); setMcpArgs(''); setMcpEnv('{}');
     setMcpPreset('custom'); setMcpExtraArg(''); setMcpEnvValues({}); setSetupError('');
+    setLeadAgentProvider('anthropic'); setOpenaiModelName(''); setLocalBaseUrl(''); setLocalModelName('');
   }
 
   function handleSignOut() {
@@ -455,7 +479,16 @@ export default function Settings() {
           {healthDot && (
             <span title={healthTitle} className={cn('size-2 shrink-0 rounded-full', healthDot)} />
           )}
-          {connection ? (health?.ok === false ? <ConnectionErrorBadge /> : <ConnectedBadge />) : <NotSetBadge />}
+          {connection ? (
+            <div className="flex items-center gap-2">
+              {health?.ok === false ? <ConnectionErrorBadge /> : <ConnectedBadge />}
+              {kind === 'lead_agent' && (
+                <span className="text-xs text-muted-foreground">
+                  {connection.type === 'local' ? 'local model' : connection.type === 'openai' ? 'OpenAI' : 'Claude'}
+                </span>
+              )}
+            </div>
+          ) : <NotSetBadge />}
           <Button size="sm" variant={connection ? 'ghost' : 'default'} onClick={() => openSetupModal(kind)}>
             {connection ? 'Edit' : 'Connect'}
           </Button>
@@ -486,7 +519,14 @@ export default function Settings() {
             <div className="flex items-center gap-3 rounded-lg border border-border-soft bg-card px-4 py-3">
               <div className="flex-1 min-w-0">
                 <div className="text-sm text-foreground">{existing.name}</div>
-                <ConnectedBadge />
+                <div className="mt-1 flex items-center gap-2">
+                  <ConnectedBadge />
+                  {activeSetup === 'lead_agent' && (
+                    <span className="text-xs text-muted-foreground">
+                      {existing.type === 'local' ? 'local model' : existing.type === 'openai' ? 'OpenAI' : 'Claude'}
+                    </span>
+                  )}
+                </div>
               </div>
               <DeleteBtn onClick={() => { setPendingDelete({ id: existing.id }); closeSetupModal(); }} />
             </div>
@@ -536,6 +576,66 @@ export default function Settings() {
                     <div><Label>Env JSON</Label><Textarea rows={2} placeholder='{"TOKEN":"..."}' value={mcpEnv} onChange={e => setMcpEnv(e.target.value)} className="text-sm font-mono resize-y" /></div>
                   </>
                 )
+              ) : activeSetup === 'lead_agent' ? (
+                <>
+                  <div>
+                    <Label>Provider</Label>
+                    <div className="mt-1 grid grid-cols-3 gap-2">
+                      {(['anthropic', 'openai', 'local'] as const).map(provider => (
+                        <button
+                          key={provider}
+                          type="button"
+                          onClick={() => setLeadAgentProvider(provider)}
+                          className={cn(
+                            'rounded-md border px-3 py-2 text-sm font-medium transition-colors',
+                            leadAgentProvider === provider
+                              ? 'border-primary bg-primary/10 text-foreground'
+                              : 'border-border-soft text-muted-foreground hover:bg-muted',
+                          )}
+                        >
+                          {provider === 'anthropic' ? 'Claude' : provider === 'openai' ? 'OpenAI' : 'Local Model'}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+
+                  {leadAgentProvider === 'anthropic' && (
+                    <div>
+                      <Label>Anthropic API key</Label>
+                      <Input type="password" placeholder="sk-ant-..." value={secret} onChange={e => setSecret(e.target.value)} className="text-sm" />
+                    </div>
+                  )}
+
+                  {leadAgentProvider === 'openai' && (
+                    <>
+                      <div>
+                        <Label>OpenAI API key</Label>
+                        <Input type="password" placeholder="sk-..." value={secret} onChange={e => setSecret(e.target.value)} className="text-sm" />
+                      </div>
+                      <div>
+                        <Label>Model name</Label>
+                        <Input placeholder="gpt-4o" value={openaiModelName} onChange={e => setOpenaiModelName(e.target.value)} className="text-sm" />
+                      </div>
+                    </>
+                  )}
+
+                  {leadAgentProvider === 'local' && (
+                    <>
+                      <div>
+                        <Label>Base URL</Label>
+                        <Input placeholder="http://localhost:11434/v1" value={localBaseUrl} onChange={e => setLocalBaseUrl(e.target.value)} className="text-sm" />
+                      </div>
+                      <div>
+                        <Label>Model name</Label>
+                        <Input placeholder="qwen2.5:14b" value={localModelName} onChange={e => setLocalModelName(e.target.value)} className="text-sm" />
+                      </div>
+                      <div>
+                        <Label>API key (optional)</Label>
+                        <Input type="password" placeholder="Leave blank for unauthenticated" value={secret} onChange={e => setSecret(e.target.value)} className="text-sm" />
+                      </div>
+                    </>
+                  )}
+                </>
               ) : (
                 <div>
                   <Label>{meta.secretLabel}{meta.secretOptional ? ' (optional)' : ''}</Label>

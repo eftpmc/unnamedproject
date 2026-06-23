@@ -138,7 +138,7 @@ export interface UserSettings {
 export interface Connection {
   id: string;
   name: string;
-  type: 'anthropic' | 'openai' | 'github' | 'mcp';
+  type: 'anthropic' | 'openai' | 'github' | 'mcp' | 'local';
   purpose: 'lead_agent' | 'claude_code' | 'codex' | 'github' | 'mcp' | 'tool';
   created_at: number;
 }

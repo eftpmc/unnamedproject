@@ -6,7 +6,6 @@ import Sidebar from '../components/Sidebar.js';
 import ChatView from '../components/ChatView.js';
 import EmptyState from '../components/EmptyState.js';
 import InboxPanel from '../components/InboxPanel.js';
-import CommandPalette from '../components/CommandPalette.js';
 import ErrorBoundary from '../components/ErrorBoundary.js';
 import { createChat, getConnections } from '../lib/api.js';
 import { connect, disconnect, subscribe } from '../lib/ws.js';
@@ -47,22 +46,10 @@ export default function AppLayout() {
   // executionId → approvalId for pending approvals
   const [pendingApprovals, setPendingApprovals] = useState<Map<string, string>>(new Map());
   const [inboxOpen, setInboxOpen] = useState(false);
-  const [paletteOpen, setPaletteOpen] = useState(false);
 
   // Keep a ref to chatId so the WS callback always has the current value
   const chatIdRef = useRef(chatId);
   useEffect(() => { chatIdRef.current = chatId; }, [chatId]);
-
-  useEffect(() => {
-    function handleKeyDown(e: KeyboardEvent) {
-      if ((e.metaKey || e.ctrlKey) && e.key === 'k') {
-        e.preventDefault();
-        setPaletteOpen(prev => !prev);
-      }
-    }
-    window.addEventListener('keydown', handleKeyDown);
-    return () => window.removeEventListener('keydown', handleKeyDown);
-  }, []);
 
   const { data: connections = [] } = useQuery<Connection[]>({
     queryKey: ['connections'],
@@ -172,7 +159,6 @@ export default function AppLayout() {
         pendingApprovals={pendingApprovals}
         onApprovalResolved={handleApprovalResolved}
       />
-      <CommandPalette open={paletteOpen} onClose={() => setPaletteOpen(false)} />
     </SidebarProvider>
   );
 }

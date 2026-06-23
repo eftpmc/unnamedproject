@@ -83,7 +83,7 @@ export const toolDefinitions: Anthropic.Tool[] = [
   },
   {
     name: 'rebuild_graph',
-    description: 'Rebuild the knowledge graph for a project. Call this after significant code changes (e.g. after a Claude Code or Codex session) so that subsequent project_query calls reflect the current state of the codebase.',
+    description: 'Rebuild the knowledge graph for a project. The graph is rebuilt automatically after invoke_claude_code and invoke_codex finish — you do not need to call this after a coding agent session. Only call it manually when you suspect the graph is stale, e.g. after editing files directly with write_file.',
     input_schema: {
       type: 'object',
       properties: {
@@ -322,7 +322,7 @@ export const toolDefinitions: Anthropic.Tool[] = [
   },
   {
     name: 'create_plan',
-    description: 'Create a plan to track a coordinated multi-step effort. Supports two execution modes:\n\n**Manual dispatch** (existing): Call create_plan to get step IDs, then call invoke_claude_code / invoke_codex / etc. with plan_step_id to execute steps manually — useful when you need to inspect results between steps.\n\n**Auto-dispatch** (recommended for parallel work): Add a `prompt` to each step and `depends_on` (array of 0-based step indices) to declare dependencies, then call run_plan with the plan_id. Steps without dependencies run immediately in parallel; steps with dependencies wait for their deps to complete.\n\nStep agent types: claude_code/codex = AI coding agents, mcp = MCP tool call, file_write = write a file, git = git operation, github = GitHub API, eval = run a shell command (prompt = the command, e.g. "npm test"), subagent = spawn a focused sub-agent with its own context window.',
+    description: 'Create a plan to track a coordinated multi-step effort. Supports two execution modes:\n\n**Manual dispatch** (existing): Call create_plan to get step IDs, then call invoke_claude_code / invoke_codex / etc. with plan_step_id to execute steps manually — useful when you need to inspect results between steps.\n\n**Auto-dispatch** (recommended for parallel work): Add a `prompt` to each step and `depends_on` (array of 0-based step indices) to declare dependencies, then call run_plan with the plan_id. Steps without dependencies run immediately in parallel; steps with dependencies wait for their deps to complete.\n\nStep agent types:\n- claude_code / codex: Fully autonomous coding agents — each step runs as an independent session that can implement entire features end-to-end: reading the codebase, writing and editing files across modules, running tests and fixing failures, installing dependencies, refactoring, and more. Write rich, detailed prompts for these steps exactly as you would for a direct invoke_claude_code call — describe what already exists, what to build, relevant constraints, and what "done" looks like. Do not write thin command-style prompts for coding agent steps; they are capable of handling ambitious, complex work.\n- mcp: MCP tool call\n- file_write: write a file\n- git: git operation\n- github: GitHub API\n- eval: run a shell command (prompt = the command, e.g. "npm test")\n- subagent: spawn a focused sub-agent with its own context window (lighter than a coding agent — use for analysis, summarization, or orchestration tasks, not for coding work)',
     input_schema: {
       type: 'object',
       properties: {
@@ -336,7 +336,7 @@ export const toolDefinitions: Anthropic.Tool[] = [
             properties: {
               title: { type: 'string', description: 'Short label for this step' },
               agent: { type: 'string', enum: ['claude_code', 'codex', 'mcp', 'file_write', 'git', 'github', 'eval', 'subagent'], description: 'Which executor to use' },
-              prompt: { type: 'string', description: 'Instruction for the agent / command for eval / message for git commit. Required when using run_plan auto-dispatch.' },
+              prompt: { type: 'string', description: 'Instruction for the agent / command for eval / message for git commit. Required when using run_plan auto-dispatch. For claude_code/codex steps: write the same rich, detailed brief you would give a direct invoke_claude_code call — what already exists, what to build, and what done looks like. These are full independent sessions, not simple commands.' },
               depends_on: { type: 'array', items: { type: 'number' }, description: 'Zero-based indices of steps this step depends on. Steps with no depends_on run immediately in parallel when using run_plan.' },
               tool_args: { type: 'object', description: 'Additional tool-specific arguments (e.g. {"op":"commit","branch":"main"} for git, {"path":"src/foo.ts","content":"..."} for file_write, {"connection_id":"...","tool_name":"...","tool_input":{}} for mcp, {"model":"opus"} to override the model for claude_code/codex steps)' },
             },
@@ -375,7 +375,7 @@ export const toolDefinitions: Anthropic.Tool[] = [
             properties: {
               title: { type: 'string' },
               agent: { type: 'string', enum: ['claude_code', 'codex', 'mcp', 'file_write', 'git', 'github', 'eval', 'subagent'] },
-              prompt: { type: 'string', description: 'Default instruction/command for this task step' },
+              prompt: { type: 'string', description: 'Default instruction/command for this task step. For claude_code/codex tasks: write the same rich, detailed brief you would give a direct invoke_claude_code call — what already exists, what to build, and what done looks like. These are full independent sessions, not simple commands.' },
               depends_on: { type: 'array', items: { type: 'number' }, description: 'Zero-based indices of tasks this step depends on' },
               tool_args: { type: 'object', description: 'Default tool-specific arguments for this step' },
             },

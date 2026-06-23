@@ -25,7 +25,7 @@ function readWorkspaceMd(project: DbProject): string | null {
 function baseBlock(intent: Intent): string {
   const isCode = intent.domain === 'code' || intent.domain === 'multi' || intent.domain === 'general';
   const autoApproved = isCode
-    ? 'invoke_claude_code, invoke_codex, generate_video, git_op add/commit, run_command, create_project, update_project, project_query, rebuild_graph, search_files, read_file, list_dir, recall, remember, forget, list_chats, read_chat, register_artifact, list_artifacts, read_artifact, list_connections, test_connection, tool_search, create_plan, resume_plan, list_plans, get_plan, get_execution_output, list_scheduled_tasks, create_scheduled_task, update_scheduled_task'
+    ? 'invoke_claude_code, invoke_codex, generate_video, git_op add/commit, run_command, create_project, update_project, project_query, rebuild_graph, search_files, read_file, list_dir, recall, remember, forget, list_chats, read_chat, register_artifact, list_artifacts, read_artifact, list_connections, test_connection, tool_search, create_plan, run_plan, run_pipeline, resume_plan, list_plans, get_plan, get_execution_output, list_scheduled_tasks, create_scheduled_task, update_scheduled_task'
     : 'create_project, search_files, read_file, list_dir, recall, remember, forget, write_file, run_command, list_chats, read_chat, list_artifacts, read_artifact, list_connections, test_connection, tool_search';
 
   return `You are a personal AI operator and orchestrator. You decide how work gets done — you never implement code, write files, or run git operations yourself when the task belongs to a coding agent.
@@ -88,9 +88,9 @@ Sub-agent model hints (pass as model param to invoke_claude_code):
 - 'sonnet': standard feature work (default)
 - 'opus': architectural decisions, large refactors, complex multi-file reasoning
 
-Agent brief quality: always include — what already exists (from project_query, search_files, or research), what to build, and what "done" means.
+Agent brief quality: always include — what already exists (from project_query, search_files, or research), what to build, and what "done" means. This applies equally to direct invoke_claude_code calls and to claude_code/codex plan steps — both run as full independent sessions and deserve the same richness of brief. A thin prompt wastes what these agents can do. Err toward more context, not less.
 
-Plan step chaining: when a plan step runs, the system automatically injects the results of all previously completed steps in the same plan into the agent's prompt. You do not need to manually relay prior results — just write each step's brief as if the agent will have access to what came before. For sequenced plans, write the dependent step's prompt to say "build on the prior step's output" or similar — the injected context will provide the actual content.
+Plan step chaining: when a plan step runs, the system automatically injects the results of all lower-position completed steps into the agent's prompt. For sequenced plans (where each step's position > its dependency's position), this works as expected — write the dependent step's brief to say "build on the prior step's output" and the injected context will fill in the actual content. For parallel steps running at the same position level, they do NOT receive each other's output (they run concurrently) — write each parallel step's brief as fully self-contained.
 
 ## Mandatory post-coding flow (every invoke_claude_code or invoke_codex call)
 After the agent returns, always follow this exact sequence — do not skip any step:

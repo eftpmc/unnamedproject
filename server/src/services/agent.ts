@@ -24,6 +24,7 @@ import { runCreatePlan } from '../tools/create_plan.js';
 import { broadcast } from './socket.js';
 import { newId } from '../lib/ids.js';
 import { DEFAULT_EFFORT, getAnthropicKey, resolveModelForTurn, listClaudeModels, tokensToUsd, withTransientRetry, isTransientApiError, type EffortLevel } from './anthropic.js';
+import { getLeadAgentProvider } from './lead_agent_providers.js';
 import { classifyIntent } from './intent.js';
 import { buildContext } from './context.js';
 import { toolDefinitions } from '../tools/definitions.js';
@@ -68,7 +69,7 @@ function buildPlanPriorContext(planStepId: string): string | null {
 
   if (priorSteps.length === 0) return null;
 
-  const MAX_RESULT_CHARS = 2000;
+  const MAX_RESULT_CHARS = 4000;
   const parts = priorSteps.map(t => {
     if (!t.execution_id) return `### ${t.title}\n(no output recorded)`;
     const ex = getExecutionById(t.execution_id);
@@ -190,15 +191,22 @@ const PARALLEL_SAFE_TOOLS = new Set([
 ]);
 
 const CORE_TOOLS = new Set([
-  'tool_search',
-  'recall',
-  'remember',
-  'read_file',
-  'search_files',
-  'list_dir',
-  'write_file',
-  'create_plan',
-  'delegate_to_agent',
+  // Discovery + memory
+  'tool_search', 'recall', 'remember',
+  // File access
+  'read_file', 'search_files', 'list_dir', 'write_file',
+  // Coding agents — always available; the auto-approved list references these on turn 1
+  'invoke_claude_code', 'invoke_codex',
+  // Post-coding mandatory flow
+  'git_op', 'run_command',
+  // State-awareness checks (system prompt requires these before starting work)
+  'list_plans', 'list_artifacts', 'run_plan',
+  // Codebase understanding
+  'project_query',
+  // Connection verification (MCP instructions reference this early)
+  'list_connections',
+  // Orchestration
+  'create_plan', 'delegate_to_agent',
 ]);
 
 export function resolveToolsForTurn(userId: string, sessionId: string): Anthropic.Tool[] {
@@ -420,6 +428,9 @@ async function executePlanStep(
 
   const toolArgs: Record<string, unknown> = step.tool_args ? JSON.parse(step.tool_args) : {};
   const prompt = step.prompt ?? '';
+  if ((step.agent === 'claude_code' || step.agent === 'codex') && !prompt.trim()) {
+    throw new Error(`Plan step "${step.title}" has no prompt. claude_code and codex steps require a detailed brief describing what to build and what done looks like.`);
+  }
   const priorCtx = buildPlanPriorContext(step.id);
   const fullPrompt = priorCtx ? `${prompt}\n\n${priorCtx}` : prompt;
 
@@ -1282,17 +1293,7 @@ async function dispatchTool(
 }
 
 export async function runAgentTurn(userId: string, sessionId: string, userMessageId: string): Promise<void> {
-  let apiKey: string;
-  try {
-    apiKey = getAnthropicKey(userId);
-  } catch {
-    if (process.env.ANTHROPIC_API_KEY) {
-      apiKey = process.env.ANTHROPIC_API_KEY;
-    } else {
-      throw new Error('No Anthropic API key configured. Add a connection in Settings or set ANTHROPIC_API_KEY in the environment.');
-    }
-  }
-  const client = new Anthropic({ apiKey });
+  const provider = getLeadAgentProvider(userId);
 
   const session = getDb()
     .prepare('SELECT effort, model, summary FROM sessions WHERE id = ?')
@@ -1327,7 +1328,7 @@ export async function runAgentTurn(userId: string, sessionId: string, userMessag
   listClaudeModels(userId).catch(() => {});
 
   const intent = classifyIntent(lastUserMsg);
-  const model = session?.model ?? await resolveModelForTurn(client, intent, effort, apiKey);
+  const model = await provider.resolveModel(session, intent, effort);
 
   const systemPrompt = buildContext(userId, sessionId, intent);
   const tools = resolveToolsForTurn(userId, sessionId);
@@ -1367,33 +1368,30 @@ export async function runAgentTurn(userId: string, sessionId: string, userMessag
     while (true) {
       if (abortController.signal.aborted) break;
 
-      let response: Anthropic.Message | undefined;
+      let contentBlocks: Anthropic.ContentBlock[] = [];
+      let turnInputTokens = 0;
+      let turnOutputTokens = 0;
       for (let attempt = 0; ; attempt++) {
-        const stream = client.messages.stream({
-          model,
-          max_tokens: 8192,
-          system: systemPrompt,
-          tools: tools,
-          messages: currentMessages,
-        }, {
-          headers: { 'anthropic-beta': 'web-fetch-2025-09-10' },
-          signal: abortController.signal,
-        });
-
-        stream.on('text', (delta) => {
-          if (!started) {
-            started = true;
-            getDb()
-              .prepare('INSERT INTO messages (id, session_id, role, content) VALUES (?,?,?,?)')
-              .run(replyId, sessionId, 'assistant', '');
-            broadcast(userId, { type: 'message_started', sessionId, message: { id: replyId, role: 'assistant', content: '' } });
-          }
-          fullText += delta;
-          broadcast(userId, { type: 'message_delta', sessionId, messageId: replyId, delta });
-        });
-
         try {
-          response = await stream.finalMessage();
+          ({ contentBlocks, inputTokens: turnInputTokens, outputTokens: turnOutputTokens } =
+            await provider.stream({
+              model,
+              system: systemPrompt,
+              tools,
+              messages: currentMessages,
+              signal: abortController.signal,
+              onText: (delta) => {
+                if (!started) {
+                  started = true;
+                  getDb()
+                    .prepare('INSERT INTO messages (id, session_id, role, content) VALUES (?,?,?,?)')
+                    .run(replyId, sessionId, 'assistant', '');
+                  broadcast(userId, { type: 'message_started', sessionId, message: { id: replyId, role: 'assistant', content: '' } });
+                }
+                fullText += delta;
+                broadcast(userId, { type: 'message_delta', sessionId, messageId: replyId, delta });
+              },
+            }));
           break;
         } catch (err) {
           // Only safe to retry before any text has reached the client — once streamed, a retry would duplicate output.
@@ -1401,13 +1399,13 @@ export async function runAgentTurn(userId: string, sessionId: string, userMessag
           await new Promise(resolve => setTimeout(resolve, 300 * 2 ** attempt));
         }
       }
-      totalInputTokens += response.usage.input_tokens;
-      totalOutputTokens += response.usage.output_tokens;
+      totalInputTokens += turnInputTokens;
+      totalOutputTokens += turnOutputTokens;
 
-      if (response.stop_reason === 'tool_use') {
-        const toolUseBlocks = response.content.filter(b => b.type === 'tool_use') as Anthropic.ToolUseBlock[];
+      const toolUseBlocks = contentBlocks.filter(b => b.type === 'tool_use') as Anthropic.ToolUseBlock[];
+      if (toolUseBlocks.length > 0) {
 
-        currentMessages.push({ role: 'assistant', content: response.content });
+        currentMessages.push({ role: 'assistant', content: contentBlocks });
 
         const toolResults = await dispatchToolBlocks(toolUseBlocks, userId, userMessageId, sessionId);
 
@@ -1461,6 +1459,14 @@ export async function runAgentTurn(userId: string, sessionId: string, userMessag
   // Fire-and-forget: generate title after first turn
   maybeGenerateSessionTitle(userId, sessionId).catch(() => {});
 
-  extractAndRemember(userId, sessionId, apiKey).catch(() => {});
-  maybeDistill(userId, sessionId, apiKey).catch(() => {});
+  try {
+    const anthropicKey = getAnthropicKey(userId);
+    extractAndRemember(userId, sessionId, anthropicKey).catch(() => {});
+    maybeDistill(userId, sessionId, anthropicKey).catch(() => {});
+  } catch {
+    if (process.env.ANTHROPIC_API_KEY) {
+      extractAndRemember(userId, sessionId, process.env.ANTHROPIC_API_KEY).catch(() => {});
+      maybeDistill(userId, sessionId, process.env.ANTHROPIC_API_KEY).catch(() => {});
+    }
+  }
 }

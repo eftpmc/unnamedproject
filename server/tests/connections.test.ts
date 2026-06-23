@@ -65,6 +65,36 @@ describe('connections', () => {
     expect(res.status).toBe(400);
   });
 
+  it('allows openai and local connections for the lead agent', async () => {
+    const openai = await request(app)
+      .post('/connections')
+      .set('Authorization', `Bearer ${token}`)
+      .send({ name: 'Lead OpenAI', type: 'openai', purpose: 'lead_agent', config: { apiKey: 'sk-test', modelName: 'gpt-4o' } });
+    expect(openai.status).toBe(201);
+
+    const local = await request(app)
+      .post('/connections')
+      .set('Authorization', `Bearer ${token}`)
+      .send({ name: 'Lead Local', type: 'local', purpose: 'lead_agent', config: { baseUrl: 'http://localhost:11434/v1', modelName: 'qwen2.5:14b' } });
+    expect(local.status).toBe(201);
+  });
+
+  it('requires model/base URL config for non-anthropic lead agent connections', async () => {
+    const openai = await request(app)
+      .post('/connections')
+      .set('Authorization', `Bearer ${token}`)
+      .send({ name: 'Lead OpenAI Missing Model', type: 'openai', purpose: 'lead_agent', config: { apiKey: 'sk-test' } });
+    expect(openai.status).toBe(400);
+    expect(openai.body.error).toMatch(/modelName/);
+
+    const local = await request(app)
+      .post('/connections')
+      .set('Authorization', `Bearer ${token}`)
+      .send({ name: 'Lead Local Missing Base', type: 'local', purpose: 'lead_agent', config: { modelName: 'qwen2.5:14b' } });
+    expect(local.status).toBe(400);
+    expect(local.body.error).toMatch(/baseUrl/);
+  });
+
   it('decrypts config only for the owning user', async () => {
     const ownUserId = (getDb().prepare('SELECT id FROM users WHERE email = ?').get(email) as { id: string }).id;
 

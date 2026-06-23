@@ -519,10 +519,10 @@ export default function ChatView({ chatId }: ChatViewProps) {
       <div className="relative flex min-w-0 flex-1 flex-col">
       <PageHeader
         title={<EditableTitle title={chat?.title ?? 'Untitled chat'} onSave={(t) => configMutation.mutate({ title: t })} />}
-        className="border-b border-border-soft px-5 py-4"
-        description={
-          <div className="flex flex-col gap-1.5">
-            <div className="flex items-center gap-2">
+        className="border-b border-border-soft px-5 py-2.5"
+        description={lastInputTokens !== null ? <ContextBar inputTokens={lastInputTokens} /> : undefined}
+        actions={
+          <div className="flex items-center gap-2">
             <ScopePopover
               projects={projects}
               pinnedProject={pinnedProject}
@@ -545,14 +545,6 @@ export default function ChatView({ chatId }: ChatViewProps) {
                 )}
               </button>
             )}
-          </div>
-            {lastInputTokens !== null && (
-              <ContextBar inputTokens={lastInputTokens} />
-            )}
-          </div>
-        }
-        actions={
-          <div className="flex items-center gap-2">
             <button
               type="button"
               onClick={toggleCtx}

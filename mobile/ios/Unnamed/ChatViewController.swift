@@ -4,7 +4,6 @@ import UniformTypeIdentifiers
 final class ChatViewController: UIViewController {
   var onOpenSidebar: (() -> Void)?
   var onDeleted: (() -> Void)?
-  var onJumpToChat: ((ChatSession) -> Void)?
   var onNewChat: (() -> Void)?
   var onShowSettings: (() -> Void)?
   private let isNew: Bool
@@ -680,11 +679,8 @@ final class ChatViewController: UIViewController {
   /// effort/model live on the composer pill instead — this menu is just
   /// chat-level actions.
   private func makeChatSettingsMenu() -> UIMenu {
-    let jumpAction = UIAction(title: "Jump to…", image: UIImage(systemName: "magnifyingglass")) { [weak self] _ in
-      self?.presentQuickSwitch()
-    }
     guard !activeSessionId.isEmpty else {
-      return UIMenu(children: [jumpAction])
+      return UIMenu(children: [])
     }
     let renameAction = UIAction(title: "Rename Chat", image: UIImage(systemName: "pencil")) { [weak self] _ in
       self?.promptRename()
@@ -692,21 +688,7 @@ final class ChatViewController: UIViewController {
     let deleteAction = UIAction(title: "Delete Chat", image: UIImage(systemName: "trash"), attributes: .destructive) { [weak self] _ in
       self?.confirmDeleteChat()
     }
-    return UIMenu(children: [jumpAction, renameAction, UIMenu(options: .displayInline, children: [deleteAction])])
-  }
-
-  private func presentQuickSwitch() {
-    let qs = QuickSwitchViewController(appSession: appSession)
-    qs.onSelectChat = { [weak self] chat in self?.onJumpToChat?(chat) }
-    qs.onNewChat = { [weak self] in self?.onNewChat?() }
-    qs.onShowSettings = { [weak self] in self?.onShowSettings?() }
-    let nav = UINavigationController(rootViewController: qs)
-    if let sheet = nav.sheetPresentationController {
-      sheet.detents = [.medium(), .large()]
-      sheet.selectedDetentIdentifier = .medium
-      sheet.prefersGrabberVisible = true
-    }
-    present(nav, animated: true)
+    return UIMenu(children: [renameAction, UIMenu(options: .displayInline, children: [deleteAction])])
   }
 
   private func refreshOptionsMenu() {

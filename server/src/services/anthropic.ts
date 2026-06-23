@@ -62,6 +62,47 @@ export function getAnthropicKey(userId: string): string {
   return config.apiKey;
 }
 
+export type LeadAgentConnection =
+  | { type: 'anthropic'; apiKey: string }
+  | { type: 'openai'; apiKey: string; modelName: string }
+  | { type: 'local'; baseUrl: string; modelName: string; apiKey?: string };
+
+export function getLeadAgentConnection(userId: string): LeadAgentConnection {
+  const conn = getDb()
+    .prepare(`
+      SELECT id, type FROM connections
+      WHERE user_id = ? AND purpose = 'lead_agent'
+      ORDER BY created_at DESC
+      LIMIT 1
+    `)
+    .get(userId) as { id: string; type: string } | undefined;
+
+  if (!conn) {
+    // Fall back to any anthropic connection (matches existing getAnthropicKey behaviour)
+    const fallback = getDb()
+      .prepare(`
+        SELECT id FROM connections
+        WHERE user_id = ? AND type = 'anthropic'
+        ORDER BY created_at
+        LIMIT 1
+      `)
+      .get(userId) as { id: string } | undefined;
+    if (!fallback) throw new Error('No lead agent connection configured. Add a connection in Settings.');
+    const config = getDecryptedConfig(fallback.id, userId);
+    return { type: 'anthropic', apiKey: config.apiKey };
+  }
+
+  const config = getDecryptedConfig(conn.id, userId);
+  if (conn.type === 'openai') {
+    return { type: 'openai', apiKey: config.apiKey, modelName: config.modelName };
+  }
+  if (conn.type === 'local') {
+    return { type: 'local', baseUrl: config.baseUrl, modelName: config.modelName, apiKey: config.apiKey || undefined };
+  }
+  // anthropic (default)
+  return { type: 'anthropic', apiKey: config.apiKey };
+}
+
 const MODEL_LIST_CACHE_TTL_MS = 5 * 60 * 1000;
 const modelListCache = new Map<string, { models: ClaudeModelInfo[]; expiresAt: number }>();
 

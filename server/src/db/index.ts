@@ -14,7 +14,7 @@ export function getDataDir(): string {
   return process.env.DATA_DIR ? path.resolve(process.env.DATA_DIR) : defaultDataDir;
 }
 
-function addDocumentItems(database: Database.Database): void {
+export function addDocumentItems(database: Database.Database): void {
   // 1. Widen space_items.type CHECK to include 'document'
   const itemsSql = (database.prepare("SELECT sql FROM sqlite_master WHERE type='table' AND name='space_items'").get() as { sql: string } | undefined)?.sql;
   if (itemsSql && !itemsSql.includes("'document'")) {
@@ -71,7 +71,7 @@ function addDocumentItems(database: Database.Database): void {
         space_id TEXT REFERENCES spaces(id) ON DELETE SET NULL,
         plan_id TEXT REFERENCES plans(id) ON DELETE SET NULL,
         item_id TEXT REFERENCES space_items(id) ON DELETE SET NULL,
-        execution_id TEXT,
+        execution_id TEXT REFERENCES executions(id) ON DELETE SET NULL,
         metadata TEXT NOT NULL DEFAULT '{}',
         created_at INTEGER NOT NULL DEFAULT (unixepoch())
       );

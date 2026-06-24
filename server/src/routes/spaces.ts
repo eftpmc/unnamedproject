@@ -316,6 +316,10 @@ router.get('/:spaceId/items/:itemId/content', async (req, res) => {
     res.status(400).json({ error: "Operation not supported for item type 'repo'" });
     return;
   }
+  if (item.type === 'document') {
+    res.status(400).json({ error: 'Content endpoint not supported for document items. Use the blocks field from GET /spaces/:spaceId/items/:itemId instead.' });
+    return;
+  }
   try {
     const content = await readItemContent(item);
     if (item.type === 'note') {

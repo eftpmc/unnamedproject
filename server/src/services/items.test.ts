@@ -70,6 +70,7 @@ describe('items service', () => {
     const blocks = [{ type: 'text' as const, content: 'hello' }];
     const item = createDocumentItem({ space_id: 'space1', name: 'My Doc', template: 'document', blocks });
     expect(item.type).toBe('document');
+    if (item.type !== 'document') throw new Error('expected document');
     expect(item.template).toBe('document');
     expect(item.blocks).toEqual(blocks);
     expect(item.id).toBeTruthy();
@@ -78,6 +79,7 @@ describe('items service', () => {
   it('createDocumentItem with empty blocks stores empty array', async () => {
     const { createDocumentItem } = await import('./items.js');
     const item = createDocumentItem({ space_id: 'space1', name: 'Empty Doc', template: 'spec', blocks: [] });
+    if (item.type !== 'document') throw new Error('expected document');
     expect(item.blocks).toEqual([]);
   });
 

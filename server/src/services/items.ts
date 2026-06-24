@@ -262,5 +262,8 @@ export function resolveFileItemPath(item: SpaceItem & { type: 'file' }): string 
 export async function readItemContent(item: SpaceItem): Promise<string | Buffer> {
   if (item.type === 'note') return item.content;
   if (item.type === 'file') return fs.readFile(resolveFileItemPath(item));
+  if (item.type === 'document') {
+    throw new Error("readItemContent is not supported for document items");
+  }
   throw new Error("Operation not supported for item type 'repo'");
 }

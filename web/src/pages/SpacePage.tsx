@@ -113,6 +113,7 @@ export default function SpacePage() {
   return (
     <PageShell>
       <PageHeader
+        className="border-0"
         title={title}
         description={description}
         breadcrumb={section === 'overview' ? undefined : (

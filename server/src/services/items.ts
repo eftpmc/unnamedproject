@@ -131,6 +131,10 @@ export function updateDocumentBlocks(itemId: string, blocks: Block[]): void {
   getDb().prepare('UPDATE space_documents SET blocks = ? WHERE item_id = ?').run(JSON.stringify(blocks), itemId);
 }
 
+export function updateNoteContent(itemId: string, content: string): void {
+  getDb().prepare('UPDATE space_notes SET content = ? WHERE item_id = ?').run(content, itemId);
+}
+
 export function updateRepoOverviewBlocks(itemId: string, blocks: Block[] | null): void {
   getDb().prepare('UPDATE space_repos SET overview_blocks = ? WHERE item_id = ?').run(
     blocks ? JSON.stringify(blocks) : null,

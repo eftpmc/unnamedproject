@@ -86,6 +86,19 @@ describe('runUpdateItem', () => {
     expect(result.blocks).toEqual(newBlocks);
   });
 
+  it('updates note content', async () => {
+    const { runCreateItem, runUpdateItem } = await import('./item_ops.js');
+    const created = JSON.parse(await runCreateItem(
+      { space_id: 'sp1', name: 'My Note', type: 'note', content: 'original' },
+      'u1',
+    ));
+    const result = JSON.parse(await runUpdateItem(
+      { space_id: 'sp1', item_id: created.id, content: 'updated content' },
+      'u1',
+    ));
+    expect(result.content).toBe('updated content');
+  });
+
   it('updates repo overview_blocks', async () => {
     const { runUpdateItem } = await import('./item_ops.js');
     const overview: Block[] = [{ type: 'text', content: 'overview' }];

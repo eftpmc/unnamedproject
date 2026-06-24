@@ -1,11 +1,13 @@
-import { getSpaceForUser, getDb } from '../db/index.js';
+import { getSpaceForUser } from '../db/index.js';
 import {
   createDocumentItem,
   createNoteItem,
   createRepoItem,
   updateDocumentBlocks,
+  updateNoteContent,
   updateRepoOverviewBlocks,
   getItemById,
+  readItemContent,
   type Block,
 } from '../services/items.js';
 import { ITEM_TEMPLATES } from '../lib/item-templates.js';
@@ -87,7 +89,7 @@ export async function runUpdateItem(
 
   if (input.content !== undefined) {
     if (item.type !== 'note') return `Error: content only applies to note items`;
-    getDb().prepare('UPDATE space_notes SET content = ? WHERE item_id = ?').run(input.content, item.id);
+    updateNoteContent(item.id, input.content);
   }
 
   return JSON.stringify(getItemById(item.id));
@@ -102,6 +104,11 @@ export async function runReadItem(
 
   const item = getItemById(input.item_id);
   if (!item || item.space_id !== input.space_id) return `Error: item ${input.item_id} not found`;
+
+  if (item.type === 'file') {
+    const content = await readItemContent(item);
+    return JSON.stringify({ ...item, content: Buffer.isBuffer(content) ? `[binary: ${content.length} bytes]` : content });
+  }
 
   return JSON.stringify(item);
 }

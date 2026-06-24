@@ -47,6 +47,7 @@ export type SessionEventType =
   | 'plan_created'
   | 'artifact_created'
   | 'item_created'
+  | 'item_updated'
   | 'approval_requested'
   | 'approval_resolved'
   | 'mcp_required';
@@ -99,7 +100,17 @@ export interface Space {
   created_at?: number;
 }
 
-export type SpaceItemType = 'repo' | 'file' | 'note';
+export type Block =
+  | { type: 'text'; content: string }
+  | { type: 'heading'; level: 1 | 2 | 3; text: string }
+  | { type: 'code'; language: string; content: string }
+  | { type: 'table'; headers: string[]; rows: string[][] }
+  | { type: 'image'; url: string; alt?: string; caption?: string }
+  | { type: 'task-list'; tasks: { id: string; text: string; done: boolean }[] }
+  | { type: 'callout'; variant: 'info' | 'warning' | 'success' | 'error'; content: string }
+  | { type: 'file-browser' };
+
+export type SpaceItemType = 'repo' | 'file' | 'note' | 'document';
 
 interface SpaceItemBase {
   id: string;
@@ -113,9 +124,10 @@ interface SpaceItemBase {
 }
 
 export type SpaceItem =
-  | (SpaceItemBase & { type: 'repo'; repo_path: string; default_branch: string | null })
+  | (SpaceItemBase & { type: 'repo'; repo_path: string; default_branch: string | null; overview_blocks: Block[] | null })
   | (SpaceItemBase & { type: 'file'; file_path: string; size_bytes: number | null; mime_type: string | null })
-  | (SpaceItemBase & { type: 'note'; content: string });
+  | (SpaceItemBase & { type: 'note'; content: string })
+  | (SpaceItemBase & { type: 'document'; template: string; blocks: Block[] });
 
 export interface FileEntry {
   name: string;

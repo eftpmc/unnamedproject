@@ -630,6 +630,13 @@ function ItemDetail({ space, item }: { space: Space; item: SpaceItem }) {
   );
 }
 
+const TEMPLATE_LABELS: Record<string, string> = {
+  document: 'Document',
+  spec: 'Spec',
+  kanban: 'Kanban',
+  report: 'Report',
+};
+
 function RepoDetail({ space, item }: { space: Space; item: SpaceItem & { type: 'repo' } }) {
   return (
     <PageBody className="p-4 sm:p-5">
@@ -651,13 +658,6 @@ function RepoDetail({ space, item }: { space: Space; item: SpaceItem & { type: '
 }
 
 function DocumentDetail({ space, item }: { space: Space; item: SpaceItem & { type: 'document' } }) {
-  const TEMPLATE_LABELS: Record<string, string> = {
-    document: 'Document',
-    spec: 'Spec',
-    kanban: 'Kanban',
-    report: 'Report',
-  };
-
   return (
     <PageBody>
       <ContentColumn className="max-w-2xl py-6">

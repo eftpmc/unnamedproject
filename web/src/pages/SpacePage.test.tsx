@@ -42,24 +42,24 @@ function renderPage(path: string) {
 }
 
 describe('SpacePage', () => {
-  it('renders the Space overview with tab bar visible', async () => {
+  it('renders the Space overview with tab bar and activity list', async () => {
     renderPage('/spaces/space-1');
     expect(await screen.findByText('Test Space')).toBeInTheDocument();
-    expect(screen.getByText('Recent activity')).toBeInTheDocument();
-    // Tab bar is present
     expect(screen.getByRole('link', { name: 'Chats' })).toBeInTheDocument();
     expect(screen.getByRole('link', { name: 'Items' })).toBeInTheDocument();
     expect(screen.getByRole('link', { name: 'Plans' })).toBeInTheDocument();
     expect(screen.getByRole('link', { name: 'Pipelines' })).toBeInTheDocument();
     expect(screen.getByRole('link', { name: 'Settings' })).toBeInTheDocument();
-    // No tab is active on overview
-    expect(screen.queryByRole('link', { name: 'Chats', current: 'page' })).not.toBeInTheDocument();
+    // Stat cards removed — "Running" label no longer present
+    expect(screen.queryByText('Running')).not.toBeInTheDocument();
+    // Activity items present
+    expect(screen.getByText('Web repo')).toBeInTheDocument();
+    expect(screen.getByText('Fix the render bug')).toBeInTheDocument();
   });
 
   it('marks the Chats tab active on the chats sub-route', async () => {
     renderPage('/spaces/space-1/chats');
     expect(await screen.findByRole('link', { name: 'Chats' })).toHaveAttribute('aria-current', 'page');
-    expect(screen.queryByRole('link', { name: 'Items', current: 'page' })).not.toBeInTheDocument();
   });
 
   it('marks the Items tab active on the items sub-route', async () => {
@@ -81,7 +81,6 @@ describe('SpacePage', () => {
   it('drills into a repository Item without showing tab bar', async () => {
     renderPage('/spaces/space-1/items/repo-1');
     expect(await screen.findByText('Repository browser')).toBeInTheDocument();
-    // ItemDetail renders its own shell — tab bar is not present
     expect(screen.queryByRole('link', { name: 'Pipelines' })).not.toBeInTheDocument();
   });
 });

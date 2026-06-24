@@ -50,7 +50,7 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
-import { EmptyPanel, PageBody, PageHeader, PageLoading, PageSection, PageShell, Surface } from '@/components/ui/app-layout';
+import { ContentColumn, EmptyPanel, PageBody, PageHeader, PageLoading, PageSection, PageShell, Surface } from '@/components/ui/app-layout';
 import { StatusPill } from '@/components/ui/status-pill';
 import FileBrowser from '../components/FileBrowser.js';
 import type { Pipeline, Plan, Session, Space, SpaceItem, SpaceItemType } from '../types.js';
@@ -141,67 +141,40 @@ export default function SpacePage() {
 
 function Overview({ space, items, plans, chats }: { space: Space; items: SpaceItem[]; plans: Plan[]; chats: Session[] }) {
   const navigate = useNavigate();
-  const activePlans = plans.filter(plan => plan.status === 'running');
   const recent = [
-    ...plans.slice(0, 4).map(plan => ({ key: plan.id, type: 'Plan', title: plan.title, time: plan.created_at, href: `/spaces/${space.id}/plans/${plan.id}`, status: plan.status })),
-    ...chats.slice(0, 4).map(chat => ({ key: chat.id, type: 'Chat', title: chat.title ?? 'Untitled chat', time: chat.updated_at, href: `/c/${chat.id}`, status: null })),
-    ...items.slice(0, 4).map(item => ({ key: item.id, type: item.type, title: item.name, time: item.created_at, href: `/spaces/${space.id}/items/${item.id}`, status: null })),
-  ].sort((a, b) => b.time - a.time).slice(0, 6);
+    ...plans.map(plan => ({ key: plan.id, type: 'Plan' as const, title: plan.title, time: plan.created_at, href: `/spaces/${space.id}/plans/${plan.id}`, status: plan.status })),
+    ...chats.map(chat => ({ key: chat.id, type: 'Chat' as const, title: chat.title ?? 'Untitled chat', time: chat.updated_at, href: `/c/${chat.id}`, status: null })),
+    ...items.map(item => ({ key: item.id, type: item.type, title: item.name, time: item.created_at, href: `/spaces/${space.id}/items/${item.id}`, status: null })),
+  ].sort((a, b) => b.time - a.time).slice(0, 12);
 
   return (
     <PageBody>
-      <div className="mx-auto flex w-full max-w-5xl flex-col gap-7">
-        <div className="grid grid-cols-2 gap-4 lg:grid-cols-4">
-          <Metric label="Items" value={items.length} onClick={() => navigate(`/spaces/${space.id}/items`)} />
-          <Metric label="Chats" value={chats.length} onClick={() => navigate(`/spaces/${space.id}/chats`)} />
-          <Metric label="Plans" value={plans.length} onClick={() => navigate(`/spaces/${space.id}/plans`)} />
-          <Metric label="Running" value={activePlans.length} />
-        </div>
-
-        {activePlans.length > 0 && (
-          <PageSection title="Active now">
-            <div className="grid gap-3 md:grid-cols-2">
-              {activePlans.map(plan => <PlanCard key={plan.id} plan={plan} spaceId={space.id} />)}
-            </div>
-          </PageSection>
+      <ContentColumn className="max-w-2xl">
+        {recent.length === 0 ? (
+          <EmptyPanel title="Nothing here yet" description="Start a chat or add an item to this Space." />
+        ) : (
+          <div className="flex flex-col gap-2">
+            {recent.map(entry => (
+              <button
+                type="button"
+                key={`${entry.type}-${entry.key}`}
+                onClick={() => navigate(entry.href)}
+                className="flex items-center gap-3 rounded-lg border border-border-soft bg-card px-4 py-3.5 text-left transition hover:-translate-y-px hover:border-border hover:shadow-sm"
+              >
+                <ItemIcon type={entry.type === 'Plan' || entry.type === 'Chat' ? entry.type : entry.type as SpaceItemType} />
+                <span className="min-w-0 flex-1">
+                  <span className="block truncate text-sm font-medium text-foreground">{entry.title}</span>
+                  <span className="block text-xs capitalize text-faint-fg">{entry.type} · {timeAgo(entry.time)}</span>
+                </span>
+                {entry.status && <StatusPill status={entry.status as Plan['status']} />}
+                <ChevronRight size={15} className="shrink-0 text-faint-fg" />
+              </button>
+            ))}
+          </div>
         )}
-
-        <PageSection title="Recent activity">
-          {recent.length === 0 ? (
-            <EmptyPanel title="Nothing here yet" description="Start a chat or add an Item to begin building this Space." />
-          ) : (
-            <Surface className="divide-y divide-border-soft overflow-hidden">
-              {recent.map(entry => (
-                <button
-                  type="button"
-                  key={`${entry.type}-${entry.key}`}
-                  onClick={() => navigate(entry.href)}
-                  className="flex w-full items-center gap-3 px-4 py-3 text-left transition-colors hover:bg-muted/35"
-                >
-                  <ItemIcon type={entry.type === 'Plan' || entry.type === 'Chat' ? entry.type : entry.type as SpaceItemType} />
-                  <span className="min-w-0 flex-1">
-                    <span className="block truncate text-sm font-medium">{entry.title}</span>
-                    <span className="mt-0.5 block text-xs capitalize text-muted-foreground">{entry.type} · {timeAgo(entry.time)}</span>
-                  </span>
-                  {entry.status && <StatusPill status={entry.status as Plan['status']} />}
-                  <ChevronRight size={15} className="text-faint-fg" />
-                </button>
-              ))}
-            </Surface>
-          )}
-        </PageSection>
-      </div>
+      </ContentColumn>
     </PageBody>
   );
-}
-
-function Metric({ label, value, onClick }: { label: string; value: number; onClick?: () => void }) {
-  const content = <><div className="text-2xl font-semibold tracking-tight">{value}</div><div className="mt-1 text-xs text-muted-foreground">{label}</div></>;
-  return onClick ? (
-    <button type="button" onClick={onClick} className="rounded-lg border border-border-soft bg-card p-4 text-left transition hover:border-border hover:shadow-sm">
-      {content}
-    </button>
-  ) : <Surface className="p-4">{content}</Surface>;
 }
 
 function ChatsSection({ chats, onNewChat }: { chats: Session[]; onNewChat: () => void }) {

@@ -127,6 +127,7 @@ export default function SpacePage() {
           </Button>
         ) : undefined}
       />
+      <SpaceTabs spaceId={space.id} section={section} />
       {section === 'overview' && <Overview space={space} items={items} plans={plans} chats={spaceChats} />}
       {section === 'chats' && <ChatsSection chats={spaceChats} onNewChat={() => startChat.mutate()} />}
       {section === 'items' && <ItemsSection space={space} items={items} />}
@@ -710,4 +711,35 @@ function formatBytes(bytes: number) {
   if (bytes < 1024) return `${bytes} B`;
   if (bytes < 1024 ** 2) return `${(bytes / 1024).toFixed(1)} KB`;
   return `${(bytes / 1024 ** 2).toFixed(1)} MB`;
+}
+
+function SpaceTabs({ spaceId, section }: { spaceId: string; section: Section }) {
+  const tabs: { label: string; key: Section }[] = [
+    { label: 'Chats', key: 'chats' },
+    { label: 'Items', key: 'items' },
+    { label: 'Plans', key: 'plans' },
+    { label: 'Pipelines', key: 'pipelines' },
+    { label: 'Settings', key: 'settings' },
+  ];
+  return (
+    <div className="border-b border-border-soft px-6">
+      <nav className="flex" aria-label="Space sections">
+        {tabs.map(tab => (
+          <Link
+            key={tab.key}
+            to={`/spaces/${spaceId}/${tab.key}`}
+            aria-current={section === tab.key ? 'page' : undefined}
+            className={cn(
+              '-mb-px border-b-2 px-4 py-2.5 text-sm font-medium transition-colors',
+              section === tab.key
+                ? 'border-foreground text-foreground'
+                : 'border-transparent text-muted-foreground hover:text-foreground',
+            )}
+          >
+            {tab.label}
+          </Link>
+        ))}
+      </nav>
+    </div>
+  );
 }

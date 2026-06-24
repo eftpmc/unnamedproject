@@ -42,11 +42,29 @@ function renderPage(path: string) {
 }
 
 describe('SpacePage', () => {
-  it('renders the Space overview without a tab strip', async () => {
+  it('renders the Space overview with tab bar visible', async () => {
     renderPage('/spaces/space-1');
     expect(await screen.findByText('Test Space')).toBeInTheDocument();
     expect(screen.getByText('Recent activity')).toBeInTheDocument();
-    expect(screen.queryByRole('link', { name: 'Artifacts' })).not.toBeInTheDocument();
+    // Tab bar is present
+    expect(screen.getByRole('link', { name: 'Chats' })).toBeInTheDocument();
+    expect(screen.getByRole('link', { name: 'Items' })).toBeInTheDocument();
+    expect(screen.getByRole('link', { name: 'Plans' })).toBeInTheDocument();
+    expect(screen.getByRole('link', { name: 'Pipelines' })).toBeInTheDocument();
+    expect(screen.getByRole('link', { name: 'Settings' })).toBeInTheDocument();
+    // No tab is active on overview
+    expect(screen.queryByRole('link', { name: 'Chats', current: 'page' })).not.toBeInTheDocument();
+  });
+
+  it('marks the Chats tab active on the chats sub-route', async () => {
+    renderPage('/spaces/space-1/chats');
+    expect(await screen.findByRole('link', { name: 'Chats' })).toHaveAttribute('aria-current', 'page');
+    expect(screen.queryByRole('link', { name: 'Items', current: 'page' })).not.toBeInTheDocument();
+  });
+
+  it('marks the Items tab active on the items sub-route', async () => {
+    renderPage('/spaces/space-1/items');
+    expect(await screen.findByRole('link', { name: 'Items' })).toHaveAttribute('aria-current', 'page');
   });
 
   it('shows only chats pinned to the Space', async () => {
@@ -60,8 +78,10 @@ describe('SpacePage', () => {
     expect(screen.getByText('Release notes')).toBeInTheDocument();
   });
 
-  it('drills into a repository Item', async () => {
+  it('drills into a repository Item without showing tab bar', async () => {
     renderPage('/spaces/space-1/items/repo-1');
     expect(await screen.findByText('Repository browser')).toBeInTheDocument();
+    // ItemDetail renders its own shell — tab bar is not present
+    expect(screen.queryByRole('link', { name: 'Pipelines' })).not.toBeInTheDocument();
   });
 });

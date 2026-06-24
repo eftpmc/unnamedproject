@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState, type ChangeEvent, type KeyboardEvent } from 'react';
-import { ArrowUp, FileText, Mic, MicOff, Paperclip, Pencil, X } from 'lucide-react';
+import { ArrowUp, FileText, Mic, MicOff, Paperclip, Pencil, Square, X } from 'lucide-react';
 import { Textarea } from '@/components/ui/textarea';
 import { cn } from '@/lib/utils';
 import ChatConfigPopover from './ChatConfigPopover.js';
@@ -53,6 +53,7 @@ interface MessageInputProps {
   value: string;
   onChange: (value: string) => void;
   onSend: (attachments: File[]) => Promise<boolean>;
+  onStop?: () => void;
   disabled?: boolean;
   isEditing?: boolean;
   onCancelEdit?: () => void;
@@ -67,7 +68,7 @@ interface MessageInputProps {
 const MAX_ATTACHMENTS = 8;
 const MAX_ATTACHMENT_BYTES = 10 * 1024 * 1024;
 
-export default function MessageInput({ value, onChange, onSend, disabled, isEditing, onCancelEdit, pendingFiles, onPendingFilesConsumed, effort, model, models, onConfigChange }: MessageInputProps) {
+export default function MessageInput({ value, onChange, onSend, onStop, disabled, isEditing, onCancelEdit, pendingFiles, onPendingFilesConsumed, effort, model, models, onConfigChange }: MessageInputProps) {
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const recognitionRef = useRef<SpeechRecognition | null>(null);
@@ -262,35 +263,48 @@ export default function MessageInput({ value, onChange, onSend, disabled, isEdit
             />
           </div>
           <div className="flex items-center gap-1">
-            <button
-              type="button"
-              onClick={toggleDictation}
-              disabled={disabled || !supportsSpeech}
-              title={supportsSpeech ? (isListening ? 'Stop voice input' : 'Start voice input') : 'Voice input is not supported in this browser'}
-              aria-pressed={isListening}
-              className={cn(
-                'grid h-8 w-8 shrink-0 place-items-center rounded-lg transition-colors disabled:cursor-default disabled:opacity-50',
-                isListening
-                  ? 'bg-destructive/10 text-destructive hover:bg-destructive/20'
-                  : 'text-muted-foreground hover:bg-muted hover:text-foreground',
-              )}
-            >
-              {isListening ? <MicOff size={16} strokeWidth={2} /> : <Mic size={16} strokeWidth={2} />}
-            </button>
-            <button
-              type="button"
-              onClick={submit}
-              disabled={!canSend}
-              title="Send"
-              className={cn(
-                'grid h-8 w-8 shrink-0 place-items-center rounded-lg transition-[filter,transform] active:translate-y-px',
-                canSend
-                  ? 'bg-primary text-primary-foreground hover:brightness-105'
-                  : 'bg-muted text-faint-fg cursor-default',
-              )}
-            >
-              <ArrowUp size={16} strokeWidth={2} />
-            </button>
+            {disabled && onStop ? (
+              <button
+                type="button"
+                onClick={onStop}
+                title="Stop"
+                className="grid h-8 w-8 shrink-0 place-items-center rounded-lg bg-muted text-foreground transition-colors hover:bg-accent"
+              >
+                <Square size={13} className="fill-current" />
+              </button>
+            ) : (
+              <>
+                <button
+                  type="button"
+                  onClick={toggleDictation}
+                  disabled={disabled || !supportsSpeech}
+                  title={supportsSpeech ? (isListening ? 'Stop voice input' : 'Start voice input') : 'Voice input is not supported in this browser'}
+                  aria-pressed={isListening}
+                  className={cn(
+                    'grid h-8 w-8 shrink-0 place-items-center rounded-lg transition-colors disabled:cursor-default disabled:opacity-50',
+                    isListening
+                      ? 'bg-destructive/10 text-destructive hover:bg-destructive/20'
+                      : 'text-muted-foreground hover:bg-muted hover:text-foreground',
+                  )}
+                >
+                  {isListening ? <MicOff size={16} strokeWidth={2} /> : <Mic size={16} strokeWidth={2} />}
+                </button>
+                <button
+                  type="button"
+                  onClick={submit}
+                  disabled={!canSend}
+                  title="Send"
+                  className={cn(
+                    'grid h-8 w-8 shrink-0 place-items-center rounded-lg transition-[filter,transform] active:translate-y-px',
+                    canSend
+                      ? 'bg-primary text-primary-foreground hover:brightness-105'
+                      : 'bg-muted text-faint-fg cursor-default',
+                  )}
+                >
+                  <ArrowUp size={16} strokeWidth={2} />
+                </button>
+              </>
+            )}
           </div>
         </div>
       </div>

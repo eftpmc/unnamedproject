@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useNavigate } from 'react-router-dom';
-import { Bell, GitBranch, Loader2, PanelRight, Square, X } from 'lucide-react';
+import { Bell, GitBranch, PanelRight, X } from 'lucide-react';
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from '@/components/ui/sheet';
 import ContextPanel from './ContextPanel.js';
 import MessageList from './MessageList.js';
@@ -569,9 +569,11 @@ export default function ChatView({ chatId }: ChatViewProps) {
 
       {messages.length === 0 ? (
         <EmptyChatState
-          projectName={pinnedProject?.name}
+          value={inputValue}
+          onChange={(v) => { setInputValue(v); if (v) localStorage.setItem(draftKey, v); else localStorage.removeItem(draftKey); }}
+          onSendContent={(content) => sendPrompt(content)}
           disabled={agentActive}
-          onSelect={(content) => sendPrompt(content)}
+          projectName={pinnedProject?.name}
         />
       ) : (
         <MessageList
@@ -590,61 +592,50 @@ export default function ChatView({ chatId }: ChatViewProps) {
         />
       )}
 
-      <div className="pointer-events-none absolute inset-x-0 bottom-0 z-10">
+      {messages.length > 0 && <div className="pointer-events-none absolute inset-x-0 bottom-0 z-10">
         <div className="pointer-events-auto relative flex flex-col">
-          <div className="pointer-events-none absolute inset-x-0 bottom-full h-20 bg-gradient-to-t from-background via-background/90 to-transparent sm:h-24" />
+          <div className="pointer-events-none absolute bottom-full left-1/2 h-20 w-full max-w-3xl -translate-x-1/2 bg-gradient-to-t from-background via-background/90 to-transparent sm:h-24" />
+
           {agentError && (() => {
             const lastUserContent = [...messages].reverse().find(m => m.role === 'user')?.content ?? null;
             return (
-              <div className="mx-4 flex items-center justify-between gap-3 rounded-t-lg border border-b-0 border-destructive/20 bg-destructive/5 px-5 py-2.5 text-xs text-destructive sm:mx-6">
-                <span className="flex-1 min-w-0 truncate">{agentError}</span>
-                <div className="flex items-center gap-2 shrink-0">
-                  {lastUserContent && (
-                    <button
-                      type="button"
-                      onClick={() => { setAgentError(null); sendPrompt(lastUserContent); }}
-                      className="font-medium text-destructive/70 hover:text-destructive transition-colors"
-                    >
-                      Retry
+              <div className="px-4 sm:px-6">
+                <div className="mx-auto flex max-w-[46rem] items-center justify-between gap-3 rounded-t-lg border border-b-0 border-destructive/20 bg-destructive/5 px-5 py-2.5 text-xs text-destructive">
+                  <span className="min-w-0 flex-1 truncate">{agentError}</span>
+                  <div className="flex shrink-0 items-center gap-2">
+                    {lastUserContent && (
+                      <button
+                        type="button"
+                        onClick={() => { setAgentError(null); sendPrompt(lastUserContent); }}
+                        className="font-medium text-destructive/70 transition-colors hover:text-destructive"
+                      >
+                        Retry
+                      </button>
+                    )}
+                    <button type="button" onClick={() => setAgentError(null)} className="text-destructive/60 hover:text-destructive" aria-label="Dismiss error">
+                      <X size={14} />
                     </button>
-                  )}
-                  <button type="button" onClick={() => setAgentError(null)} className="text-destructive/60 hover:text-destructive" aria-label="Dismiss error">
-                    <X size={14} />
-                  </button>
+                  </div>
                 </div>
               </div>
             );
           })()}
 
           {pendingApproval && !ctxOpen && (
-            <div className="mx-4 flex items-center justify-between gap-3 rounded-t-lg border border-b-0 border-warning/25 bg-warning/8 px-5 py-2.5 text-sm sm:mx-6 md:hidden">
-              <div className="flex items-center gap-2 text-fg-soft">
-                <Bell size={14} className="text-warning" />
-                <span>Approval needed for <strong className="font-semibold text-foreground">{pendingApproval.action ?? 'Tool execution'}</strong></span>
+            <div className="px-4 sm:px-6 md:hidden">
+              <div className="mx-auto flex max-w-[46rem] items-center justify-between gap-3 rounded-t-lg border border-b-0 border-warning/25 bg-warning/8 px-5 py-2.5 text-sm">
+                <div className="flex items-center gap-2 text-fg-soft">
+                  <Bell size={14} className="text-warning" />
+                  <span>Approval needed for <strong className="font-semibold text-foreground">{pendingApproval.action ?? 'Tool execution'}</strong></span>
+                </div>
+                <button
+                  type="button"
+                  onClick={toggleCtx}
+                  className="text-xs font-medium text-on-accent-soft hover:underline"
+                >
+                  Review
+                </button>
               </div>
-              <button
-                type="button"
-                onClick={toggleCtx}
-                className="text-xs font-medium text-on-accent-soft hover:underline"
-              >
-                Review
-              </button>
-            </div>
-          )}
-
-          {agentActive && !pendingApproval && (
-            <div className="mx-4 flex items-center gap-2 rounded-t-lg border border-b-0 border-border-soft bg-muted/35 px-5 py-2 text-xs text-muted-foreground sm:mx-6">
-              <Loader2 size={13} className="animate-spin" />
-              <span className="flex-1">{agentStatusText}</span>
-              <button
-                type="button"
-                onClick={() => stopChat(chatId).catch(() => {})}
-                title="Stop agent"
-                className="flex items-center gap-1 rounded-md px-2 py-1 text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
-              >
-                <Square size={11} className="fill-current" />
-                Stop
-              </button>
             </div>
           )}
 
@@ -652,6 +643,7 @@ export default function ChatView({ chatId }: ChatViewProps) {
             value={inputValue}
             onChange={(v) => { setInputValue(v); if (v) localStorage.setItem(draftKey, v); else localStorage.removeItem(draftKey); }}
             onSend={(attachments) => sendPrompt(undefined, attachments)}
+            onStop={() => stopChat(chatId).catch(() => {})}
             disabled={agentActive}
             isEditing={!!editingMessageId}
             onCancelEdit={() => { setEditingMessageId(null); setInputValue(''); }}
@@ -663,7 +655,7 @@ export default function ChatView({ chatId }: ChatViewProps) {
             onConfigChange={(config) => configMutation.mutate(config)}
           />
         </div>
-      </div>
+      </div>}
       </div>
       <Sheet open={diffOpen} onOpenChange={setDiffOpen}>
         <SheetContent side="right" className="flex w-full flex-col gap-0 p-0 sm:max-w-2xl">
@@ -693,7 +685,8 @@ export default function ChatView({ chatId }: ChatViewProps) {
       <ContextPanel
         open={ctxOpen}
         onClose={() => { setCtxOpen(false); localStorage.setItem('ctx_panel', 'closed'); }}
-        project={contextProject}
+        pinnedSpace={pinnedProject}
+        linkedSpaces={linkedProjects}
         worktree={worktree ? { branch: worktree.branch, commits_ahead: worktree.ahead } : null}
         pendingApproval={pendingApproval ? {
           executionId: pendingApproval.executionId,

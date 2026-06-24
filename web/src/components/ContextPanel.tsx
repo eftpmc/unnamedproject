@@ -1,10 +1,10 @@
 import { useQuery } from '@tanstack/react-query';
 import { useNavigate } from 'react-router-dom';
-import { X, GitMerge, Check, Bell, FileStack, ArrowRight } from 'lucide-react';
+import { X, GitMerge, Check, Bell, FileStack, ArrowRight, Target } from 'lucide-react';
 import { getSpaceItems, getSpacePlans } from '../lib/api.js';
 import { cn } from '@/lib/utils';
 import { StatusPill } from '@/components/ui/status-pill';
-import type { Plan, Space } from '../types.js';
+import type { Plan, Space, SessionSpaceLink } from '../types.js';
 
 interface Approval {
   executionId: string;
@@ -15,7 +15,8 @@ interface Approval {
 interface ContextPanelProps {
   open: boolean;
   onClose: () => void;
-  project: Space | null;
+  pinnedSpace: Space | null;
+  linkedSpaces: SessionSpaceLink[];
   worktree: { branch: string; commits_ahead: number } | null;
   pendingApproval: Approval | null;
   onApprove: (approvalId: string) => void;
@@ -27,7 +28,8 @@ interface ContextPanelProps {
 export default function ContextPanel({
   open,
   onClose,
-  project,
+  pinnedSpace,
+  linkedSpaces,
   worktree,
   pendingApproval,
   onApprove,
@@ -47,7 +49,8 @@ export default function ContextPanel({
         <div className="h-full w-72 overflow-y-auto">
           <PanelContent
             onClose={onClose}
-            project={project}
+            pinnedSpace={pinnedSpace}
+            linkedSpaces={linkedSpaces}
             worktree={worktree}
             pendingApproval={pendingApproval}
             onApprove={onApprove}
@@ -69,7 +72,8 @@ export default function ContextPanel({
             <div className="mx-auto mt-2 h-1 w-8 rounded-full bg-border" />
             <PanelContent
               onClose={onClose}
-              project={project}
+              pinnedSpace={pinnedSpace}
+              linkedSpaces={linkedSpaces}
               worktree={worktree}
               pendingApproval={pendingApproval}
               onApprove={onApprove}
@@ -86,7 +90,8 @@ export default function ContextPanel({
 
 function PanelContent({
   onClose,
-  project,
+  pinnedSpace,
+  linkedSpaces,
   worktree,
   pendingApproval,
   onApprove,
@@ -96,18 +101,20 @@ function PanelContent({
 }: Omit<ContextPanelProps, 'open'>) {
   const navigate = useNavigate();
 
+  const primarySpace = pinnedSpace ?? linkedSpaces[linkedSpaces.length - 1] ?? null;
+
   const { data: items = [] } = useQuery({
-    queryKey: ['space-items', project?.id],
-    queryFn: () => getSpaceItems(project!.id),
-    enabled: !!project,
+    queryKey: ['space-items', primarySpace?.id],
+    queryFn: () => getSpaceItems(primarySpace!.id),
+    enabled: !!primarySpace,
     staleTime: 20_000,
   });
   const recentItems = items.slice(0, 3);
 
   const { data: plans = [] } = useQuery<Plan[]>({
-    queryKey: ['space-plans', project?.id],
-    queryFn: () => getSpacePlans(project!.id),
-    enabled: !!project,
+    queryKey: ['space-plans', primarySpace?.id],
+    queryFn: () => getSpacePlans(primarySpace!.id),
+    enabled: !!primarySpace,
     staleTime: 15_000,
     refetchInterval: (query) => {
       const data = query.state.data ?? [];
@@ -116,6 +123,8 @@ function PanelContent({
   });
   const activePlans = plans.filter(p => p.status === 'running' || p.status === 'error').slice(0, 3);
   const recentPlans = activePlans.length > 0 ? activePlans : plans.slice(0, 3);
+
+  const hasSpaces = pinnedSpace || linkedSpaces.length > 0;
 
   return (
     <div className="flex flex-col gap-5 p-4 pb-6">
@@ -130,22 +139,28 @@ function PanelContent({
         </button>
       </div>
 
-      {/* Space */}
-      {project && (
+      {/* Spaces */}
+      {hasSpaces && (
         <section className="flex flex-col gap-2">
-          <span className="text-[11px] font-medium text-muted-foreground">Space</span>
-          <button
-            type="button"
-            onClick={() => navigate(`/spaces/${project.id}`)}
-            className="flex items-center gap-2.5 rounded-lg border border-border-soft bg-card p-3 text-left transition-colors hover:border-border hover:bg-muted/30"
-          >
-            <span className="size-2 shrink-0 rounded-full bg-success shadow-[0_0_0_3px_color-mix(in_oklch,var(--success)_22%,transparent)]" />
-            <div className="min-w-0 flex-1">
-              <div className="truncate text-sm font-semibold text-foreground">{project.name}</div>
-              <div className="truncate text-[11px] text-faint-fg">{project.description ?? 'space'}</div>
-            </div>
-            <ArrowRight size={12} className="shrink-0 text-faint-fg" />
-          </button>
+          <span className="text-[11px] font-medium text-muted-foreground">Spaces</span>
+          <div className="flex flex-col gap-1.5">
+            {pinnedSpace && (
+              <SpaceRow
+                space={pinnedSpace}
+                label="Pinned"
+                onClick={() => navigate(`/spaces/${pinnedSpace.id}`)}
+              />
+            )}
+            {linkedSpaces.map(space => (
+              <SpaceRow
+                key={space.id}
+                space={space}
+                label="Auto"
+                icon={<Target size={11} className="shrink-0" strokeWidth={1.85} />}
+                onClick={() => navigate(`/spaces/${space.id}`)}
+              />
+            ))}
+          </div>
         </section>
       )}
 
@@ -202,13 +217,13 @@ function PanelContent({
         </section>
       )}
 
-      {project && recentPlans.length > 0 && (
+      {primarySpace && recentPlans.length > 0 && (
         <section className="flex flex-col gap-2">
           <div className="flex items-center justify-between">
             <span className="text-[11px] font-medium text-muted-foreground">Plans</span>
             <button
               type="button"
-              onClick={() => navigate(`/spaces/${project.id}/plans`)}
+              onClick={() => navigate(`/spaces/${primarySpace.id}/plans`)}
               className="flex items-center gap-0.5 text-[11px] text-faint-fg transition-colors hover:text-muted-foreground"
             >
               All <ArrowRight size={10} />
@@ -219,7 +234,7 @@ function PanelContent({
               <button
                 key={plan.id}
                 type="button"
-                onClick={() => navigate(`/spaces/${project.id}/plans/${plan.id}`)}
+                onClick={() => navigate(`/spaces/${primarySpace.id}/plans/${plan.id}`)}
                 className="flex items-center gap-2.5 rounded-lg border border-border-soft bg-card p-2.5 text-left transition-colors hover:bg-muted/40"
               >
                 <div className="min-w-0 flex-1">
@@ -232,7 +247,7 @@ function PanelContent({
         </section>
       )}
 
-      {project && (
+      {primarySpace && (
         <section className="flex flex-col gap-2">
           <span className="text-[11px] font-medium text-muted-foreground">Items</span>
           {recentItems.length > 0 ? (
@@ -240,7 +255,7 @@ function PanelContent({
               {recentItems.map(item => (
                 <button
                   type="button"
-                  onClick={() => navigate(`/spaces/${project.id}/items/${item.id}`)}
+                  onClick={() => navigate(`/spaces/${primarySpace.id}/items/${item.id}`)}
                   key={item.id}
                   className="flex items-center gap-2.5 rounded-lg border border-border-soft bg-card p-2.5 text-left transition-colors hover:bg-muted/40"
                 >
@@ -263,5 +278,36 @@ function PanelContent({
         </section>
       )}
     </div>
+  );
+}
+
+function SpaceRow({
+  space,
+  label,
+  icon,
+  onClick,
+}: {
+  space: Space;
+  label: string;
+  icon?: React.ReactNode;
+  onClick: () => void;
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      className="flex items-center gap-2.5 rounded-lg border border-border-soft bg-card p-2.5 text-left transition-colors hover:border-border hover:bg-muted/30"
+    >
+      <span className="size-2 shrink-0 rounded-full bg-success shadow-[0_0_0_3px_color-mix(in_oklch,var(--success)_22%,transparent)]" />
+      <div className="min-w-0 flex-1">
+        <div className="truncate text-xs font-medium text-foreground">{space.name}</div>
+        {space.description && <div className="truncate text-[11px] text-faint-fg">{space.description}</div>}
+      </div>
+      <span className="flex shrink-0 items-center gap-0.5 text-[10px] text-faint-fg">
+        {icon}
+        {label}
+      </span>
+      <ArrowRight size={11} className="shrink-0 text-faint-fg" />
+    </button>
   );
 }

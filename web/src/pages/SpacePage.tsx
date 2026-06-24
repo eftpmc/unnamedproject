@@ -367,30 +367,34 @@ function PlansSection({ space, plans, items }: { space: Space; plans: Plan[]; it
 
   return (
     <PageBody>
-      <div className="mx-auto max-w-5xl">
+      <ContentColumn className="max-w-2xl">
         {plans.length === 0 ? (
           <EmptyPanel title="No plans yet" description="Ask the agent to plan or execute a multi-step effort." />
         ) : (
-          <div className="grid gap-3 md:grid-cols-2">
+          <div className="flex flex-col gap-2">
             {plans.map(plan => <PlanCard key={plan.id} plan={plan} spaceId={space.id} generatedCount={generatedCounts.get(plan.id) ?? 0} />)}
           </div>
         )}
-      </div>
+      </ContentColumn>
     </PageBody>
   );
 }
 
 function PlanCard({ plan, spaceId, generatedCount = 0 }: { plan: Plan; spaceId: string; generatedCount?: number }) {
   return (
-    <Link to={`/spaces/${spaceId}/plans/${plan.id}`}>
-      <Surface interactive className="flex h-full items-start gap-3 p-4">
-        <div className="grid size-9 shrink-0 place-items-center rounded-lg bg-muted text-muted-foreground"><ListTodo size={16} /></div>
-        <div className="min-w-0 flex-1">
-          <div className="flex items-center gap-2"><span className="truncate text-sm font-semibold">{plan.title}</span><StatusPill status={plan.status} /></div>
-          <div className="mt-1.5 text-xs text-muted-foreground">{generatedCount} generated Items · {timeAgo(plan.created_at)}</div>
+    <Link
+      to={`/spaces/${spaceId}/plans/${plan.id}`}
+      className="flex w-full items-center gap-3 rounded-lg border border-border-soft bg-card px-4 py-3.5 transition-[transform,box-shadow,border-color] hover:-translate-y-px hover:border-border hover:shadow-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/30"
+    >
+      <ListTodo size={15} className="shrink-0 text-muted-foreground" />
+      <div className="min-w-0 flex-1">
+        <div className="flex items-center gap-2">
+          <span className="truncate text-sm font-medium">{plan.title}</span>
+          <StatusPill status={plan.status} />
         </div>
-        <ChevronRight size={15} className="mt-1 text-faint-fg" />
-      </Surface>
+        <div className="mt-0.5 text-xs text-faint-fg">{generatedCount} generated Items · {timeAgo(plan.created_at)}</div>
+      </div>
+      <ChevronRight size={15} className="shrink-0 text-faint-fg" />
     </Link>
   );
 }
@@ -420,17 +424,17 @@ function PipelinesSection({ space }: { space: Space }) {
   const pipelines = data?.pipelines ?? [];
   return (
     <PageBody>
-      <div className="mx-auto max-w-4xl">
+      <ContentColumn className="max-w-2xl">
         {pipelines.length === 0 ? (
           <EmptyPanel title="No pipelines yet" description="Pipelines are reusable workflows owned by this Space. Ask the agent to create one." />
         ) : (
-          <div className="grid gap-3 md:grid-cols-2">
+          <div className="flex flex-col gap-2">
             {pipelines.map(pipeline => (
-              <Surface key={pipeline.id} className="group flex items-center gap-3 p-4">
-                <div className="grid size-9 place-items-center rounded-lg bg-muted text-muted-foreground"><Workflow size={16} /></div>
+              <div key={pipeline.id} className="flex items-center gap-3 rounded-lg border border-border-soft bg-card px-4 py-3.5">
+                <Workflow size={15} className="shrink-0 text-muted-foreground" />
                 <div className="min-w-0 flex-1">
-                  <div className="truncate text-sm font-semibold">{pipeline.title}</div>
-                  <div className="mt-0.5 text-xs text-muted-foreground">{pipeline.description || `${pipeline.task_count ?? 0} steps`}</div>
+                  <div className="truncate text-sm font-medium">{pipeline.title}</div>
+                  <div className="mt-0.5 text-xs text-faint-fg">{pipeline.description || `${pipeline.task_count ?? 0} steps`}</div>
                 </div>
                 <Button size="sm" className="h-8 gap-1.5 text-xs" onClick={() => setRunning(pipeline)}><Play size={12} />Run</Button>
                 <DropdownMenu>
@@ -439,11 +443,11 @@ function PipelinesSection({ space }: { space: Space }) {
                     <DropdownMenuItem variant="destructive" onSelect={() => setPendingDelete(pipeline)}><Trash2 size={14} />Delete</DropdownMenuItem>
                   </DropdownMenuContent>
                 </DropdownMenu>
-              </Surface>
+              </div>
             ))}
           </div>
         )}
-      </div>
+      </ContentColumn>
 
       {running && (
         <Dialog open onOpenChange={open => !open && setRunning(null)}>

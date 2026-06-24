@@ -7,7 +7,7 @@ import ChatView from '../components/ChatView.js';
 import EmptyState from '../components/EmptyState.js';
 import InboxPanel from '../components/InboxPanel.js';
 import ErrorBoundary from '../components/ErrorBoundary.js';
-import { createChat, getConnections } from '../lib/api.js';
+import { getConnections } from '../lib/api.js';
 import { connect, disconnect, subscribe } from '../lib/ws.js';
 import { SidebarInset, SidebarProvider, useSidebar } from '@/components/ui/sidebar';
 import type { Connection, Session, WSApprovalRequested, WSExecutionUpdate, WSTurnComplete } from '../types.js';
@@ -124,18 +124,13 @@ export default function AppLayout() {
     });
   }
 
-  async function handleNewChat() {
-    const { id } = await createChat();
-    navigate(`/c/${id}`);
-  }
-
   const isPageRoute = PAGE_ROUTES.some(r => location.pathname === r || location.pathname.startsWith(r + '/'));
 
   const mainContent = isPageRoute
     ? <Outlet />
     : chatId
       ? <ChatView chatId={chatId} />
-      : <EmptyState onNewChat={handleNewChat} hasLeadAgent={hasLeadAgent} />;
+      : <EmptyState hasLeadAgent={hasLeadAgent} />;
 
   return (
     <SidebarProvider

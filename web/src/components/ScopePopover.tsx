@@ -26,7 +26,7 @@ export default function ScopePopover({
       <PopoverTrigger asChild>
         <button
           type="button"
-          className="mt-1 flex w-fit max-w-full items-center gap-1.5 rounded-lg border border-border/40 bg-muted/50 px-2 py-1 text-left text-xs text-muted-foreground transition-colors hover:border-border hover:bg-muted hover:text-foreground"
+          className="flex w-fit max-w-[10rem] items-center gap-1.5 rounded-lg border border-border-soft bg-muted px-2.5 py-1.5 text-left text-xs font-medium text-muted-foreground transition-colors hover:border-muted-foreground hover:text-foreground"
           aria-label={`Chat scope: ${triggerLabel}`}
         >
           {isAuto ? (

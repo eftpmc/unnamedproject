@@ -3,7 +3,7 @@ import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import rehypeHighlight from 'rehype-highlight';
 import 'highlight.js/styles/github-dark.css';
-import { ArrowDown, ArrowRight, Check, ChevronDown, ChevronUp, Copy, FileText, GitMerge, Image, ListChecks, Pencil, Plug, Sparkles, Target } from 'lucide-react';
+import { ArrowDown, ArrowRight, Check, ChevronDown, ChevronUp, Copy, FileStack, FileText, GitMerge, Image, ListChecks, Pencil, Plug, Sparkles, Target } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import ExecutionCard from './ExecutionCard.js';
 import PlanCard from './PlanCard.js';
@@ -245,6 +245,7 @@ function renderExecutionCard(exec: InlineExecution) {
 function eventIcon(type: SessionEvent['type']) {
   if (type === 'scope_changed' || type === 'project_linked') return Target;
   if (type === 'plan_created' || type === 'artifact_created' || type === 'project_created') return Sparkles;
+  if (type === 'item_created' || type === 'item_updated') return FileStack;
   return GitMerge;
 }
 
@@ -433,6 +434,31 @@ export default function MessageList({ messages, executions, streamingIds, sessio
               return (
                 <div key={`event-${item.event.id}`} className="flex max-w-[94%] flex-col sm:max-w-[86%]">
                   <PlanCard planId={item.event.plan_id} spaceId={item.event.space_id} />
+                </div>
+              );
+            }
+            if (
+              (item.event.type === 'item_created' || item.event.type === 'item_updated') &&
+              item.event.item_id &&
+              item.event.space_id
+            ) {
+              const isUpdate = item.event.type === 'item_updated';
+              const typeLabel = (item.event.metadata as { itemType?: string })?.itemType ?? 'item';
+              const TEMPLATE_LABELS: Record<string, string> = {
+                document: 'Doc', spec: 'Spec', kanban: 'Kanban', report: 'Report', repo: 'Repo', note: 'Note',
+              };
+              const label = TEMPLATE_LABELS[typeLabel] ?? typeLabel;
+              return (
+                <div key={`event-${item.event.id}`} className="flex max-w-[94%] flex-col sm:max-w-[86%]">
+                  <Link
+                    to={`/spaces/${item.event.space_id}/items/${item.event.item_id}`}
+                    className="flex items-center gap-2.5 self-start rounded-xl border border-border-soft bg-card px-3 py-2 text-left text-xs transition-colors hover:border-border hover:bg-muted/30"
+                  >
+                    <span className="rounded-md bg-muted px-1.5 py-0.5 text-[10px] font-medium text-muted-foreground">{label}</span>
+                    <span className="font-medium text-foreground">{item.event.title.replace(/^(Created|Updated) item: /, '')}</span>
+                    <span className="text-faint-fg">{isUpdate ? 'updated' : 'created'}</span>
+                    <ArrowRight size={11} className="text-faint-fg" />
+                  </Link>
                 </div>
               );
             }

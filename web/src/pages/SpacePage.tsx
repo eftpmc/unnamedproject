@@ -722,7 +722,7 @@ function SpaceTabs({ spaceId, section }: { spaceId: string; section: Section }) 
     { label: 'Settings', key: 'settings' },
   ];
   return (
-    <div className="border-b border-border-soft px-6">
+    <div className="px-6">
       <nav className="flex" aria-label="Space sections">
         {tabs.map(tab => (
           <Link
@@ -730,7 +730,7 @@ function SpaceTabs({ spaceId, section }: { spaceId: string; section: Section }) 
             to={`/spaces/${spaceId}/${tab.key}`}
             aria-current={section === tab.key ? 'page' : undefined}
             className={cn(
-              '-mb-px border-b-2 px-4 py-2.5 text-sm font-medium transition-colors',
+              'border-b-2 px-4 py-2.5 text-sm font-medium transition-colors',
               section === tab.key
                 ? 'border-foreground text-foreground'
                 : 'border-transparent text-muted-foreground hover:text-foreground',

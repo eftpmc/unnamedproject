@@ -1,34 +1,26 @@
 # Current Architecture
 
-Unnamed is a local agent workspace for chats, projects, plans, executions, artifacts, memory, and scheduled work.
+Unnamed is a local agent workspace for chats, Spaces, Items, plans, pipelines, executions, memory, and scheduled work.
 
 ## Runtime Shape
 
-- `server/`: Express API, WebSocket server, SQLite data model, agent/tool orchestration, executions, plans, pipelines, artifacts, memory, scheduled tasks, and MCP process pooling.
-- `web/`: React/Vite client with React Query, authenticated API calls, WebSocket updates, chat UI, project workspace, plan views, artifacts, files, and settings.
+- `server/`: Express API, WebSocket server, SQLite data model, agent/tool orchestration, executions, Spaces, Items, plans, pipelines, memory, scheduled tasks, and MCP process pooling.
+- `web/`: React/Vite client with React Query, authenticated API calls, WebSocket updates, chat UI, contextual Space navigation, Item views, plans, pipelines, and settings.
 - `remotion/`: shared Remotion renderer used by the `generate_video` tool.
-- `data/`: local runtime storage for SQLite, project files, media, attachments, worktrees, and generated artifacts.
+- `data/`: local runtime storage for SQLite, Space files, media, attachments, worktrees, and generated Items.
 
-## Project Surface
+## Space Surface
 
-Projects are capability-detected sandboxes. The UI keeps a stable set of project tabs:
+Spaces are containers for chats, Items, plans, and pipelines. The global sidebar becomes a contextual Space sidebar with these top-level destinations:
 
 - Overview
-- Plans
 - Chats
-- Artifacts
-- Files
+- Items
+- Plans
 - Pipelines
 - Settings
 
-Generated outputs belong in Artifacts. This replaces earlier plans for project-type-specific Studio tabs and capability-specific Research tabs.
-
-Detected capabilities currently include:
-
-- Remotion availability from the shared `remotion/` app.
-- Project media under `{DATA_DIR}/projects/{projectId}/media/`.
-- Code graph availability from `.project-index.json` in the project repo.
-- Legacy research notes under `{DATA_DIR}/projects/{projectId}/research/`.
+Pipelines are a peer of Plans, not nested under them. Generated outputs are Items with provenance rather than a separate category.
 
 ## Chats And Turns
 
@@ -112,38 +104,32 @@ Research and GitHub integrations are MCP-based. Built-in `web_search`, `web_fetc
 
 ## Plans And Pipelines
 
-Plans coordinate multi-step work against a project. Steps can run in parallel when dependencies are satisfied. Plan routes (`/plans`) expose listing, detail, cancel, and resume.
+Plans coordinate multi-step work in a Space. Steps can run in parallel when dependencies are satisfied. Space-scoped plan routes expose listing and detail; plan routes expose cancel and resume.
 
-Pipelines are reusable workflow templates. `run_pipeline` instantiates a pipeline as a plan and dispatches it through the same plan machinery.
+Pipelines are reusable Space-scoped workflow templates. `run_pipeline` instantiates a pipeline as a plan and dispatches it through the same plan machinery.
 
 Scheduled tasks are polled by the scheduler and due tasks run in parallel. Individual task failures are logged without blocking remaining due tasks.
 
-## Artifacts
+## Items
 
-Artifacts are the durable review surface for inspectable work products:
+Items are the durable content model:
 
-- `create_artifact` writes DB-backed text artifacts.
-- `register_artifact` copies generated files into project media storage and registers them.
-- `generate_video` writes MP4 files under `{DATA_DIR}/projects/{projectId}/media/` and registers the rendered video as a media artifact.
-- Existing markdown files under `{DATA_DIR}/projects/{projectId}/research/` are bridged into the artifact list as legacy research artifacts.
+- `repo` Items link a repository path and default branch.
+- `file` Items point at generated or attached files and retain MIME/size metadata.
+- `note` Items store editable text or Markdown.
+- `source_session_id`, `source_plan_id`, and `source_step_id` retain provenance.
+- `generate_video` registers its rendered MP4 as a file Item.
 
-Generic artifact endpoints:
-
-```txt
-GET /projects/:id/artifacts
-GET /projects/:id/artifacts/:artifactId/content
-```
-
-Compatibility routes:
+Core endpoints:
 
 ```txt
-GET /projects/:id/media
-GET /projects/:id/media/:filename
-GET /projects/:id/research
-GET /projects/:id/research/:filename
+GET /spaces/:spaceId/items
+POST /spaces/:spaceId/items
+GET /spaces/:spaceId/items/:itemId
+PATCH /spaces/:spaceId/items/:itemId
+DELETE /spaces/:spaceId/items/:itemId
+GET /spaces/:spaceId/items/:itemId/content
 ```
-
-New UI and clients should prefer Artifacts.
 
 ## Data Directory
 

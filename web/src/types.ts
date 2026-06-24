@@ -96,6 +96,7 @@ export interface Space {
   name: string;
   description: string | null;
   enabled_connection_ids: string[];
+  created_at?: number;
 }
 
 export type SpaceItemType = 'repo' | 'file' | 'note';
@@ -115,26 +116,6 @@ export type SpaceItem =
   | (SpaceItemBase & { type: 'repo'; repo_path: string; default_branch: string | null })
   | (SpaceItemBase & { type: 'file'; file_path: string; size_bytes: number | null; mime_type: string | null })
   | (SpaceItemBase & { type: 'note'; content: string });
-
-/** @deprecated use Space */
-export type Project = Space;
-/** @deprecated use SpaceItem */
-export interface ProjectArtifact {
-  id: string;
-  project_id: string;
-  kind: string;
-  title: string;
-  description: string | null;
-  status: 'ready' | 'review' | 'running' | 'error';
-  mime_type: string;
-  path: string | null;
-  url: string | null;
-  content_url: string | null;
-  metadata: Record<string, unknown>;
-  source_plan_id: string | null;
-  source_step_id: string | null;
-  created_at: number;
-}
 
 export interface FileEntry {
   name: string;
@@ -246,7 +227,7 @@ export interface Memory {
   type: 'user' | 'feedback' | 'project' | 'reference';
   key: string;
   value: string;
-  project_id: string | null;
+  space_id: string | null;
 }
 
 export interface SessionWorktree {
@@ -294,7 +275,7 @@ export interface Plan {
 
 export interface Pipeline {
   id: string;
-  user_id: string;
+  space_id: string;
   title: string;
   description: string | null;
   created_at: number;

@@ -11,7 +11,7 @@ import WorktreeDiff from './WorktreeDiff.js';
 import ContextBar from './ContextBar.js';
 import EmptyChatState from './EmptyChatState.js';
 import ScopePopover from './ScopePopover.js';
-import { getMessages, sendMessage, getChats, updateChatConfig, getModelsForEffort, getSessionWorktree, mergeSessionBranch, getWorktreeDiff, getProjects, truncateMessagesFrom, approveExecution, rejectExecution, getChatEvents, getChatStatus, stopChat } from '../lib/api.js';
+import { getMessages, sendMessage, getChats, updateChatConfig, getModelsForEffort, getSessionWorktree, mergeSessionBranch, getWorktreeDiff, getSpaces, truncateMessagesFrom, approveExecution, rejectExecution, getChatEvents, getChatStatus, stopChat } from '../lib/api.js';
 import { subscribe } from '../lib/ws.js';
 import { cn } from '../lib/utils.js';
 import { usePageTitle } from '../lib/usePageTitle.js';
@@ -64,8 +64,8 @@ export default function ChatView({ chatId }: ChatViewProps) {
   });
 
   const { data: projects = [] } = useQuery({
-    queryKey: ['projects'],
-    queryFn: getProjects,
+    queryKey: ['spaces'],
+    queryFn: getSpaces,
   });
   const pinnedProject = projects.find(p => p.id === chat?.pinned_space_id) ?? null;
   const inferredProject = !pinnedProject ? linkedProjects[linkedProjects.length - 1] ?? null : null;
@@ -524,12 +524,12 @@ export default function ChatView({ chatId }: ChatViewProps) {
         actions={
           <div className="flex items-center gap-2">
             <ScopePopover
-              projects={projects}
+              spaces={projects}
               pinnedProject={pinnedProject}
               inferredProject={inferredProject}
               agentActive={agentActive}
-              onOpenProject={(projectId) => navigate(`/spaces/${projectId}`)}
-              onScopeChange={(projectId) => configMutation.mutate({ pinned_space_id: projectId })}
+              onOpenSpace={(spaceId) => navigate(`/spaces/${spaceId}`)}
+              onScopeChange={(spaceId) => configMutation.mutate({ pinned_space_id: spaceId })}
             />
             {worktree && (
               <button
@@ -708,4 +708,3 @@ export default function ChatView({ chatId }: ChatViewProps) {
     </div>
   );
 }
-

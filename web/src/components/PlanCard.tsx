@@ -12,7 +12,7 @@ import type { PlanStep, WSPlanStepUpdated } from '../types.js';
 
 interface PlanCardProps {
   planId: string;
-  projectId: string;
+  spaceId: string;
 }
 
 const STATUS_ICON: Record<PlanStep['status'], typeof Circle> = {
@@ -51,7 +51,7 @@ const AGENT_ICON: Record<PlanStep['agent'], typeof Bot> = {
   subagent: Cpu,
 };
 
-export default function PlanCard({ planId, projectId }: PlanCardProps) {
+export default function PlanCard({ planId, spaceId }: PlanCardProps) {
   const { data, isLoading } = useQuery({
     queryKey: ['plan', planId],
     queryFn: () => getPlan(planId),
@@ -127,7 +127,7 @@ export default function PlanCard({ planId, projectId }: PlanCardProps) {
       </div>
       <div className="border-t border-border-soft px-4 py-2.5">
         <Link
-          to={`/spaces/${projectId}/plans/${planId}`}
+          to={`/spaces/${spaceId}/plans/${planId}`}
           className="flex items-center gap-1.5 text-xs font-medium text-muted-foreground transition-colors hover:text-foreground"
         >
           View full plan

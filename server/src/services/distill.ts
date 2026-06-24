@@ -45,13 +45,13 @@ export async function maybeDistill(userId: string, sessionId: string, apiKey: st
 
     // Also persist as a memory entry so it survives session context limits
     const session = getDb()
-      .prepare('SELECT pinned_project_id FROM sessions WHERE id = ?')
-      .get(sessionId) as { pinned_project_id: string | null } | undefined;
+      .prepare('SELECT pinned_space_id FROM sessions WHERE id = ?')
+      .get(sessionId) as { pinned_space_id: string | null } | undefined;
 
-    const projectId = session?.pinned_project_id ?? null;
-    const memType = projectId ? 'project' : 'user';
+    const spaceId = session?.pinned_space_id ?? null;
+    const memType = spaceId ? 'project' : 'user';
     const memKey = `session_summary_${sessionId.slice(0, 8)}`;
-    rememberFact(userId, memType, memKey, summary, projectId);
+    rememberFact(userId, memType, memKey, summary, spaceId);
   } catch {
     // distillation is best-effort, never throw
   }

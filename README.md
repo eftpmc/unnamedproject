@@ -1,11 +1,11 @@
 # Unnamed Project
 
-Local agent workspace for coordinating chats, projects, plans, tool executions, and durable artifacts.
+Local agent workspace for coordinating chats, Spaces, plans, pipelines, tool executions, and durable Items.
 
 ## Project Shape
 
-- `server/`: Express API, SQLite data model, agent/tool orchestration, executions, plans, artifacts, memory, scheduled tasks.
-- `web/`: React/Vite client for chats, projects, files, plans, settings, and artifact review.
+- `server/`: Express API, SQLite data model, agent/tool orchestration, executions, Spaces, Items, plans, pipelines, memory, and scheduled tasks.
+- `web/`: React/Vite client for chats, Spaces, Items, plans, pipelines, and settings.
 - `mobile/`: Native iOS app (Swift/UIKit) under `mobile/ios/`.
 - `remotion/`: Shared Remotion composition used by the `generate_video` tool.
 - `docs/`: current architecture, design-system, and mobile-readiness notes. Historical specs and implementation plans live under `docs/superpowers/archive/`.
@@ -97,22 +97,23 @@ The server Vitest config intentionally includes only `server/tests/**/*.test.ts`
 
 ## Product Model
 
-Projects are open-ended sandboxes. The app does not use project-type-specific UI such as separate Studio or Research tabs. Generated outputs should be registered as artifacts and reviewed from the project **Artifacts** tab.
+Spaces are open-ended containers for chats, repositories, files, notes, plans, and pipelines. Opening a Space replaces the global navigation with a contextual sidebar:
 
-Current artifact sources include:
+- Overview
+- Chats
+- Items
+- Plans
+- Pipelines
+- Settings
 
-- DB-backed text artifacts created by tools.
-- Generated media under `{DATA_DIR}/projects/{projectId}/media/`.
-- Legacy research markdown under `{DATA_DIR}/projects/{projectId}/research/`.
-
-The legacy `/projects/:id/media` and `/projects/:id/research` endpoints remain available for compatibility, but the durable product surface is `/projects/:id/artifacts`.
+Generated outputs are ordinary Items with provenance. Notes are stored in `space_notes`, files in `space_files`, and repositories in `space_repos`; there is no separate Artifacts product surface.
 
 ## Smoke Path
 
 After starting the app:
 
 1. Register or log in.
-2. Create a project.
-3. Start a chat from that project.
+2. Create a Space.
+3. Start a chat from that Space.
 4. Ask the agent to produce a durable output.
-5. Open the project **Artifacts** tab and verify the output appears and previews correctly.
+5. Open the Space **Items** section and verify the output appears and opens correctly.

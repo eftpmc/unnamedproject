@@ -73,4 +73,19 @@ describe('spaces routes', () => {
     expect(content.text).toBe('# Summary');
     expect(content.headers['content-type']).toContain('text/markdown');
   });
+
+  it('updates note name and content', async () => {
+    const space = await request(app).post('/spaces').set('Authorization', authorization).send({ name: 'Editable Notes' });
+    const note = await request(app)
+      .post(`/spaces/${space.body.id}/items`)
+      .set('Authorization', authorization)
+      .send({ type: 'note', name: 'Draft', content: 'old' });
+
+    const updated = await request(app)
+      .patch(`/spaces/${space.body.id}/items/${note.body.id}`)
+      .set('Authorization', authorization)
+      .send({ name: 'Final', content: 'new' });
+    expect(updated.status).toBe(200);
+    expect(updated.body).toMatchObject({ name: 'Final', content: 'new', type: 'note' });
+  });
 });

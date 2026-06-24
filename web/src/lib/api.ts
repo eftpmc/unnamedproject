@@ -1,5 +1,5 @@
 import { getToken, setToken, clearToken } from './auth.js';
-import type { Session, Message, Space, SpaceItem, SpaceItemType, Project, ProjectArtifact, Connection, EffortLevel, ClaudeModelInfo, UserSettings, AgentBudgets, Memory, ScheduledTask, SessionWorktree, Plan, PlanStep, Pipeline, PipelineTask, PermissionProfile, SessionEvent, SessionSpaceLink } from '../types.js';
+import type { Session, Message, Space, SpaceItem, SpaceItemType, Connection, EffortLevel, ClaudeModelInfo, UserSettings, AgentBudgets, Memory, ScheduledTask, SessionWorktree, Plan, PlanStep, Pipeline, PipelineTask, PermissionProfile, SessionEvent, SessionSpaceLink } from '../types.js';
 
 async function request<T>(path: string, init: RequestInit = {}): Promise<T> {
   const token = getToken();
@@ -167,6 +167,37 @@ export function deleteSpaceItem(spaceId: string, itemId: string): Promise<void> 
   return request(`/spaces/${spaceId}/items/${itemId}`, { method: 'DELETE' });
 }
 
+export function getSpaceItem(spaceId: string, itemId: string): Promise<SpaceItem> {
+  return request(`/spaces/${spaceId}/items/${itemId}`);
+}
+
+export function updateSpaceItem(
+  spaceId: string,
+  itemId: string,
+  input: { name?: string; content?: string },
+): Promise<SpaceItem> {
+  return request(`/spaces/${spaceId}/items/${itemId}`, {
+    method: 'PATCH',
+    body: JSON.stringify(input),
+  });
+}
+
+export async function getItemContent(spaceId: string, itemId: string): Promise<Blob> {
+  const token = getToken();
+  const res = await fetch(`/spaces/${spaceId}/items/${itemId}/content`, {
+    headers: {
+      ...(token ? { Authorization: `Bearer ${token}` } : {}),
+    },
+  });
+  if (res.status === 401) {
+    clearToken();
+    window.location.href = '/login';
+    throw new Error('Unauthorized');
+  }
+  if (!res.ok) throw new Error(`HTTP ${res.status}`);
+  return res.blob();
+}
+
 export function getItemTree(spaceId: string, itemId: string, dirPath?: string): Promise<{ entries: { name: string; type: 'file' | 'dir'; path: string }[]; base_is_repo: boolean }> {
   const q = dirPath ? `?path=${encodeURIComponent(dirPath)}` : '';
   return request(`/spaces/${spaceId}/items/${itemId}/tree${q}`);
@@ -197,23 +228,6 @@ export function getItemCapabilities(spaceId: string, itemId: string): Promise<Sp
 
 export function getSpacePlans(spaceId: string): Promise<Plan[]> {
   return request(`/spaces/${spaceId}/plans`);
-}
-
-/** @deprecated use getSpaces */
-export const getProjects = getSpaces;
-/** @deprecated use createSpace */
-export const createProject = (body: { name: string; description?: string; repo_path?: string; enabled_connection_ids: string[] }) =>
-  createSpace({ name: body.name, description: body.description, enabled_connection_ids: body.enabled_connection_ids });
-/** @deprecated use deleteSpace */
-export const deleteProject = deleteSpace;
-
-export function getProjectTree(projectId: string, dirPath?: string): Promise<{ entries: { name: string; type: 'file' | 'dir'; path: string }[]; base_is_repo: boolean }> {
-  const q = dirPath ? `?path=${encodeURIComponent(dirPath)}` : '';
-  return request(`/projects/${projectId}/tree${q}`);
-}
-
-export function getProjectFile(projectId: string, filePath: string): Promise<{ content: string; path: string }> {
-  return request(`/projects/${projectId}/file?path=${encodeURIComponent(filePath)}`);
 }
 
 export function getSettings(): Promise<UserSettings> {
@@ -264,10 +278,7 @@ export function runScheduledTask(id: string): Promise<void> {
   return request(`/scheduled-tasks/${id}/run`, { method: 'POST' });
 }
 
-/** @deprecated use getSpacePlans */
-export const getProjectPlans = getSpacePlans;
-
-export function getAllPlans(): Promise<{ plans: (Plan & { project_name: string })[] }> {
+export function getAllPlans(): Promise<{ plans: (Plan & { space_name: string })[] }> {
   return request('/plans');
 }
 
@@ -283,71 +294,25 @@ export function resumePlan(planId: string): Promise<{ plan: Plan; steps: PlanSte
   return request(`/plans/${planId}/resume`, { method: 'POST' });
 }
 
-export function getPipelines(): Promise<{ pipelines: Pipeline[] }> {
-  return request('/pipelines');
+export function getSpacePipelines(spaceId: string): Promise<{ pipelines: Pipeline[] }> {
+  return request(`/spaces/${spaceId}/pipelines`);
 }
 
-export function getPipeline(id: string): Promise<{ pipeline: Pipeline; tasks: PipelineTask[] }> {
-  return request(`/pipelines/${id}`);
+export function getSpacePipeline(spaceId: string, id: string): Promise<{ pipeline: Pipeline; tasks: PipelineTask[] }> {
+  return request(`/spaces/${spaceId}/pipelines/${id}`);
 }
 
-export function deletePipeline(id: string): Promise<void> {
-  return request(`/pipelines/${id}`, { method: 'DELETE' });
+export function deleteSpacePipeline(spaceId: string, id: string): Promise<void> {
+  return request(`/spaces/${spaceId}/pipelines/${id}`, { method: 'DELETE' });
 }
 
-export function runPipeline(
-  id: string,
+export function runSpacePipeline(
   spaceId: string,
+  id: string,
   opts?: { title?: string; on_error?: 'stop' | 'continue' }
 ): Promise<{ plan_id: string; space_id: string }> {
-  return request(`/pipelines/${id}/run`, {
+  return request(`/spaces/${spaceId}/pipelines/${id}/run`, {
     method: 'POST',
-    body: JSON.stringify({ space_id: spaceId, ...opts }),
+    body: JSON.stringify(opts ?? {}),
   });
-}
-
-/** @deprecated use updateSpace */
-export const updateProject = (projectId: string, body: { description?: string; name?: string; repo_path?: string | null }) =>
-  updateSpace(projectId, { description: body.description, name: body.name });
-
-/** @deprecated use getItemWorkspace */
-export function getProjectWorkspace(projectId: string): Promise<{ content: string }> {
-  return request(`/projects/${projectId}/workspace`);
-}
-
-/** @deprecated use updateItemWorkspace */
-export function updateProjectWorkspace(projectId: string, content: string): Promise<void> {
-  return request(`/projects/${projectId}/workspace`, {
-    method: 'PUT',
-    body: JSON.stringify({ content }),
-  });
-}
-
-/** @deprecated use SpaceCapabilities */
-export type ProjectCapabilities = SpaceCapabilities;
-
-/** @deprecated use getItemCapabilities */
-export function getProjectCapabilities(projectId: string): Promise<SpaceCapabilities> {
-  return request(`/projects/${projectId}/capabilities`);
-}
-
-/** @deprecated use getSpaceItems */
-export function getProjectArtifacts(projectId: string): Promise<{ artifacts: ProjectArtifact[] }> {
-  return request(`/projects/${projectId}/artifacts`);
-}
-
-export async function getArtifactContent(contentUrl: string): Promise<string> {
-  const token = getToken();
-  const res = await fetch(contentUrl, {
-    headers: {
-      ...(token ? { Authorization: `Bearer ${token}` } : {}),
-    },
-  });
-  if (res.status === 401) {
-    clearToken();
-    window.location.href = '/login';
-    throw new Error('Unauthorized');
-  }
-  if (!res.ok) throw new Error(`HTTP ${res.status}`);
-  return res.text();
 }

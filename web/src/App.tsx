@@ -1,18 +1,24 @@
-import { createBrowserRouter, RouterProvider, Navigate } from 'react-router-dom';
+import { createBrowserRouter, RouterProvider, Navigate, useParams } from 'react-router-dom';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import RequireAuth from './components/RequireAuth.js';
 import Login from './pages/Login.js';
 import AppLayout from './pages/AppLayout.js';
 import Settings from './pages/Settings.js';
 import ChatsPage from './pages/ChatsPage.js';
-import ProjectsPage from './pages/ProjectsPage.js';
-import ProjectPage from './pages/ProjectPage.js';
+import SpacesPage from './pages/SpacesPage.js';
+import SpacePage from './pages/SpacePage.js';
 import PlanPage from './pages/PlanPage.js';
 import { TooltipProvider } from '@/components/ui/tooltip';
 
 const queryClient = new QueryClient({
   defaultOptions: { queries: { retry: 1, staleTime: 30_000 } },
 });
+
+function LegacyProjectRedirect({ suffix = '' }: { suffix?: string }) {
+  const { projectId, planId } = useParams<{ projectId: string; planId?: string }>();
+  const tail = suffix.replace(':planId', planId ?? '');
+  return <Navigate to={`/spaces/${projectId}${tail}`} replace />;
+}
 
 const router = createBrowserRouter([
   { path: '/login', element: <Login /> },
@@ -27,17 +33,19 @@ const router = createBrowserRouter([
       { path: 'c/:chatId', element: null },
       { path: 'chats', element: <ChatsPage /> },
       { path: 'activity', element: <Navigate to="/" replace /> },
-      { path: 'spaces', element: <ProjectsPage /> },
-      { path: 'spaces/:projectId', element: <ProjectPage /> },
-      { path: 'spaces/:projectId/plans', element: <ProjectPage /> },
-      { path: 'spaces/:projectId/files', element: <ProjectPage /> },
-      { path: 'spaces/:projectId/settings', element: <ProjectPage /> },
-      { path: 'spaces/:projectId/:tab', element: <ProjectPage /> },
-      { path: 'spaces/:projectId/plans/:planId', element: <PlanPage /> },
+      { path: 'spaces', element: <SpacesPage /> },
+      { path: 'spaces/:spaceId', element: <SpacePage /> },
+      { path: 'spaces/:spaceId/chats', element: <SpacePage /> },
+      { path: 'spaces/:spaceId/items', element: <SpacePage /> },
+      { path: 'spaces/:spaceId/items/:itemId', element: <SpacePage /> },
+      { path: 'spaces/:spaceId/plans', element: <SpacePage /> },
+      { path: 'spaces/:spaceId/plans/:planId', element: <PlanPage /> },
+      { path: 'spaces/:spaceId/pipelines', element: <SpacePage /> },
+      { path: 'spaces/:spaceId/settings', element: <SpacePage /> },
       { path: 'projects', element: <Navigate to="/spaces" replace /> },
-      { path: 'projects/:projectId', element: <Navigate to="/spaces/:projectId" replace /> },
-      { path: 'projects/:projectId/plans/:planId', element: <Navigate to="/spaces/:projectId/plans/:planId" replace /> },
-      { path: 'projects/:projectId/:tab', element: <Navigate to="/spaces/:projectId/:tab" replace /> },
+      { path: 'projects/:projectId', element: <LegacyProjectRedirect /> },
+      { path: 'projects/:projectId/plans/:planId', element: <LegacyProjectRedirect suffix="/plans/:planId" /> },
+      { path: 'projects/:projectId/:tab', element: <LegacyProjectRedirect /> },
       { path: 'pipelines', element: <Navigate to="/spaces" replace /> },
       { path: 'settings', element: <Settings /> },
     ],

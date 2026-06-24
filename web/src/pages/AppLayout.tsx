@@ -12,7 +12,7 @@ import { connect, disconnect, subscribe } from '../lib/ws.js';
 import { SidebarInset, SidebarProvider, useSidebar } from '@/components/ui/sidebar';
 import type { Connection, Session, WSApprovalRequested, WSExecutionUpdate, WSTurnComplete } from '../types.js';
 
-const PAGE_ROUTES = ['/chats', '/projects', '/settings'];
+const PAGE_ROUTES = ['/chats', '/spaces', '/settings'];
 
 /** Mobile-only top bar: hamburger (left) · brand mark (centered) · spacer. */
 function MobileTopbar() {

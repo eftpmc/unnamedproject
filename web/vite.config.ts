@@ -33,6 +33,10 @@ export default defineConfig({
       '/scheduled-tasks': 'http://localhost:3000',
       '/campaigns': 'http://localhost:3000',
       '/pipelines': 'http://localhost:3000',
+      '/spaces': {
+        target: 'http://localhost:3000',
+        bypass: apiOrSpaBypass,
+      },
       '/projects': {
         target: 'http://localhost:3000',
         bypass: apiOrSpaBypass,

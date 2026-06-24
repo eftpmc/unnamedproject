@@ -36,6 +36,7 @@ export const migrations: Migration[] = [
     if (!cols.includes('apns_device_token')) database.exec('ALTER TABLE user_settings ADD COLUMN apns_device_token TEXT');
   }},
   { version: 7, name: 'finalize-spaces-items-and-pipelines', noTransaction: true, up: finalizeSpacesItemsAndPipelines },
+  { version: 8, name: 'repair-pipeline-space-foreign-key', noTransaction: true, up: repairPipelineSpaceForeignKey },
 ];
 
 function tableSql(database: Database.Database, name: string): string | undefined {
@@ -436,6 +437,47 @@ function finalizeSpacesItemsAndPipelines(database: Database.Database): void {
     database.exec('DROP TABLE artifacts');
   }
 
+  database.pragma('foreign_keys = ON');
+}
+
+function repairPipelineSpaceForeignKey(database: Database.Database): void {
+  const pipelineSql = tableSql(database, 'pipelines');
+  if (!pipelineSql || /REFERENCES\s+["`]?spaces["`]?/i.test(pipelineSql)) return;
+
+  database.pragma('foreign_keys = OFF');
+  database.pragma('legacy_alter_table = ON');
+  database.exec('ALTER TABLE pipelines RENAME TO pipelines_pre_v8');
+  database.pragma('legacy_alter_table = OFF');
+  database.exec(`
+    CREATE TABLE pipelines (
+      id TEXT PRIMARY KEY,
+      space_id TEXT NOT NULL REFERENCES spaces(id) ON DELETE CASCADE,
+      title TEXT NOT NULL,
+      description TEXT,
+      created_at INTEGER NOT NULL DEFAULT (unixepoch())
+    );
+    INSERT INTO pipelines (id, space_id, title, description, created_at)
+    SELECT
+      pipeline.id,
+      CASE
+        WHEN EXISTS (SELECT 1 FROM spaces WHERE id = pipeline.space_id)
+          THEN pipeline.space_id
+        ELSE (
+          SELECT space.id
+          FROM spaces space
+          WHERE space.user_id = pipeline.space_id
+          ORDER BY space.created_at, space.id
+          LIMIT 1
+        )
+      END,
+      pipeline.title,
+      pipeline.description,
+      pipeline.created_at
+    FROM pipelines_pre_v8 pipeline
+    WHERE EXISTS (SELECT 1 FROM spaces WHERE id = pipeline.space_id)
+       OR EXISTS (SELECT 1 FROM spaces WHERE user_id = pipeline.space_id);
+    DROP TABLE pipelines_pre_v8;
+  `);
   database.pragma('foreign_keys = ON');
 }
 
@@ -1927,7 +1969,7 @@ export function getPlanForStep(stepId: string): DbPlan | undefined {
 export interface DbExecution {
   id: string;
   message_id: string | null;
-  project_id: string | null;
+  space_id: string | null;
   tool: string;
   status: 'running' | 'done' | 'error';
   output_log: string;

@@ -137,13 +137,13 @@ export const toolDefinitions: Anthropic.Tool[] = [
   },
   {
     name: 'create_project',
-    description: "Create a new project. If with_repo is true, creates a git repo under the configured projects root.",
+    description: "Create a new Space. If with_repo is true, creates a git repo under the configured Spaces root.",
     input_schema: {
       type: 'object',
       properties: {
-        name: { type: 'string', description: 'Project name' },
+        name: { type: 'string', description: 'Space name' },
         description: { type: 'string', description: 'Optional description' },
-        with_repo: { type: 'boolean', description: 'Whether to create a backing git repo for this project' },
+        with_repo: { type: 'boolean', description: 'Whether to create a backing git repo for this Space' },
       },
       required: ['name', 'with_repo'],
     },
@@ -155,7 +155,7 @@ export const toolDefinitions: Anthropic.Tool[] = [
       type: 'object',
       properties: {
         project_id: { type: 'string' },
-        name: { type: 'string', description: 'New project name' },
+        name: { type: 'string', description: 'New Space name' },
         description: { type: 'string', description: 'New description' },
       },
       required: ['project_id'],
@@ -531,7 +531,7 @@ export const toolDefinitions: Anthropic.Tool[] = [
   },
   {
     name: 'generate_video',
-    description: 'Render an MP4 video for a project from structured scene data. Runs asynchronously; returns immediately with the execution id, and the finished video is registered in the project Artifacts tab.',
+    description: 'Render an MP4 video for a Space from structured scene data. Runs asynchronously; returns immediately with the execution id, and the finished video is registered as a file Item in the Space.',
     input_schema: {
       type: 'object',
       properties: {

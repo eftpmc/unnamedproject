@@ -3,28 +3,31 @@ import { useQuery } from '@tanstack/react-query';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import { ChevronRight, ChevronDown, FileText, Folder, FolderOpen, Loader2 } from 'lucide-react';
-import { getProjectTree, getProjectFile } from '../lib/api.js';
+import { getItemTree, getItemFile } from '../lib/api.js';
 import { cn } from '@/lib/utils';
 import { EmptyPanel, Surface } from '@/components/ui/app-layout';
 import type { FileEntry } from '../types.js';
 
 interface FileBrowserProps {
-  projectId: string;
+  spaceId: string;
+  itemId: string;
+  itemName?: string;
 }
 
 interface TreeNodeProps {
   entry: FileEntry;
-  projectId: string;
+  spaceId: string;
+  itemId: string;
   depth: number;
   selectedPath: string | null;
   onSelect: (path: string) => void;
 }
 
-function TreeNode({ entry, projectId, depth, selectedPath, onSelect }: TreeNodeProps) {
+function TreeNode({ entry, spaceId, itemId, depth, selectedPath, onSelect }: TreeNodeProps) {
   const [open, setOpen] = useState(false);
   const { data, isFetching } = useQuery({
-    queryKey: ['project-tree', projectId, entry.path],
-    queryFn: () => getProjectTree(projectId, entry.path),
+    queryKey: ['item-tree', spaceId, itemId, entry.path],
+    queryFn: () => getItemTree(spaceId, itemId, entry.path),
     enabled: entry.type === 'dir' && open,
     staleTime: 30000,
   });
@@ -68,7 +71,8 @@ function TreeNode({ entry, projectId, depth, selectedPath, onSelect }: TreeNodeP
         <TreeNode
           key={child.path}
           entry={child}
-          projectId={projectId}
+          spaceId={spaceId}
+          itemId={itemId}
           depth={depth + 1}
           selectedPath={selectedPath}
           onSelect={onSelect}
@@ -91,7 +95,7 @@ function detectLanguage(filePath: string): string {
 }
 
 // Currently unused by FileBrowser itself — provided for media-aware callers.
-// viewers operating on the dedicated `/media` routes. getProjectFile returns repo-tree
+// viewers operating on the dedicated `/media` routes. getItemFile returns repo-tree
 // files as UTF-8 text, which would corrupt binary media; this distinction is why
 // FileBrowser doesn't use this for repo-tree files.
 export function detectFileKind(filePath: string): 'image' | 'video' | 'audio' | 'text' {
@@ -102,18 +106,18 @@ export function detectFileKind(filePath: string): 'image' | 'video' | 'audio' | 
   return 'text';
 }
 
-export default function FileBrowser({ projectId }: FileBrowserProps) {
+export default function FileBrowser({ spaceId, itemId, itemName = 'Repository' }: FileBrowserProps) {
   const [selectedPath, setSelectedPath] = useState<string | null>(null);
 
   const { data: rootData, isLoading } = useQuery({
-    queryKey: ['project-tree', projectId, ''],
-    queryFn: () => getProjectTree(projectId),
+    queryKey: ['item-tree', spaceId, itemId, ''],
+    queryFn: () => getItemTree(spaceId, itemId),
     staleTime: 30000,
   });
 
   const { data: fileData, isLoading: fileLoading } = useQuery({
-    queryKey: ['project-file', projectId, selectedPath],
-    queryFn: () => getProjectFile(projectId, selectedPath!),
+    queryKey: ['item-file', spaceId, itemId, selectedPath],
+    queryFn: () => getItemFile(spaceId, itemId, selectedPath!),
     enabled: !!selectedPath,
     staleTime: 10000,
   });
@@ -127,8 +131,8 @@ export default function FileBrowser({ projectId }: FileBrowserProps) {
     <div className="grid min-h-[30rem] gap-4 lg:grid-cols-[minmax(18rem,0.8fr)_minmax(0,1.2fr)]">
       <Surface className="min-w-0 overflow-hidden bg-card">
         <div className="border-b border-border-soft px-4 py-3">
-          <div className="text-sm font-semibold text-foreground">Files</div>
-          <div className="mt-0.5 text-xs text-muted-foreground">Project workspace</div>
+          <div className="text-sm font-semibold text-foreground">{itemName}</div>
+          <div className="mt-0.5 text-xs text-muted-foreground">Repository files</div>
         </div>
         <div className="max-h-[34rem] overflow-y-auto py-2">
         {isLoading && (
@@ -149,7 +153,8 @@ export default function FileBrowser({ projectId }: FileBrowserProps) {
           <TreeNode
             key={entry.path}
             entry={entry}
-            projectId={projectId}
+            spaceId={spaceId}
+            itemId={itemId}
             depth={0}
             selectedPath={selectedPath}
             onSelect={setSelectedPath}

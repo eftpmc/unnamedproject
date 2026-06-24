@@ -3,17 +3,16 @@ import type { ReactNode } from 'react';
 import { useParams, Link, useNavigate } from 'react-router-dom';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { ArrowDown, Bot, Check, ChevronRight, Cpu, FileEdit, FileText, GitBranch, GitPullRequest, MessageSquare, Plus, RotateCcw, Sparkles, Terminal, X, Zap } from 'lucide-react';
-import { getPlan, cancelPlan, resumePlan, createChat, updateChatConfig, getChats, getProjectArtifacts, getSessionWorktree, getProjects } from '../lib/api.js';
-import ArtifactPreviewCard from '../components/ArtifactPreviewCard.js';
+import { getPlan, cancelPlan, resumePlan, createChat, updateChatConfig, getChats, getSpaceItems, getSessionWorktree, getSpaces } from '../lib/api.js';
 import { subscribe } from '../lib/ws.js';
 import { cn } from '@/lib/utils';
 import { timeAgo } from '../lib/utils.js';
 import { usePageTitle } from '../lib/usePageTitle.js';
 import { getToken } from '../lib/auth.js';
-import { PageBody, PageHeader, PageLoading, PageShell } from '@/components/ui/app-layout';
+import { PageBody, PageHeader, PageLoading, PageShell, Surface } from '@/components/ui/app-layout';
 import { Button } from '@/components/ui/button';
 import { StatusPill } from '@/components/ui/status-pill';
-import type { Plan, PlanStep, Project, ProjectArtifact, Session, WSPlanStepUpdated, WSPlanUpdated } from '../types.js';
+import type { Plan, PlanStep, Space, Session, WSPlanStepUpdated, WSPlanUpdated } from '../types.js';
 
 const AGENT_LABEL: Record<PlanStep['agent'], string> = {
   claude_code: 'Claude Code',
@@ -65,7 +64,7 @@ function StatusDot({ status }: { status: PlanStep['status'] }) {
 }
 
 export default function PlanPage() {
-  const { projectId, planId } = useParams<{ projectId: string; planId: string }>();
+  const { spaceId, planId } = useParams<{ spaceId: string; planId: string }>();
   const navigate = useNavigate();
 
   const { data, isLoading, isError } = useQuery({
@@ -121,22 +120,22 @@ export default function PlanPage() {
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ['plan', planId] }),
   });
 
-  const { data: projects = [] } = useQuery<Project[]>({
-    queryKey: ['projects'],
-    queryFn: getProjects,
+  const { data: spaces = [] } = useQuery<Space[]>({
+    queryKey: ['spaces'],
+    queryFn: getSpaces,
     staleTime: 30_000,
   });
-  const project = projects.find(p => p.id === projectId) ?? null;
+  const space = spaces.find(candidate => candidate.id === spaceId) ?? null;
 
   const { data: chats = [] } = useQuery<Session[]>({
     queryKey: ['chats'],
     queryFn: getChats,
   });
 
-  const { data: artifactData } = useQuery<{ artifacts: ProjectArtifact[] }>({
-    queryKey: ['project-artifacts', projectId],
-    queryFn: () => getProjectArtifacts(projectId!),
-    enabled: !!projectId,
+  const { data: spaceItems = [] } = useQuery({
+    queryKey: ['space-items', spaceId],
+    queryFn: () => getSpaceItems(spaceId!),
+    enabled: !!spaceId,
     staleTime: 20_000,
   });
 
@@ -151,7 +150,7 @@ export default function PlanPage() {
   const startChatMutation = useMutation({
     mutationFn: async () => {
       const { id } = await createChat();
-      await updateChatConfig(id, { pinned_project_id: projectId ?? null });
+      await updateChatConfig(id, { pinned_space_id: spaceId ?? null });
       return id;
     },
     onSuccess: (id) => navigate(`/c/${id}`),
@@ -182,7 +181,7 @@ export default function PlanPage() {
   const hasDeps = steps.some(s => s.depends_on && s.depends_on !== '[]');
   const waves = hasDeps ? buildWaves(steps) : null;
   const relatedChat = plan.session_id ? chats.find(chat => chat.id === plan.session_id) : null;
-  const relatedArtifacts = (artifactData?.artifacts ?? []).filter(a => a.source_plan_id === plan.id);
+  const relatedItems = spaceItems.filter(item => item.source_plan_id === plan.id);
   const branchName = worktree?.branch ?? null;
   const stepEvents = steps
     .filter(step => (stepStatuses[step.id] ?? step.status) !== 'waiting')
@@ -193,15 +192,15 @@ export default function PlanPage() {
       <PageHeader
         breadcrumb={(
           <nav className="flex items-center gap-1.5 text-xs text-muted-foreground">
-            <Link to="/projects" className="transition-colors hover:text-foreground">
-              Projects
+            <Link to="/spaces" className="transition-colors hover:text-foreground">
+              Spaces
             </Link>
             <ChevronRight size={12} className="text-faint-fg" />
-            <Link to={`/spaces/${projectId}`} className="transition-colors hover:text-foreground">
-              {project?.name ?? 'Space'}
+            <Link to={`/spaces/${spaceId}`} className="transition-colors hover:text-foreground">
+              {space?.name ?? 'Space'}
             </Link>
             <ChevronRight size={12} className="text-faint-fg" />
-            <Link to={`/spaces/${projectId}/plans`} className="text-xs text-muted-foreground hover:text-foreground transition-colors">
+            <Link to={`/spaces/${spaceId}/plans`} className="text-xs text-muted-foreground hover:text-foreground transition-colors">
               Plans
             </Link>
             <ChevronRight size={12} className="text-faint-fg" />
@@ -341,27 +340,29 @@ export default function PlanPage() {
 
             <section>
               <div className="mb-3 flex items-center gap-2">
-                <h2 className="text-sm font-semibold text-foreground">Artifacts</h2>
+                <h2 className="text-sm font-semibold text-foreground">Generated Items</h2>
                 <span className="rounded-full border border-border-soft bg-muted px-2 py-0.5 text-[11px] font-medium text-muted-foreground">
-                  {relatedArtifacts.length}
+                  {relatedItems.length}
                 </span>
               </div>
-              {relatedArtifacts.length > 0 ? (
+              {relatedItems.length > 0 ? (
                 <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-                  {relatedArtifacts.map(artifact => (
-                    <ArtifactPreviewCard
-                      key={artifact.id}
-                      artifactId={artifact.id}
-                      projectId={artifact.project_id}
-                      title={artifact.title}
-                      kind={artifact.kind}
-                      mimeType={artifact.mime_type}
-                    />
+                  {relatedItems.map(item => (
+                    <Link key={item.id} to={`/spaces/${spaceId}/items/${item.id}`}>
+                      <Surface interactive className="flex items-center gap-3 p-4">
+                        <FileText size={16} className="text-muted-foreground" />
+                        <span className="min-w-0 flex-1">
+                          <span className="block truncate text-sm font-medium">{item.name}</span>
+                          <span className="block text-xs capitalize text-muted-foreground">{item.type}</span>
+                        </span>
+                        <ChevronRight size={15} className="text-faint-fg" />
+                      </Surface>
+                    </Link>
                   ))}
                 </div>
               ) : (
                 <div className="rounded-lg border border-dashed border-border bg-muted/30 p-4 text-sm text-muted-foreground">
-                  Artifacts produced by this plan will appear here.
+                  Items produced by this plan will appear here.
                 </div>
               )}
             </section>

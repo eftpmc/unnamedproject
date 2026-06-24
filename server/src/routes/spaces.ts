@@ -214,6 +214,31 @@ router.get('/:spaceId/items/:itemId', (req, res) => {
   res.json(item);
 });
 
+router.patch('/:spaceId/items/:itemId', (req, res) => {
+  if (!requireSpace(req, res)) return;
+  const item = getItemById(req.params.itemId);
+  if (!item || item.space_id !== req.params.spaceId) {
+    res.status(404).json({ error: 'Item not found in this space' });
+    return;
+  }
+  const { name, content } = req.body as { name?: string; content?: string };
+  if (name !== undefined) {
+    if (!name.trim()) {
+      res.status(400).json({ error: 'name cannot be empty' });
+      return;
+    }
+    getDb().prepare('UPDATE space_items SET name = ? WHERE id = ?').run(name.trim(), item.id);
+  }
+  if (content !== undefined) {
+    if (item.type !== 'note') {
+      res.status(400).json({ error: `Content editing is not supported for item type '${item.type}'` });
+      return;
+    }
+    getDb().prepare('UPDATE space_notes SET content = ? WHERE item_id = ?').run(content, item.id);
+  }
+  res.json(getItemById(item.id));
+});
+
 router.get('/:spaceId/items/:itemId/content', async (req, res) => {
   if (!requireSpace(req, res)) return;
   const item = getItemById(req.params.itemId);

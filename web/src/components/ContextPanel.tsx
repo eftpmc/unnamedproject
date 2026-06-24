@@ -1,10 +1,10 @@
 import { useQuery } from '@tanstack/react-query';
 import { useNavigate } from 'react-router-dom';
-import { X, GitMerge, Check, Bell, Sparkles, ArrowRight } from 'lucide-react';
-import { getProjectArtifacts, getProjectPlans } from '../lib/api.js';
+import { X, GitMerge, Check, Bell, FileStack, ArrowRight } from 'lucide-react';
+import { getSpaceItems, getSpacePlans } from '../lib/api.js';
 import { cn } from '@/lib/utils';
 import { StatusPill } from '@/components/ui/status-pill';
-import type { Plan, Project, ProjectArtifact } from '../types.js';
+import type { Plan, Space } from '../types.js';
 
 interface Approval {
   executionId: string;
@@ -15,7 +15,7 @@ interface Approval {
 interface ContextPanelProps {
   open: boolean;
   onClose: () => void;
-  project: Project | null;
+  project: Space | null;
   worktree: { branch: string; commits_ahead: number } | null;
   pendingApproval: Approval | null;
   onApprove: (approvalId: string) => void;
@@ -96,17 +96,17 @@ function PanelContent({
 }: Omit<ContextPanelProps, 'open'>) {
   const navigate = useNavigate();
 
-  const { data: artifactData } = useQuery<{ artifacts: ProjectArtifact[] }>({
-    queryKey: ['project-artifacts', project?.id],
-    queryFn: () => getProjectArtifacts(project!.id),
+  const { data: items = [] } = useQuery({
+    queryKey: ['space-items', project?.id],
+    queryFn: () => getSpaceItems(project!.id),
     enabled: !!project,
     staleTime: 20_000,
   });
-  const artifacts = artifactData?.artifacts?.slice(0, 3) ?? [];
+  const recentItems = items.slice(0, 3);
 
   const { data: plans = [] } = useQuery<Plan[]>({
-    queryKey: ['project-plans', project?.id],
-    queryFn: () => getProjectPlans(project!.id),
+    queryKey: ['space-plans', project?.id],
+    queryFn: () => getSpacePlans(project!.id),
     enabled: !!project,
     staleTime: 15_000,
     refetchInterval: (query) => {
@@ -130,10 +130,10 @@ function PanelContent({
         </button>
       </div>
 
-      {/* Project */}
+      {/* Space */}
       {project && (
         <section className="flex flex-col gap-2">
-          <span className="text-[11px] font-medium text-muted-foreground">Project</span>
+          <span className="text-[11px] font-medium text-muted-foreground">Space</span>
           <button
             type="button"
             onClick={() => navigate(`/spaces/${project.id}`)}
@@ -234,30 +234,30 @@ function PanelContent({
 
       {project && (
         <section className="flex flex-col gap-2">
-          <span className="text-[11px] font-medium text-muted-foreground">Artifacts</span>
-          {artifacts.length > 0 ? (
+          <span className="text-[11px] font-medium text-muted-foreground">Items</span>
+          {recentItems.length > 0 ? (
             <div className="flex flex-col gap-2">
-              {artifacts.map(artifact => (
-                <div key={artifact.id} className="flex items-center gap-2.5 rounded-lg border border-border-soft bg-card p-2.5">
+              {recentItems.map(item => (
+                <button
+                  type="button"
+                  onClick={() => navigate(`/spaces/${project.id}/items/${item.id}`)}
+                  key={item.id}
+                  className="flex items-center gap-2.5 rounded-lg border border-border-soft bg-card p-2.5 text-left transition-colors hover:bg-muted/40"
+                >
                   <span className="grid size-8 shrink-0 place-items-center rounded-md bg-muted text-muted-foreground">
-                    <Sparkles size={13} />
+                    <FileStack size={13} />
                   </span>
                   <span className="min-w-0 flex-1">
-                    <span className="block truncate text-xs font-medium text-foreground">{artifact.title}</span>
-                    <span className="block truncate text-[11px] text-faint-fg">{artifact.kind}</span>
+                    <span className="block truncate text-xs font-medium text-foreground">{item.name}</span>
+                    <span className="block truncate text-[11px] capitalize text-faint-fg">{item.type}</span>
                   </span>
-                  <span className={cn(
-                    'size-2 shrink-0 rounded-full',
-                    artifact.status === 'ready' ? 'bg-success' :
-                      artifact.status === 'running' ? 'bg-primary animate-pulse' :
-                        artifact.status === 'error' ? 'bg-destructive' : 'bg-warning',
-                  )} />
-                </div>
+                  <ArrowRight size={11} className="text-faint-fg" />
+                </button>
               ))}
             </div>
           ) : (
             <div className="rounded-lg border border-dashed border-border bg-background/50 p-3 text-xs leading-relaxed text-muted-foreground">
-              Artifacts created from this chat will appear here.
+              Items created from this chat will appear here.
             </div>
           )}
         </section>

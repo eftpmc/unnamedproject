@@ -4,19 +4,19 @@ import { cn } from '../lib/utils.js';
 import type { Space, SessionSpaceLink } from '../types.js';
 
 export default function ScopePopover({
-  projects,
+  spaces,
   pinnedProject,
   inferredProject,
   agentActive,
-  onOpenProject,
+  onOpenSpace,
   onScopeChange,
 }: {
-  projects: Space[];
+  spaces: Space[];
   pinnedProject: Space | null;
   inferredProject: SessionSpaceLink | null;
   agentActive: boolean;
-  onOpenProject: (projectId: string) => void;
-  onScopeChange: (projectId: string | null) => void;
+  onOpenSpace: (spaceId: string) => void;
+  onScopeChange: (spaceId: string | null) => void;
 }) {
   const isAuto = !pinnedProject;
   const triggerLabel = pinnedProject?.name ?? (inferredProject ? `Auto · ${inferredProject.name}` : 'Auto');
@@ -46,20 +46,20 @@ export default function ScopePopover({
           selected={isAuto}
           icon={<Target size={14} />}
           title="Auto"
-          description={inferredProject ? `Agent attached ${inferredProject.name}.` : 'Let the agent route this work or create a project.'}
+          description={inferredProject ? `Agent attached ${inferredProject.name}.` : 'Let the agent route this work or create a Space.'}
           onClick={() => onScopeChange(null)}
         />
         <div className="my-1 border-t border-border-soft" />
         <div className="max-h-60 overflow-y-auto">
-          {projects.map(project => (
+          {spaces.map(space => (
             <ScopeOption
-              key={project.id}
-              selected={pinnedProject?.id === project.id}
+              key={space.id}
+              selected={pinnedProject?.id === space.id}
               icon={<Folder size={14} />}
-              title={project.name}
+              title={space.name}
               description="Space context"
-              onClick={() => onScopeChange(project.id)}
-              onAuxClick={() => onOpenProject(project.id)}
+              onClick={() => onScopeChange(space.id)}
+              onAuxClick={() => onOpenSpace(space.id)}
             />
           ))}
         </div>

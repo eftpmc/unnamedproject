@@ -19,7 +19,7 @@ import {
   deleteScheduledTask,
   getConnections,
   getMemory,
-  getProjects,
+  getSpaces,
   getScheduledTasks,
   getSettings,
   runScheduledTask,
@@ -33,7 +33,7 @@ import { usePageTitle } from '../lib/usePageTitle.js';
 import { useTheme } from '../lib/useTheme.js';
 import { useAccent } from '../lib/useAccent.js';
 import { ACCENT_PRESETS, DEFAULT_ACCENT } from '../lib/accent.js';
-import type { Connection, Memory, PermissionProfile, Project, ScheduledTask, UserSettings } from '../types.js';
+import type { Connection, Memory, PermissionProfile, Space, ScheduledTask, UserSettings } from '../types.js';
 
 type Tab = 'agents' | 'tools' | 'mcp' | 'workspace' | 'memory' | 'account';
 
@@ -526,7 +526,7 @@ export default function Settings() {
   const [tab, setTab] = useState<Tab>('agents');
 
   const { data: connections = [] } = useQuery<Connection[]>({ queryKey: ['connections'], queryFn: getConnections });
-  const { data: projects = [] } = useQuery<Project[]>({ queryKey: ['projects'], queryFn: getProjects });
+  const { data: spaces = [] } = useQuery<Space[]>({ queryKey: ['spaces'], queryFn: getSpaces });
   const { data: memory = [] } = useQuery<Memory[]>({ queryKey: ['memory'], queryFn: getMemory });
   const { data: scheduledTasks = [] } = useQuery<ScheduledTask[]>({ queryKey: ['scheduledTasks'], queryFn: getScheduledTasks });
   const { data: settings } = useQuery<UserSettings>({ queryKey: ['settings'], queryFn: getSettings });
@@ -866,7 +866,7 @@ export default function Settings() {
           {tab === 'workspace' && (
             <div className="flex flex-col gap-7">
               <div>
-                <SectionLabel>Projects root</SectionLabel>
+                <SectionLabel>Spaces repository root</SectionLabel>
                 <div className="rounded-lg border border-border-soft bg-card p-4 flex flex-col gap-3">
                   <div className="flex gap-3 items-end">
                     <div className="flex-1">
@@ -887,7 +887,7 @@ export default function Settings() {
                     </Button>
                   </div>
                   {projectsRootError && <div className="text-sm text-destructive">{projectsRootError}</div>}
-                  <HintText>New repo-backed projects are created here. Keep the default, or point to a workspace location such as <code>~/code</code>.</HintText>
+                  <HintText>Repositories created for new Spaces are stored here. Keep the default, or point to a workspace location such as <code>~/code</code>.</HintText>
                 </div>
               </div>
 
@@ -995,7 +995,7 @@ export default function Settings() {
                               {m.key}
                               {m.type === 'project' && (
                                 <div className="mt-0.5 font-sans text-[11px] text-faint-fg">
-                                  {projects.find(p => p.id === m.project_id)?.name ?? m.project_id}
+                                  {spaces.find(space => space.id === m.space_id)?.name ?? m.space_id}
                                 </div>
                               )}
                             </div>

@@ -7,18 +7,18 @@ interface MemoryCandidate {
   type: MemoryType;
   key: string;
   value: string;
-  project_id?: string;
+  space_id?: string;
 }
 
 const EXTRACT_SYSTEM = `You are a memory extractor. Review the conversation and identify facts worth persisting for future sessions. Return a JSON array of memory candidates — or an empty array [] if nothing new is worth saving.
 
 Each candidate:
-{"type":"user|feedback|project|reference","key":"short_snake_case_id","value":"the fact","project_id":"optional"}
+{"type":"user|feedback|project|reference","key":"short_snake_case_id","value":"the fact","space_id":"optional"}
 
 Types:
 - user: durable preferences or facts about the user or their environment
 - feedback: corrections or process preferences about how the assistant should work
-- project: decisions or notes tied to a specific project (include project_id)
+- project: decisions or notes tied to a specific Space (include space_id)
 - reference: pointers to external systems (Slack channels, Linear projects, dashboards, etc.)
 
 Only extract genuinely new and durable information. Do not re-extract things that are already common knowledge or temporary context. Return [] if nothing qualifies.`;
@@ -31,8 +31,8 @@ export async function extractAndRemember(userId: string, sessionId: string, apiK
   if (messages.length === 0) return;
 
   const session = getDb()
-    .prepare('SELECT pinned_project_id FROM sessions WHERE id = ?')
-    .get(sessionId) as { pinned_project_id: string | null } | undefined;
+    .prepare('SELECT pinned_space_id FROM sessions WHERE id = ?')
+    .get(sessionId) as { pinned_space_id: string | null } | undefined;
 
   const transcript = messages
     .reverse()
@@ -53,8 +53,8 @@ export async function extractAndRemember(userId: string, sessionId: string, apiK
 
     for (const c of candidates) {
       if (!c.type || !c.key || !c.value) continue;
-      const projectId = c.project_id ?? session?.pinned_project_id ?? null;
-      rememberFact(userId, c.type, c.key, c.value, projectId);
+      const spaceId = c.space_id ?? session?.pinned_space_id ?? null;
+      rememberFact(userId, c.type, c.key, c.value, spaceId);
     }
   } catch {
     // extraction is best-effort, never throw

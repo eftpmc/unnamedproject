@@ -164,7 +164,7 @@ describe('migration v5: spaces rename and item model', () => {
   });
 
   it('lands on the latest version and v5 is idempotent', async () => {
-    expect(db.pragma('user_version', { simple: true })).toBe(7);
+    expect(db.pragma('user_version', { simple: true })).toBe(8);
     expect(db.pragma('foreign_key_check')).toEqual([]);
     const { migrations } = await import('../../src/db/index.js');
     const migration = migrations.find(candidate => candidate.version === 5)!;
@@ -221,6 +221,45 @@ describe('migration v7: finalize an already-migrated v6 database', () => {
     expect(repairDb.prepare("SELECT name FROM space_items WHERE id = 'item_a1'").get()).toEqual({ name: 'Report' });
     expect(repairDb.prepare("SELECT file_path FROM space_files WHERE item_id = 'item_a1'").get()).toEqual({ file_path: 'artifacts/a1.md' });
     expect(repairDb.prepare("SELECT item_id FROM session_events WHERE id = 'e1'").get()).toEqual({ item_id: 'item_a1' });
+
+    repairDb.close();
+    fs.unlinkSync(repairPath);
+  });
+});
+
+describe('migration v8: repair pipeline Space ownership', () => {
+  it('repoints a legacy user-owned space_id value and fixes the foreign key', async () => {
+    const repairPath = path.join('/tmp', `migration-v8-test-${Date.now()}.db`);
+    const repairDb = new Database(repairPath);
+    repairDb.exec(`
+      PRAGMA foreign_keys = OFF;
+      CREATE TABLE users (id TEXT PRIMARY KEY);
+      CREATE TABLE spaces (
+        id TEXT PRIMARY KEY,
+        user_id TEXT NOT NULL REFERENCES users(id),
+        created_at INTEGER NOT NULL
+      );
+      CREATE TABLE pipelines (
+        id TEXT PRIMARY KEY,
+        space_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+        title TEXT NOT NULL,
+        description TEXT,
+        created_at INTEGER NOT NULL
+      );
+      INSERT INTO users VALUES ('u1');
+      INSERT INTO spaces VALUES ('s1', 'u1', 1);
+      INSERT INTO pipelines VALUES ('p1', 'u1', 'Release', NULL, 2);
+      PRAGMA user_version = 7;
+      PRAGMA foreign_keys = ON;
+    `);
+
+    const { migrations } = await import('../../src/db/index.js');
+    runMigrations(repairDb, migrations);
+
+    expect(repairDb.prepare("SELECT space_id FROM pipelines WHERE id = 'p1'").get()).toEqual({ space_id: 's1' });
+    const pipelineSql = repairDb.prepare("SELECT sql FROM sqlite_master WHERE name = 'pipelines'").get() as { sql: string };
+    expect(pipelineSql.sql.toLowerCase()).toContain('references spaces');
+    expect(repairDb.pragma('foreign_key_check')).toEqual([]);
 
     repairDb.close();
     fs.unlinkSync(repairPath);

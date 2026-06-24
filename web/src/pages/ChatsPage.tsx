@@ -2,13 +2,13 @@ import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { ChevronRight, Search, Trash2, X } from 'lucide-react';
-import { getChats, deleteChat, searchChats, getProjects } from '../lib/api.js';
+import { getChats, deleteChat, searchChats, getSpaces } from '../lib/api.js';
 import { timeAgo } from '../lib/utils.js';
 import { usePageTitle } from '../lib/usePageTitle.js';
 import { ConfirmDialog } from '@/components/ui/confirm-dialog';
 import { Button } from '@/components/ui/button';
 import { ContentColumn, EmptyPanel, PageBody, PageHeader, PageLoading, PageShell } from '@/components/ui/app-layout';
-import type { Project, Session } from '../types.js';
+import type { Space, Session } from '../types.js';
 import { useDebounce } from '../lib/useDebounce.js';
 
 function dateGroup(unixSeconds: number): string {
@@ -50,9 +50,9 @@ export default function ChatsPage() {
     queryFn: getChats,
   });
 
-  const { data: projects = [] } = useQuery<Project[]>({
-    queryKey: ['projects'],
-    queryFn: getProjects,
+  const { data: projects = [] } = useQuery<Space[]>({
+    queryKey: ['spaces'],
+    queryFn: getSpaces,
     staleTime: 60_000,
   });
   const projectById = Object.fromEntries(projects.map(p => [p.id, p]));
@@ -115,7 +115,7 @@ export default function ChatsPage() {
                   onClick={() => setProjectFilter(null)}
                   className="flex items-center gap-1 rounded-md border border-border bg-muted px-2.5 py-0.5 text-xs font-medium text-foreground hover:bg-accent transition-colors"
                 >
-                  {projectById[projectFilter]?.name ?? 'Project'}
+                  {projectById[projectFilter]?.name ?? 'Space'}
                   <X size={11} className="ml-0.5 text-faint-fg" />
                 </button>
               </div>

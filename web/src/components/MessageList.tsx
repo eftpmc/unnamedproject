@@ -7,7 +7,6 @@ import { ArrowDown, ArrowRight, Check, ChevronDown, ChevronUp, Copy, FileText, G
 import { Link } from 'react-router-dom';
 import ExecutionCard from './ExecutionCard.js';
 import PlanCard from './PlanCard.js';
-import ArtifactPreviewCard from './ArtifactPreviewCard.js';
 import { StatusPill } from '@/components/ui/status-pill';
 import { getToken } from '../lib/auth.js';
 import { cn } from '../lib/utils.js';
@@ -21,11 +20,11 @@ function isGroupExempt(exec: InlineExecution): boolean {
   if (DELEGATE_TOOLS.has(exec.tool)) return true;
   if (exec.status === 'error' || exec.status === 'awaiting_approval') return true;
   if (exec.tool === 'create_plan') return true;
-  if ((exec.tool === 'create_artifact' || exec.tool === 'register_artifact') && exec.status === 'done' && exec.result) {
+  if ((exec.tool === 'create_note' || exec.tool === 'register_file_item') && exec.status === 'done' && exec.result) {
     try {
       const parsed = JSON.parse(exec.result) as Record<string, unknown>;
-      if (parsed.artifact_id && parsed.project_id) return true;
-    } catch { /* not an artifact payload, stays groupable */ }
+      if (parsed.id && parsed.space_id) return true;
+    } catch { /* not an item payload, stays groupable */ }
   }
   return false;
 }
@@ -222,16 +221,20 @@ function renderExecutionCard(exec: InlineExecution) {
   if (exec.status === 'done' && exec.result) {
     try {
       const parsed = JSON.parse(exec.result) as Record<string, unknown>;
-      if ((exec.tool === 'create_artifact' || exec.tool === 'register_artifact') && parsed.artifact_id && parsed.project_id) {
+      if ((exec.tool === 'create_note' || exec.tool === 'register_file_item') && parsed.id && parsed.space_id) {
         return (
-          <ArtifactPreviewCard
+          <Link
             key={exec.executionId}
-            artifactId={parsed.artifact_id as string}
-            projectId={parsed.project_id as string}
-            title={parsed.title as string}
-            kind={parsed.kind as string}
-            mimeType={parsed.mime_type as string | undefined}
-          />
+            to={`/spaces/${parsed.space_id as string}/items/${parsed.id as string}`}
+            className="flex items-center gap-3 rounded-lg border border-border-soft bg-card p-3.5 transition-colors hover:border-border"
+          >
+            <span className="grid size-8 place-items-center rounded-md bg-muted text-muted-foreground"><FileText size={14} /></span>
+            <span className="min-w-0 flex-1">
+              <span className="block truncate text-sm font-medium">{parsed.name as string}</span>
+              <span className="block text-xs capitalize text-muted-foreground">{parsed.type as string}</span>
+            </span>
+            <ArrowRight size={14} className="text-faint-fg" />
+          </Link>
         );
       }
     } catch { /* fall through to ExecutionCard */ }
@@ -429,7 +432,7 @@ export default function MessageList({ messages, executions, streamingIds, sessio
             if (item.event.type === 'plan_created' && item.event.plan_id && item.event.space_id) {
               return (
                 <div key={`event-${item.event.id}`} className="flex max-w-[94%] flex-col sm:max-w-[86%]">
-                  <PlanCard planId={item.event.plan_id} projectId={item.event.space_id} />
+                  <PlanCard planId={item.event.plan_id} spaceId={item.event.space_id} />
                 </div>
               );
             }

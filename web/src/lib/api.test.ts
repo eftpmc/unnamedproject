@@ -10,7 +10,7 @@ vi.mock('./auth', () => ({
 const mockFetch = vi.fn();
 globalThis.fetch = mockFetch;
 
-const { login, getChats, createChat, getChatStatus, sendMessage, getProjectArtifacts, getArtifactContent } = await import('./api');
+const { login, getChats, createChat, getChatStatus, sendMessage, getSpaceItems, getSpacePipelines } = await import('./api');
 
 beforeEach(() => {
   mockFetch.mockReset();
@@ -63,18 +63,15 @@ describe('api', () => {
     expect(opts.headers.Authorization).toBe('Bearer test-token');
   });
 
-  it('getProjectArtifacts fetches the project artifact list', async () => {
-    mockFetch.mockResolvedValueOnce({ ok: true, json: async () => ({ artifacts: [] }) });
-    await getProjectArtifacts('proj-1');
-    expect(mockFetch).toHaveBeenCalledWith('/projects/proj-1/artifacts', expect.any(Object));
+  it('getSpaceItems fetches the unified item list', async () => {
+    mockFetch.mockResolvedValueOnce({ ok: true, json: async () => [] });
+    await getSpaceItems('space-1');
+    expect(mockFetch).toHaveBeenCalledWith('/spaces/space-1/items', expect.any(Object));
   });
 
-  it('getArtifactContent fetches a generic artifact content url', async () => {
-    mockFetch.mockResolvedValueOnce({ ok: true, text: async () => '# Artifact' });
-    const content = await getArtifactContent('/projects/proj-1/research/example.md');
-    expect(content).toBe('# Artifact');
-    expect(mockFetch).toHaveBeenCalledWith('/projects/proj-1/research/example.md', expect.objectContaining({
-      headers: expect.objectContaining({ Authorization: 'Bearer test-token' }),
-    }));
+  it('getSpacePipelines uses the Space-owned route', async () => {
+    mockFetch.mockResolvedValueOnce({ ok: true, json: async () => ({ pipelines: [] }) });
+    await getSpacePipelines('space-1');
+    expect(mockFetch).toHaveBeenCalledWith('/spaces/space-1/pipelines', expect.any(Object));
   });
 });

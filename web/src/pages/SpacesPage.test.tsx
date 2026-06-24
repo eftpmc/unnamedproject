@@ -38,12 +38,12 @@ describe('SpacesPage', () => {
 
   it('shows search input unconditionally', async () => {
     renderPage();
-    expect(await screen.findByPlaceholderText('Filter Spaces...')).toBeInTheDocument();
+    expect(await screen.findByPlaceholderText('Filter Spaces…')).toBeInTheDocument();
   });
 
   it('filters spaces by name', async () => {
     renderPage();
-    const input = await screen.findByPlaceholderText('Filter Spaces...');
+    const input = await screen.findByPlaceholderText('Filter Spaces…');
     fireEvent.change(input, { target: { value: 'word' } });
     expect(screen.getByText('word-counter-cli')).toBeInTheDocument();
     expect(screen.queryByText('remotion-video')).not.toBeInTheDocument();

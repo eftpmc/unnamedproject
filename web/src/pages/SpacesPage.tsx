@@ -79,7 +79,7 @@ export default function SpacesPage() {
               <input
                 value={search}
                 onChange={e => setSearch(e.target.value)}
-                placeholder="Filter Spaces..."
+                placeholder="Filter Spaces…"
                 className="w-full rounded-lg border border-border-soft bg-card py-2 pl-8 pr-3 text-sm placeholder:text-faint-fg focus:border-border focus:outline-none focus:ring-2 focus:ring-ring transition-colors"
               />
             </div>
@@ -130,7 +130,7 @@ export default function SpacesPage() {
           <DialogFooter>
             <Button variant="ghost" onClick={() => setOpen(false)}>Cancel</Button>
             <Button disabled={!name.trim() || createMutation.isPending} onClick={() => createMutation.mutate()}>
-              {createMutation.isPending ? 'Creating...' : 'Create Space'}
+              {createMutation.isPending ? 'Creating…' : 'Create Space'}
             </Button>
           </DialogFooter>
         </DialogContent>

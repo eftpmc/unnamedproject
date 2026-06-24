@@ -4,7 +4,8 @@ import fs from 'fs';
 import path from 'path';
 import { promisify } from 'util';
 import { createSessionEvent, getDb, getSpaceForUser, linkSessionProject, setAgentWorktreeSession, updatePlanStepStatus, maybeCompletePlan, getPlanForStep, getPlanSummaries, getPlanById, getPlanSteps, getExecutionById, getScheduledTasksForUser, createScheduledTask, updateScheduledTask, deleteScheduledTask, resumePlan, getPermissionProfile, createPipeline, getPipelineById, getPipelineTasks, listPipelinesForUser, createPlan, recordAgentUsage, addSessionDiscoveredTools, getSessionDiscoveredTools, upsertMcpRegistryTools, type DbPlan, type DbPlanStep } from '../db/index.js';
-import { getItemsForSpace, getItemById, createNoteItem, createFileItem, createRepoItem, readItemContent, registerFileItem, type SpaceItem } from './items.js';
+import { getItemsForSpace, getItemById, createNoteItem, createFileItem, createRepoItem, readItemContent, registerFileItem, type SpaceItem, type Block } from './items.js';
+import { runCreateItem, runUpdateItem, runReadItem } from '../tools/item_ops.js';
 
 const execAsync = promisify(execCallback);
 import { runAgentPipeline, type AgentPipelineCtx } from './agent_pipeline.js';
@@ -209,6 +210,8 @@ const CORE_TOOLS = new Set([
   'list_connections', 'create_connection',
   // Orchestration
   'create_plan', 'delegate_to_agent',
+  // Item management
+  'create_item', 'update_item', 'read_item',
 ]);
 
 export function resolveToolsForTurn(userId: string, sessionId: string): Anthropic.Tool[] {
@@ -876,18 +879,13 @@ async function dispatchTool(
         break;
       }
       case 'read_item': {
-        const itemSpaceId = toolInput.space_id as string;
-        const item = getItemById(toolInput.item_id as string);
-        if (!getSpaceForUser(itemSpaceId, userId) || !item || item.space_id !== itemSpaceId) {
-          result = `Error: item ${toolInput.item_id} not found in space ${itemSpaceId}`;
-          break;
-        }
-        if (item.type === 'file' && item.mime_type && !item.mime_type.startsWith('text/') && item.mime_type !== 'application/json') {
-          result = `Error: file item ${item.id} is binary (${item.mime_type})`;
-          break;
-        }
-        const content = await readItemContent(item);
-        result = Buffer.isBuffer(content) ? content.toString('utf-8') : content;
+        result = await runReadItem(
+          {
+            space_id: toolInput.space_id as string,
+            item_id: toolInput.item_id as string,
+          },
+          userId,
+        );
         break;
       }
       case 'list_connections': {
@@ -1066,6 +1064,69 @@ async function dispatchTool(
           }
         }
         break;
+      case 'create_item': {
+        result = await runCreateItem(
+          {
+            space_id: toolInput.space_id as string,
+            name: toolInput.name as string,
+            type: toolInput.type as string,
+            template: toolInput.template as string | undefined,
+            blocks: toolInput.blocks as Block[] | undefined,
+            repo_path: toolInput.repo_path as string | undefined,
+            default_branch: toolInput.default_branch as string | undefined,
+            content: toolInput.content as string | undefined,
+          },
+          userId,
+        );
+        if (!result.startsWith('Error:')) {
+          try {
+            const created = JSON.parse(result) as { id?: string; space_id?: string; name?: string; type?: string };
+            if (created.id && created.space_id) {
+              emitSessionEvent(userId, {
+                sessionId,
+                type: 'item_created',
+                title: `Created item: ${created.name ?? created.id}`,
+                body: created.type ?? null,
+                spaceId: created.space_id,
+                itemId: created.id,
+                executionId,
+                metadata: { source: 'agent', itemType: created.type },
+              });
+            }
+          } catch { /* non-fatal */ }
+        }
+        break;
+      }
+      case 'update_item': {
+        result = await runUpdateItem(
+          {
+            space_id: toolInput.space_id as string,
+            item_id: toolInput.item_id as string,
+            blocks: toolInput.blocks as Block[] | undefined,
+            overview_blocks: toolInput.overview_blocks as Block[] | null | undefined,
+            content: toolInput.content as string | undefined,
+          },
+          userId,
+        );
+        if (!result.startsWith('Error:')) {
+          try {
+            const updated = JSON.parse(result) as { id?: string; space_id?: string; name?: string };
+            if (updated.id && updated.space_id) {
+              emitSessionEvent(userId, {
+                sessionId,
+                type: 'item_updated',
+                title: `Updated item: ${updated.name ?? updated.id}`,
+                body: null,
+                spaceId: updated.space_id,
+                itemId: updated.id,
+                executionId,
+                metadata: { source: 'agent' },
+              });
+            }
+          } catch { /* non-fatal */ }
+        }
+        break;
+      }
       case 'update_project':
         result = await updateProject(
           {

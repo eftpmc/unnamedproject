@@ -273,12 +273,45 @@ export const toolDefinitions: Anthropic.Tool[] = [
   },
   {
     name: 'read_item',
-    description: 'Read a note item or text file item. Repository items are not supported by this tool.',
+    description: 'Returns the current content of an item including its blocks (for documents), overview_blocks (for repos), or content (for notes).',
     input_schema: {
       type: 'object',
       properties: {
-        space_id: { type: 'string', description: 'ID of the Space' },
+        space_id: { type: 'string', description: 'ID of the Space containing the item' },
         item_id: { type: 'string', description: 'ID of the item to read' },
+      },
+      required: ['space_id', 'item_id'],
+    },
+  },
+  {
+    name: 'create_item',
+    description: 'Creates an item in a space. For documents: provide template and optional blocks. For repos: provide repo_path. For notes: provide content. File items are not supported (files are upload-only).',
+    input_schema: {
+      type: 'object',
+      properties: {
+        space_id: { type: 'string', description: 'ID of the Space to create the item in' },
+        name: { type: 'string', description: 'Display name for the item' },
+        type: { type: 'string', enum: ['document', 'repo', 'note'], description: 'Item type' },
+        template: { type: 'string', enum: ['document', 'spec', 'kanban', 'report'], description: 'Document template (only for type=document). Omit to use default starter blocks.' },
+        blocks: { type: 'array', description: 'Block array (only for type=document). Omit to use template starter blocks.' },
+        repo_path: { type: 'string', description: 'Absolute filesystem path to the repository (only for type=repo)' },
+        default_branch: { type: 'string', description: 'Default branch name (only for type=repo, optional)' },
+        content: { type: 'string', description: 'Markdown content (only for type=note)' },
+      },
+      required: ['space_id', 'name', 'type'],
+    },
+  },
+  {
+    name: 'update_item',
+    description: 'Updates an item\'s content. Pass blocks to replace a document\'s blocks, overview_blocks to set a repo\'s overview section, or content to update a note. Only pass fields that apply to the item type.',
+    input_schema: {
+      type: 'object',
+      properties: {
+        space_id: { type: 'string', description: 'ID of the Space containing the item' },
+        item_id: { type: 'string', description: 'ID of the item to update' },
+        blocks: { type: 'array', description: 'Full replacement blocks array (document items only)' },
+        overview_blocks: { description: 'Overview blocks array or null to clear (repo items only)' },
+        content: { type: 'string', description: 'Replacement markdown content (note items only)' },
       },
       required: ['space_id', 'item_id'],
     },

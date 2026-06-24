@@ -3,7 +3,17 @@ import path from 'path';
 import { getDataDir, getDb } from '../db/index.js';
 import { newId } from '../lib/ids.js';
 
-export type SpaceItemType = 'repo' | 'file' | 'note';
+export type SpaceItemType = 'repo' | 'file' | 'note' | 'document';
+
+export type Block =
+  | { type: 'text'; content: string }
+  | { type: 'heading'; level: 1 | 2 | 3; text: string }
+  | { type: 'code'; language: string; content: string }
+  | { type: 'table'; headers: string[]; rows: string[][] }
+  | { type: 'image'; url: string; alt?: string; caption?: string }
+  | { type: 'task-list'; tasks: { id: string; text: string; done: boolean }[] }
+  | { type: 'callout'; variant: 'info' | 'warning' | 'success' | 'error'; content: string }
+  | { type: 'file-browser' };
 
 interface SpaceItemRow {
   id: string;
@@ -19,9 +29,10 @@ interface SpaceItemRow {
 export interface SpaceItemBase extends SpaceItemRow {}
 
 export type SpaceItem =
-  | (SpaceItemBase & { type: 'repo'; repo_path: string; default_branch: string | null })
+  | (SpaceItemBase & { type: 'repo'; repo_path: string; default_branch: string | null; overview_blocks: Block[] | null })
   | (SpaceItemBase & { type: 'file'; file_path: string; size_bytes: number | null; mime_type: string | null })
-  | (SpaceItemBase & { type: 'note'; content: string });
+  | (SpaceItemBase & { type: 'note'; content: string })
+  | (SpaceItemBase & { type: 'document'; template: string; blocks: Block[] });
 
 export interface CreateItemInput {
   space_id: string;
@@ -73,6 +84,7 @@ export function createRepoItem(
       type: 'repo',
       repo_path: input.repo_path,
       default_branch: input.default_branch ?? null,
+      overview_blocks: null,
     };
   })();
 }
@@ -103,14 +115,73 @@ export function createNoteItem(input: CreateItemInput & { content: string }): Sp
   })();
 }
 
+export function createDocumentItem(
+  input: CreateItemInput & { template: string; blocks: Block[] },
+): SpaceItem {
+  return getDb().transaction((): SpaceItem => {
+    const base = insertBaseRow(input, 'document');
+    getDb().prepare(
+      'INSERT INTO space_documents (item_id, template, blocks) VALUES (?, ?, ?)',
+    ).run(base.id, input.template, JSON.stringify(input.blocks));
+    return { ...base, type: 'document', template: input.template, blocks: input.blocks };
+  })();
+}
+
+export function updateDocumentBlocks(itemId: string, blocks: Block[]): void {
+  getDb().prepare('UPDATE space_documents SET blocks = ? WHERE item_id = ?').run(JSON.stringify(blocks), itemId);
+}
+
+export function updateRepoOverviewBlocks(itemId: string, blocks: Block[] | null): void {
+  getDb().prepare('UPDATE space_repos SET overview_blocks = ? WHERE item_id = ?').run(
+    blocks ? JSON.stringify(blocks) : null,
+    itemId,
+  );
+}
+
+export function updateTaskDone(itemId: string, taskId: string, done: boolean): boolean {
+  const item = getItemById(itemId);
+  if (!item || item.type !== 'document') return false;
+  let found = false;
+  const updated = item.blocks.map(block => {
+    if (block.type !== 'task-list') return block;
+    const tasks = block.tasks.map(task => {
+      if (task.id !== taskId) return task;
+      found = true;
+      return { ...task, done };
+    });
+    return { ...block, tasks };
+  });
+  if (!found) return false;
+  updateDocumentBlocks(itemId, updated);
+  return true;
+}
+
 function hydrate(row: SpaceItemRow): SpaceItem {
   const db = getDb();
   if (row.type === 'repo') {
     const subtype = db.prepare(
-      'SELECT repo_path, default_branch FROM space_repos WHERE item_id = ?',
-    ).get(row.id) as { repo_path: string; default_branch: string | null } | undefined;
+      'SELECT repo_path, default_branch, overview_blocks FROM space_repos WHERE item_id = ?',
+    ).get(row.id) as { repo_path: string; default_branch: string | null; overview_blocks: string | null } | undefined;
     if (!subtype) throw new Error(`Repo item ${row.id} is missing its subtype row`);
-    return { ...row, type: 'repo', ...subtype };
+    return {
+      ...row,
+      type: 'repo',
+      repo_path: subtype.repo_path,
+      default_branch: subtype.default_branch,
+      overview_blocks: subtype.overview_blocks ? JSON.parse(subtype.overview_blocks) as Block[] : null,
+    };
+  }
+  if (row.type === 'document') {
+    const subtype = db.prepare(
+      'SELECT template, blocks FROM space_documents WHERE item_id = ?',
+    ).get(row.id) as { template: string; blocks: string } | undefined;
+    if (!subtype) throw new Error(`Document item ${row.id} is missing its subtype row`);
+    return {
+      ...row,
+      type: 'document',
+      template: subtype.template,
+      blocks: JSON.parse(subtype.blocks) as Block[],
+    };
   }
   if (row.type === 'file') {
     const subtype = db.prepare(

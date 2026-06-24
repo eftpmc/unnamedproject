@@ -1,4 +1,4 @@
-import { useNavigate, useLocation } from 'react-router-dom';
+import { Link, useNavigate, useLocation } from 'react-router-dom';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import {
   Bell,
@@ -7,7 +7,6 @@ import {
   MessagesSquare,
   Plus,
 } from 'lucide-react';
-import { Link } from 'react-router-dom';
 import { createChat, getActiveSessions, getChats, getSpaces } from '../lib/api.js';
 import { cn, timeAgo } from '../lib/utils.js';
 import { useWsStatus } from '../lib/useWsStatus.js';

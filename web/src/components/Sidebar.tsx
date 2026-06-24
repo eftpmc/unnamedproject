@@ -1,31 +1,17 @@
-import { Link, useLocation, useNavigate } from 'react-router-dom';
+import { useNavigate, useLocation } from 'react-router-dom';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import {
   Bell,
-  Boxes,
-  ChevronDown,
-  CircleGauge,
-  FileStack,
   KeyRound,
   LayoutGrid,
-  ListTodo,
   MessagesSquare,
   Plus,
-  Settings2,
-  Workflow,
 } from 'lucide-react';
-import { createChat, getActiveSessions, getChats, getSpaces, updateChatConfig } from '../lib/api.js';
+import { Link } from 'react-router-dom';
+import { createChat, getActiveSessions, getChats, getSpaces } from '../lib/api.js';
 import { cn, timeAgo } from '../lib/utils.js';
 import { useWsStatus } from '../lib/useWsStatus.js';
 import UserMenu from './UserMenu.js';
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuLabel,
-  DropdownMenuSeparator,
-  DropdownMenuTrigger,
-} from '@/components/ui/dropdown-menu';
 import {
   Sidebar as SidebarRoot,
   SidebarContent,
@@ -77,9 +63,6 @@ export default function Sidebar({
     staleTime: 0,
   });
 
-  const spaceMatch = location.pathname.match(/^\/spaces\/([^/]+)/);
-  const activeSpaceId = spaceMatch?.[1] ?? null;
-  const activeSpace = spaces.find(space => space.id === activeSpaceId) ?? null;
   const activeIds = new Set(activeData?.ids ?? []);
   const activeChatId = location.pathname.startsWith('/c/') ? location.pathname.split('/')[2] : null;
   const spaceById = Object.fromEntries(spaces.map(space => [space.id, space]));
@@ -96,27 +79,19 @@ export default function Sidebar({
 
   async function handleNewChat() {
     const { id } = await createChat();
-    if (activeSpaceId) await updateChatConfig(id, { pinned_space_id: activeSpaceId });
     await queryClient.invalidateQueries({ queryKey: ['chats'] });
     go(`/c/${id}`);
   }
 
-  const isActive = (path: string, exact = false) =>
-    exact ? location.pathname === path : location.pathname === path || location.pathname.startsWith(`${path}/`);
-
   return (
     <SidebarRoot className={cn('border-r border-sidebar-border bg-sidebar', className)} collapsible="offcanvas">
       <SidebarHeader className="gap-3 px-3 py-3">
-        {activeSpace ? (
-          <SpaceSwitcher space={activeSpace} spaces={spaces} onNavigate={go} />
-        ) : (
-          <div className="flex h-9 items-center gap-2 px-1">
-            <div className="grid size-7 shrink-0 place-items-center rounded-lg bg-primary text-xs font-semibold text-primary-foreground shadow-sm">
-              u
-            </div>
-            <span className="text-sm font-semibold">unnamed</span>
+        <div className="flex h-9 items-center gap-2 px-1">
+          <div className="grid size-7 shrink-0 place-items-center rounded-lg bg-primary text-xs font-semibold text-primary-foreground shadow-sm">
+            u
           </div>
-        )}
+          <span className="text-sm font-semibold">unnamed</span>
+        </div>
         <button
           type="button"
           onClick={handleNewChat}
@@ -128,13 +103,9 @@ export default function Sidebar({
       </SidebarHeader>
 
       <SidebarContent>
-        {activeSpace ? (
-          <SpaceNavigation spaceId={activeSpace.id} pathname={location.pathname} onNavigate={closeSidebar} />
-        ) : (
-          <GlobalNavigation pathname={location.pathname} onNavigate={closeSidebar} />
-        )}
+        <GlobalNavigation pathname={location.pathname} onNavigate={closeSidebar} />
 
-        {!activeSpace && chats.length > 0 && (
+        {chats.length > 0 && (
           <SidebarGroup className="min-h-0 flex-1 pt-1">
             <SidebarGroupLabel className="h-6 px-2 text-[11px] font-semibold text-faint-fg">Recent</SidebarGroupLabel>
             <SidebarGroupContent className="min-h-0 flex-1">
@@ -167,7 +138,7 @@ export default function Sidebar({
             </SidebarGroupContent>
           </SidebarGroup>
         )}
-        {(activeSpace || chats.length === 0) && <div className="flex-1" />}
+        {chats.length === 0 && <div className="flex-1" />}
       </SidebarContent>
 
       {!hasLeadAgent && (
@@ -214,41 +185,6 @@ export default function Sidebar({
   );
 }
 
-function SpaceSwitcher({ space, spaces, onNavigate }: { space: Space; spaces: Space[]; onNavigate: (path: string) => void }) {
-  return (
-    <DropdownMenu>
-      <DropdownMenuTrigger asChild>
-        <button
-          type="button"
-          className="flex h-9 w-full items-center gap-2 rounded-lg px-1.5 text-left transition-colors hover:bg-sidebar-accent"
-        >
-          <div className="grid size-7 shrink-0 place-items-center rounded-lg border border-sidebar-border bg-sidebar-accent text-xs font-semibold">
-            {space.name.slice(0, 1).toUpperCase()}
-          </div>
-          <span className="min-w-0 flex-1 truncate text-sm font-semibold">{space.name}</span>
-          <ChevronDown size={14} className="shrink-0 text-faint-fg" />
-        </button>
-      </DropdownMenuTrigger>
-      <DropdownMenuContent className="min-w-56" align="start">
-        <DropdownMenuItem onSelect={() => onNavigate('/spaces')}>
-          <LayoutGrid size={14} />
-          All Spaces
-        </DropdownMenuItem>
-        <DropdownMenuSeparator />
-        <DropdownMenuLabel>Switch Space</DropdownMenuLabel>
-        {spaces.map(candidate => (
-          <DropdownMenuItem key={candidate.id} onSelect={() => onNavigate(`/spaces/${candidate.id}`)}>
-            <span className="grid size-5 place-items-center rounded bg-muted text-[10px] font-semibold">
-              {candidate.name.slice(0, 1).toUpperCase()}
-            </span>
-            <span className="truncate">{candidate.name}</span>
-          </DropdownMenuItem>
-        ))}
-      </DropdownMenuContent>
-    </DropdownMenu>
-  );
-}
-
 function GlobalNavigation({ pathname, onNavigate }: { pathname: string; onNavigate: () => void }) {
   return (
     <SidebarGroup className="pb-1">
@@ -256,35 +192,6 @@ function GlobalNavigation({ pathname, onNavigate }: { pathname: string; onNaviga
         <SidebarMenu>
           <NavItem icon={<MessagesSquare />} label="Chats" href="/chats" active={pathname.startsWith('/chats')} onClick={onNavigate} />
           <NavItem icon={<LayoutGrid />} label="Spaces" href="/spaces" active={pathname.startsWith('/spaces')} onClick={onNavigate} />
-        </SidebarMenu>
-      </SidebarGroupContent>
-    </SidebarGroup>
-  );
-}
-
-function SpaceNavigation({ spaceId, pathname, onNavigate }: { spaceId: string; pathname: string; onNavigate: () => void }) {
-  const base = `/spaces/${spaceId}`;
-  const entries = [
-    { label: 'Overview', href: base, icon: <CircleGauge />, exact: true },
-    { label: 'Chats', href: `${base}/chats`, icon: <MessagesSquare /> },
-    { label: 'Items', href: `${base}/items`, icon: <FileStack /> },
-    { label: 'Plans', href: `${base}/plans`, icon: <ListTodo /> },
-    { label: 'Pipelines', href: `${base}/pipelines`, icon: <Workflow /> },
-    { label: 'Settings', href: `${base}/settings`, icon: <Settings2 /> },
-  ];
-  return (
-    <SidebarGroup className="pb-1">
-      <SidebarGroupLabel className="h-6 px-2 text-[11px] font-semibold text-faint-fg">Space</SidebarGroupLabel>
-      <SidebarGroupContent>
-        <SidebarMenu>
-          {entries.map(entry => (
-            <NavItem
-              key={entry.href}
-              {...entry}
-              active={entry.exact ? pathname === entry.href : pathname === entry.href || pathname.startsWith(`${entry.href}/`)}
-              onClick={onNavigate}
-            />
-          ))}
         </SidebarMenu>
       </SidebarGroupContent>
     </SidebarGroup>
@@ -302,7 +209,6 @@ function NavItem({
   label: string;
   href: string;
   active: boolean;
-  exact?: boolean;
   onClick?: () => void;
 }) {
   return (

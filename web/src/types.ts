@@ -3,7 +3,7 @@ export interface Session {
   title: string | null;
   effort: EffortLevel;
   model: string | null;
-  pinned_project_id: string | null;
+  pinned_space_id: string | null;
   created_at: number;
   updated_at: number;
 }
@@ -20,7 +20,7 @@ export type EffortLevel = 'low' | 'medium' | 'high';
 export interface MessageExecution {
   executionId: string;
   tool: string;
-  projectName?: string;
+  spaceName?: string;
   status: 'pending' | 'running' | 'done' | 'error' | 'awaiting_approval';
   outputLog: string;
   result: string | null;
@@ -46,6 +46,7 @@ export type SessionEventType =
   | 'project_created'
   | 'plan_created'
   | 'artifact_created'
+  | 'item_created'
   | 'approval_requested'
   | 'approval_resolved'
   | 'mcp_required';
@@ -56,15 +57,15 @@ export interface SessionEvent {
   type: SessionEventType;
   title: string;
   body: string | null;
-  project_id: string | null;
+  space_id: string | null;
   plan_id: string | null;
-  artifact_id: string | null;
+  item_id: string | null;
   execution_id: string | null;
   metadata: Record<string, unknown>;
   created_at: number;
 }
 
-export interface SessionProjectLink extends Project {
+export interface SessionSpaceLink extends Space {
   source: 'agent' | 'user' | 'system';
   linked_at: number;
 }
@@ -81,7 +82,7 @@ export interface Message {
 export interface Execution {
   id: string;
   message_id: string;
-  project_id: string;
+  space_id: string;
   tool: string;
   status: 'pending' | 'running' | 'done' | 'error' | 'awaiting_approval';
   output_log: string;
@@ -90,14 +91,34 @@ export interface Execution {
   completed_at: number | null;
 }
 
-export interface Project {
+export interface Space {
   id: string;
   name: string;
   description: string | null;
-  repo_path: string | null;
   enabled_connection_ids: string[];
 }
 
+export type SpaceItemType = 'repo' | 'file' | 'note';
+
+interface SpaceItemBase {
+  id: string;
+  space_id: string;
+  type: SpaceItemType;
+  name: string;
+  source_session_id: string | null;
+  source_plan_id: string | null;
+  source_step_id: string | null;
+  created_at: number;
+}
+
+export type SpaceItem =
+  | (SpaceItemBase & { type: 'repo'; repo_path: string; default_branch: string | null })
+  | (SpaceItemBase & { type: 'file'; file_path: string; size_bytes: number | null; mime_type: string | null })
+  | (SpaceItemBase & { type: 'note'; content: string });
+
+/** @deprecated use Space */
+export type Project = Space;
+/** @deprecated use SpaceItem */
 export interface ProjectArtifact {
   id: string;
   project_id: string;
@@ -162,7 +183,7 @@ export interface WSExecutionUpdate extends WSEvent {
   chunk?: string;
   result?: string;
   tool?: string;
-  projectName?: string;
+  spaceName?: string;
   messageId?: string;
 }
 
@@ -231,6 +252,7 @@ export interface Memory {
 export interface SessionWorktree {
   branch: string;
   project_name: string;
+  space_name?: string;
   files_changed: number;
   ahead: number;
   has_uncommitted: boolean;
@@ -262,7 +284,7 @@ export interface PlanStep {
 
 export interface Plan {
   id: string;
-  project_id: string;
+  space_id: string;
   session_id: string | null;
   title: string;
   status: 'running' | 'done' | 'error' | 'cancelled';

@@ -11,4 +11,13 @@ describe('toolDefinitions', () => {
     expect(toolSearch).toBeDefined();
     expect(toolSearch?.input_schema.required).toContain('query');
   });
+
+  it('only requires properties declared by the tool schema', () => {
+    for (const tool of toolDefinitions) {
+      const properties = tool.input_schema.properties ?? {};
+      for (const required of tool.input_schema.required ?? []) {
+        expect(properties, `${tool.name} requires undeclared property ${required}`).toHaveProperty(required);
+      }
+    }
+  });
 });

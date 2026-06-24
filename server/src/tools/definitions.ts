@@ -7,12 +7,13 @@ export const toolDefinitions: Anthropic.Tool[] = [
     input_schema: {
       type: 'object',
       properties: {
-        project_id: { type: 'string', description: 'ID of the project to work in' },
+        space_id: { type: 'string', description: 'ID of the Space' },
+        item_id: { type: 'string', description: 'ID of the repo item to work in' },
         prompt: { type: 'string', description: 'The task to give Claude Code. Be specific and thorough — it can handle complex, multi-file work. Include context, constraints, and what done looks like.' },
         model: { type: 'string', description: "Optional model override for this run, e.g. 'sonnet', 'opus', 'haiku', 'fable', or a full model ID. Defaults to the CLI's configured default." },
         plan_step_id: { type: 'string', description: 'Plan step ID to link this execution to (from create_plan response)' },
       },
-      required: ['project_id', 'prompt'],
+      required: ['space_id', 'item_id', 'prompt'],
     },
   },
   {
@@ -21,12 +22,13 @@ export const toolDefinitions: Anthropic.Tool[] = [
     input_schema: {
       type: 'object',
       properties: {
-        project_id: { type: 'string', description: 'ID of the project to work in' },
+        space_id: { type: 'string', description: 'ID of the Space' },
+        item_id: { type: 'string', description: 'ID of the repo item to work in' },
         prompt: { type: 'string', description: 'The task to give Codex. Be specific — include codebase context, what to build, and what done looks like.' },
         model: { type: 'string', description: "Optional OpenAI model override for this run, e.g. 'gpt-5'. Defaults to the CLI's configured default." },
         plan_step_id: { type: 'string', description: 'Plan step ID to link this execution to (from create_plan response)' },
       },
-      required: ['project_id', 'prompt'],
+      required: ['space_id', 'item_id', 'prompt'],
     },
   },
   {
@@ -42,12 +44,13 @@ export const toolDefinitions: Anthropic.Tool[] = [
   },
   {
     name: 'run_command',
-    description: 'Run a shell command and return its output. Use for quick operations — running tests, checking git log, listing files, inspecting processes — where spinning up a full coding agent would be wasteful. Runs in the project repo directory when project_id is provided, otherwise in the data directory. Output is capped at 10 KB; use invoke_claude_code for commands that produce large output you need to reason about.',
+    description: 'Run a shell command and return its output. Provide space_id and item_id to run in a specific repo item; omit both to run in the server data directory.',
     input_schema: {
       type: 'object',
       properties: {
         command: { type: 'string', description: 'Shell command to run, e.g. "npm test", "git log --oneline -10"' },
-        project_id: { type: 'string', description: 'Optional project to run the command in. Uses the project repo_path as working directory.' },
+        space_id: { type: 'string', description: 'Optional Space containing the repo item. Must be paired with item_id.' },
+        item_id: { type: 'string', description: 'Optional repo item to use as the working directory. Must be paired with space_id.' },
         timeout_ms: { type: 'number', description: 'Timeout in milliseconds. Defaults to 30000, max 60000.' },
         plan_step_id: { type: 'string', description: 'Plan step ID to link this execution to (from create_plan response)' },
       },
@@ -60,13 +63,14 @@ export const toolDefinitions: Anthropic.Tool[] = [
     input_schema: {
       type: 'object',
       properties: {
-        project_id: { type: 'string' },
+        space_id: { type: 'string' },
+        item_id: { type: 'string', description: 'Repo item to operate on' },
         op: { type: 'string', enum: ['log', 'diff', 'status', 'add', 'commit', 'push'] },
         message: { type: 'string', description: 'Commit message (for commit op)' },
         branch: { type: 'string', description: "Branch name to push (for push op, defaults to this session's agent branch)" },
         plan_step_id: { type: 'string', description: 'Plan step ID to link this execution to (from create_plan response)' },
       },
-      required: ['project_id', 'op'],
+      required: ['space_id', 'item_id', 'op'],
     },
   },
   {
@@ -75,10 +79,11 @@ export const toolDefinitions: Anthropic.Tool[] = [
     input_schema: {
       type: 'object',
       properties: {
-        project_id: { type: 'string' },
+        space_id: { type: 'string' },
+        item_id: { type: 'string', description: 'Repo item to query' },
         question: { type: 'string', description: 'What to look up in the codebase' },
       },
-      required: ['project_id', 'question'],
+      required: ['space_id', 'item_id', 'question'],
     },
   },
   {
@@ -87,9 +92,10 @@ export const toolDefinitions: Anthropic.Tool[] = [
     input_schema: {
       type: 'object',
       properties: {
-        project_id: { type: 'string' },
+        space_id: { type: 'string' },
+        item_id: { type: 'string', description: 'Repo item whose graph should be rebuilt' },
       },
-      required: ['project_id'],
+      required: ['space_id', 'item_id'],
     },
   },
   {
@@ -144,26 +150,25 @@ export const toolDefinitions: Anthropic.Tool[] = [
   },
   {
     name: 'update_project',
-    description: "Update a project's name, description, or repo path.",
+    description: "Update a Space's name or description.",
     input_schema: {
       type: 'object',
       properties: {
         project_id: { type: 'string' },
         name: { type: 'string', description: 'New project name' },
         description: { type: 'string', description: 'New description' },
-        repo_path: { type: 'string', description: 'New absolute path to the git repo, or null to unlink' },
       },
       required: ['project_id'],
     },
   },
   {
     name: 'delete_project',
-    description: 'Delete a project. Requires user approval. Optionally deletes the project files on disk.',
+    description: 'Delete a Space. Requires user approval. Optionally deletes all linked repository directories from disk.',
     input_schema: {
       type: 'object',
       properties: {
-        project_id: { type: 'string' },
-        delete_files: { type: 'boolean', description: 'Whether to also delete the project repo directory from disk' },
+        project_id: { type: 'string', description: 'Legacy parameter name for the Space ID' },
+        delete_files: { type: 'boolean', description: 'Whether to also delete linked repository directories from disk' },
       },
       required: ['project_id', 'delete_files'],
     },
@@ -174,12 +179,13 @@ export const toolDefinitions: Anthropic.Tool[] = [
     input_schema: {
       type: 'object',
       properties: {
-        project_id: { type: 'string' },
+        space_id: { type: 'string' },
+        item_id: { type: 'string', description: 'Repo item to read from' },
         path: { type: 'string', description: 'Path relative to the workspace root' },
         offset: { type: 'number', description: 'First line to return (1-based). Omit to start from the beginning.' },
         limit: { type: 'number', description: 'Number of lines to return. Omit to return to the end of file.' },
       },
-      required: ['project_id', 'path'],
+      required: ['space_id', 'item_id', 'path'],
     },
   },
   {
@@ -188,13 +194,14 @@ export const toolDefinitions: Anthropic.Tool[] = [
     input_schema: {
       type: 'object',
       properties: {
-        project_id: { type: 'string' },
+        space_id: { type: 'string' },
+        item_id: { type: 'string', description: 'Repo item to search' },
         pattern: { type: 'string', description: 'Regex pattern to search for' },
         path: { type: 'string', description: 'Subdirectory to search within (default: repo root)' },
         file_glob: { type: 'string', description: 'Filename pattern to restrict search (e.g. "*.ts", "*.py"). Optional.' },
         ignore_case: { type: 'boolean', description: 'Case-insensitive search (default false)' },
       },
-      required: ['project_id', 'pattern'],
+      required: ['space_id', 'item_id', 'pattern'],
     },
   },
   {
@@ -203,10 +210,11 @@ export const toolDefinitions: Anthropic.Tool[] = [
     input_schema: {
       type: 'object',
       properties: {
-        project_id: { type: 'string' },
+        space_id: { type: 'string' },
+        item_id: { type: 'string', description: 'Repo item to list' },
         path: { type: 'string', description: 'Path relative to the workspace root (default: repo root)' },
       },
-      required: ['project_id'],
+      required: ['space_id', 'item_id'],
     },
   },
   {
@@ -215,68 +223,64 @@ export const toolDefinitions: Anthropic.Tool[] = [
     input_schema: {
       type: 'object',
       properties: {
-        project_id: { type: 'string' },
+        space_id: { type: 'string' },
+        item_id: { type: 'string', description: 'Repo item to write into' },
         path: { type: 'string', description: 'Path relative to the workspace root' },
         content: { type: 'string', description: 'New file contents' },
         plan_step_id: { type: 'string', description: 'Plan step ID to link this execution to (from create_plan response)' },
       },
-      required: ['project_id', 'path', 'content'],
+      required: ['space_id', 'item_id', 'path', 'content'],
     },
   },
   {
-    name: 'create_artifact',
-    description: 'Create a durable project artifact for an inspectable output such as research, reports, summaries, drafts, test results, screenshots metadata, or other deliverables. Use this when the orchestrator produces an output the user may want to review later in the project Artifacts tab.',
+    name: 'create_note',
+    description: 'Create a durable note item in a Space for research, reports, summaries, drafts, test results, or other text output.',
     input_schema: {
       type: 'object',
       properties: {
-        project_id: { type: 'string', description: 'Project this artifact belongs to' },
-        kind: { type: 'string', description: "Artifact category, e.g. 'research', 'report', 'summary', 'design', 'test_report'." },
-        title: { type: 'string', description: 'Human-readable artifact title' },
-        description: { type: 'string', description: 'Optional short description' },
-        content: { type: 'string', description: 'Text content to store for this artifact' },
-        mime_type: { type: 'string', enum: ['text/markdown', 'text/plain', 'application/json'], description: 'Text MIME type for the artifact content. Defaults to text/markdown.' },
-        status: { type: 'string', enum: ['ready', 'review', 'running', 'error'], description: "Artifact status. Use 'review' when user review is expected." },
-        plan_step_id: { type: 'string', description: 'Plan step ID to link this artifact to, when applicable' },
+        space_id: { type: 'string', description: 'Space that owns the note' },
+        name: { type: 'string', description: 'Human-readable note name' },
+        content: { type: 'string', description: 'Markdown or plain-text note content' },
+        plan_step_id: { type: 'string', description: 'Plan step ID to link this item to, when applicable' },
       },
-      required: ['project_id', 'kind', 'title', 'content'],
+      required: ['space_id', 'name', 'content'],
     },
   },
   {
-    name: 'register_artifact',
-    description: 'Register an existing file from the project repo as a project artifact, making it visible in the Artifacts tab. Use this when a coding agent has produced a file (video, image, PDF, etc.) that should be surfaced as an artifact. Copies the file into the project media store.',
+    name: 'register_file_item',
+    description: 'Copy an existing file into managed storage and register it as a file item in a Space.',
     input_schema: {
       type: 'object',
       properties: {
-        project_id: { type: 'string', description: 'ID of the project' },
+        space_id: { type: 'string', description: 'Space that owns the file item' },
         file_path: { type: 'string', description: 'Absolute path to the file to register' },
-        title: { type: 'string', description: 'Human-readable title (defaults to filename)' },
-        kind: { type: 'string', description: "Artifact kind, e.g. 'media', 'report'. Defaults based on file type." },
+        name: { type: 'string', description: 'Human-readable name (defaults to filename)' },
         plan_step_id: { type: 'string', description: 'Plan step ID to mark done when this step is part of a plan.' },
       },
-      required: ['project_id', 'file_path'],
+      required: ['space_id', 'file_path'],
     },
   },
   {
-    name: 'list_artifacts',
-    description: "List all artifacts for a project — id, kind, title, status, mime_type, and created_at. Use to discover what's been produced before calling read_artifact.",
+    name: 'list_items',
+    description: 'List all repo, file, and note items in a Space, including provenance fields.',
     input_schema: {
       type: 'object',
       properties: {
-        project_id: { type: 'string', description: 'ID of the project' },
+        space_id: { type: 'string', description: 'ID of the Space' },
       },
-      required: ['project_id'],
+      required: ['space_id'],
     },
   },
   {
-    name: 'read_artifact',
-    description: 'Read the text content of a project artifact. Works for text/markdown, text/plain, and application/json artifacts. Get artifact IDs from list_artifacts.',
+    name: 'read_item',
+    description: 'Read a note item or text file item. Repository items are not supported by this tool.',
     input_schema: {
       type: 'object',
       properties: {
-        project_id: { type: 'string', description: 'ID of the project the artifact belongs to' },
-        artifact_id: { type: 'string', description: 'ID of the artifact to read' },
+        space_id: { type: 'string', description: 'ID of the Space' },
+        item_id: { type: 'string', description: 'ID of the item to read' },
       },
-      required: ['project_id', 'artifact_id'],
+      required: ['space_id', 'item_id'],
     },
   },
   {
@@ -285,6 +289,20 @@ export const toolDefinitions: Anthropic.Tool[] = [
     input_schema: {
       type: 'object',
       properties: {},
+    },
+  },
+  {
+    name: 'create_connection',
+    description: "Create a new connection (API key, GitHub token, MCP server, or local model endpoint) from credentials the user gives you in chat. Always requires the user's explicit approval before the credential is stored — you'll see whether they approved or denied. Use purpose 'lead_agent' for the main conversation model, 'claude_code'/'codex' for coding agent auth, 'github' for a GitHub token, 'mcp' for an MCP server, or 'tool' for anything else. For type 'mcp', config needs command (string), and optionally args (array) and env (object). For type 'anthropic'/'openai'/'github', config needs apiKey. For type 'local', config needs baseUrl and modelName, apiKey optional. For lead_agent with type 'openai', config also needs modelName; with type 'local', config needs baseUrl and modelName.",
+    input_schema: {
+      type: 'object',
+      properties: {
+        name: { type: 'string', description: 'Human-readable name for this connection' },
+        type: { type: 'string', enum: ['anthropic', 'openai', 'github', 'mcp', 'local'], description: 'Connection type' },
+        purpose: { type: 'string', enum: ['lead_agent', 'claude_code', 'codex', 'github', 'mcp', 'tool'], description: "What this connection is used for. Defaults to 'tool'." },
+        config: { type: 'object', description: "Credential/config payload, e.g. {\"apiKey\":\"...\"} or {\"command\":\"npx\",\"args\":[...],\"env\":{...}} for mcp." },
+      },
+      required: ['name', 'type', 'config'],
     },
   },
   {
@@ -304,7 +322,7 @@ export const toolDefinitions: Anthropic.Tool[] = [
     input_schema: {
       type: 'object',
       properties: {
-        project_id: { type: 'string', description: 'Filter to chats pinned to this project (optional)' },
+        space_id: { type: 'string', description: 'Filter to chats pinned to this Space (optional)' },
         limit: { type: 'number', description: 'Max chats to return (default 20, max 100)' },
       },
     },
@@ -326,7 +344,7 @@ export const toolDefinitions: Anthropic.Tool[] = [
     input_schema: {
       type: 'object',
       properties: {
-        project_id: { type: 'string', description: 'Project this plan belongs to' },
+        space_id: { type: 'string', description: 'Space this plan belongs to' },
         title: { type: 'string', description: 'Short name for the plan, e.g. "Auth refactor"' },
         steps: {
           type: 'array',
@@ -344,7 +362,7 @@ export const toolDefinitions: Anthropic.Tool[] = [
           },
         },
       },
-      required: ['project_id', 'title', 'steps'],
+      required: ['space_id', 'title', 'steps'],
     },
   },
   {
@@ -365,6 +383,7 @@ export const toolDefinitions: Anthropic.Tool[] = [
     input_schema: {
       type: 'object',
       properties: {
+        space_id: { type: 'string', description: 'Space that owns this pipeline' },
         title: { type: 'string', description: 'Name of the pipeline, e.g. "CI: test and deploy"' },
         description: { type: 'string', description: 'What this pipeline does' },
         tasks: {
@@ -383,7 +402,7 @@ export const toolDefinitions: Anthropic.Tool[] = [
           },
         },
       },
-      required: ['title', 'tasks'],
+      required: ['space_id', 'title', 'tasks'],
     },
   },
   {
@@ -393,21 +412,20 @@ export const toolDefinitions: Anthropic.Tool[] = [
       type: 'object',
       properties: {
         pipeline_id: { type: 'string', description: 'ID of the pipeline to run (from create_pipeline)' },
-        project_id: { type: 'string', description: 'Project to run the pipeline against' },
         title: { type: 'string', description: 'Optional plan title override. Defaults to the pipeline title.' },
         on_error: { type: 'string', enum: ['stop', 'continue'], description: 'Whether to stop on first task error (default: stop)' },
       },
-      required: ['pipeline_id', 'project_id'],
+      required: ['pipeline_id'],
     },
   },
   {
     name: 'delegate_to_agent',
-    description: 'Spawn a focused sub-agent with its own context window to complete a specific task. The sub-agent can read files, search code, write files, and create artifacts, but cannot spawn further agents or create plans. Returns when the sub-agent finishes. Use for self-contained tasks that benefit from a fresh context (e.g. "analyze all API endpoints and write a summary doc").',
+    description: 'Spawn a focused sub-agent with its own context window to complete a specific task. The sub-agent can read files, search code, write files, and create Space items, but cannot spawn further agents or create plans. Returns when the sub-agent finishes. Use for self-contained tasks that benefit from a fresh context.',
     input_schema: {
       type: 'object',
       properties: {
         instructions: { type: 'string', description: 'Clear instructions for what the sub-agent should do and return' },
-        project_id: { type: 'string', description: 'Optional project context for the sub-agent' },
+        space_id: { type: 'string', description: 'Optional Space context for the sub-agent' },
         max_turns: { type: 'integer', description: 'Maximum turns the sub-agent may take (1–50, default 15). Raise for complex multi-step tasks.', minimum: 1, maximum: 50 },
       },
       required: ['instructions'],
@@ -426,13 +444,13 @@ export const toolDefinitions: Anthropic.Tool[] = [
   },
   {
     name: 'list_plans',
-    description: 'List plans for a project — id, title, status, step counts, and timestamps. Use this to survey past plans before deciding whether to create a new one or investigate a failed one.',
+    description: 'List plans for a Space — id, title, status, step counts, and timestamps.',
     input_schema: {
       type: 'object',
       properties: {
-        project_id: { type: 'string', description: 'ID of the project' },
+        space_id: { type: 'string', description: 'ID of the Space' },
       },
-      required: ['project_id'],
+      required: ['space_id'],
     },
   },
   {
@@ -517,7 +535,7 @@ export const toolDefinitions: Anthropic.Tool[] = [
     input_schema: {
       type: 'object',
       properties: {
-        project_id: { type: 'string', description: 'ID of the project to render video for' },
+        space_id: { type: 'string', description: 'ID of the Space to render video for' },
         title: { type: 'string', description: 'Video title' },
         scenes: {
           type: 'array',
@@ -533,7 +551,7 @@ export const toolDefinitions: Anthropic.Tool[] = [
           },
         },
       },
-      required: ['project_id', 'title', 'scenes'],
+      required: ['space_id', 'title', 'scenes'],
     },
   },
 ];

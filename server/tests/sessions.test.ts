@@ -96,7 +96,7 @@ describe('sessions', () => {
       .prepare('INSERT INTO messages (id, session_id, role, content) VALUES (?,?,?,?)')
       .run(messageId, sessionId, 'assistant', 'working');
     getDb()
-      .prepare('INSERT INTO executions (id, message_id, project_id, tool, status) VALUES (?,?,?,?,?)')
+      .prepare('INSERT INTO executions (id, message_id, space_id, tool, status) VALUES (?,?,?,?,?)')
       .run(newId(), messageId, null, 'invoke_claude_code', 'running');
 
     const res = await request(app)

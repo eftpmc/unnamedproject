@@ -80,30 +80,30 @@ describe('buildContext', () => {
   });
 
   it('includes project name and id in project context', () => {
-    const projectId = newId();
+    const spaceId = newId();
     getDb()
-      .prepare('INSERT INTO projects (id, user_id, name, description, enabled_connection_ids) VALUES (?,?,?,?,?)')
-      .run(projectId, userId, 'sandbox-demo', 'A sandbox project', '[]');
-    getDb().prepare('UPDATE sessions SET pinned_project_id = ? WHERE id = ?').run(projectId, sessionId);
+      .prepare('INSERT INTO spaces (id, user_id, name, description, enabled_connection_ids) VALUES (?,?,?,?,?)')
+      .run(spaceId, userId, 'sandbox-demo', 'A sandbox project', '[]');
+    getDb().prepare('UPDATE sessions SET pinned_space_id = ? WHERE id = ?').run(spaceId, sessionId);
 
     const ctx = buildContext(userId, sessionId, DEFAULT_INTENT);
     expect(ctx).toContain('sandbox-demo');
-    expect(ctx).toContain(projectId);
+    expect(ctx).toContain(spaceId);
 
-    getDb().prepare('UPDATE sessions SET pinned_project_id = NULL WHERE id = ?').run(sessionId);
+    getDb().prepare('UPDATE sessions SET pinned_space_id = NULL WHERE id = ?').run(sessionId);
   });
 
   it('project context block does not reference a project type label', () => {
-    const projectId = newId();
+    const spaceId = newId();
     getDb()
-      .prepare('INSERT INTO projects (id, user_id, name, description, enabled_connection_ids) VALUES (?,?,?,?,?)')
-      .run(projectId, userId, 'type-check-project', 'Testing no type label', '[]');
-    getDb().prepare('UPDATE sessions SET pinned_project_id = ? WHERE id = ?').run(projectId, sessionId);
+      .prepare('INSERT INTO spaces (id, user_id, name, description, enabled_connection_ids) VALUES (?,?,?,?,?)')
+      .run(spaceId, userId, 'type-check-project', 'Testing no type label', '[]');
+    getDb().prepare('UPDATE sessions SET pinned_space_id = ? WHERE id = ?').run(spaceId, sessionId);
 
     const ctx = buildContext(userId, sessionId, DEFAULT_INTENT);
     expect(ctx).not.toMatch(/type:\s*(default|video)/);
 
-    getDb().prepare('UPDATE sessions SET pinned_project_id = NULL WHERE id = ?').run(sessionId);
+    getDb().prepare('UPDATE sessions SET pinned_space_id = NULL WHERE id = ?').run(sessionId);
   });
 
   it('includes workspace.md content in project context when file exists', () => {
@@ -111,32 +111,35 @@ describe('buildContext', () => {
     const workspaceContent = '## Goals\n- Build the login flow\n\n## Done\n- DB schema migration';
     fs.writeFileSync(path.join(tmpDir, 'workspace.md'), workspaceContent);
 
-    const projectId = newId();
+    const spaceId = newId();
     getDb()
-      .prepare('INSERT INTO projects (id, user_id, name, repo_path, enabled_connection_ids) VALUES (?,?,?,?,?)')
-      .run(projectId, userId, 'ws-project', tmpDir, '[]');
-    getDb().prepare('UPDATE sessions SET pinned_project_id = ? WHERE id = ?').run(projectId, sessionId);
+      .prepare('INSERT INTO spaces (id, user_id, name, enabled_connection_ids) VALUES (?,?,?,?)')
+      .run(spaceId, userId, 'ws-project', '[]');
+    const itemId = newId();
+    getDb().prepare('INSERT INTO space_items (id, space_id, type, name) VALUES (?,?,?,?)').run(itemId, spaceId, 'repo', 'ws-project');
+    getDb().prepare('INSERT INTO space_repos (item_id, repo_path) VALUES (?,?)').run(itemId, tmpDir);
+    getDb().prepare('UPDATE sessions SET pinned_space_id = ? WHERE id = ?').run(spaceId, sessionId);
 
     const ctx = buildContext(userId, sessionId, DEFAULT_INTENT);
     expect(ctx).toContain('Build the login flow');
     expect(ctx).toContain('DB schema migration');
 
-    getDb().prepare('UPDATE sessions SET pinned_project_id = NULL WHERE id = ?').run(sessionId);
-    getDb().prepare('DELETE FROM projects WHERE id = ?').run(projectId);
+    getDb().prepare('UPDATE sessions SET pinned_space_id = NULL WHERE id = ?').run(sessionId);
+    getDb().prepare('DELETE FROM spaces WHERE id = ?').run(spaceId);
     fs.rmSync(tmpDir, { recursive: true, force: true });
   });
 
-  it('includes workspace.md hint when no file exists', () => {
-    const projectId = newId();
+  it('describes item-based guidance for a Space without a repo', () => {
+    const spaceId = newId();
     getDb()
-      .prepare('INSERT INTO projects (id, user_id, name, repo_path, enabled_connection_ids) VALUES (?,?,?,?,?)')
-      .run(projectId, userId, 'no-ws-project', '/tmp/nonexistent-repo-path', '[]');
-    getDb().prepare('UPDATE sessions SET pinned_project_id = ? WHERE id = ?').run(projectId, sessionId);
+      .prepare('INSERT INTO spaces (id, user_id, name, enabled_connection_ids) VALUES (?,?,?,?)')
+      .run(spaceId, userId, 'no-ws-project', '[]');
+    getDb().prepare('UPDATE sessions SET pinned_space_id = ? WHERE id = ?').run(spaceId, sessionId);
 
     const ctx = buildContext(userId, sessionId, DEFAULT_INTENT);
-    expect(ctx).toContain('workspace.md');
+    expect(ctx).toContain('Create and read note/file items directly');
 
-    getDb().prepare('UPDATE sessions SET pinned_project_id = NULL WHERE id = ?').run(sessionId);
-    getDb().prepare('DELETE FROM projects WHERE id = ?').run(projectId);
+    getDb().prepare('UPDATE sessions SET pinned_space_id = NULL WHERE id = ?').run(sessionId);
+    getDb().prepare('DELETE FROM spaces WHERE id = ?').run(spaceId);
   });
 });

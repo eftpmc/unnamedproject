@@ -547,7 +547,7 @@ final class ChatViewController: UIViewController {
       equalTo: view.safeAreaLayoutGuide.bottomAnchor, constant: -composeFloatingGap)
 
     NSLayoutConstraint.activate([
-      tableView.topAnchor.constraint(equalTo: view.safeAreaLayoutGuide.topAnchor),
+      tableView.topAnchor.constraint(equalTo: view.topAnchor),
       tableView.leadingAnchor.constraint(equalTo: view.leadingAnchor),
       tableView.trailingAnchor.constraint(equalTo: view.trailingAnchor),
       tableView.bottomAnchor.constraint(equalTo: view.bottomAnchor),
@@ -1834,8 +1834,8 @@ private final class ToolEventCell: UITableViewCell {
     badge.layer.cornerCurve = .continuous
     badge.translatesAutoresizingMaskIntoConstraints = false
     NSLayoutConstraint.activate([
-      badge.widthAnchor.constraint(equalToConstant: 26),
-      badge.heightAnchor.constraint(equalToConstant: 26),
+      badge.widthAnchor.constraint(equalToConstant: 24),
+      badge.heightAnchor.constraint(equalToConstant: 24),
     ])
 
     iconView.contentMode = .scaleAspectFit
@@ -1844,8 +1844,8 @@ private final class ToolEventCell: UITableViewCell {
     NSLayoutConstraint.activate([
       iconView.centerXAnchor.constraint(equalTo: badge.centerXAnchor),
       iconView.centerYAnchor.constraint(equalTo: badge.centerYAnchor),
-      iconView.widthAnchor.constraint(equalToConstant: 13),
-      iconView.heightAnchor.constraint(equalToConstant: 13),
+      iconView.widthAnchor.constraint(equalToConstant: 12),
+      iconView.heightAnchor.constraint(equalToConstant: 12),
     ])
 
     nameLabel.font = UIFont.app(forTextStyle: .footnote).withWeight(.medium)
@@ -1943,7 +1943,7 @@ private final class ToolEventCell: UITableViewCell {
     stack.axis = .vertical
     stack.spacing = 10
     stack.isLayoutMarginsRelativeArrangement = true
-    stack.directionalLayoutMargins = NSDirectionalEdgeInsets(top: 11, leading: 13, bottom: 11, trailing: 13)
+    stack.directionalLayoutMargins = NSDirectionalEdgeInsets(top: 7, leading: 10, bottom: 7, trailing: 10)
 
     card.addSubview(stack)
     stack.translatesAutoresizingMaskIntoConstraints = false
@@ -1969,7 +1969,7 @@ private final class ToolEventCell: UITableViewCell {
     if t.contains("github") { return "arrow.triangle.pull" }
     if t.contains("git") { return "arrow.triangle.branch" }
     if t.contains("file") || t.contains("read") || t.contains("write") { return "doc.text" }
-    if t.contains("claude") || t.contains("mcp") || t.contains("agent") { return "sparkles" }
+    if t.contains("claude") || t.contains("mcp") || t.contains("agent") { return "seal" }
     if t.contains("code") || t.contains("project") { return "chevron.left.forwardslash.chevron.right" }
     return "terminal"
   }
@@ -2073,48 +2073,63 @@ private final class ToolEventCell: UITableViewCell {
 
 private final class ToolGroupCell: UITableViewCell {
   static let reuseID = "ToolGroupCell"
-  private let card = UIView()
+  private let pillContainer = UIView()
+  private let iconView = UIImageView()
   private let label = UILabel()
-  private let sublabel = UILabel()
 
   override init(style: UITableViewCell.CellStyle, reuseIdentifier: String?) {
     super.init(style: style, reuseIdentifier: reuseIdentifier)
     backgroundColor = .clear
     selectionStyle = .none
-    card.backgroundColor = AppPalette.card
-    card.layer.borderWidth = 1
-    card.layer.borderColor = AppPalette.borderSoft.cgColor
-    card.layer.cornerRadius = 9
-    card.layer.cornerCurve = .continuous
-    label.font = UIFont.app(forTextStyle: .footnote).withWeight(.medium)
-    sublabel.font = UIFont.app(forTextStyle: .caption2)
-    sublabel.textColor = .secondaryLabel
-    let stack = UIStackView(arrangedSubviews: [label, sublabel])
-    stack.axis = .vertical
-    stack.spacing = 2
-    stack.isLayoutMarginsRelativeArrangement = true
-    stack.directionalLayoutMargins = NSDirectionalEdgeInsets(top: 9, leading: 12, bottom: 9, trailing: 12)
-    card.addSubview(stack)
-    stack.translatesAutoresizingMaskIntoConstraints = false
-    contentView.addSubview(card)
-    card.translatesAutoresizingMaskIntoConstraints = false
+
+    pillContainer.backgroundColor = AppPalette.muted
+    pillContainer.layer.cornerRadius = 10
+    pillContainer.layer.cornerCurve = .continuous
+    pillContainer.translatesAutoresizingMaskIntoConstraints = false
+
+    iconView.image = UIImage(systemName: "chevron.right.2")
+    iconView.tintColor = .secondaryLabel
+    iconView.contentMode = .scaleAspectFit
+    iconView.translatesAutoresizingMaskIntoConstraints = false
     NSLayoutConstraint.activate([
-      stack.leadingAnchor.constraint(equalTo: card.leadingAnchor),
-      stack.trailingAnchor.constraint(equalTo: card.trailingAnchor),
-      stack.topAnchor.constraint(equalTo: card.topAnchor),
-      stack.bottomAnchor.constraint(equalTo: card.bottomAnchor),
-      card.leadingAnchor.constraint(equalTo: contentView.leadingAnchor, constant: 16),
-      card.trailingAnchor.constraint(equalTo: contentView.trailingAnchor, constant: -16),
-      card.topAnchor.constraint(equalTo: contentView.topAnchor, constant: 4),
-      card.bottomAnchor.constraint(equalTo: contentView.bottomAnchor, constant: -4),
+      iconView.widthAnchor.constraint(equalToConstant: 11),
+      iconView.heightAnchor.constraint(equalToConstant: 11),
+    ])
+
+    label.font = UIFont.app(forTextStyle: .caption1)
+    label.textColor = .secondaryLabel
+    label.numberOfLines = 1
+
+    let row = UIStackView(arrangedSubviews: [iconView, label])
+    row.axis = .horizontal
+    row.alignment = .center
+    row.spacing = 5
+    row.isLayoutMarginsRelativeArrangement = true
+    row.directionalLayoutMargins = NSDirectionalEdgeInsets(top: 5, leading: 10, bottom: 5, trailing: 10)
+    row.translatesAutoresizingMaskIntoConstraints = false
+
+    pillContainer.addSubview(row)
+    contentView.addSubview(pillContainer)
+    NSLayoutConstraint.activate([
+      row.leadingAnchor.constraint(equalTo: pillContainer.leadingAnchor),
+      row.trailingAnchor.constraint(equalTo: pillContainer.trailingAnchor),
+      row.topAnchor.constraint(equalTo: pillContainer.topAnchor),
+      row.bottomAnchor.constraint(equalTo: pillContainer.bottomAnchor),
+      pillContainer.leadingAnchor.constraint(equalTo: contentView.leadingAnchor, constant: 16),
+      pillContainer.topAnchor.constraint(equalTo: contentView.topAnchor, constant: 3),
+      pillContainer.bottomAnchor.constraint(equalTo: contentView.bottomAnchor, constant: -3),
     ])
   }
 
   required init?(coder: NSCoder) { fatalError() }
 
   func configure(with events: [ToolEvent]) {
-    label.text = "Ran \(events.count) tools"
-    sublabel.text = events.map { $0.tool.replacingOccurrences(of: "_", with: " ") }.prefix(3).joined(separator: " · ")
+    let names = events.prefix(3).map { event -> String in
+      let stripped = event.tool.hasPrefix("invoke_") ? String(event.tool.dropFirst(7)) : event.tool
+      return stripped.split(separator: "_").map { $0.capitalized }.joined(separator: " ")
+    }
+    let overflow = events.count > 3 ? " · +\(events.count - 3) more" : ""
+    label.text = "Ran \(events.count) tools · \(names.joined(separator: " · "))\(overflow)"
   }
 }
 

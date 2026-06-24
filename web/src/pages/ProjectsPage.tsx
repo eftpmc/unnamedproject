@@ -32,18 +32,15 @@ function ProjectCard({ project }: { project: Project }) {
     queryFn: getChats,
     staleTime: 60_000,
   });
-  const chatCount = allChats.filter(c => c.pinned_project_id === project.id).length;
+  const chatCount = allChats.filter(c => c.pinned_space_id === project.id).length;
   const runningCount = plans.filter(p => p.status === 'running').length;
 
   return (
-    <button type="button" aria-label={`Open project: ${project.name}`} className="block h-full w-full rounded-lg text-left" onClick={() => navigate(`/projects/${project.id}`)}>
+    <button type="button" aria-label={`Open project: ${project.name}`} className="block h-full w-full rounded-lg text-left" onClick={() => navigate(`/spaces/${project.id}`)}>
       <Surface interactive className="flex h-full flex-col gap-2.5 rounded-lg p-4">
         <div className="flex items-start justify-between gap-2.5">
           <div className="flex min-w-0 flex-1 items-center gap-2.5">
-            {project.repo_path
-              ? <FolderGit2 size={16} className="shrink-0 text-muted-foreground" />
-              : <FileText size={16} className="shrink-0 text-muted-foreground" />
-            }
+            <FolderGit2 size={16} className="shrink-0 text-muted-foreground" />
             <span className="truncate text-sm font-semibold tracking-tight text-foreground">{project.name}</span>
           </div>
           {runningCount > 0 && (
@@ -57,7 +54,7 @@ function ProjectCard({ project }: { project: Project }) {
           <p className="line-clamp-2 text-[13px] leading-relaxed text-muted-foreground">{project.description}</p>
         )}
         <div className="flex flex-wrap items-center gap-x-2 gap-y-1 text-[11px] text-faint-fg">
-          <span>{project.repo_path ? 'code repo' : 'doc project'}</span>
+          <span>space</span>
           {caps?.has_graph && (
             <span className="flex items-center gap-1">
               <span className="text-border">·</span>

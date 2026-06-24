@@ -1,4 +1,4 @@
-import { rememberFact, forgetFact, recallAll, projectNameFor, type MemoryType, type MemoryEntry } from '../services/memory.js';
+import { rememberFact, forgetFact, recallAll, spaceNameFor, type MemoryType, type MemoryEntry } from '../services/memory.js';
 
 const TYPES: MemoryType[] = ['user', 'feedback', 'project', 'reference'];
 
@@ -8,7 +8,7 @@ function isMemoryType(value: unknown): value is MemoryType {
 
 export function formatEntry(userId: string, e: MemoryEntry): string {
   const label = e.type === 'project'
-    ? `[project: ${projectNameFor(userId, e.project_id) ?? e.project_id}]`
+    ? `[project: ${spaceNameFor(userId, e.space_id) ?? e.space_id}]`
     : `[${e.type}]`;
   return `${label} ${e.key}: ${e.value}`;
 }

@@ -1,7 +1,7 @@
 import { describe, it, expect, beforeAll } from 'vitest';
 import fs from 'fs';
 import { initDb, getDb } from '../../src/db/index.js';
-import { rememberFact, recallFact, forgetFact, recallAll, projectNameFor, recallRelevant } from '../../src/services/memory.js';
+import { rememberFact, recallFact, forgetFact, recallAll, spaceNameFor, recallRelevant } from '../../src/services/memory.js';
 import { newId } from '../../src/lib/ids.js';
 import type { Intent } from '../../src/services/intent.js';
 
@@ -54,20 +54,20 @@ describe('memory', () => {
     expect(forgetFact(userId, 'user', 'temp_fact')).toBe(false);
   });
 
-  it('stores project-linked entries with a project_id', () => {
-    const projectId = newId();
-    getDb().prepare('INSERT INTO projects (id, user_id, name, enabled_connection_ids) VALUES (?,?,?,?)')
-      .run(projectId, userId, 'demo-project', '[]');
+  it('stores space-linked entries with a space_id', () => {
+    const spaceId = newId();
+    getDb().prepare('INSERT INTO spaces (id, user_id, name, enabled_connection_ids) VALUES (?,?,?,?)')
+      .run(spaceId, userId, 'demo-space', '[]');
 
-    rememberFact(userId, 'project', 'auth_status', 'blocked on legal review', projectId);
+    rememberFact(userId, 'project', 'auth_status', 'blocked on legal review', spaceId);
     const all = recallAll(userId, 'project');
     const entry = all.find(e => e.key === 'auth_status');
-    expect(entry?.project_id).toBe(projectId);
-    expect(projectNameFor(userId, projectId)).toBe('demo-project');
+    expect(entry?.space_id).toBe(spaceId);
+    expect(spaceNameFor(userId, spaceId)).toBe('demo-space');
   });
 
-  it('projectNameFor returns null for null project_id', () => {
-    expect(projectNameFor(userId, null)).toBeNull();
+  it('spaceNameFor returns null for null space_id', () => {
+    expect(spaceNameFor(userId, null)).toBeNull();
   });
 });
 
@@ -107,7 +107,7 @@ describe('recallRelevant', () => {
 
   it('filters project memories to pinned project when provided', () => {
     const projectId = newId();
-    getDb().prepare('INSERT INTO projects (id, user_id, name, enabled_connection_ids) VALUES (?,?,?,?)').run(projectId, relUserId, `proj-${relUserId}`, '[]');
+    getDb().prepare('INSERT INTO spaces (id, user_id, name, enabled_connection_ids) VALUES (?,?,?,?)').run(projectId, relUserId, `proj-${relUserId}`, '[]');
     rememberFact(relUserId, 'project', 'auth_decision', 'using JWT with RS256', projectId);
     rememberFact(relUserId, 'project', 'other_note', 'unrelated project fact');
 

@@ -136,13 +136,13 @@ function PanelContent({
           <span className="text-[11px] font-medium text-muted-foreground">Project</span>
           <button
             type="button"
-            onClick={() => navigate(`/projects/${project.id}`)}
+            onClick={() => navigate(`/spaces/${project.id}`)}
             className="flex items-center gap-2.5 rounded-lg border border-border-soft bg-card p-3 text-left transition-colors hover:border-border hover:bg-muted/30"
           >
             <span className="size-2 shrink-0 rounded-full bg-success shadow-[0_0_0_3px_color-mix(in_oklch,var(--success)_22%,transparent)]" />
             <div className="min-w-0 flex-1">
               <div className="truncate text-sm font-semibold text-foreground">{project.name}</div>
-              <div className="truncate text-[11px] text-faint-fg">{project.description ?? (project.repo_path ? 'code repo' : 'doc project')}</div>
+              <div className="truncate text-[11px] text-faint-fg">{project.description ?? 'space'}</div>
             </div>
             <ArrowRight size={12} className="shrink-0 text-faint-fg" />
           </button>
@@ -208,7 +208,7 @@ function PanelContent({
             <span className="text-[11px] font-medium text-muted-foreground">Plans</span>
             <button
               type="button"
-              onClick={() => navigate(`/projects/${project.id}/plans`)}
+              onClick={() => navigate(`/spaces/${project.id}/plans`)}
               className="flex items-center gap-0.5 text-[11px] text-faint-fg transition-colors hover:text-muted-foreground"
             >
               All <ArrowRight size={10} />
@@ -219,7 +219,7 @@ function PanelContent({
               <button
                 key={plan.id}
                 type="button"
-                onClick={() => navigate(`/projects/${project.id}/plans/${plan.id}`)}
+                onClick={() => navigate(`/spaces/${project.id}/plans/${plan.id}`)}
                 className="flex items-center gap-2.5 rounded-lg border border-border-soft bg-card p-2.5 text-left transition-colors hover:bg-muted/40"
               >
                 <div className="min-w-0 flex-1">

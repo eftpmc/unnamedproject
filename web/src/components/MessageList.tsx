@@ -426,10 +426,10 @@ export default function MessageList({ messages, executions, streamingIds, sessio
                 </div>
               );
             }
-            if (item.event.type === 'plan_created' && item.event.plan_id && item.event.project_id) {
+            if (item.event.type === 'plan_created' && item.event.plan_id && item.event.space_id) {
               return (
                 <div key={`event-${item.event.id}`} className="flex max-w-[94%] flex-col sm:max-w-[86%]">
-                  <PlanCard planId={item.event.plan_id} projectId={item.event.project_id} />
+                  <PlanCard planId={item.event.plan_id} projectId={item.event.space_id} />
                 </div>
               );
             }

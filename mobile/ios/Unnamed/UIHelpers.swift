@@ -8,7 +8,7 @@ extension Notification.Name {
 
 /// Bridges the web app's design tokens (web/src/index.css) into UIKit dynamic
 /// colors, so native screens read as the same product rather than stock iOS.
-/// Approximated from the web app's oklch tokens — not pixel-exact conversions.
+/// Values are exact OKLCH→sRGB conversions of the web tokens (not hand-eyeballed).
 enum AppPalette {
   private static func dynamic(light: UIColor, dark: UIColor) -> UIColor {
     UIColor { $0.userInterfaceStyle == .dark ? dark : light }
@@ -16,42 +16,42 @@ enum AppPalette {
 
   /// Desaturated indigo accent (web --primary), replaces system blue.
   static let accent = dynamic(
-    light: UIColor(red: 0.36, green: 0.43, blue: 0.74, alpha: 1),
-    dark: UIColor(red: 0.58, green: 0.64, blue: 0.88, alpha: 1)
+    light: UIColor(red: 0.330, green: 0.492, blue: 0.672, alpha: 1),
+    dark: UIColor(red: 0.437, green: 0.636, blue: 0.859, alpha: 1)
   )
   static let accentForeground = dynamic(
-    light: .white,
-    dark: UIColor(red: 0.10, green: 0.11, blue: 0.15, alpha: 1)
+    light: UIColor(red: 0.979, green: 0.988, blue: 0.998, alpha: 1),
+    dark: UIColor(red: 0.047, green: 0.070, blue: 0.104, alpha: 1)
   )
 
   /// Neutral chip surface (web --muted) — used for the user message bubble
   /// and tool icon badges instead of a colored/tinted fill.
   static let muted = dynamic(
-    light: UIColor(red: 0.961, green: 0.965, blue: 0.973, alpha: 1),
-    dark: UIColor(red: 0.137, green: 0.149, blue: 0.192, alpha: 1)
+    light: UIColor(red: 0.951, green: 0.962, blue: 0.974, alpha: 1),
+    dark: UIColor(red: 0.086, green: 0.100, blue: 0.121, alpha: 1)
   )
 
   /// Slightly softer body text for assistant messages (web --fg-soft).
   static let foregroundSoft = dynamic(
-    light: UIColor(red: 0.31, green: 0.32, blue: 0.36, alpha: 1),
-    dark: UIColor(red: 0.79, green: 0.80, blue: 0.83, alpha: 1)
+    light: UIColor(red: 0.294, green: 0.314, blue: 0.344, alpha: 1),
+    dark: UIColor(red: 0.769, green: 0.782, blue: 0.802, alpha: 1)
   )
 
   /// Hairline border (web --border-soft).
   static let borderSoft = dynamic(
-    light: UIColor(red: 0.925, green: 0.929, blue: 0.941, alpha: 1),
+    light: UIColor(red: 0.932, green: 0.943, blue: 0.954, alpha: 1),
     dark: UIColor.white.withAlphaComponent(0.045)
   )
 
   /// Composer card surface (web --card).
   static let card = dynamic(
     light: UIColor.white,
-    dark: UIColor(red: 0.149, green: 0.157, blue: 0.184, alpha: 1)
+    dark: UIColor(red: 0.100, green: 0.116, blue: 0.140, alpha: 1)
   )
 
   /// Composer card border (web --input — more opaque than --border-soft in dark mode).
   static let inputBorder = dynamic(
-    light: UIColor(red: 0.910, green: 0.914, blue: 0.926, alpha: 1),
+    light: UIColor(red: 0.891, green: 0.904, blue: 0.918, alpha: 1),
     dark: UIColor.white.withAlphaComponent(0.18)
   )
 
@@ -60,16 +60,16 @@ enum AppPalette {
   static let codeForeground = UIColor(red: 0xc9 / 255.0, green: 0xd1 / 255.0, blue: 0xd9 / 255.0, alpha: 1)
 
   static let success = dynamic(
-    light: UIColor(red: 0.30, green: 0.62, blue: 0.45, alpha: 1),
-    dark: UIColor(red: 0.52, green: 0.78, blue: 0.62, alpha: 1)
+    light: UIColor(red: 0.271, green: 0.570, blue: 0.450, alpha: 1),
+    dark: UIColor(red: 0.410, green: 0.749, blue: 0.608, alpha: 1)
   )
   static let warning = dynamic(
-    light: UIColor(red: 0.72, green: 0.55, blue: 0.18, alpha: 1),
-    dark: UIColor(red: 0.85, green: 0.70, blue: 0.35, alpha: 1)
+    light: UIColor(red: 0.778, green: 0.577, blue: 0.336, alpha: 1),
+    dark: UIColor(red: 0.881, green: 0.675, blue: 0.433, alpha: 1)
   )
   static let destructive = dynamic(
-    light: UIColor(red: 0.75, green: 0.32, blue: 0.30, alpha: 1),
-    dark: UIColor(red: 0.85, green: 0.50, blue: 0.48, alpha: 1)
+    light: UIColor(red: 0.844, green: 0.201, blue: 0.217, alpha: 1),
+    dark: UIColor(red: 0.970, green: 0.364, blue: 0.360, alpha: 1)
   )
 }
 

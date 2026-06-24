@@ -127,7 +127,7 @@ export default function PlanCard({ planId, projectId }: PlanCardProps) {
       </div>
       <div className="border-t border-border-soft px-4 py-2.5">
         <Link
-          to={`/projects/${projectId}/plans/${planId}`}
+          to={`/spaces/${projectId}/plans/${planId}`}
           className="flex items-center gap-1.5 text-xs font-medium text-muted-foreground transition-colors hover:text-foreground"
         >
           View full plan

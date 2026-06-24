@@ -84,10 +84,10 @@ beforeAll(async () => {
 
   // Mirror the real createExecution: insert a row so session_events.execution_id
   // (FK -> executions.id) is satisfied when the agent records project use.
-  createExecutionMock.mockImplementation((_userId: string, msgId: string, projectId: string | null, tool: string) => {
+  createExecutionMock.mockImplementation((_userId: string, msgId: string, spaceId: string | null, tool: string) => {
     const id = newId();
-    getDb().prepare('INSERT INTO executions (id, message_id, project_id, tool, status) VALUES (?,?,?,?,?)')
-      .run(id, msgId, projectId, tool, 'running');
+    getDb().prepare('INSERT INTO executions (id, message_id, space_id, tool, status) VALUES (?,?,?,?,?)')
+      .run(id, msgId, spaceId, tool, 'running');
     return id;
   });
 
@@ -129,8 +129,8 @@ describe('agent', () => {
 
   it('includes available projects in the system prompt', async () => {
     const db = getDb();
-    db.prepare('INSERT INTO projects (id, user_id, name, description, repo_path, enabled_connection_ids) VALUES (?,?,?,?,?,?)')
-      .run(newId(), userId, 'demo', 'Demo project', null, '[]');
+    db.prepare('INSERT INTO spaces (id, user_id, name, description, enabled_connection_ids) VALUES (?,?,?,?,?)')
+      .run(newId(), userId, 'demo', 'Demo project', '[]');
 
     const msgId = newId();
     db.prepare('INSERT INTO messages (id, session_id, role, content) VALUES (?,?,?,?)').run(msgId, sessionId, 'user', 'hi');
@@ -158,8 +158,8 @@ describe('agent', () => {
   it('returns "no repo" error for git_op on a project without repo_path and does not call runGitOp', async () => {
     const db = getDb();
     const projectId = newId();
-    db.prepare('INSERT INTO projects (id, user_id, name, description, repo_path, enabled_connection_ids) VALUES (?,?,?,?,?,?)')
-      .run(projectId, userId, 'norepo', 'No repo project', null, '[]');
+    db.prepare('INSERT INTO spaces (id, user_id, name, description, enabled_connection_ids) VALUES (?,?,?,?,?)')
+      .run(projectId, userId, 'norepo', 'No repo project', '[]');
 
     runGitOpMock.mockClear();
 
@@ -175,7 +175,7 @@ describe('agent', () => {
         finalMessage: async () => ({
           stop_reason: 'tool_use',
           usage: { input_tokens: 10, output_tokens: 5 },
-          content: [{ type: 'tool_use', id: 'tool-1', name: 'git_op', input: { project_id: projectId, op: 'status' } }],
+          content: [{ type: 'tool_use', id: 'tool-1', name: 'git_op', input: { space_id: projectId, item_id: 'missing-item', op: 'status' } }],
         }),
       };
     });
@@ -209,15 +209,15 @@ describe('agent', () => {
       m.role === 'user' && Array.isArray(m.content) && (m.content as { type: string }[]).some(c => c.type === 'tool_result')
     );
     const toolResult = (toolResultMsg.content as { content: string }[])[0].content;
-    expect(toolResult).toBe("Project 'norepo' has no repo. Create a new repo-backed project with create_project (with_repo=true) for this work.");
+    expect(toolResult).toBe("Repo item missing-item not found in Space 'norepo'.");
     expect(toolCallCount).toBe(1);
   });
 
   it('returns "no repo" error for invoke_claude_code on a project without repo_path and does not call invokeClaudeCode', async () => {
     const db = getDb();
     const projectId = newId();
-    db.prepare('INSERT INTO projects (id, user_id, name, description, repo_path, enabled_connection_ids) VALUES (?,?,?,?,?,?)')
-      .run(projectId, userId, 'norepo2', 'No repo project 2', null, '[]');
+    db.prepare('INSERT INTO spaces (id, user_id, name, description, enabled_connection_ids) VALUES (?,?,?,?,?)')
+      .run(projectId, userId, 'norepo2', 'No repo project 2', '[]');
 
     invokeClaudeCodeMock.mockClear();
 
@@ -231,7 +231,7 @@ describe('agent', () => {
         finalMessage: async () => ({
           stop_reason: 'tool_use',
           usage: { input_tokens: 10, output_tokens: 5 },
-          content: [{ type: 'tool_use', id: 'tool-2', name: 'invoke_claude_code', input: { project_id: projectId, prompt: 'fix bug' } }],
+          content: [{ type: 'tool_use', id: 'tool-2', name: 'invoke_claude_code', input: { space_id: projectId, item_id: 'missing-item', prompt: 'fix bug' } }],
         }),
       };
     });
@@ -265,7 +265,7 @@ describe('agent', () => {
       m.role === 'user' && Array.isArray(m.content) && (m.content as { type: string }[]).some(c => c.type === 'tool_result')
     );
     const toolResult = (toolResultMsg.content as { content: string }[])[0].content;
-    expect(toolResult).toBe("Project 'norepo2' has no repo. Create a new repo-backed project with create_project (with_repo=true) for this work.");
+    expect(toolResult).toBe("Repo item missing-item not found in Space 'norepo2'.");
   });
 
   it('renders "No memories stored yet." in the system prompt when memory is empty', async () => {
@@ -293,13 +293,13 @@ describe('agent', () => {
     const { rememberFact } = await import('../../src/services/memory.js');
 
     const projectId = newId();
-    db.prepare('INSERT INTO projects (id, user_id, name, description, repo_path, enabled_connection_ids) VALUES (?,?,?,?,?,?)')
-      .run(projectId, userId, 'memdemo', 'Demo project', null, '[]');
+    db.prepare('INSERT INTO spaces (id, user_id, name, description, enabled_connection_ids) VALUES (?,?,?,?,?)')
+      .run(projectId, userId, 'memdemo', 'Demo project', '[]');
 
     rememberFact(userId, 'feedback', 'package_manager', 'use pnpm, not npm');
     rememberFact(userId, 'project', 'status', 'auth refactor blocked on legal review', projectId);
 
-    db.prepare('UPDATE sessions SET pinned_project_id = ? WHERE id = ?').run(projectId, sessionId);
+    db.prepare('UPDATE sessions SET pinned_space_id = ? WHERE id = ?').run(projectId, sessionId);
 
     const msgId = newId();
     db.prepare('INSERT INTO messages (id, session_id, role, content) VALUES (?,?,?,?)').run(msgId, sessionId, 'user', 'hi');
@@ -329,11 +329,11 @@ describe('agent', () => {
     expect(call.system).toContain(recentSessionId);
   });
 
-  it('creates a project artifact from the create_artifact tool', async () => {
+  it('creates a note item from the create_note tool', async () => {
     const db = getDb();
     const projectId = newId();
-    db.prepare('INSERT INTO projects (id, user_id, name, description, repo_path, enabled_connection_ids) VALUES (?,?,?,?,?,?)')
-      .run(projectId, userId, 'artifactdemo', 'Artifact demo', null, '[]');
+    db.prepare('INSERT INTO spaces (id, user_id, name, description, enabled_connection_ids) VALUES (?,?,?,?,?)')
+      .run(projectId, userId, 'artifactdemo', 'Artifact demo', '[]');
 
     streamMock.mockImplementationOnce(() => {
       const listeners: Record<string, ((...args: unknown[]) => void)[]> = {};
@@ -347,14 +347,12 @@ describe('agent', () => {
           usage: { input_tokens: 10, output_tokens: 5 },
           content: [{
             type: 'tool_use',
-            id: 'tool-artifact',
-            name: 'create_artifact',
+            id: 'tool-note',
+            name: 'create_note',
             input: {
-              project_id: projectId,
-              kind: 'research',
-              title: 'Research Summary',
+              space_id: projectId,
+              name: 'Research Summary',
               content: '# Findings\n\nUseful details.',
-              status: 'review',
             },
           }],
         }),
@@ -384,22 +382,23 @@ describe('agent', () => {
 
     await runAgentTurn(userId, sessionId, msgId);
 
-    const artifact = db.prepare('SELECT kind, title, status, mime_type, path FROM artifacts WHERE project_id = ?')
-      .get(projectId) as { kind: string; title: string; status: string; mime_type: string; path: string };
-    expect(artifact).toMatchObject({
-      kind: 'research',
-      title: 'Research Summary',
-      status: 'review',
-      mime_type: 'text/markdown',
-    });
-    expect(artifact.path).toMatch(/^artifacts\/.+\.md$/);
+    const note = db.prepare(`
+      SELECT item.name, note.content
+      FROM space_items item
+      JOIN space_notes note ON note.item_id = item.id
+      WHERE item.space_id = ? AND item.type = 'note'
+    `).get(projectId) as { name: string; content: string };
+    expect(note).toEqual({ name: 'Research Summary', content: '# Findings\n\nUseful details.' });
   });
 
   it('runs side-effecting tool calls sequentially in model order', async () => {
     const db = getDb();
     const projectId = newId();
-    db.prepare('INSERT INTO projects (id, user_id, name, description, repo_path, enabled_connection_ids) VALUES (?,?,?,?,?,?)')
-      .run(projectId, userId, 'ordered-git', 'Ordered git project', '/tmp/repo', '[]');
+    db.prepare('INSERT INTO spaces (id, user_id, name, description, enabled_connection_ids) VALUES (?,?,?,?,?)')
+      .run(projectId, userId, 'ordered-git', 'Ordered git project', '[]');
+    const repoItemId = newId();
+    db.prepare('INSERT INTO space_items (id, space_id, type, name, created_at) VALUES (?,?,?,?,?)').run(repoItemId, projectId, 'repo', 'ordered-git', Math.floor(Date.now() / 1000));
+    db.prepare('INSERT INTO space_repos (item_id, repo_path, default_branch) VALUES (?,?,?)').run(repoItemId, '/tmp/repo', null);
 
     const events: string[] = [];
     runGitOpMock.mockReset();
@@ -421,8 +420,8 @@ describe('agent', () => {
         stop_reason: 'tool_use',
         usage: { input_tokens: 10, output_tokens: 5 },
         content: [
-          { type: 'tool_use', id: 'tool-add', name: 'git_op', input: { project_id: projectId, op: 'add' } },
-          { type: 'tool_use', id: 'tool-commit', name: 'git_op', input: { project_id: projectId, op: 'commit', message: 'test' } },
+          { type: 'tool_use', id: 'tool-add', name: 'git_op', input: { space_id: projectId, item_id: repoItemId, op: 'add' } },
+          { type: 'tool_use', id: 'tool-commit', name: 'git_op', input: { space_id: projectId, item_id: repoItemId, op: 'commit', message: 'test' } },
         ],
       }),
     }));
@@ -454,8 +453,11 @@ describe('agent', () => {
     const events: string[] = [];
     const db = getDb();
     const projectId = newId();
-    db.prepare('INSERT INTO projects (id, user_id, name, description, repo_path, enabled_connection_ids) VALUES (?,?,?,?,?,?)')
-      .run(projectId, userId, 'parallel-reads', 'Parallel reads project', '/tmp/repo', '[]');
+    db.prepare('INSERT INTO spaces (id, user_id, name, description, enabled_connection_ids) VALUES (?,?,?,?,?)')
+      .run(projectId, userId, 'parallel-reads', 'Parallel reads project', '[]');
+    const repoItemId = newId();
+    db.prepare('INSERT INTO space_items (id, space_id, type, name, created_at) VALUES (?,?,?,?,?)').run(repoItemId, projectId, 'repo', 'parallel-reads', Math.floor(Date.now() / 1000));
+    db.prepare('INSERT INTO space_repos (item_id, repo_path, default_branch) VALUES (?,?,?)').run(repoItemId, '/tmp/repo', null);
 
     readFileMock.mockReset();
     readFileMock.mockImplementationOnce(async () => {
@@ -476,8 +478,8 @@ describe('agent', () => {
         stop_reason: 'tool_use',
         usage: { input_tokens: 10, output_tokens: 5 },
         content: [
-          { type: 'tool_use', id: 'tool-read-a', name: 'read_file', input: { project_id: projectId, path: 'a.txt' } },
-          { type: 'tool_use', id: 'tool-read-b', name: 'read_file', input: { project_id: projectId, path: 'b.txt' } },
+          { type: 'tool_use', id: 'tool-read-a', name: 'read_file', input: { space_id: projectId, item_id: repoItemId, path: 'a.txt' } },
+          { type: 'tool_use', id: 'tool-read-b', name: 'read_file', input: { space_id: projectId, item_id: repoItemId, path: 'b.txt' } },
         ],
       }),
     }));
@@ -559,8 +561,11 @@ describe('agent', () => {
   it('still dispatches the tool when project bookkeeping (session event) fails', async () => {
     const db = getDb();
     const projectId = newId();
-    db.prepare('INSERT INTO projects (id, user_id, name, description, repo_path, enabled_connection_ids) VALUES (?,?,?,?,?,?)')
-      .run(projectId, userId, 'bookkeeping-fail', 'Bookkeeping fail project', '/tmp/repo', '[]');
+    db.prepare('INSERT INTO spaces (id, user_id, name, description, enabled_connection_ids) VALUES (?,?,?,?,?)')
+      .run(projectId, userId, 'bookkeeping-fail', 'Bookkeeping fail project', '[]');
+    const repoItemId = newId();
+    db.prepare('INSERT INTO space_items (id, space_id, type, name, created_at) VALUES (?,?,?,?,?)').run(repoItemId, projectId, 'repo', 'bookkeeping-fail', Math.floor(Date.now() / 1000));
+    db.prepare('INSERT INTO space_repos (item_id, repo_path, default_branch) VALUES (?,?,?)').run(repoItemId, '/tmp/repo', null);
 
     // Return an execution id with no backing row. noteProjectUse -> createSessionEvent
     // then violates the execution_id FK and throws — but that bookkeeping failure
@@ -577,7 +582,7 @@ describe('agent', () => {
       finalMessage: async () => ({
         stop_reason: 'tool_use',
         usage: { input_tokens: 10, output_tokens: 5 },
-        content: [{ type: 'tool_use', id: 'tool-bk', name: 'git_op', input: { project_id: projectId, op: 'add' } }],
+        content: [{ type: 'tool_use', id: 'tool-bk', name: 'git_op', input: { space_id: projectId, item_id: repoItemId, op: 'add' } }],
       }),
     }));
     streamMock.mockImplementationOnce(() => {
@@ -608,8 +613,11 @@ describe('agent', () => {
   it('passes onSessionId callback to invokeClaudeCode which fires eagerly', async () => {
     const db = getDb();
     const projectId = newId();
-    db.prepare('INSERT INTO projects (id, user_id, name, description, repo_path, enabled_connection_ids) VALUES (?,?,?,?,?,?)')
-      .run(projectId, userId, 'eager-session', 'Eager session test', '/tmp/repo', '[]');
+    db.prepare('INSERT INTO spaces (id, user_id, name, description, enabled_connection_ids) VALUES (?,?,?,?,?)')
+      .run(projectId, userId, 'eager-session', 'Eager session test', '[]');
+    const repoItemId = newId();
+    db.prepare('INSERT INTO space_items (id, space_id, type, name, created_at) VALUES (?,?,?,?,?)').run(repoItemId, projectId, 'repo', 'eager-session', Math.floor(Date.now() / 1000));
+    db.prepare('INSERT INTO space_repos (item_id, repo_path, default_branch) VALUES (?,?,?)').run(repoItemId, '/tmp/repo', null);
 
     const capturedIds: string[] = [];
     invokeClaudeCodeMock.mockImplementationOnce(
@@ -627,7 +635,7 @@ describe('agent', () => {
       finalMessage: async () => ({
         stop_reason: 'tool_use',
         usage: { input_tokens: 10, output_tokens: 5 },
-        content: [{ type: 'tool_use', id: 'tool-cc', name: 'invoke_claude_code', input: { project_id: projectId, prompt: 'fix bug' } }],
+        content: [{ type: 'tool_use', id: 'tool-cc', name: 'invoke_claude_code', input: { space_id: projectId, item_id: repoItemId, prompt: 'fix bug' } }],
       }),
     }));
     streamMock.mockImplementationOnce(() => {
@@ -712,16 +720,16 @@ describe('agent', () => {
   it('includes errors array in run_plan tool result when steps fail', async () => {
     const db = getDb();
     const projectId = newId();
-    db.prepare('INSERT INTO projects (id, user_id, name, description, repo_path, enabled_connection_ids) VALUES (?,?,?,?,?,?)')
-      .run(projectId, userId, 'plan-errors', 'Plan errors test', null, '[]');
+    db.prepare('INSERT INTO spaces (id, user_id, name, description, enabled_connection_ids) VALUES (?,?,?,?,?)')
+      .run(projectId, userId, 'plan-errors', 'Plan errors test', '[]');
 
     // Create a plan with one errored step
     const planId = newId();
     const stepId = newId();
     const execId = newId();
-    db.prepare('INSERT INTO plans (id, project_id, session_id, title, status) VALUES (?,?,?,?,?)')
+    db.prepare('INSERT INTO plans (id, space_id, session_id, title, status) VALUES (?,?,?,?,?)')
       .run(planId, projectId, sessionId, 'Test Plan', 'error');
-    db.prepare('INSERT INTO executions (id, message_id, project_id, tool, status, result) VALUES (?,?,?,?,?,?)')
+    db.prepare('INSERT INTO executions (id, message_id, space_id, tool, status, result) VALUES (?,?,?,?,?,?)')
       .run(execId, null, projectId, 'subagent', 'error', 'Exit 1: jest not found — full error message here');
     db.prepare('INSERT INTO plan_steps (id, plan_id, title, agent, position, status, execution_id) VALUES (?,?,?,?,?,?,?)')
       .run(stepId, planId, 'Run tests', 'subagent', 0, 'error', execId);
@@ -766,14 +774,14 @@ describe('agent', () => {
     });
   });
 
-  it('returns the create_artifact success result even when its session event fails', async () => {
+  it('returns the create_note success result even when its session event fails', async () => {
     const db = getDb();
     const projectId = newId();
-    db.prepare('INSERT INTO projects (id, user_id, name, description, repo_path, enabled_connection_ids) VALUES (?,?,?,?,?,?)')
-      .run(projectId, userId, 'artifact-bk-fail', 'Artifact bookkeeping fail', null, '[]');
+    db.prepare('INSERT INTO spaces (id, user_id, name, description, enabled_connection_ids) VALUES (?,?,?,?,?)')
+      .run(projectId, userId, 'artifact-bk-fail', 'Artifact bookkeeping fail', '[]');
 
-    // Bad execution id -> the artifact_created session event violates the FK and
-    // throws, but the artifact was already created and the tool must still succeed.
+    // Bad execution id -> the item_created session event violates the FK and
+    // throws, but the note was already created and the tool must still succeed.
     createExecutionMock.mockImplementationOnce(() => 'exec-missing-artifact');
     const errSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
 
@@ -784,9 +792,9 @@ describe('agent', () => {
         usage: { input_tokens: 10, output_tokens: 5 },
         content: [{
           type: 'tool_use',
-          id: 'tool-artifact-bk',
-          name: 'create_artifact',
-          input: { project_id: projectId, kind: 'research', title: 'Resilient Report', content: '# Body', status: 'review' },
+          id: 'tool-note-bk',
+          name: 'create_note',
+          input: { space_id: projectId, name: 'Resilient Report', content: '# Body' },
         }],
       }),
     }));
@@ -809,9 +817,9 @@ describe('agent', () => {
 
     await runAgentTurn(userId, sessionId, msgId);
 
-    // Artifact persisted...
-    const artifact = db.prepare('SELECT title FROM artifacts WHERE project_id = ?').get(projectId) as { title: string } | undefined;
-    expect(artifact?.title).toBe('Resilient Report');
+    // Note persisted...
+    const item = db.prepare("SELECT name FROM space_items WHERE space_id = ? AND type = 'note'").get(projectId) as { name: string } | undefined;
+    expect(item?.name).toBe('Resilient Report');
 
     // ...and the tool reported success, not an error masked by the failed event.
     const secondCall = streamMock.mock.calls[streamMock.mock.calls.length - 1][0];
@@ -819,7 +827,7 @@ describe('agent', () => {
       m.role === 'user' && Array.isArray(m.content) && (m.content as { type: string }[]).some(c => c.type === 'tool_result')
     );
     const toolResult = (toolResultMsg.content as { content: string }[])[0].content;
-    expect(toolResult).toContain('artifact_id');
+    expect(toolResult).toContain('"type":"note"');
     expect(toolResult).not.toContain('Error');
     expect(errSpy).toHaveBeenCalledWith('emitSessionEvent failed (non-fatal):', expect.anything());
     errSpy.mockRestore();
@@ -828,15 +836,15 @@ describe('agent', () => {
   it('generate_video returns structured JSON with execution_id', async () => {
     const db = getDb();
     const projectId = newId();
-    db.prepare('INSERT INTO projects (id, user_id, name, description, repo_path, enabled_connection_ids) VALUES (?,?,?,?,?,?)')
-      .run(projectId, userId, 'video-json', 'Video JSON test', null, '[]');
+    db.prepare('INSERT INTO spaces (id, user_id, name, description, enabled_connection_ids) VALUES (?,?,?,?,?)')
+      .run(projectId, userId, 'video-json', 'Video JSON test', '[]');
 
     streamMock.mockImplementationOnce(() => ({
       on: () => ({ on: () => ({ finalMessage: async () => ({}) }) }),
       finalMessage: async () => ({
         stop_reason: 'tool_use',
         usage: { input_tokens: 10, output_tokens: 5 },
-        content: [{ type: 'tool_use', id: 'tool-vid', name: 'generate_video', input: { project_id: projectId, title: 'Test', scenes: [{ text: 'hello', durationInSeconds: 2 }] } }],
+        content: [{ type: 'tool_use', id: 'tool-vid', name: 'generate_video', input: { space_id: projectId, title: 'Test', scenes: [{ text: 'hello', durationInSeconds: 2 }] } }],
       }),
     }));
     streamMock.mockImplementationOnce(() => {
@@ -867,7 +875,7 @@ describe('agent', () => {
   it('wait_for_execution returns result when execution reaches done state', async () => {
     const db = getDb();
     const execId = newId();
-    db.prepare('INSERT INTO executions (id, message_id, project_id, tool, status, result) VALUES (?,?,?,?,?,?)')
+    db.prepare('INSERT INTO executions (id, message_id, space_id, tool, status, result) VALUES (?,?,?,?,?,?)')
       .run(execId, null, null, 'generate_video', 'done', 'Rendered test-video.mp4');
 
     streamMock.mockImplementationOnce(() => ({
@@ -905,7 +913,7 @@ describe('agent', () => {
   it('wait_for_execution returns error string on timeout', async () => {
     const db = getDb();
     const execId = newId();
-    db.prepare('INSERT INTO executions (id, message_id, project_id, tool, status) VALUES (?,?,?,?,?)')
+    db.prepare('INSERT INTO executions (id, message_id, space_id, tool, status) VALUES (?,?,?,?,?)')
       .run(execId, null, null, 'generate_video', 'running');
 
     streamMock.mockImplementationOnce(() => ({

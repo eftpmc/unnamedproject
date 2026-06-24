@@ -127,7 +127,7 @@ describe('messages', () => {
 
     const executionId = newId();
     getDb()
-      .prepare("INSERT INTO executions (id, message_id, project_id, tool, status, output_log, result) VALUES (?,?,?,?,?,?,?)")
+      .prepare("INSERT INTO executions (id, message_id, space_id, tool, status, output_log, result) VALUES (?,?,?,?,?,?,?)")
       .run(executionId, assistant.id, null, 'invoke_claude_code', 'done', 'doing the work\n', 'Done.');
 
     const res = await request(app)

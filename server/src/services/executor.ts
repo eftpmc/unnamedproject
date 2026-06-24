@@ -26,13 +26,13 @@ function getSessionIdForExecution(executionId: string): string | null {
 export function createExecution(
   userId: string,
   messageId: string,
-  projectId: string | null,
+  spaceId: string | null,
   tool: string
 ): string {
   const id = newId();
   getDb()
-    .prepare('INSERT INTO executions (id, message_id, project_id, tool, status) VALUES (?,?,?,?,?)')
-    .run(id, messageId, projectId, tool, 'running');
+    .prepare('INSERT INTO executions (id, message_id, space_id, tool, status) VALUES (?,?,?,?,?)')
+    .run(id, messageId, spaceId, tool, 'running');
   broadcast(userId, { type: 'execution_update', sessionId: getSessionIdForMessage(messageId), executionId: id, status: 'running', tool, messageId });
   return id;
 }
@@ -78,12 +78,12 @@ export async function requestApproval(
 
   const executionContext = getDb()
     .prepare(`
-      SELECT m.session_id AS sessionId, e.project_id AS projectId
+      SELECT m.session_id AS sessionId, e.space_id AS spaceId
       FROM executions e
       JOIN messages m ON m.id = e.message_id
       WHERE e.id = ?
     `)
-    .get(executionId) as { sessionId: string; projectId: string | null } | undefined;
+    .get(executionId) as { sessionId: string; spaceId: string | null } | undefined;
 
   getDb()
     .prepare("UPDATE executions SET status = 'awaiting_approval' WHERE id = ?")
@@ -94,7 +94,7 @@ export async function requestApproval(
       type: 'approval_requested',
       title: `Approval needed: ${action}`,
       body: 'The agent is waiting for your decision.',
-      projectId: executionContext.projectId,
+      spaceId: executionContext.spaceId,
       executionId,
       metadata: { action, payload },
     });
@@ -172,7 +172,7 @@ export async function requestApproval(
       type: 'approval_resolved',
       title: decision === 'approved' ? `Approved: ${action}` : `Denied: ${action}`,
       body: decision === 'approved' ? 'The agent can continue.' : 'The agent action was denied.',
-      projectId: executionContext.projectId,
+      spaceId: executionContext.spaceId,
       executionId,
       metadata: { action, decision },
     });

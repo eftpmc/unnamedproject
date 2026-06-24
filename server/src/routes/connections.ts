@@ -29,44 +29,47 @@ router.get('/', (req, res) => {
   res.json(rows);
 });
 
-router.post('/', (req, res) => {
-  const { userId } = req as AuthedRequest;
-  const { name, type, purpose, config } = req.body as { name?: string; type?: string; purpose?: string; config?: unknown };
+export class ConnectionValidationError extends Error {
+  status: number;
+  constructor(message: string, status = 400) {
+    super(message);
+    this.status = status;
+  }
+}
+
+export function createConnectionRecord(
+  userId: string,
+  input: { name?: string; type?: string; purpose?: string; config?: unknown },
+): { id: string; type: string; purpose: string } {
+  const { name, type, purpose, config } = input;
   if (!name || !type || !config) {
-    res.status(400).json({ error: 'name, type, config required' });
-    return;
+    throw new ConnectionValidationError('name, type, config required');
   }
   if (!VALID_TYPES.includes(type as (typeof VALID_TYPES)[number])) {
-    res.status(400).json({ error: `type must be one of ${VALID_TYPES.join(', ')}` });
-    return;
+    throw new ConnectionValidationError(`type must be one of ${VALID_TYPES.join(', ')}`);
   }
   const connectionPurpose = purpose ?? 'tool';
   if (!VALID_PURPOSES.includes(connectionPurpose as (typeof VALID_PURPOSES)[number])) {
-    res.status(400).json({ error: `purpose must be one of ${VALID_PURPOSES.join(', ')}` });
-    return;
+    throw new ConnectionValidationError(`purpose must be one of ${VALID_PURPOSES.join(', ')}`);
   }
   const allowedTypes = PURPOSE_ALLOWED_TYPES[connectionPurpose];
   if (allowedTypes && !allowedTypes.includes(type)) {
-    res.status(400).json({ error: `Purpose '${connectionPurpose}' does not support type '${type}'. Allowed: ${allowedTypes.join(', ')}` });
-    return;
+    throw new ConnectionValidationError(`Purpose '${connectionPurpose}' does not support type '${type}'. Allowed: ${allowedTypes.join(', ')}`);
   }
   // Validate required config fields for lead_agent non-anthropic providers
   if (connectionPurpose === 'lead_agent' && type === 'openai') {
     const cfg = config as Record<string, unknown>;
     if (!cfg.modelName || typeof cfg.modelName !== 'string') {
-      res.status(400).json({ error: "OpenAI lead agent connection requires 'modelName' in config (e.g. 'gpt-4o')" });
-      return;
+      throw new ConnectionValidationError("OpenAI lead agent connection requires 'modelName' in config (e.g. 'gpt-4o')");
     }
   }
   if (connectionPurpose === 'lead_agent' && type === 'local') {
     const cfg = config as Record<string, unknown>;
     if (!cfg.baseUrl || typeof cfg.baseUrl !== 'string') {
-      res.status(400).json({ error: "Local lead agent connection requires 'baseUrl' in config (e.g. 'http://localhost:11434/v1')" });
-      return;
+      throw new ConnectionValidationError("Local lead agent connection requires 'baseUrl' in config (e.g. 'http://localhost:11434/v1')");
     }
     if (!cfg.modelName || typeof cfg.modelName !== 'string') {
-      res.status(400).json({ error: "Local lead agent connection requires 'modelName' in config (e.g. 'qwen2.5:14b')" });
-      return;
+      throw new ConnectionValidationError("Local lead agent connection requires 'modelName' in config (e.g. 'qwen2.5:14b')");
     }
   }
   const id = newId();
@@ -76,12 +79,25 @@ router.post('/', (req, res) => {
       .prepare('INSERT INTO connections (id, user_id, name, type, purpose, encrypted_config) VALUES (?,?,?,?,?,?)')
       .run(id, userId, name, type, connectionPurpose, encrypted);
   } catch {
-    res.status(409).json({ error: 'Connection name already exists' });
-    return;
+    throw new ConnectionValidationError('Connection name already exists', 409);
   }
-  res.status(201).json({ id });
   if (type === 'mcp') {
     ingestMcpTools(userId, id).catch(() => {});
+  }
+  return { id, type, purpose: connectionPurpose };
+}
+
+router.post('/', (req, res) => {
+  const { userId } = req as AuthedRequest;
+  try {
+    const { id } = createConnectionRecord(userId, req.body as { name?: string; type?: string; purpose?: string; config?: unknown });
+    res.status(201).json({ id });
+  } catch (err) {
+    if (err instanceof ConnectionValidationError) {
+      res.status(err.status).json({ error: err.message });
+      return;
+    }
+    throw err;
   }
 });
 

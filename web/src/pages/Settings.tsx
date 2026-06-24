@@ -91,6 +91,36 @@ const SETUP_META: Record<SetupKind, {
   },
 };
 
+interface SetupFormState {
+  setupName: string;
+  secret: string;
+  mcpCommand: string;
+  mcpArgs: string;
+  mcpEnv: string;
+  mcpPreset: string;
+  mcpExtraArg: string;
+  mcpEnvValues: Record<string, string>;
+  leadAgentProvider: 'anthropic' | 'openai' | 'local';
+  openaiModelName: string;
+  localBaseUrl: string;
+  localModelName: string;
+}
+
+const INITIAL_SETUP_FORM: SetupFormState = {
+  setupName: '',
+  secret: '',
+  mcpCommand: '',
+  mcpArgs: '',
+  mcpEnv: '{}',
+  mcpPreset: 'custom',
+  mcpExtraArg: '',
+  mcpEnvValues: {},
+  leadAgentProvider: 'anthropic',
+  openaiModelName: '',
+  localBaseUrl: '',
+  localModelName: '',
+};
+
 interface McpPreset {
   id: string;
   name: string;
@@ -255,6 +285,240 @@ function ConnectMobileSection() {
   );
 }
 
+function ConnectionRow({
+  kind,
+  connections,
+  onOpenSetup,
+  onRequestDelete,
+}: {
+  kind: SetupKind;
+  connections: Connection[];
+  onOpenSetup: (kind: SetupKind) => void;
+  onRequestDelete: (id: string) => void;
+}) {
+  const meta = SETUP_META[kind];
+  const connection = connections.find(c => c.purpose === kind);
+  const { data: health } = useQuery({
+    queryKey: ['connection-health', connection?.id],
+    queryFn: () => testConnection(connection!.id),
+    enabled: !!connection && connection.type !== 'mcp',
+    staleTime: 60_000,
+    retry: false,
+  });
+  const healthDot = connection && health !== undefined
+    ? health.ok === true ? 'bg-success' : health.ok === false ? 'bg-destructive' : null
+    : null;
+  const healthTitle = health?.ok === true
+    ? `Connected · ${health.latencyMs}ms`
+    : health?.ok === false ? `Error: ${health.error}` : undefined;
+
+  return (
+    <SettingRow>
+      <div className="min-w-0">
+        <SettingRowInfo title={meta.title} description={connection ? connection.name : meta.description} />
+        {health?.ok === false && (
+          <div className="mt-1 text-xs text-destructive">Error: {health.error}</div>
+        )}
+      </div>
+      <div className="flex items-center gap-2 shrink-0">
+        {healthDot && (
+          <span title={healthTitle} className={cn('size-2 shrink-0 rounded-full', healthDot)} />
+        )}
+        {connection ? (
+          <div className="flex items-center gap-2">
+            {health?.ok === false ? <ConnectionErrorBadge /> : <ConnectedBadge />}
+            {kind === 'lead_agent' && (
+              <span className="text-xs text-muted-foreground">
+                {connection.type === 'local' ? 'local model' : connection.type === 'openai' ? 'OpenAI' : 'Claude'}
+              </span>
+            )}
+          </div>
+        ) : <NotSetBadge />}
+        <Button size="sm" variant={connection ? 'ghost' : 'default'} onClick={() => onOpenSetup(kind)}>
+          {connection ? 'Edit' : 'Connect'}
+        </Button>
+        {connection && <DeleteBtn onClick={() => onRequestDelete(connection.id)} />}
+      </div>
+    </SettingRow>
+  );
+}
+
+function SetupModal({
+  activeSetup,
+  connections,
+  form,
+  updateForm,
+  setupError,
+  onClose,
+  onSave,
+  onDelete,
+}: {
+  activeSetup: SetupKind | null;
+  connections: Connection[];
+  form: SetupFormState;
+  updateForm: (patch: Partial<SetupFormState>) => void;
+  setupError: string;
+  onClose: () => void;
+  onSave: () => void;
+  onDelete: (id: string) => void;
+}) {
+  if (!activeSetup) return null;
+  const meta = SETUP_META[activeSetup];
+  const existing = connections.find(c => c.purpose === activeSetup);
+  const { setupName, secret, mcpCommand, mcpArgs, mcpEnv, mcpPreset, mcpExtraArg, mcpEnvValues, leadAgentProvider, openaiModelName, localBaseUrl, localModelName } = form;
+
+  const selectedPreset = activeSetup === 'mcp' && mcpPreset !== 'custom'
+    ? MCP_PRESETS.find(p => p.id === mcpPreset)
+    : null;
+
+  return (
+    <Dialog open onOpenChange={open => { if (!open) onClose(); }}>
+      <DialogContent className="sm:max-w-lg">
+        <DialogHeader>
+          <DialogTitle>{selectedPreset ? selectedPreset.name : meta.title}</DialogTitle>
+          <DialogDescription>{selectedPreset ? selectedPreset.description : meta.description}</DialogDescription>
+        </DialogHeader>
+
+        {existing && activeSetup !== 'mcp' && (
+          <div className="flex items-center gap-3 rounded-lg border border-border-soft bg-card px-4 py-3">
+            <div className="flex-1 min-w-0">
+              <div className="text-sm text-foreground">{existing.name}</div>
+              <div className="mt-1 flex items-center gap-2">
+                <ConnectedBadge />
+                {activeSetup === 'lead_agent' && (
+                  <span className="text-xs text-muted-foreground">
+                    {existing.type === 'local' ? 'local model' : existing.type === 'openai' ? 'OpenAI' : 'Claude'}
+                  </span>
+                )}
+              </div>
+            </div>
+            <DeleteBtn onClick={() => onDelete(existing.id)} />
+          </div>
+        )}
+
+        {existing && activeSetup !== 'mcp' ? (
+          <div className="flex justify-end">
+            <Button variant="ghost" onClick={onClose}>Close</Button>
+          </div>
+        ) : (
+          <div className="flex flex-col gap-3">
+            <div>
+              <Label>Name</Label>
+              <Input value={setupName} onChange={e => updateForm({ setupName: e.target.value })} className="text-sm" />
+            </div>
+            {activeSetup === 'mcp' ? (
+              mcpPreset !== 'custom' ? (
+                <>
+                  {(() => {
+                    const preset = MCP_PRESETS.find(p => p.id === mcpPreset);
+                    if (!preset) return null;
+                    return (
+                      <>
+                        {preset.extraArgLabel && (
+                          <div>
+                            <Label>{preset.extraArgLabel}</Label>
+                            <Input placeholder={preset.extraArgPlaceholder} value={mcpExtraArg} onChange={e => updateForm({ mcpExtraArg: e.target.value })} className="text-sm" />
+                          </div>
+                        )}
+                        {(preset.envVars ?? []).map(v => (
+                          <div key={v.key}>
+                            <Label>{v.label}</Label>
+                            <Input type="password" placeholder={v.placeholder} value={mcpEnvValues[v.key] ?? ''} onChange={e => updateForm({ mcpEnvValues: { ...mcpEnvValues, [v.key]: e.target.value } })} className="text-sm" />
+                          </div>
+                        ))}
+                        {!preset.extraArgLabel && (preset.envVars ?? []).length === 0 && (
+                          <p className="text-sm text-muted-foreground">No configuration needed — just save to add this server.</p>
+                        )}
+                      </>
+                    );
+                  })()}
+                </>
+              ) : (
+                <>
+                  <div><Label>Command</Label><Input placeholder="npx" value={mcpCommand} onChange={e => updateForm({ mcpCommand: e.target.value })} className="text-sm" /></div>
+                  <div><Label>Args JSON</Label><Textarea rows={2} placeholder='["-y", "@modelcontextprotocol/server-filesystem", "/path"]' value={mcpArgs} onChange={e => updateForm({ mcpArgs: e.target.value })} className="text-sm font-mono resize-y" /></div>
+                  <div><Label>Env JSON</Label><Textarea rows={2} placeholder='{"TOKEN":"..."}' value={mcpEnv} onChange={e => updateForm({ mcpEnv: e.target.value })} className="text-sm font-mono resize-y" /></div>
+                </>
+              )
+            ) : activeSetup === 'lead_agent' ? (
+              <>
+                <div>
+                  <Label>Provider</Label>
+                  <div className="mt-1 grid grid-cols-3 gap-2">
+                    {(['anthropic', 'openai', 'local'] as const).map(provider => (
+                      <button
+                        key={provider}
+                        type="button"
+                        onClick={() => updateForm({ leadAgentProvider: provider })}
+                        className={cn(
+                          'rounded-md border px-3 py-2 text-sm font-medium transition-colors',
+                          leadAgentProvider === provider
+                            ? 'border-primary bg-primary/10 text-foreground'
+                            : 'border-border-soft text-muted-foreground hover:bg-muted',
+                        )}
+                      >
+                        {provider === 'anthropic' ? 'Claude' : provider === 'openai' ? 'OpenAI' : 'Local Model'}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+
+                {leadAgentProvider === 'anthropic' && (
+                  <div>
+                    <Label>Anthropic API key</Label>
+                    <Input type="password" placeholder="sk-ant-..." value={secret} onChange={e => updateForm({ secret: e.target.value })} className="text-sm" />
+                  </div>
+                )}
+
+                {leadAgentProvider === 'openai' && (
+                  <>
+                    <div>
+                      <Label>OpenAI API key</Label>
+                      <Input type="password" placeholder="sk-..." value={secret} onChange={e => updateForm({ secret: e.target.value })} className="text-sm" />
+                    </div>
+                    <div>
+                      <Label>Model name</Label>
+                      <Input placeholder="gpt-4o" value={openaiModelName} onChange={e => updateForm({ openaiModelName: e.target.value })} className="text-sm" />
+                    </div>
+                  </>
+                )}
+
+                {leadAgentProvider === 'local' && (
+                  <>
+                    <div>
+                      <Label>Base URL</Label>
+                      <Input placeholder="http://localhost:11434/v1" value={localBaseUrl} onChange={e => updateForm({ localBaseUrl: e.target.value })} className="text-sm" />
+                    </div>
+                    <div>
+                      <Label>Model name</Label>
+                      <Input placeholder="qwen2.5:14b" value={localModelName} onChange={e => updateForm({ localModelName: e.target.value })} className="text-sm" />
+                    </div>
+                    <div>
+                      <Label>API key (optional)</Label>
+                      <Input type="password" placeholder="Leave blank for unauthenticated" value={secret} onChange={e => updateForm({ secret: e.target.value })} className="text-sm" />
+                    </div>
+                  </>
+                )}
+              </>
+            ) : (
+              <div>
+                <Label>{meta.secretLabel}{meta.secretOptional ? ' (optional)' : ''}</Label>
+                <Input type="password" placeholder={meta.placeholder} value={secret} onChange={e => updateForm({ secret: e.target.value })} className="text-sm" />
+                {meta.secretOptionalHint && <p className="mt-1 text-xs text-muted-foreground">{meta.secretOptionalHint}</p>}
+              </div>
+            )}
+            {setupError && <div className="text-sm text-destructive">{setupError}</div>}
+            <DialogFooter>
+              <Button variant="ghost" onClick={onClose}>Cancel</Button>
+              <Button onClick={onSave}>Save</Button>
+            </DialogFooter>
+          </div>
+        )}
+      </DialogContent>
+    </Dialog>
+  );
+}
+
 export default function Settings() {
   usePageTitle('Settings');
   const navigate = useNavigate();
@@ -268,19 +532,9 @@ export default function Settings() {
   const { data: settings } = useQuery<UserSettings>({ queryKey: ['settings'], queryFn: getSettings });
 
   const [activeSetup, setActiveSetup] = useState<SetupKind | null>(null);
-  const [setupName, setSetupName] = useState('');
-  const [secret, setSecret] = useState('');
-  const [mcpCommand, setMcpCommand] = useState('');
-  const [mcpArgs, setMcpArgs] = useState('');
-  const [mcpEnv, setMcpEnv] = useState('{}');
-  const [mcpPreset, setMcpPreset] = useState<string>('custom');
-  const [mcpExtraArg, setMcpExtraArg] = useState('');
-  const [mcpEnvValues, setMcpEnvValues] = useState<Record<string, string>>({});
+  const [form, setForm] = useState<SetupFormState>(INITIAL_SETUP_FORM);
+  const updateForm = (patch: Partial<SetupFormState>) => setForm(prev => ({ ...prev, ...patch }));
   const [setupError, setSetupError] = useState('');
-  const [leadAgentProvider, setLeadAgentProvider] = useState<'anthropic' | 'openai' | 'local'>('anthropic');
-  const [openaiModelName, setOpenaiModelName] = useState('');
-  const [localBaseUrl, setLocalBaseUrl] = useState('');
-  const [localModelName, setLocalModelName] = useState('');
 
   const [projectsRoot, setProjectsRoot] = useState('');
   const [permissionProfile, setPermissionProfile] = useState<PermissionProfile>('fast');
@@ -314,6 +568,7 @@ export default function Settings() {
     mutationFn: () => {
       if (!activeSetup) throw new Error('Pick what you want to set up');
       const meta = SETUP_META[activeSetup];
+      const { setupName, secret, mcpCommand, mcpArgs, mcpEnv, mcpPreset, mcpExtraArg, mcpEnvValues, leadAgentProvider, openaiModelName, localBaseUrl, localModelName } = form;
       let config: Record<string, unknown>;
 
       if (activeSetup === 'mcp') {
@@ -423,236 +678,26 @@ export default function Settings() {
 
   function openSetupModal(kind: SetupKind) {
     setActiveSetup(kind);
-    setSetupName(SETUP_META[kind].title);
-    setSecret(''); setMcpCommand(''); setMcpArgs(''); setMcpEnv('{}');
-    setMcpPreset('custom'); setMcpExtraArg(''); setMcpEnvValues({}); setSetupError('');
-    setLeadAgentProvider('anthropic'); setOpenaiModelName(''); setLocalBaseUrl(''); setLocalModelName('');
+    setForm({ ...INITIAL_SETUP_FORM, setupName: SETUP_META[kind].title });
+    setSetupError('');
   }
 
   function openMcpPresetModal(presetId: string) {
     const preset = MCP_PRESETS.find(p => p.id === presetId);
     setActiveSetup('mcp');
-    setSetupName(preset ? preset.name : SETUP_META.mcp.title);
-    setMcpPreset(presetId);
-    setMcpExtraArg(''); setMcpEnvValues({}); setSetupError('');
-    setSecret(''); setMcpCommand(''); setMcpArgs(''); setMcpEnv('{}');
+    setForm({ ...INITIAL_SETUP_FORM, setupName: preset ? preset.name : SETUP_META.mcp.title, mcpPreset: presetId });
+    setSetupError('');
   }
 
   function closeSetupModal() {
     setActiveSetup(null);
-    setSetupName(''); setSecret(''); setMcpCommand(''); setMcpArgs(''); setMcpEnv('{}');
-    setMcpPreset('custom'); setMcpExtraArg(''); setMcpEnvValues({}); setSetupError('');
-    setLeadAgentProvider('anthropic'); setOpenaiModelName(''); setLocalBaseUrl(''); setLocalModelName('');
+    setForm(INITIAL_SETUP_FORM);
+    setSetupError('');
   }
 
   function handleSignOut() {
     clearToken();
     navigate('/login', { replace: true });
-  }
-
-  function ConnectionRow({ kind }: { kind: SetupKind }) {
-    const meta = SETUP_META[kind];
-    const connection = connections.find(c => c.purpose === kind);
-    const { data: health } = useQuery({
-      queryKey: ['connection-health', connection?.id],
-      queryFn: () => testConnection(connection!.id),
-      enabled: !!connection && connection.type !== 'mcp',
-      staleTime: 60_000,
-      retry: false,
-    });
-    const healthDot = connection && health !== undefined
-      ? health.ok === true ? 'bg-success' : health.ok === false ? 'bg-destructive' : null
-      : null;
-    const healthTitle = health?.ok === true
-      ? `Connected · ${health.latencyMs}ms`
-      : health?.ok === false ? `Error: ${health.error}` : undefined;
-
-    return (
-      <SettingRow>
-        <div className="min-w-0">
-          <SettingRowInfo title={meta.title} description={connection ? connection.name : meta.description} />
-          {health?.ok === false && (
-            <div className="mt-1 text-xs text-destructive">Error: {health.error}</div>
-          )}
-        </div>
-        <div className="flex items-center gap-2 shrink-0">
-          {healthDot && (
-            <span title={healthTitle} className={cn('size-2 shrink-0 rounded-full', healthDot)} />
-          )}
-          {connection ? (
-            <div className="flex items-center gap-2">
-              {health?.ok === false ? <ConnectionErrorBadge /> : <ConnectedBadge />}
-              {kind === 'lead_agent' && (
-                <span className="text-xs text-muted-foreground">
-                  {connection.type === 'local' ? 'local model' : connection.type === 'openai' ? 'OpenAI' : 'Claude'}
-                </span>
-              )}
-            </div>
-          ) : <NotSetBadge />}
-          <Button size="sm" variant={connection ? 'ghost' : 'default'} onClick={() => openSetupModal(kind)}>
-            {connection ? 'Edit' : 'Connect'}
-          </Button>
-          {connection && <DeleteBtn onClick={() => setPendingDelete({ id: connection.id })} />}
-        </div>
-      </SettingRow>
-    );
-  }
-
-  function SetupModal() {
-    if (!activeSetup) return null;
-    const meta = SETUP_META[activeSetup];
-    const existing = connections.find(c => c.purpose === activeSetup);
-
-    const selectedPreset = activeSetup === 'mcp' && mcpPreset !== 'custom'
-      ? MCP_PRESETS.find(p => p.id === mcpPreset)
-      : null;
-
-    return (
-      <Dialog open onOpenChange={open => { if (!open) closeSetupModal(); }}>
-        <DialogContent className="sm:max-w-lg">
-          <DialogHeader>
-            <DialogTitle>{selectedPreset ? selectedPreset.name : meta.title}</DialogTitle>
-            <DialogDescription>{selectedPreset ? selectedPreset.description : meta.description}</DialogDescription>
-          </DialogHeader>
-
-          {existing && activeSetup !== 'mcp' && (
-            <div className="flex items-center gap-3 rounded-lg border border-border-soft bg-card px-4 py-3">
-              <div className="flex-1 min-w-0">
-                <div className="text-sm text-foreground">{existing.name}</div>
-                <div className="mt-1 flex items-center gap-2">
-                  <ConnectedBadge />
-                  {activeSetup === 'lead_agent' && (
-                    <span className="text-xs text-muted-foreground">
-                      {existing.type === 'local' ? 'local model' : existing.type === 'openai' ? 'OpenAI' : 'Claude'}
-                    </span>
-                  )}
-                </div>
-              </div>
-              <DeleteBtn onClick={() => { setPendingDelete({ id: existing.id }); closeSetupModal(); }} />
-            </div>
-          )}
-
-          {existing && activeSetup !== 'mcp' ? (
-            <div className="flex justify-end">
-              <Button variant="ghost" onClick={closeSetupModal}>Close</Button>
-            </div>
-          ) : (
-            <div className="flex flex-col gap-3">
-              <div>
-                <Label>Name</Label>
-                <Input value={setupName} onChange={e => setSetupName(e.target.value)} className="text-sm" />
-              </div>
-              {activeSetup === 'mcp' ? (
-                mcpPreset !== 'custom' ? (
-                  <>
-                    {(() => {
-                      const preset = MCP_PRESETS.find(p => p.id === mcpPreset);
-                      if (!preset) return null;
-                      return (
-                        <>
-                          {preset.extraArgLabel && (
-                            <div>
-                              <Label>{preset.extraArgLabel}</Label>
-                              <Input placeholder={preset.extraArgPlaceholder} value={mcpExtraArg} onChange={e => setMcpExtraArg(e.target.value)} className="text-sm" />
-                            </div>
-                          )}
-                          {(preset.envVars ?? []).map(v => (
-                            <div key={v.key}>
-                              <Label>{v.label}</Label>
-                              <Input type="password" placeholder={v.placeholder} value={mcpEnvValues[v.key] ?? ''} onChange={e => setMcpEnvValues(prev => ({ ...prev, [v.key]: e.target.value }))} className="text-sm" />
-                            </div>
-                          ))}
-                          {!preset.extraArgLabel && (preset.envVars ?? []).length === 0 && (
-                            <p className="text-sm text-muted-foreground">No configuration needed — just save to add this server.</p>
-                          )}
-                        </>
-                      );
-                    })()}
-                  </>
-                ) : (
-                  <>
-                    <div><Label>Command</Label><Input placeholder="npx" value={mcpCommand} onChange={e => setMcpCommand(e.target.value)} className="text-sm" /></div>
-                    <div><Label>Args JSON</Label><Textarea rows={2} placeholder='["-y", "@modelcontextprotocol/server-filesystem", "/path"]' value={mcpArgs} onChange={e => setMcpArgs(e.target.value)} className="text-sm font-mono resize-y" /></div>
-                    <div><Label>Env JSON</Label><Textarea rows={2} placeholder='{"TOKEN":"..."}' value={mcpEnv} onChange={e => setMcpEnv(e.target.value)} className="text-sm font-mono resize-y" /></div>
-                  </>
-                )
-              ) : activeSetup === 'lead_agent' ? (
-                <>
-                  <div>
-                    <Label>Provider</Label>
-                    <div className="mt-1 grid grid-cols-3 gap-2">
-                      {(['anthropic', 'openai', 'local'] as const).map(provider => (
-                        <button
-                          key={provider}
-                          type="button"
-                          onClick={() => setLeadAgentProvider(provider)}
-                          className={cn(
-                            'rounded-md border px-3 py-2 text-sm font-medium transition-colors',
-                            leadAgentProvider === provider
-                              ? 'border-primary bg-primary/10 text-foreground'
-                              : 'border-border-soft text-muted-foreground hover:bg-muted',
-                          )}
-                        >
-                          {provider === 'anthropic' ? 'Claude' : provider === 'openai' ? 'OpenAI' : 'Local Model'}
-                        </button>
-                      ))}
-                    </div>
-                  </div>
-
-                  {leadAgentProvider === 'anthropic' && (
-                    <div>
-                      <Label>Anthropic API key</Label>
-                      <Input type="password" placeholder="sk-ant-..." value={secret} onChange={e => setSecret(e.target.value)} className="text-sm" />
-                    </div>
-                  )}
-
-                  {leadAgentProvider === 'openai' && (
-                    <>
-                      <div>
-                        <Label>OpenAI API key</Label>
-                        <Input type="password" placeholder="sk-..." value={secret} onChange={e => setSecret(e.target.value)} className="text-sm" />
-                      </div>
-                      <div>
-                        <Label>Model name</Label>
-                        <Input placeholder="gpt-4o" value={openaiModelName} onChange={e => setOpenaiModelName(e.target.value)} className="text-sm" />
-                      </div>
-                    </>
-                  )}
-
-                  {leadAgentProvider === 'local' && (
-                    <>
-                      <div>
-                        <Label>Base URL</Label>
-                        <Input placeholder="http://localhost:11434/v1" value={localBaseUrl} onChange={e => setLocalBaseUrl(e.target.value)} className="text-sm" />
-                      </div>
-                      <div>
-                        <Label>Model name</Label>
-                        <Input placeholder="qwen2.5:14b" value={localModelName} onChange={e => setLocalModelName(e.target.value)} className="text-sm" />
-                      </div>
-                      <div>
-                        <Label>API key (optional)</Label>
-                        <Input type="password" placeholder="Leave blank for unauthenticated" value={secret} onChange={e => setSecret(e.target.value)} className="text-sm" />
-                      </div>
-                    </>
-                  )}
-                </>
-              ) : (
-                <div>
-                  <Label>{meta.secretLabel}{meta.secretOptional ? ' (optional)' : ''}</Label>
-                  <Input type="password" placeholder={meta.placeholder} value={secret} onChange={e => setSecret(e.target.value)} className="text-sm" />
-                  {meta.secretOptionalHint && <p className="mt-1 text-xs text-muted-foreground">{meta.secretOptionalHint}</p>}
-                </div>
-              )}
-              {setupError && <div className="text-sm text-destructive">{setupError}</div>}
-              <DialogFooter>
-                <Button variant="ghost" onClick={closeSetupModal}>Cancel</Button>
-                <Button onClick={() => createConnMutation.mutate()}>Save</Button>
-              </DialogFooter>
-            </div>
-          )}
-        </DialogContent>
-      </Dialog>
-    );
   }
 
   return (
@@ -690,7 +735,7 @@ export default function Settings() {
             <div className="flex flex-col gap-7">
               <div>
                 <SectionLabel>Lead agent</SectionLabel>
-                <ConnectionRow kind="lead_agent" />
+                <ConnectionRow kind="lead_agent" connections={connections} onOpenSetup={openSetupModal} onRequestDelete={id => setPendingDelete({ id })} />
               </div>
 
               <div>
@@ -766,8 +811,8 @@ export default function Settings() {
           {tab === 'tools' && (
             <div className="flex flex-col gap-3">
               <SectionLabel>Coding tools</SectionLabel>
-              <ConnectionRow kind="claude_code" />
-              <ConnectionRow kind="codex" />
+              <ConnectionRow kind="claude_code" connections={connections} onOpenSetup={openSetupModal} onRequestDelete={id => setPendingDelete({ id })} />
+              <ConnectionRow kind="codex" connections={connections} onOpenSetup={openSetupModal} onRequestDelete={id => setPendingDelete({ id })} />
             </div>
           )}
 
@@ -994,7 +1039,7 @@ export default function Settings() {
           onCancel={() => setPendingDelete(null)}
         />
       )}
-      <SetupModal />
+      <SetupModal activeSetup={activeSetup} connections={connections} form={form} updateForm={updateForm} setupError={setupError} onClose={closeSetupModal} onSave={() => createConnMutation.mutate()} onDelete={id => { setPendingDelete({ id }); closeSetupModal(); }} />
     </PageShell>
   );
 }

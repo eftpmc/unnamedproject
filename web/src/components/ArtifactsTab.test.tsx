@@ -16,7 +16,6 @@ const project: Project = {
   id: 'proj-1',
   name: 'Artifacts Project',
   description: null,
-  repo_path: null,
   enabled_connection_ids: [],
 };
 

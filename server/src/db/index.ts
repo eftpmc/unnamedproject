@@ -19,11 +19,23 @@ export function getDataDir(): string {
 // kept idempotent so it lands any existing or fresh database at today's schema
 // and stamps user_version = 1. New schema changes append as version 2, 3, …
 // (use noTransaction + self-managed PRAGMAs for table rebuilds).
-const migrations: Migration[] = [
+export const migrations: Migration[] = [
   { version: 1, name: 'baseline-schema', noTransaction: true, up: () => applySchema() },
   { version: 2, name: 'repair-plan-foreign-keys', noTransaction: true, up: repairPlanForeignKeys },
   { version: 3, name: 'tool-registry', up: addToolRegistry },
   { version: 4, name: 'widen-connection-type-for-local', noTransaction: true, up: widenConnectionsTypeForLocal },
+  { version: 5, name: 'rename-projects-to-spaces-and-add-items', noTransaction: true, up: renameProjectsToSpacesAndAddItems },
+  { version: 6, name: 'add-user-settings-columns', noTransaction: true, up: (database) => {
+    const tableExists = (database.prepare("SELECT 1 FROM sqlite_master WHERE type='table' AND name='user_settings'").get());
+    if (!tableExists) return;
+    const cols = (database.prepare("SELECT name FROM pragma_table_info('user_settings')").all() as { name: string }[]).map(c => c.name);
+    if (!cols.includes('claude_code_daily_budget_usd')) database.exec('ALTER TABLE user_settings ADD COLUMN claude_code_daily_budget_usd REAL');
+    if (!cols.includes('codex_daily_budget_usd')) database.exec('ALTER TABLE user_settings ADD COLUMN codex_daily_budget_usd REAL');
+    if (!cols.includes('permission_profile')) database.exec("ALTER TABLE user_settings ADD COLUMN permission_profile TEXT NOT NULL DEFAULT 'fast' CHECK(permission_profile IN ('fast','trusted','strict'))");
+    if (!cols.includes('expo_push_token')) database.exec('ALTER TABLE user_settings ADD COLUMN expo_push_token TEXT');
+    if (!cols.includes('apns_device_token')) database.exec('ALTER TABLE user_settings ADD COLUMN apns_device_token TEXT');
+  }},
+  { version: 7, name: 'finalize-spaces-items-and-pipelines', noTransaction: true, up: finalizeSpacesItemsAndPipelines },
 ];
 
 function tableSql(database: Database.Database, name: string): string | undefined {
@@ -161,6 +173,272 @@ function widenConnectionsTypeForLocal(database: Database.Database): void {
   `);
 }
 
+function renameProjectsToSpacesAndAddItems(database: Database.Database): void {
+  database.pragma('foreign_keys = OFF');
+
+  const projectsTableExists = database
+    .prepare("SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = 'projects'")
+    .get();
+  if (projectsTableExists) {
+    database.pragma('legacy_alter_table = OFF');
+    database.exec('ALTER TABLE projects RENAME TO spaces');
+  }
+
+  database.exec(`
+    CREATE TABLE IF NOT EXISTS space_items (
+      id TEXT PRIMARY KEY,
+      space_id TEXT NOT NULL REFERENCES spaces(id) ON DELETE CASCADE,
+      type TEXT NOT NULL CHECK(type IN ('repo','file','note')),
+      name TEXT NOT NULL,
+      source_session_id TEXT REFERENCES sessions(id) ON DELETE SET NULL,
+      source_plan_id TEXT REFERENCES plans(id) ON DELETE SET NULL,
+      source_step_id TEXT REFERENCES plan_steps(id) ON DELETE SET NULL,
+      created_at INTEGER NOT NULL DEFAULT (unixepoch())
+    );
+    CREATE TABLE IF NOT EXISTS space_repos (
+      item_id TEXT PRIMARY KEY REFERENCES space_items(id) ON DELETE CASCADE,
+      repo_path TEXT NOT NULL,
+      default_branch TEXT
+    );
+    CREATE TABLE IF NOT EXISTS space_files (
+      item_id TEXT PRIMARY KEY REFERENCES space_items(id) ON DELETE CASCADE,
+      file_path TEXT NOT NULL,
+      size_bytes INTEGER,
+      mime_type TEXT
+    );
+    CREATE TABLE IF NOT EXISTS space_notes (
+      item_id TEXT PRIMARY KEY REFERENCES space_items(id) ON DELETE CASCADE,
+      content TEXT NOT NULL
+    );
+  `);
+
+  const repoPathColumnExists = (database.prepare('PRAGMA table_info(spaces)').all() as Array<{ name: string }>)
+    .some(column => column.name === 'repo_path');
+  if (repoPathColumnExists) {
+    const spaces = database
+      .prepare('SELECT id, name, repo_path FROM spaces WHERE repo_path IS NOT NULL')
+      .all() as Array<{ id: string; name: string; repo_path: string }>;
+    const insertItem = database.prepare(
+      "INSERT INTO space_items (id, space_id, type, name) VALUES (?, ?, 'repo', ?)",
+    );
+    const insertRepo = database.prepare('INSERT INTO space_repos (item_id, repo_path) VALUES (?, ?)');
+    const itemExists = database.prepare('SELECT 1 FROM space_items WHERE id = ?');
+    for (const space of spaces) {
+      const itemId = `item_${space.id}_repo`;
+      if (itemExists.get(itemId)) continue;
+      insertItem.run(itemId, space.id, space.name);
+      insertRepo.run(itemId, space.repo_path);
+    }
+  }
+
+  const worktreeColumns = database.prepare('PRAGMA table_info(agent_worktrees)').all() as Array<{ name: string }>;
+  if (worktreeColumns.some(column => column.name === 'project_id')) {
+    database.exec(`
+      ALTER TABLE agent_worktrees RENAME COLUMN project_id TO space_id;
+      ALTER TABLE agent_worktrees RENAME TO agent_worktrees_pre_v5;
+      CREATE TABLE agent_worktrees (
+        id TEXT PRIMARY KEY,
+        item_id TEXT NOT NULL REFERENCES space_items(id) ON DELETE CASCADE,
+        session_id TEXT NOT NULL REFERENCES sessions(id) ON DELETE CASCADE,
+        branch TEXT NOT NULL,
+        worktree_path TEXT NOT NULL,
+        claude_session_id TEXT,
+        codex_session_id TEXT,
+        created_at INTEGER NOT NULL DEFAULT (unixepoch()),
+        UNIQUE(item_id, session_id)
+      );
+      INSERT INTO agent_worktrees (
+        id, item_id, session_id, branch, worktree_path,
+        claude_session_id, codex_session_id, created_at
+      )
+      SELECT
+        worktree.id, 'item_' || worktree.space_id || '_repo', worktree.session_id,
+        worktree.branch, worktree.worktree_path, worktree.claude_session_id,
+        worktree.codex_session_id, worktree.created_at
+      FROM agent_worktrees_pre_v5 worktree
+      WHERE EXISTS (
+        SELECT 1 FROM space_items WHERE id = 'item_' || worktree.space_id || '_repo'
+      );
+      DROP TABLE agent_worktrees_pre_v5;
+    `);
+  }
+
+  const artifactsExist = database
+    .prepare("SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = 'artifacts'")
+    .get();
+  if (artifactsExist) {
+    const artifactColumns = database.prepare('PRAGMA table_info(artifacts)').all() as Array<{ name: string }>;
+    const artifactSpaceColumn = artifactColumns.some(column => column.name === 'space_id') ? 'space_id' : 'project_id';
+    const artifacts = database.prepare('SELECT * FROM artifacts').all() as Array<{
+      id: string;
+      project_id?: string;
+      space_id?: string;
+      title: string;
+      mime_type: string;
+      path: string | null;
+      source_plan_id: string | null;
+      source_step_id: string | null;
+    }>;
+    const insertItem = database.prepare(`
+      INSERT INTO space_items (
+        id, space_id, type, name, source_plan_id, source_step_id
+      ) VALUES (?, ?, 'file', ?, ?, ?)
+    `);
+    const insertFile = database.prepare(
+      'INSERT INTO space_files (item_id, file_path, mime_type) VALUES (?, ?, ?)',
+    );
+    const itemExists = database.prepare('SELECT 1 FROM space_items WHERE id = ?');
+    for (const artifact of artifacts) {
+      const itemId = `item_${artifact.id}`;
+      if (itemExists.get(itemId)) continue;
+      const artifactSpaceId = artifactSpaceColumn === 'space_id' ? artifact.space_id : artifact.project_id;
+      if (!artifactSpaceId) continue;
+      insertItem.run(
+        itemId,
+        artifactSpaceId,
+        artifact.title,
+        artifact.source_plan_id,
+        artifact.source_step_id,
+      );
+      insertFile.run(itemId, artifact.path ?? '', artifact.mime_type);
+    }
+  }
+
+  const eventColumns = database.prepare('PRAGMA table_info(session_events)').all() as Array<{ name: string }>;
+  if (eventColumns.some(column => column.name === 'artifact_id')) {
+    const eventProjectColumn = eventColumns.some(column => column.name === 'project_id')
+      ? 'project_id'
+      : 'space_id';
+    database.exec(`
+      ALTER TABLE session_events RENAME TO session_events_pre_v5;
+      CREATE TABLE session_events (
+        id TEXT PRIMARY KEY,
+        session_id TEXT NOT NULL REFERENCES sessions(id) ON DELETE CASCADE,
+        type TEXT NOT NULL CHECK(type IN (
+          'scope_changed','project_linked','project_created','plan_created',
+          'artifact_created','item_created','approval_requested','approval_resolved',
+          'mcp_required','subagent_started','subagent_completed','connection_created'
+        )),
+        title TEXT NOT NULL,
+        body TEXT,
+        space_id TEXT REFERENCES spaces(id) ON DELETE SET NULL,
+        plan_id TEXT REFERENCES plans(id) ON DELETE SET NULL,
+        item_id TEXT REFERENCES space_items(id) ON DELETE SET NULL,
+        execution_id TEXT REFERENCES executions(id) ON DELETE SET NULL,
+        metadata TEXT NOT NULL DEFAULT '{}',
+        created_at INTEGER NOT NULL DEFAULT (unixepoch())
+      );
+      INSERT INTO session_events (
+        id, session_id, type, title, body, space_id, plan_id,
+        item_id, execution_id, metadata, created_at
+      )
+      SELECT
+        id, session_id, type, title, body, ${eventProjectColumn}, plan_id,
+        CASE WHEN artifact_id IS NOT NULL THEN 'item_' || artifact_id ELSE NULL END,
+        execution_id, metadata, created_at
+      FROM session_events_pre_v5;
+      DROP TABLE session_events_pre_v5;
+    `);
+  }
+
+  if (artifactsExist) database.exec('DROP TABLE artifacts');
+  if (repoPathColumnExists) database.exec('ALTER TABLE spaces DROP COLUMN repo_path');
+
+  const sessionColumns = database.prepare('PRAGMA table_info(sessions)').all() as Array<{ name: string }>;
+  if (sessionColumns.some(column => column.name === 'pinned_project_id')) {
+    database.exec('ALTER TABLE sessions RENAME COLUMN pinned_project_id TO pinned_space_id');
+  }
+
+  const pipelineColumns = database.prepare('PRAGMA table_info(pipelines)').all() as Array<{ name: string }>;
+  if (pipelineColumns.some(column => column.name === 'user_id')) {
+    database.pragma('legacy_alter_table = ON');
+    database.exec('ALTER TABLE pipelines RENAME TO pipelines_pre_v5');
+    database.pragma('legacy_alter_table = OFF');
+    database.exec(`
+      CREATE TABLE pipelines (
+        id TEXT PRIMARY KEY,
+        space_id TEXT NOT NULL REFERENCES spaces(id) ON DELETE CASCADE,
+        title TEXT NOT NULL,
+        description TEXT,
+        created_at INTEGER NOT NULL DEFAULT (unixepoch())
+      );
+      INSERT INTO pipelines (id, space_id, title, description, created_at)
+      SELECT pipeline.id, (
+        SELECT space.id
+        FROM spaces space
+        WHERE space.user_id = pipeline.user_id
+        ORDER BY space.created_at, space.id
+        LIMIT 1
+      ), pipeline.title, pipeline.description, pipeline.created_at
+      FROM pipelines_pre_v5 pipeline
+      WHERE EXISTS (SELECT 1 FROM spaces space WHERE space.user_id = pipeline.user_id);
+      DROP TABLE pipelines_pre_v5;
+    `);
+  }
+
+  const tablesWithProjectId = database.prepare(`
+    SELECT schema.name AS table_name
+    FROM sqlite_master schema
+    JOIN pragma_table_info(schema.name) columns ON columns.name = 'project_id'
+    WHERE schema.type = 'table'
+  `).all() as Array<{ table_name: string }>;
+  for (const { table_name } of tablesWithProjectId) {
+    database.exec(`ALTER TABLE "${table_name}" RENAME COLUMN project_id TO space_id`);
+  }
+
+  database.pragma('foreign_keys = ON');
+}
+
+function finalizeSpacesItemsAndPipelines(database: Database.Database): void {
+  database.pragma('foreign_keys = OFF');
+
+  const artifactsExist = database
+    .prepare("SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = 'artifacts'")
+    .get();
+  if (artifactsExist) {
+    const columns = database.prepare('PRAGMA table_info(artifacts)').all() as Array<{ name: string }>;
+    const spaceColumn = columns.some(column => column.name === 'space_id') ? 'space_id' : 'project_id';
+    const artifacts = database.prepare('SELECT * FROM artifacts').all() as Array<{
+      id: string;
+      space_id?: string;
+      project_id?: string;
+      title: string;
+      mime_type: string;
+      path: string | null;
+      source_plan_id: string | null;
+      source_step_id: string | null;
+      created_at: number;
+    }>;
+    const insertItem = database.prepare(`
+      INSERT OR IGNORE INTO space_items (
+        id, space_id, type, name, source_plan_id, source_step_id, created_at
+      ) VALUES (?, ?, 'file', ?, ?, ?, ?)
+    `);
+    const insertFile = database.prepare(`
+      INSERT OR IGNORE INTO space_files (item_id, file_path, mime_type)
+      VALUES (?, ?, ?)
+    `);
+    for (const artifact of artifacts) {
+      const itemId = `item_${artifact.id}`;
+      const spaceId = spaceColumn === 'space_id' ? artifact.space_id : artifact.project_id;
+      if (!spaceId) continue;
+      insertItem.run(
+        itemId,
+        spaceId,
+        artifact.title,
+        artifact.source_plan_id,
+        artifact.source_step_id,
+        artifact.created_at,
+      );
+      insertFile.run(itemId, artifact.path ?? '', artifact.mime_type);
+      database.prepare('UPDATE session_events SET item_id = ? WHERE item_id = ?').run(itemId, artifact.id);
+    }
+    database.exec('DROP TABLE artifacts');
+  }
+
+  database.pragma('foreign_keys = ON');
+}
+
 export function initDb(): void {
   const dataDir = getDataDir();
   fs.mkdirSync(dataDir, { recursive: true });
@@ -292,7 +570,7 @@ function applySchema(): void {
     CREATE TABLE IF NOT EXISTS session_events (
       id TEXT PRIMARY KEY,
       session_id TEXT NOT NULL REFERENCES sessions(id) ON DELETE CASCADE,
-      type TEXT NOT NULL CHECK(type IN ('scope_changed','project_linked','project_created','plan_created','artifact_created','approval_requested','approval_resolved','mcp_required','subagent_started','subagent_completed')),
+      type TEXT NOT NULL CHECK(type IN ('scope_changed','project_linked','project_created','plan_created','artifact_created','approval_requested','approval_resolved','mcp_required','subagent_started','subagent_completed','connection_created')),
       title TEXT NOT NULL,
       body TEXT,
       project_id TEXT REFERENCES projects(id) ON DELETE SET NULL,
@@ -410,7 +688,7 @@ function applySchema(): void {
 
     CREATE TABLE IF NOT EXISTS artifacts (
       id TEXT PRIMARY KEY,
-      project_id TEXT NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
+      space_id TEXT NOT NULL,
       kind TEXT NOT NULL,
       title TEXT NOT NULL,
       description TEXT,
@@ -420,8 +698,8 @@ function applySchema(): void {
       path TEXT,
       url TEXT,
       metadata TEXT NOT NULL DEFAULT '{}',
-      source_campaign_id TEXT REFERENCES campaigns(id) ON DELETE SET NULL,
-      source_task_id TEXT REFERENCES campaign_tasks(id) ON DELETE SET NULL,
+      source_plan_id TEXT,
+      source_step_id TEXT,
       created_at INTEGER NOT NULL DEFAULT (unixepoch())
     );
   `);
@@ -873,6 +1151,31 @@ function applySchema(): void {
     `);
   }
 
+  // Widen session_events.type CHECK to include 'connection_created'.
+  const sessionEventsSql5 = (db.prepare("SELECT sql FROM sqlite_master WHERE type='table' AND name='session_events'").get() as { sql: string } | undefined)?.sql;
+  if (sessionEventsSql5 && !sessionEventsSql5.includes("'connection_created'")) {
+    db.exec(`
+      PRAGMA foreign_keys = OFF;
+      ALTER TABLE session_events RENAME TO session_events_pre_conn;
+      CREATE TABLE session_events (
+        id TEXT PRIMARY KEY,
+        session_id TEXT NOT NULL REFERENCES sessions(id) ON DELETE CASCADE,
+        type TEXT NOT NULL CHECK(type IN ('scope_changed','project_linked','project_created','plan_created','artifact_created','approval_requested','approval_resolved','mcp_required','subagent_started','subagent_completed','connection_created')),
+        title TEXT NOT NULL,
+        body TEXT,
+        project_id TEXT REFERENCES projects(id) ON DELETE SET NULL,
+        plan_id TEXT REFERENCES plans(id) ON DELETE SET NULL,
+        artifact_id TEXT REFERENCES artifacts(id) ON DELETE SET NULL,
+        execution_id TEXT REFERENCES executions(id) ON DELETE SET NULL,
+        metadata TEXT NOT NULL DEFAULT '{}',
+        created_at INTEGER NOT NULL DEFAULT (unixepoch())
+      );
+      INSERT INTO session_events SELECT * FROM session_events_pre_conn;
+      DROP TABLE session_events_pre_conn;
+      PRAGMA foreign_keys = ON;
+    `);
+  }
+
   db.exec(`
     CREATE INDEX IF NOT EXISTS idx_messages_session_id ON messages(session_id);
     CREATE INDEX IF NOT EXISTS idx_message_attachments_message_id ON message_attachments(message_id);
@@ -914,23 +1217,28 @@ export function reconcileOrphanedExecutions(): void {
   }
 }
 
-export interface DbProject {
+export interface DbSpace {
   id: string;
   name: string;
   description: string | null;
-  repo_path: string | null;
   enabled_connection_ids: string;
 }
 
-export function getProjectForUser(projectId: string, userId: string): DbProject | undefined {
+/** @deprecated Use DbSpace */
+export type DbProject = DbSpace;
+
+export function getSpaceForUser(spaceId: string, userId: string): DbSpace | undefined {
   return getDb()
-    .prepare('SELECT id, name, description, repo_path, enabled_connection_ids FROM projects WHERE id = ? AND user_id = ?')
-    .get(projectId, userId) as DbProject | undefined;
+    .prepare('SELECT id, name, description, enabled_connection_ids FROM spaces WHERE id = ? AND user_id = ?')
+    .get(spaceId, userId) as DbSpace | undefined;
 }
+
+/** @deprecated Use getSpaceForUser */
+export const getProjectForUser = getSpaceForUser;
 
 export interface DbAgentWorktree {
   id: string;
-  project_id: string;
+  item_id: string;
   session_id: string;
   branch: string;
   worktree_path: string;
@@ -938,18 +1246,18 @@ export interface DbAgentWorktree {
   codex_session_id: string | null;
 }
 
-export function getAgentWorktree(projectId: string, sessionId: string): DbAgentWorktree | undefined {
+export function getAgentWorktree(itemId: string, sessionId: string): DbAgentWorktree | undefined {
   return getDb()
-    .prepare('SELECT * FROM agent_worktrees WHERE project_id = ? AND session_id = ?')
-    .get(projectId, sessionId) as DbAgentWorktree | undefined;
+    .prepare('SELECT * FROM agent_worktrees WHERE item_id = ? AND session_id = ?')
+    .get(itemId, sessionId) as DbAgentWorktree | undefined;
 }
 
-export function createAgentWorktree(projectId: string, sessionId: string, branch: string, worktreePath: string): DbAgentWorktree {
+export function createAgentWorktree(itemId: string, sessionId: string, branch: string, worktreePath: string): DbAgentWorktree {
   const id = newId();
   getDb()
-    .prepare('INSERT INTO agent_worktrees (id, project_id, session_id, branch, worktree_path) VALUES (?,?,?,?,?)')
-    .run(id, projectId, sessionId, branch, worktreePath);
-  return getAgentWorktree(projectId, sessionId)!;
+    .prepare('INSERT INTO agent_worktrees (id, item_id, session_id, branch, worktree_path) VALUES (?,?,?,?,?)')
+    .run(id, itemId, sessionId, branch, worktreePath);
+  return getAgentWorktree(itemId, sessionId)!;
 }
 
 export function setAgentWorktreeSession(id: string, tool: 'claude' | 'codex', sessionId: string): void {
@@ -961,11 +1269,14 @@ export function updateAgentWorktreePath(id: string, worktreePath: string): void 
   getDb().prepare('UPDATE agent_worktrees SET worktree_path = ? WHERE id = ?').run(worktreePath, id);
 }
 
-export function getProjectsForUser(userId: string): DbProject[] {
+export function getSpacesForUser(userId: string): DbSpace[] {
   return getDb()
-    .prepare('SELECT id, name, description, repo_path, enabled_connection_ids FROM projects WHERE user_id = ?')
-    .all(userId) as DbProject[];
+    .prepare('SELECT id, name, description, enabled_connection_ids FROM spaces WHERE user_id = ?')
+    .all(userId) as DbSpace[];
 }
+
+/** @deprecated Use getSpacesForUser */
+export const getProjectsForUser = getSpacesForUser;
 
 export type SessionEventType =
   | 'scope_changed'
@@ -973,11 +1284,13 @@ export type SessionEventType =
   | 'project_created'
   | 'plan_created'
   | 'artifact_created'
+  | 'item_created'
   | 'approval_requested'
   | 'approval_resolved'
   | 'mcp_required'
   | 'subagent_started'
-  | 'subagent_completed';
+  | 'subagent_completed'
+  | 'connection_created';
 
 export interface DbSessionEvent {
   id: string;
@@ -985,9 +1298,9 @@ export interface DbSessionEvent {
   type: SessionEventType;
   title: string;
   body: string | null;
-  project_id: string | null;
+  space_id: string | null;
   plan_id: string | null;
-  artifact_id: string | null;
+  item_id: string | null;
   execution_id: string | null;
   metadata: string;
   created_at: number;
@@ -998,16 +1311,16 @@ export function createSessionEvent(input: {
   type: SessionEventType;
   title: string;
   body?: string | null;
-  projectId?: string | null;
+  spaceId?: string | null;
   planId?: string | null;
-  artifactId?: string | null;
+  itemId?: string | null;
   executionId?: string | null;
   metadata?: Record<string, unknown>;
 }): DbSessionEvent {
   const id = newId();
   getDb()
     .prepare(`
-      INSERT INTO session_events (id, session_id, type, title, body, project_id, plan_id, artifact_id, execution_id, metadata)
+      INSERT INTO session_events (id, session_id, type, title, body, space_id, plan_id, item_id, execution_id, metadata)
       VALUES (?,?,?,?,?,?,?,?,?,?)
     `)
     .run(
@@ -1016,9 +1329,9 @@ export function createSessionEvent(input: {
       input.type,
       input.title,
       input.body ?? null,
-      input.projectId ?? null,
+      input.spaceId ?? null,
       input.planId ?? null,
-      input.artifactId ?? null,
+      input.itemId ?? null,
       input.executionId ?? null,
       JSON.stringify(input.metadata ?? {}),
     );
@@ -1035,29 +1348,29 @@ export function getSessionEvents(sessionId: string): DbSessionEvent[] {
 
 export function linkSessionProject(
   sessionId: string,
-  projectId: string,
+  spaceId: string,
   source: 'agent' | 'user' | 'system',
 ): boolean {
   const result = getDb()
     .prepare(`
-      INSERT OR IGNORE INTO session_project_links (session_id, project_id, source)
+      INSERT OR IGNORE INTO session_project_links (session_id, space_id, source)
       VALUES (?,?,?)
     `)
-    .run(sessionId, projectId, source);
+    .run(sessionId, spaceId, source);
   return result.changes > 0;
 }
 
-export function getSessionProjectLinks(sessionId: string): Array<DbProject & { source: 'agent' | 'user' | 'system'; linked_at: number }> {
+export function getSessionProjectLinks(sessionId: string): Array<DbSpace & { source: 'agent' | 'user' | 'system'; linked_at: number }> {
   return getDb()
     .prepare(`
-      SELECT p.id, p.name, p.description, p.repo_path, p.enabled_connection_ids,
+      SELECT p.id, p.name, p.description, p.enabled_connection_ids,
              l.source, l.created_at AS linked_at
       FROM session_project_links l
-      JOIN projects p ON p.id = l.project_id
+      JOIN spaces p ON p.id = l.space_id
       WHERE l.session_id = ?
       ORDER BY l.created_at ASC
     `)
-    .all(sessionId) as Array<DbProject & { source: 'agent' | 'user' | 'system'; linked_at: number }>;
+    .all(sessionId) as Array<DbSpace & { source: 'agent' | 'user' | 'system'; linked_at: number }>;
 }
 
 export function getProjectsRoot(userId: string): string {
@@ -1234,7 +1547,7 @@ export function markScheduledTaskRun(id: string, now: number, intervalHours: num
 
 export interface DbPlan {
   id: string;
-  project_id: string;
+  space_id: string;
   session_id: string | null;
   title: string;
   status: 'running' | 'done' | 'error' | 'cancelled';
@@ -1259,7 +1572,7 @@ export interface DbPlanStep {
 
 export interface DbPipeline {
   id: string;
-  user_id: string;
+  space_id: string;
   title: string;
   description: string | null;
   created_at: number;
@@ -1278,7 +1591,7 @@ export interface DbPipelineTask {
 }
 
 export function createPlan(
-  projectId: string,
+  spaceId: string,
   sessionId: string | null,
   title: string,
   steps: Array<{
@@ -1292,8 +1605,8 @@ export function createPlan(
   return getDb().transaction(() => {
     const id = newId();
     getDb()
-      .prepare('INSERT INTO plans (id, project_id, session_id, title) VALUES (?,?,?,?)')
-      .run(id, projectId, sessionId, title);
+      .prepare('INSERT INTO plans (id, space_id, session_id, title) VALUES (?,?,?,?)')
+      .run(id, spaceId, sessionId, title);
     // Pre-assign step IDs so depends_on indices can be resolved to IDs
     const stepIds = steps.map(() => newId());
     const insertStep = getDb().prepare(
@@ -1316,7 +1629,7 @@ export function createPlan(
 }
 
 export function createPipeline(
-  userId: string,
+  spaceId: string,
   title: string,
   description: string | null,
   tasks: Array<{
@@ -1330,8 +1643,8 @@ export function createPipeline(
   return getDb().transaction(() => {
     const id = newId();
     getDb()
-      .prepare('INSERT INTO pipelines (id, user_id, title, description) VALUES (?,?,?,?)')
-      .run(id, userId, title, description);
+      .prepare('INSERT INTO pipelines (id, space_id, title, description) VALUES (?,?,?,?)')
+      .run(id, spaceId, title, description);
     const insertTask = getDb().prepare(
       'INSERT INTO pipeline_tasks (id, pipeline_id, title, agent, position, prompt, depends_on, tool_args) VALUES (?,?,?,?,?,?,?,?)'
     );
@@ -1351,7 +1664,12 @@ export function createPipeline(
 }
 
 export function getPipelineById(id: string, userId: string): DbPipeline | undefined {
-  return getDb().prepare('SELECT * FROM pipelines WHERE id = ? AND user_id = ?').get(id, userId) as DbPipeline | undefined;
+  return getDb().prepare(`
+    SELECT pipeline.*
+    FROM pipelines pipeline
+    JOIN spaces space ON space.id = pipeline.space_id
+    WHERE pipeline.id = ? AND space.user_id = ?
+  `).get(id, userId) as DbPipeline | undefined;
 }
 
 export function getPipelineTasks(pipelineId: string): DbPipelineTask[] {
@@ -1427,11 +1745,19 @@ export function addSessionDiscoveredTools(sessionId: string, toolNames: string[]
 }
 
 export function listPipelinesForUser(userId: string): DbPipeline[] {
-  return getDb().prepare('SELECT * FROM pipelines WHERE user_id = ? ORDER BY created_at DESC').all(userId) as DbPipeline[];
+  return getDb().prepare(`
+    SELECT pipeline.*
+    FROM pipelines pipeline
+    JOIN spaces space ON space.id = pipeline.space_id
+    WHERE space.user_id = ?
+    ORDER BY pipeline.created_at DESC
+  `).all(userId) as DbPipeline[];
 }
 
 export function deletePipeline(id: string, userId: string): boolean {
-  const result = getDb().prepare('DELETE FROM pipelines WHERE id = ? AND user_id = ?').run(id, userId);
+  const pipeline = getPipelineById(id, userId);
+  if (!pipeline) return false;
+  const result = getDb().prepare('DELETE FROM pipelines WHERE id = ?').run(id);
   return result.changes > 0;
 }
 
@@ -1444,37 +1770,40 @@ export function getPlanSummaries(projectId: string): Array<DbPlan & { total_task
         SUM(CASE WHEN ct.status = 'error' THEN 1 ELSE 0 END) AS error_tasks
       FROM plans c
       LEFT JOIN plan_steps ct ON ct.plan_id = c.id
-      WHERE c.project_id = ?
+      WHERE c.space_id = ?
       GROUP BY c.id
       ORDER BY c.created_at DESC
     `)
     .all(projectId) as Array<DbPlan & { total_tasks: number; done_tasks: number; error_tasks: number }>;
 }
 
-export function getRecentPlansForUser(userId: string, limit = 30): Array<DbPlan & { project_name: string }> {
+export function getRecentPlansForUser(userId: string, limit = 30): Array<DbPlan & { space_name: string }> {
   return getDb()
     .prepare(`
-      SELECT c.*, p.name AS project_name
+      SELECT c.*, p.name AS space_name
       FROM plans c
-      JOIN projects p ON p.id = c.project_id
+      JOIN spaces p ON p.id = c.space_id
       WHERE p.user_id = ?
       ORDER BY c.created_at DESC
       LIMIT ?
     `)
-    .all(userId, limit) as Array<DbPlan & { project_name: string }>;
+    .all(userId, limit) as Array<DbPlan & { space_name: string }>;
 }
 
-export function getPlansForProject(projectId: string): DbPlan[] {
+export function getPlansForSpace(spaceId: string): DbPlan[] {
   return getDb()
-    .prepare('SELECT * FROM plans WHERE project_id = ? ORDER BY created_at DESC')
-    .all(projectId) as DbPlan[];
+    .prepare('SELECT * FROM plans WHERE space_id = ? ORDER BY created_at DESC')
+    .all(spaceId) as DbPlan[];
 }
 
-export function getPlansWithDetails(projectId: string, limit = 20): Array<DbPlan & {
+/** @deprecated Use getPlansForSpace */
+export const getPlansForProject = getPlansForSpace;
+
+export function getPlansWithDetails(spaceId: string, limit = 20): Array<DbPlan & {
   steps: Array<DbPlanStep & { output: string | null; result: string | null }>;
 }> {
   type Row = {
-    c_id: string; c_project_id: string; c_session_id: string | null; c_title: string;
+    c_id: string; c_space_id: string; c_session_id: string | null; c_title: string;
     c_status: DbPlan['status']; c_created_at: number; c_completed_at: number | null;
     t_id: string | null; t_title: string | null; t_agent: DbPlanStep['agent'] | null;
     t_status: DbPlanStep['status'] | null; t_execution_id: string | null;
@@ -1483,7 +1812,7 @@ export function getPlansWithDetails(projectId: string, limit = 20): Array<DbPlan
   };
   const rows = getDb()
     .prepare(`
-      SELECT c.id AS c_id, c.project_id AS c_project_id, c.session_id AS c_session_id,
+      SELECT c.id AS c_id, c.space_id AS c_space_id, c.session_id AS c_session_id,
              c.title AS c_title, c.status AS c_status,
              c.created_at AS c_created_at, c.completed_at AS c_completed_at,
              ct.id AS t_id, ct.title AS t_title, ct.agent AS t_agent,
@@ -1491,18 +1820,18 @@ export function getPlansWithDetails(projectId: string, limit = 20): Array<DbPlan
              ct.position AS t_position, ct.created_at AS t_created_at,
              ct.completed_at AS t_completed_at,
              e.output_log AS output, e.result AS task_result
-      FROM (SELECT * FROM plans WHERE project_id = ? ORDER BY created_at DESC LIMIT ?) c
+      FROM (SELECT * FROM plans WHERE space_id = ? ORDER BY created_at DESC LIMIT ?) c
       LEFT JOIN plan_steps ct ON ct.plan_id = c.id
       LEFT JOIN executions e ON e.id = ct.execution_id
       ORDER BY c.created_at DESC, ct.position
     `)
-    .all(projectId, limit) as Row[];
+    .all(spaceId, limit) as Row[];
 
   const planMap = new Map<string, DbPlan & { steps: Array<DbPlanStep & { output: string | null; result: string | null }> }>();
   for (const row of rows) {
     if (!planMap.has(row.c_id)) {
       planMap.set(row.c_id, {
-        id: row.c_id, project_id: row.c_project_id, session_id: row.c_session_id,
+        id: row.c_id, space_id: row.c_space_id, session_id: row.c_session_id,
         title: row.c_title, status: row.c_status,
         created_at: row.c_created_at, completed_at: row.c_completed_at,
         steps: [],

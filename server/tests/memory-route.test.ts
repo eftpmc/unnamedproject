@@ -28,8 +28,8 @@ describe('GET /memory', () => {
       .get('/memory')
       .set('Authorization', `Bearer ${token}`);
     expect(res.status).toBe(200);
-    expect(res.body).toContainEqual({ type: 'user', key: 'preferred_language', value: 'TypeScript', project_id: null });
-    expect(res.body).toContainEqual({ type: 'feedback', key: 'package_manager', value: 'use pnpm, not npm', project_id: null });
+    expect(res.body).toContainEqual({ type: 'user', key: 'preferred_language', value: 'TypeScript', space_id: null });
+    expect(res.body).toContainEqual({ type: 'feedback', key: 'package_manager', value: 'use pnpm, not npm', space_id: null });
   });
 
   it('returns 401 without token', async () => {

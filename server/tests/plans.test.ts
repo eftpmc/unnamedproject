@@ -26,7 +26,7 @@ beforeAll(() => {
   projectId = newId();
   db.prepare('INSERT INTO users (id, email, hashed_password) VALUES (?,?,?)')
     .run(userId, `plans-${Date.now()}@test.com`, 'x');
-  db.prepare('INSERT INTO projects (id, user_id, name, enabled_connection_ids) VALUES (?,?,?,?)')
+  db.prepare('INSERT INTO spaces (id, user_id, name, enabled_connection_ids) VALUES (?,?,?,?)')
     .run(projectId, userId, 'plan-project', '[]');
 });
 
@@ -71,19 +71,20 @@ describe('plans DB layer', () => {
     expect(maybeCompletePlan(plan.id)).toBe('error');
   });
 
-  it('allows inserting an artifact that references a plan step (FK repair)', () => {
-    const { plan, steps } = createPlan(projectId, null, 'With artifact', [
+  it('allows inserting an item that references a plan step', () => {
+    const { plan, steps } = createPlan(projectId, null, 'With item', [
       { title: 'gen', agent: 'subagent' },
     ]);
-    // Would throw "no such table: campaign_tasks" before the FK-repair migration.
+    const itemId = newId();
     expect(() =>
       getDb()
         .prepare(
-          `INSERT INTO artifacts (id, project_id, kind, title, source_plan_id, source_step_id)
+          `INSERT INTO space_items (id, space_id, type, name, source_plan_id, source_step_id)
            VALUES (?,?,?,?,?,?)`
         )
-        .run(newId(), projectId, 'text', 'out', plan.id, steps[0].id)
+        .run(itemId, projectId, 'note', 'out', plan.id, steps[0].id)
     ).not.toThrow();
+    getDb().prepare('INSERT INTO space_notes (item_id, content) VALUES (?,?)').run(itemId, 'body');
     expect(getPlanSteps(plan.id)).toHaveLength(1);
   });
 });

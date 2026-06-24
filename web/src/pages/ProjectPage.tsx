@@ -3,7 +3,7 @@ import type { ReactNode } from 'react';
 import { useParams, useNavigate, Link, useLocation } from 'react-router-dom';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { Check, ChevronRight, FileText, GitGraph, MessageSquare, Play, Sparkles, Trash2, Video, Workflow } from 'lucide-react';
-import { getProjects, getProjectPlans, getProjectCapabilities, createChat, updateChatConfig, deleteProject, updateProject, getChats, getProjectFile, getProjectArtifacts, getPipelines, deletePipeline, runPipeline, getProjectWorkspace, updateProjectWorkspace } from '../lib/api.js';
+import { getSpaces as getProjects, getSpacePlans as getProjectPlans, getProjectCapabilities, createChat, updateChatConfig, deleteSpace as deleteProject, updateSpace as updateProject, getChats, getProjectFile, getProjectArtifacts, getPipelines, deletePipeline, runPipeline, getProjectWorkspace, updateProjectWorkspace, getSpaceItems } from '../lib/api.js';
 import { usePageTitle } from '../lib/usePageTitle.js';
 import { Button } from '@/components/ui/button';
 import { ConfirmDialog } from '@/components/ui/confirm-dialog';
@@ -37,8 +37,8 @@ function tabFromPath(pathname: string): Tab {
 }
 
 function tabHref(projectId: string, tab: Tab) {
-  if (tab === 'overview') return `/projects/${projectId}`;
-  return `/projects/${projectId}/${tab}`;
+  if (tab === 'overview') return `/spaces/${projectId}`;
+  return `/spaces/${projectId}/${tab}`;
 }
 
 export default function ProjectPage() {
@@ -56,6 +56,14 @@ export default function ProjectPage() {
   const project = projects.find(p => p.id === projectId) ?? null;
   usePageTitle(project?.name);
 
+  const { data: spaceItems = [] } = useQuery({
+    queryKey: ['space-items', projectId],
+    queryFn: () => getSpaceItems(projectId!),
+    enabled: !!projectId,
+    staleTime: 30_000,
+  });
+  const repoItems = spaceItems.filter(i => i.type === 'repo');
+
   const { data: plans = [] } = useQuery<Plan[]>({
     queryKey: ['project-plans', projectId],
     queryFn: () => getProjectPlans(projectId!),
@@ -67,7 +75,7 @@ export default function ProjectPage() {
     queryKey: ['chats'],
     queryFn: getChats,
   });
-  const pinnedChats = allChats.filter(c => c.pinned_project_id === projectId);
+  const pinnedChats = allChats.filter(c => c.pinned_space_id === projectId);
 
   const { data: artifactData } = useQuery<{ artifacts: ProjectArtifact[] }>({
     queryKey: ['project-artifacts', projectId],
@@ -99,7 +107,7 @@ export default function ProjectPage() {
   const startChatMutation = useMutation({
     mutationFn: async () => {
       const { id } = await createChat();
-      await updateChatConfig(id, { pinned_project_id: projectId ?? null });
+      await updateChatConfig(id, { pinned_space_id: projectId ?? null });
       return id;
     },
     onSuccess: (id) => navigate(`/c/${id}`),
@@ -204,14 +212,14 @@ export default function ProjectPage() {
       <div className={cn('flex-1', tab === 'artifacts' ? 'flex min-h-0 flex-col overflow-hidden' : 'overflow-y-auto')}>
         {tab === 'overview' && (
           <div className="mx-auto flex max-w-5xl flex-col gap-6 px-4 py-5 sm:px-6">
-            {project.repo_path && (
+            {repoItems.length > 0 && (
               <div className="flex items-center justify-between gap-4 rounded-lg border border-border-soft bg-card p-4">
                 <div className="flex min-w-0 items-center gap-3">
                   <div className="grid size-10 shrink-0 place-items-center rounded-md bg-muted text-muted-foreground">
                     <GitGraph size={18} />
                   </div>
                   <div className="min-w-0">
-                    <div className="truncate font-mono text-sm font-semibold text-foreground">{project.repo_path}</div>
+                    <div className="truncate font-mono text-sm font-semibold text-foreground">{repoItems[0].name}</div>
                     <div className="mt-0.5 text-xs text-faint-fg">Local repository</div>
                   </div>
                 </div>
@@ -259,7 +267,7 @@ export default function ProjectPage() {
                     title={activePlan.title}
                     subtitle={`Plan started ${timeAgo(activePlan.created_at)}`}
                     trailing={<StatusPill status={activePlan.status} />}
-                    onClick={() => navigate(`/projects/${projectId}/plans/${activePlan.id}`)}
+                    onClick={() => navigate(`/spaces/${projectId}/plans/${activePlan.id}`)}
                   />
                 )}
                 {recentActivityPlans.map(plan => (
@@ -269,7 +277,7 @@ export default function ProjectPage() {
                     title={plan.title}
                     subtitle={`Plan · ${timeAgo(plan.created_at)}`}
                     trailing={<StatusPill status={plan.status} />}
-                    onClick={() => navigate(`/projects/${projectId}/plans/${plan.id}`)}
+                    onClick={() => navigate(`/spaces/${projectId}/plans/${plan.id}`)}
                   />
                 ))}
                 {pinnedChats.slice(0, 2).map(chat => (
@@ -286,7 +294,7 @@ export default function ProjectPage() {
                   <ActivityRow
                     icon={<GitGraph size={17} />}
                     title="Project graph indexed"
-                    subtitle={project.repo_path ? project.repo_path.split('/').pop() ?? 'Repository context' : 'Repository context'}
+                    subtitle={repoItems[0]?.name ?? 'Repository context'}
                     trailing={<span className="text-xs text-faint-fg">ready</span>}
                   />
                 )}
@@ -509,7 +517,7 @@ function PlanRow({
 }) {
   return (
     <Link
-      to={`/projects/${projectId}/plans/${plan.id}`}
+      to={`/spaces/${projectId}/plans/${plan.id}`}
       className="flex w-full items-center gap-3 rounded-lg border border-border-soft bg-card p-4 text-left transition-[transform,box-shadow,border-color] hover:-translate-y-px hover:border-border hover:shadow-sm"
     >
       <div className="min-w-0 flex-1">
@@ -589,7 +597,7 @@ function ProjectSettingsForm({ project, onDelete }: { project: Project; onDelete
   const queryClient = useQueryClient();
   const [name, setName] = useState(project.name);
   const [description, setDescription] = useState(project.description ?? '');
-  const [repoPath, setRepoPath] = useState(project.repo_path ?? '');
+  const [repoPath, setRepoPath] = useState('');
   const [workspaceContent, setWorkspaceContent] = useState<string | null>(null);
   const [workspaceSaved, setWorkspaceSaved] = useState(false);
 
@@ -609,7 +617,6 @@ function ProjectSettingsForm({ project, onDelete }: { project: Project; onDelete
     mutationFn: () => updateProject(project.id, {
       name: name.trim() || project.name,
       description: description.trim(),
-      repo_path: repoPath.trim() || null,
     }),
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ['projects'] }),
   });
@@ -735,8 +742,8 @@ function RunPipelineDialog({
 
   const runMutation = useMutation({
     mutationFn: () => runPipeline(pipeline.id, projectId),
-    onSuccess: ({ plan_id, project_id }: { plan_id: string; project_id: string }) => {
-      navigate(`/projects/${project_id}/plans/${plan_id}`);
+    onSuccess: ({ plan_id, space_id }: { plan_id: string; space_id: string }) => {
+      navigate(`/spaces/${space_id}/plans/${plan_id}`);
       onClose();
     },
   });

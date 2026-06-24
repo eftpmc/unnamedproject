@@ -11,7 +11,7 @@ import { initSocket } from './services/socket.js';
 import { startScheduler } from './services/scheduler.js';
 import authRoutes from './routes/auth.js';
 import connectionsRoutes from './routes/connections.js';
-import projectsRoutes from './routes/projects.js';
+import spacesRoutes from './routes/spaces.js';
 import settingsRoutes from './routes/settings.js';
 import sessionsRoutes from './routes/sessions.js';
 import messagesRoutes from './routes/messages.js';
@@ -89,7 +89,8 @@ reconcileOrphanedExecutions();
 // (Express 4 does not do this on its own).
 app.use('/auth', authLimiter, wrapAsyncErrors(authRoutes));
 app.use('/connections', wrapAsyncErrors(connectionsRoutes));
-app.use('/projects', wrapAsyncErrors(projectsRoutes));
+app.use('/spaces/:spaceId/pipelines', wrapAsyncErrors(pipelinesRoutes));
+app.use('/spaces', wrapAsyncErrors(spacesRoutes));
 app.use('/settings', wrapAsyncErrors(settingsRoutes));
 app.use('/sessions', wrapAsyncErrors(sessionsRoutes));
 app.use('/sessions', wrapAsyncErrors(messagesRoutes));
@@ -97,7 +98,6 @@ app.use('/executions', wrapAsyncErrors(executionsRoutes));
 app.use('/memory', wrapAsyncErrors(memoryRoutes));
 app.use('/scheduled-tasks', wrapAsyncErrors(scheduledTasksRoutes));
 app.use('/plans', wrapAsyncErrors(plansRoutes));
-app.use('/pipelines', wrapAsyncErrors(pipelinesRoutes));
 
 // Must be registered after all routes.
 app.use(notFoundHandler);

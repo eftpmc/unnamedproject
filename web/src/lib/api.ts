@@ -1,5 +1,5 @@
 import { getToken, setToken, clearToken } from './auth.js';
-import type { Session, Message, Project, ProjectArtifact, Connection, EffortLevel, ClaudeModelInfo, UserSettings, AgentBudgets, Memory, ScheduledTask, SessionWorktree, Plan, PlanStep, Pipeline, PipelineTask, PermissionProfile, SessionEvent, SessionProjectLink } from '../types.js';
+import type { Session, Message, Space, SpaceItem, SpaceItemType, Project, ProjectArtifact, Connection, EffortLevel, ClaudeModelInfo, UserSettings, AgentBudgets, Memory, ScheduledTask, SessionWorktree, Plan, PlanStep, Pipeline, PipelineTask, PermissionProfile, SessionEvent, SessionSpaceLink } from '../types.js';
 
 async function request<T>(path: string, init: RequestInit = {}): Promise<T> {
   const token = getToken();
@@ -42,7 +42,7 @@ export function searchChats(q: string): Promise<Session[]> {
   return request(`/sessions/search?q=${encodeURIComponent(q)}`);
 }
 
-export function getChatEvents(chatId: string): Promise<{ events: SessionEvent[]; projects: SessionProjectLink[] }> {
+export function getChatEvents(chatId: string): Promise<{ events: SessionEvent[]; projects: SessionSpaceLink[] }> {
   return request(`/sessions/${chatId}/events`);
 }
 
@@ -72,7 +72,7 @@ export function createChat(title?: string): Promise<{ id: string }> {
   return request('/sessions', { method: 'POST', body: JSON.stringify({ title }) });
 }
 
-export function updateChatConfig(chatId: string, config: { effort?: EffortLevel; model?: string | null; pinned_project_id?: string | null; title?: string }): Promise<void> {
+export function updateChatConfig(chatId: string, config: { effort?: EffortLevel; model?: string | null; pinned_space_id?: string | null; pinned_project_id?: string | null; title?: string }): Promise<void> {
   return request(`/sessions/${chatId}`, { method: 'PATCH', body: JSON.stringify(config) });
 }
 
@@ -136,17 +136,76 @@ export function cancelExecution(executionId: string): Promise<void> {
   return request(`/executions/${executionId}/cancel`, { method: 'POST' });
 }
 
-export function getProjects(): Promise<Project[]> {
-  return request('/projects');
+export function getSpaces(): Promise<Space[]> {
+  return request('/spaces');
 }
 
-export function createProject(body: { name: string; description?: string; repo_path?: string; enabled_connection_ids: string[] }): Promise<{ id: string }> {
-  return request('/projects', { method: 'POST', body: JSON.stringify(body) });
+export function createSpace(body: { name: string; description?: string; enabled_connection_ids?: string[] }): Promise<{ id: string }> {
+  return request('/spaces', { method: 'POST', body: JSON.stringify(body) });
 }
 
-export function deleteProject(id: string): Promise<void> {
-  return request(`/projects/${id}`, { method: 'DELETE' });
+export function deleteSpace(id: string): Promise<void> {
+  return request(`/spaces/${id}`, { method: 'DELETE' });
 }
+
+export function updateSpace(id: string, body: { description?: string; name?: string }): Promise<void> {
+  return request(`/spaces/${id}`, { method: 'PATCH', body: JSON.stringify(body) });
+}
+
+export function getSpaceItems(spaceId: string): Promise<SpaceItem[]> {
+  return request(`/spaces/${spaceId}/items`);
+}
+
+export function createSpaceItem(
+  spaceId: string,
+  input: { type: SpaceItemType; name: string; repo_path?: string; file_path?: string; content?: string },
+): Promise<SpaceItem> {
+  return request(`/spaces/${spaceId}/items`, { method: 'POST', body: JSON.stringify(input) });
+}
+
+export function deleteSpaceItem(spaceId: string, itemId: string): Promise<void> {
+  return request(`/spaces/${spaceId}/items/${itemId}`, { method: 'DELETE' });
+}
+
+export function getItemTree(spaceId: string, itemId: string, dirPath?: string): Promise<{ entries: { name: string; type: 'file' | 'dir'; path: string }[]; base_is_repo: boolean }> {
+  const q = dirPath ? `?path=${encodeURIComponent(dirPath)}` : '';
+  return request(`/spaces/${spaceId}/items/${itemId}/tree${q}`);
+}
+
+export function getItemFile(spaceId: string, itemId: string, filePath: string): Promise<{ content: string; path: string }> {
+  return request(`/spaces/${spaceId}/items/${itemId}/file?path=${encodeURIComponent(filePath)}`);
+}
+
+export function getItemWorkspace(spaceId: string, itemId: string): Promise<{ content: string }> {
+  return request(`/spaces/${spaceId}/items/${itemId}/workspace`);
+}
+
+export function updateItemWorkspace(spaceId: string, itemId: string, content: string): Promise<void> {
+  return request(`/spaces/${spaceId}/items/${itemId}/workspace`, { method: 'PUT', body: JSON.stringify({ content }) });
+}
+
+export interface SpaceCapabilities {
+  has_remotion: boolean;
+  has_media: boolean;
+  has_graph: boolean;
+  has_research: boolean;
+}
+
+export function getItemCapabilities(spaceId: string, itemId: string): Promise<SpaceCapabilities> {
+  return request(`/spaces/${spaceId}/items/${itemId}/capabilities`);
+}
+
+export function getSpacePlans(spaceId: string): Promise<Plan[]> {
+  return request(`/spaces/${spaceId}/plans`);
+}
+
+/** @deprecated use getSpaces */
+export const getProjects = getSpaces;
+/** @deprecated use createSpace */
+export const createProject = (body: { name: string; description?: string; repo_path?: string; enabled_connection_ids: string[] }) =>
+  createSpace({ name: body.name, description: body.description, enabled_connection_ids: body.enabled_connection_ids });
+/** @deprecated use deleteSpace */
+export const deleteProject = deleteSpace;
 
 export function getProjectTree(projectId: string, dirPath?: string): Promise<{ entries: { name: string; type: 'file' | 'dir'; path: string }[]; base_is_repo: boolean }> {
   const q = dirPath ? `?path=${encodeURIComponent(dirPath)}` : '';
@@ -205,9 +264,8 @@ export function runScheduledTask(id: string): Promise<void> {
   return request(`/scheduled-tasks/${id}/run`, { method: 'POST' });
 }
 
-export function getProjectPlans(projectId: string): Promise<Plan[]> {
-  return request(`/projects/${projectId}/plans`);
-}
+/** @deprecated use getSpacePlans */
+export const getProjectPlans = getSpacePlans;
 
 export function getAllPlans(): Promise<{ plans: (Plan & { project_name: string })[] }> {
   return request('/plans');
@@ -239,26 +297,25 @@ export function deletePipeline(id: string): Promise<void> {
 
 export function runPipeline(
   id: string,
-  projectId: string,
+  spaceId: string,
   opts?: { title?: string; on_error?: 'stop' | 'continue' }
-): Promise<{ plan_id: string; project_id: string }> {
+): Promise<{ plan_id: string; space_id: string }> {
   return request(`/pipelines/${id}/run`, {
     method: 'POST',
-    body: JSON.stringify({ project_id: projectId, ...opts }),
+    body: JSON.stringify({ space_id: spaceId, ...opts }),
   });
 }
 
-export function updateProject(projectId: string, body: { description?: string; name?: string; repo_path?: string | null }): Promise<void> {
-  return request(`/projects/${projectId}`, {
-    method: 'PATCH',
-    body: JSON.stringify(body),
-  });
-}
+/** @deprecated use updateSpace */
+export const updateProject = (projectId: string, body: { description?: string; name?: string; repo_path?: string | null }) =>
+  updateSpace(projectId, { description: body.description, name: body.name });
 
+/** @deprecated use getItemWorkspace */
 export function getProjectWorkspace(projectId: string): Promise<{ content: string }> {
   return request(`/projects/${projectId}/workspace`);
 }
 
+/** @deprecated use updateItemWorkspace */
 export function updateProjectWorkspace(projectId: string, content: string): Promise<void> {
   return request(`/projects/${projectId}/workspace`, {
     method: 'PUT',
@@ -266,17 +323,15 @@ export function updateProjectWorkspace(projectId: string, content: string): Prom
   });
 }
 
-export interface ProjectCapabilities {
-  has_remotion: boolean;
-  has_media: boolean;
-  has_graph: boolean;
-  has_research: boolean;
-}
+/** @deprecated use SpaceCapabilities */
+export type ProjectCapabilities = SpaceCapabilities;
 
-export function getProjectCapabilities(projectId: string): Promise<ProjectCapabilities> {
+/** @deprecated use getItemCapabilities */
+export function getProjectCapabilities(projectId: string): Promise<SpaceCapabilities> {
   return request(`/projects/${projectId}/capabilities`);
 }
 
+/** @deprecated use getSpaceItems */
 export function getProjectArtifacts(projectId: string): Promise<{ artifacts: ProjectArtifact[] }> {
   return request(`/projects/${projectId}/artifacts`);
 }

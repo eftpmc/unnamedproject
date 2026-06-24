@@ -1,19 +1,23 @@
-import { getProjectForUser } from '../db/index.js';
+import { getSpaceForUser } from '../db/index.js';
+import { getItemById } from '../services/items.js';
 import { hasGraph, buildGraph, queryGraph } from '../services/graphify.js';
 
 interface ProjectQueryInput {
-  project_id: string;
+  space_id: string;
+  item_id: string;
   question: string;
 }
 
 export async function runProjectQuery(input: ProjectQueryInput, userId: string, apiKey?: string | null): Promise<string> {
-  const project = getProjectForUser(input.project_id, userId);
-  if (!project) return 'Project not found.';
-  if (!project.repo_path) return 'Project has no repo path configured.';
+  const space = getSpaceForUser(input.space_id, userId);
+  if (!space) return 'Space not found.';
+  const repoItem = getItemById(input.item_id);
+  if (!repoItem || repoItem.space_id !== space.id) return 'Repo item not found in this Space.';
+  if (repoItem.type !== 'repo') return 'Selected item is not a repo.';
 
-  const repoPath = project.repo_path;
+  const repoPath = repoItem.repo_path;
   if (!await hasGraph(repoPath)) {
-    await buildGraph(repoPath, input.project_id, apiKey);
+    await buildGraph(repoPath, input.item_id, apiKey);
   }
 
   return await queryGraph(input.question, repoPath, apiKey);

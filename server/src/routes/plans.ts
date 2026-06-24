@@ -6,7 +6,7 @@ import {
   getPlanById,
   getPlanSteps,
   getDb,
-  getProjectForUser,
+  getSpaceForUser,
   getRecentPlansForUser,
   resumePlan,
   type DbPlanStep,
@@ -27,25 +27,25 @@ router.get('/', (req, res) => {
 
 router.post('/', (req, res) => {
   const { userId } = req as AuthedRequest;
-  const { project_id, title, steps, session_id } = req.body as {
-    project_id?: string;
+  const { space_id, title, steps, session_id } = req.body as {
+    space_id?: string;
     title?: string;
     steps?: Array<{ title: string; agent: string }>;
     session_id?: string;
   };
-  if (!project_id || !title || !Array.isArray(steps) || steps.length === 0) {
-    res.status(400).json({ error: 'project_id, title, and steps required' });
+  if (!space_id || !title || !Array.isArray(steps) || steps.length === 0) {
+    res.status(400).json({ error: 'space_id, title, and steps required' });
     return;
   }
-  const project = getProjectForUser(project_id, userId);
-  if (!project) { res.status(404).json({ error: 'Project not found' }); return; }
+  const space = getSpaceForUser(space_id, userId);
+  if (!space) { res.status(404).json({ error: 'Space not found' }); return; }
 
   const { plan, steps: createdSteps } = createPlan(
-    project_id, session_id ?? null, title, steps as Array<{ title: string; agent: DbPlanStep['agent'] }>
+    space_id, session_id ?? null, title, steps as Array<{ title: string; agent: DbPlanStep['agent'] }>
   );
   res.status(201).json({
     plan_id: plan.id,
-    project_id: plan.project_id,
+    space_id: plan.space_id,
     steps: createdSteps,
   });
 });
@@ -54,7 +54,7 @@ router.get('/:id', (req, res) => {
   const { userId } = req as unknown as AuthedRequest;
   const plan = getPlanById(req.params.id);
   if (!plan) { res.status(404).json({ error: 'Plan not found' }); return; }
-  const project = getProjectForUser(plan.project_id, userId);
+  const project = getSpaceForUser(plan.space_id, userId);
   if (!project) { res.status(404).json({ error: 'Plan not found' }); return; }
   const steps = getPlanSteps(plan.id);
   res.json({ plan, steps });
@@ -64,7 +64,7 @@ router.post('/:id/cancel', (req, res) => {
   const { userId } = req as unknown as AuthedRequest;
   const plan = getPlanById(req.params.id);
   if (!plan) { res.status(404).json({ error: 'Plan not found' }); return; }
-  const project = getProjectForUser(plan.project_id, userId);
+  const project = getSpaceForUser(plan.space_id, userId);
   if (!project) { res.status(404).json({ error: 'Plan not found' }); return; }
   if (plan.status !== 'running') { res.status(400).json({ error: 'Plan is not running' }); return; }
 
@@ -86,7 +86,7 @@ router.post('/:id/resume', (req, res) => {
   const { userId } = req as unknown as AuthedRequest;
   const plan = getPlanById(req.params.id);
   if (!plan) { res.status(404).json({ error: 'Plan not found' }); return; }
-  const project = getProjectForUser(plan.project_id, userId);
+  const project = getSpaceForUser(plan.space_id, userId);
   if (!project) { res.status(404).json({ error: 'Plan not found' }); return; }
   if (plan.status === 'cancelled') { res.status(400).json({ error: 'Cancelled plans cannot be resumed' }); return; }
   if (plan.status !== 'error') { res.status(400).json({ error: 'Only failed plans can be resumed' }); return; }

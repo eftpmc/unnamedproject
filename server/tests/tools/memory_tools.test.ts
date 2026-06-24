@@ -59,7 +59,7 @@ describe('memory_tools', () => {
 
   it('formats project entries with the linked project name', () => {
     const projectId = newId();
-    getDb().prepare('INSERT INTO projects (id, user_id, name, enabled_connection_ids) VALUES (?,?,?,?)')
+    getDb().prepare('INSERT INTO spaces (id, user_id, name, enabled_connection_ids) VALUES (?,?,?,?)')
       .run(projectId, userId, 'demo-project', '[]');
     remember(userId, 'project', 'status', 'in progress', projectId);
     expect(recall(userId, 'project', 'status')).toBe('[project: demo-project] status: in progress');

@@ -77,7 +77,7 @@ export default function ChatsPage() {
   const isSearchActive = debouncedQuery.length >= 2;
   const baseChats = isSearchActive ? (searchResults ?? []) : chats;
   const displayedChats = projectFilter
-    ? baseChats.filter(c => c.pinned_project_id === projectFilter)
+    ? baseChats.filter(c => c.pinned_space_id === projectFilter)
     : baseChats;
 
   return (
@@ -150,7 +150,7 @@ export default function ChatsPage() {
                       )}
                       <div className="flex flex-col gap-2">
                         {groupChats.map(chat => {
-                          const project = chat.pinned_project_id ? projectById[chat.pinned_project_id] : null;
+                          const project = chat.pinned_space_id ? projectById[chat.pinned_space_id] : null;
                           return (
                             <div
                               key={chat.id}

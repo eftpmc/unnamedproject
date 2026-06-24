@@ -1,7 +1,7 @@
 import { Check, ChevronDown, Folder, Target } from 'lucide-react';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { cn } from '../lib/utils.js';
-import type { Project, SessionProjectLink } from '../types.js';
+import type { Space, SessionSpaceLink } from '../types.js';
 
 export default function ScopePopover({
   projects,
@@ -11,9 +11,9 @@ export default function ScopePopover({
   onOpenProject,
   onScopeChange,
 }: {
-  projects: Project[];
-  pinnedProject: Project | null;
-  inferredProject: SessionProjectLink | null;
+  projects: Space[];
+  pinnedProject: Space | null;
+  inferredProject: SessionSpaceLink | null;
   agentActive: boolean;
   onOpenProject: (projectId: string) => void;
   onScopeChange: (projectId: string | null) => void;
@@ -57,7 +57,7 @@ export default function ScopePopover({
               selected={pinnedProject?.id === project.id}
               icon={<Folder size={14} />}
               title={project.name}
-              description={project.repo_path ? project.repo_path.split('/').pop() ?? 'Code project' : 'Project context'}
+              description="Space context"
               onClick={() => onScopeChange(project.id)}
               onAuxClick={() => onOpenProject(project.id)}
             />

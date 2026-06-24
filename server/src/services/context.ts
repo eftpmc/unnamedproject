@@ -1,6 +1,7 @@
 import fs from 'fs';
 import path from 'path';
-import { getDb, getAgentBudgets, getMonthlyUsage, getDailyUsage, getDataDir, getPermissionProfile, type DbProject } from '../db/index.js';
+import { getDb, getAgentBudgets, getMonthlyUsage, getDailyUsage, getDataDir, getPermissionProfile, type DbSpace } from '../db/index.js';
+import { getItemsForSpace, type SpaceItem } from './items.js';
 import { recallRelevant } from './memory.js';
 import { formatEntry } from '../tools/memory_tools.js';
 import type { Intent } from './intent.js';
@@ -8,10 +9,10 @@ import { detectCapabilities } from './projectCapabilities.js';
 
 // ─── Block builders ────────────────────────────────────────────────────────
 
-function readWorkspaceMd(project: DbProject): string | null {
-  const filePath = project.repo_path
-    ? path.join(project.repo_path, 'workspace.md')
-    : path.join(getDataDir(), 'doc-projects', project.id, 'files', 'workspace.md');
+function readWorkspaceMd(space: DbSpace, repoPath: string | null): string | null {
+  const filePath = repoPath
+    ? path.join(repoPath, 'workspace.md')
+    : path.join(getDataDir(), 'doc-projects', space.id, 'files', 'workspace.md');
   try {
     const content = fs.readFileSync(filePath, 'utf8').trim();
     if (!content) return null;
@@ -25,8 +26,8 @@ function readWorkspaceMd(project: DbProject): string | null {
 function baseBlock(intent: Intent): string {
   const isCode = intent.domain === 'code' || intent.domain === 'multi' || intent.domain === 'general';
   const autoApproved = isCode
-    ? 'invoke_claude_code, invoke_codex, generate_video, git_op add/commit, run_command, create_project, update_project, project_query, rebuild_graph, search_files, read_file, list_dir, recall, remember, forget, list_chats, read_chat, register_artifact, list_artifacts, read_artifact, list_connections, test_connection, tool_search, create_plan, run_plan, run_pipeline, resume_plan, list_plans, get_plan, get_execution_output, list_scheduled_tasks, create_scheduled_task, update_scheduled_task'
-    : 'create_project, search_files, read_file, list_dir, recall, remember, forget, write_file, run_command, list_chats, read_chat, list_artifacts, read_artifact, list_connections, test_connection, tool_search';
+    ? 'invoke_claude_code, invoke_codex, generate_video, git_op add/commit, run_command, create_project, update_project, project_query, rebuild_graph, search_files, read_file, list_dir, recall, remember, forget, list_chats, read_chat, register_file_item, create_note, list_items, read_item, list_connections, test_connection, tool_search, create_plan, run_plan, run_pipeline, resume_plan, list_plans, get_plan, get_execution_output, list_scheduled_tasks, create_scheduled_task, update_scheduled_task'
+    : 'create_project, search_files, read_file, list_dir, recall, remember, forget, write_file, run_command, list_chats, read_chat, create_note, list_items, read_item, list_connections, test_connection, tool_search';
 
   return `You are a personal AI operator and orchestrator. You decide how work gets done — you never implement code, write files, or run git operations yourself when the task belongs to a coding agent.
 
@@ -41,7 +42,7 @@ function baseBlock(intent: Intent): string {
 ## State awareness
 Before starting work on the active project, check what already exists there:
 - Call list_plans with the active project_id — avoid recreating plans that already exist or are running.
-- Call list_artifacts with the active project_id — see what's already been produced before generating a new report or research output.
+- Call list_items with the active space_id — see what's already present before generating a new report or research output.
 - If a plan shows status 'error', use resume_plan to reset failed steps and re-dispatch only those — don't create a duplicate plan.
 Only check other projects when the user's request explicitly involves them.
 
@@ -132,33 +133,45 @@ Plan step chaining: prior step results are automatically injected into each subs
   }
 }
 
-function projectContextBlock(project: DbProject): string {
-  const caps = detectCapabilities(project.id, project.repo_path);
+function projectContextBlock(space: DbSpace): string {
+  const repoItems = getItemsForSpace(space.id)
+    .filter((item): item is SpaceItem & { type: 'repo' } => item.type === 'repo');
+  const repoPath = repoItems.length === 1 ? repoItems[0].repo_path : null;
+  const detected = repoItems.map(item => detectCapabilities(item.id, item.repo_path));
+  const caps = {
+    has_remotion: detected.some(value => value.has_remotion),
+    has_media: detected.some(value => value.has_media),
+    has_graph: detected.some(value => value.has_graph),
+    has_research: detected.some(value => value.has_research),
+  };
   const capLabels: string[] = [];
   if (caps.has_remotion) capLabels.push('remotion (can call generate_video)');
-  if (caps.has_media) capLabels.push('rendered media available in Artifacts tab');
+  if (caps.has_media) capLabels.push('rendered media available in Items tab');
   if (caps.has_graph) capLabels.push('code graph indexed — use project_query for broad codebase questions before reading individual files');
-  if (caps.has_research) capLabels.push(`research notes exist — read them with read_file/list_dir from ${path.join(getDataDir(), 'projects', project.id, 'research')} before starting new research`);
+  if (caps.has_research) capLabels.push(`research notes exist — read them with read_file/list_dir from ${path.join(getDataDir(), 'projects', space.id, 'research')} before starting new research`);
 
-  const header = `## Active project: **${project.name}** (id: ${project.id})${project.description ? ' — ' + project.description : ''}`;
+  const header = `## Active space: **${space.name}** (id: ${space.id})${space.description ? ' — ' + space.description : ''}`;
 
   let guidance: string;
-  if (project.repo_path) {
+  if (repoItems.length > 0) {
     const capNote = capLabels.length > 0
       ? ` Detected capabilities: ${capLabels.join(', ')}.`
       : ' No special capabilities detected yet.';
     const scaffoldNote = !caps.has_remotion
       ? ' To add video generation: delegate to invoke_claude_code to scaffold a Remotion setup (create remotion/ directory with package.json, composition, and index).'
       : '';
-    guidance = `\nCode project (repo: ${project.repo_path}).${capNote}${scaffoldNote} Delegate coding tasks to invoke_claude_code or invoke_codex with full context. Use git_op add→commit after work completes. For non-code tasks (docs, notes), use write_file/read_file directly.`;
+    const repoList = repoItems.map(item => `${item.name} (item_id: ${item.id}, path: ${item.repo_path})`).join('; ');
+    guidance = `\nCode space with repos: ${repoList}.${capNote}${scaffoldNote} Every repo-scoped tool call must include the selected item_id.`;
   } else {
-    guidance = `\nDoc/writing project (no git repo). Use write_file/read_file/list_dir directly — no Claude Code or Codex needed.`;
+    guidance = `\nDoc/writing space (no git repo). Create and read note/file items directly.`;
   }
 
-  const workspaceMd = readWorkspaceMd(project);
+  const workspaceMd = readWorkspaceMd(space, repoPath);
   const workspaceSection = workspaceMd
     ? `\n\n### workspace.md\n${workspaceMd}\n\n_Update workspace.md after significant progress, decisions, or completed milestones._`
-    : `\n\n_No workspace.md yet. Use write_file to create workspace.md in the project root to record current goals, decisions, and progress for future sessions._`;
+    : repoItems.length === 1
+      ? `\n\n_No workspace.md yet. Use write_file with item_id ${repoItems[0].id} to create workspace.md._`
+      : '';
 
   return header + guidance + workspaceSection;
 }
@@ -186,11 +199,11 @@ function recentChatsBlock(userId: string, sessionId: string): string {
 }
 
 function projectsListBlock(userId: string): string {
-  const projects = getDb()
-    .prepare('SELECT id, name, description, repo_path FROM projects WHERE user_id = ?')
-    .all(userId) as Array<{ id: string; name: string; description: string | null; repo_path: string | null }>;
-  if (projects.length === 0) return 'No projects yet.';
-  return `Available projects:\n${projects.map(p => `- ${p.name} (id: ${p.id}${p.repo_path ? '' : ', no repo'})${p.description ? ': ' + p.description : ''}`).join('\n')}`;
+  const spaces = getDb()
+    .prepare('SELECT id, name, description FROM spaces WHERE user_id = ?')
+    .all(userId) as Array<{ id: string; name: string; description: string | null }>;
+  if (spaces.length === 0) return 'No spaces yet.';
+  return `Available projects:\n${spaces.map(p => `- ${p.name} (id: ${p.id})${p.description ? ': ' + p.description : ''}`).join('\n')}`;
 }
 
 function formatUsageLine(label: string, spent: number, budget: number | null, dailySpent: number, dailyBudget: number | null): string {
@@ -228,13 +241,13 @@ function sessionSummaryBlock(sessionId: string): string {
 
 export function buildContext(userId: string, sessionId: string, intent: Intent): string {
   const session = getDb()
-    .prepare('SELECT pinned_project_id FROM sessions WHERE id = ?')
-    .get(sessionId) as { pinned_project_id: string | null } | undefined;
-  const pinnedProjectId = session?.pinned_project_id ?? undefined;
+    .prepare('SELECT pinned_space_id FROM sessions WHERE id = ?')
+    .get(sessionId) as { pinned_space_id: string | null } | undefined;
+  const pinnedProjectId = session?.pinned_space_id ?? undefined;
 
   const pinnedProject = pinnedProjectId
-    ? getDb().prepare('SELECT id, name, description, repo_path, enabled_connection_ids FROM projects WHERE id = ?')
-        .get(pinnedProjectId) as DbProject | undefined
+    ? getDb().prepare('SELECT id, name, description, enabled_connection_ids FROM spaces WHERE id = ?')
+        .get(pinnedProjectId) as DbSpace | undefined
     : undefined;
 
   const blocks: string[] = [

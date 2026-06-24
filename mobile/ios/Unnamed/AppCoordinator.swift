@@ -204,11 +204,24 @@ final class AppCoordinator {
 
   private func pushProjectDetail(_ project: Project) {
     let controller = ProjectDetailViewController(appSession: session, project: project)
-    controller.onShowChat = { [weak self] chat in self?.openChat(chat) }
+    controller.onShowChat = { [weak self] chat in self?.pushChat(chat) }
     if splitVC?.isCollapsed == true {
       sidebarNav?.pushViewController(controller, animated: true)
     } else {
       mainNav?.pushViewController(controller, animated: true)
+    }
+  }
+
+  /// Pushes a chat onto the current chat-area stack (so Back returns to
+  /// whatever was on top, e.g. Project Detail) — unlike `showChat`, which
+  /// resets the stack for switching the app's "active" chat.
+  private func pushChat(_ chat: ChatSession) {
+    guard let splitVC else { return }
+    let vc = makeChatVC(for: chat)
+    if splitVC.isCollapsed {
+      sidebarNav?.pushViewController(vc, animated: true)
+    } else {
+      mainNav?.pushViewController(vc, animated: true)
     }
   }
 

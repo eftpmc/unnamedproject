@@ -1,4 +1,4 @@
-import { getDb, getProjectForUser } from '../db/index.js';
+import { getDb, getSpaceForUser } from '../db/index.js';
 import { newId } from '../lib/ids.js';
 import type { Intent } from './intent.js';
 
@@ -8,20 +8,20 @@ export interface MemoryEntry {
   type: MemoryType;
   key: string;
   value: string;
-  project_id: string | null;
+  space_id: string | null;
 }
 
-export function rememberFact(userId: string, type: MemoryType, key: string, value: string, projectId: string | null = null): void {
+export function rememberFact(userId: string, type: MemoryType, key: string, value: string, spaceId: string | null = null): void {
   getDb()
     .prepare(`
-      INSERT INTO memories (id, user_id, type, key, value, project_id)
+      INSERT INTO memories (id, user_id, type, key, value, space_id)
       VALUES (?, ?, ?, ?, ?, ?)
       ON CONFLICT(user_id, type, key) DO UPDATE SET
         value = excluded.value,
-        project_id = excluded.project_id,
+        space_id = excluded.space_id,
         updated_at = unixepoch()
     `)
-    .run(newId(), userId, type, key, value, projectId);
+    .run(newId(), userId, type, key, value, spaceId);
 }
 
 export function recallFact(userId: string, type: MemoryType, key: string): string | null {
@@ -40,15 +40,18 @@ export function forgetFact(userId: string, type: MemoryType, key: string): boole
 
 export function recallAll(userId: string, type?: MemoryType): MemoryEntry[] {
   const rows = type
-    ? getDb().prepare('SELECT type, key, value, project_id FROM memories WHERE user_id = ? AND type = ?').all(userId, type)
-    : getDb().prepare('SELECT type, key, value, project_id FROM memories WHERE user_id = ?').all(userId);
+    ? getDb().prepare('SELECT type, key, value, space_id FROM memories WHERE user_id = ? AND type = ?').all(userId, type)
+    : getDb().prepare('SELECT type, key, value, space_id FROM memories WHERE user_id = ?').all(userId);
   return rows as MemoryEntry[];
 }
 
-export function projectNameFor(userId: string, projectId: string | null): string | null {
-  if (!projectId) return null;
-  return getProjectForUser(projectId, userId)?.name ?? null;
+export function spaceNameFor(userId: string, spaceId: string | null): string | null {
+  if (!spaceId) return null;
+  return getSpaceForUser(spaceId, userId)?.name ?? null;
 }
+
+/** @deprecated Use spaceNameFor */
+export const projectNameFor = spaceNameFor;
 
 const MAX_USER_MEMORIES = 10;
 
@@ -63,13 +66,13 @@ function scoreMemory(entry: MemoryEntry, intent: Intent): number {
   return score;
 }
 
-export function recallRelevant(userId: string, intent: Intent, pinnedProjectId?: string): MemoryEntry[] {
+export function recallRelevant(userId: string, intent: Intent, pinnedSpaceId?: string): MemoryEntry[] {
   const all = recallAll(userId);
 
   const feedback = all.filter(e => e.type === 'feedback');
 
-  const project = pinnedProjectId
-    ? all.filter(e => e.type === 'project' && e.project_id === pinnedProjectId)
+  const project = pinnedSpaceId
+    ? all.filter(e => e.type === 'project' && e.space_id === pinnedSpaceId)
     : all.filter(e => e.type === 'project' && scoreMemory(e, intent) > 0);
 
   const reference = intent.domain === 'general'

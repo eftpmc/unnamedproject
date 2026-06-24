@@ -1,7 +1,8 @@
 import fs from 'fs/promises';
 import fsSync from 'fs';
 import path from 'path';
-import { getProjectForUser, getDataDir } from '../db/index.js';
+import { getSpaceForUser } from '../db/index.js';
+import { getItemById } from '../services/items.js';
 import { requestApproval } from '../services/executor.js';
 import { ensureWorktree } from '../lib/worktree.js';
 import type { PermissionProfile } from '../services/permissions.js';
@@ -9,7 +10,6 @@ import type { PermissionProfile } from '../services/permissions.js';
 interface ToolContext {
   userId: string;
   executionId: string;
-  projectId: string;
   sessionId: string;
   permissionProfile?: PermissionProfile;
 }
@@ -23,22 +23,19 @@ function resolveInProject(repoPath: string, relPath: string): string {
   return resolved;
 }
 
-async function getWorkspacePath(projectId: string, userId: string, sessionId: string): Promise<string> {
-  const project = getProjectForUser(projectId, userId);
-  if (!project) throw new Error('Project not found');
-  if (!project.repo_path) {
-    // Doc project: use a managed flat directory, no git/worktree needed
-    const dir = path.join(getDataDir(), 'doc-projects', projectId, 'files');
-    await fs.mkdir(dir, { recursive: true });
-    return dir;
-  }
-  return (await ensureWorktree(project, sessionId)).worktree_path;
+async function getWorkspacePath(spaceId: string, itemId: string, userId: string, sessionId: string): Promise<string> {
+  const space = getSpaceForUser(spaceId, userId);
+  if (!space) throw new Error('Space not found');
+  const repoItem = getItemById(itemId);
+  if (!repoItem || repoItem.space_id !== spaceId) throw new Error('Repo item not found in this Space');
+  if (repoItem.type !== 'repo') throw new Error(`Item ${itemId} is not a repo`);
+  return (await ensureWorktree(repoItem, sessionId)).worktree_path;
 }
 
 const FILE_LINE_CAP = 500;
 
-export async function readFile(input: { project_id: string; path: string; offset?: number; limit?: number }, ctx: ToolContext): Promise<string> {
-  const repoPath = await getWorkspacePath(input.project_id, ctx.userId, ctx.sessionId);
+export async function readFile(input: { space_id: string; item_id: string; path: string; offset?: number; limit?: number }, ctx: ToolContext): Promise<string> {
+  const repoPath = await getWorkspacePath(input.space_id, input.item_id, ctx.userId, ctx.sessionId);
   const target = resolveInProject(repoPath, input.path);
   const content = await fs.readFile(target, 'utf-8');
   const lines = content.split('\n');
@@ -52,18 +49,18 @@ export async function readFile(input: { project_id: string; path: string; offset
   return header + slice;
 }
 
-export async function listDir(input: { project_id: string; path?: string }, ctx: ToolContext): Promise<string> {
-  const repoPath = await getWorkspacePath(input.project_id, ctx.userId, ctx.sessionId);
+export async function listDir(input: { space_id: string; item_id: string; path?: string }, ctx: ToolContext): Promise<string> {
+  const repoPath = await getWorkspacePath(input.space_id, input.item_id, ctx.userId, ctx.sessionId);
   const target = resolveInProject(repoPath, input.path ?? '.');
   const entries = await fs.readdir(target, { withFileTypes: true });
   return entries.map(e => `${e.isDirectory() ? 'd' : 'f'} ${e.name}`).join('\n');
 }
 
 export async function searchFiles(
-  input: { project_id: string; pattern: string; path?: string; file_glob?: string; ignore_case?: boolean },
+  input: { space_id: string; item_id: string; pattern: string; path?: string; file_glob?: string; ignore_case?: boolean },
   ctx: ToolContext,
 ): Promise<string> {
-  const repoPath = await getWorkspacePath(input.project_id, ctx.userId, ctx.sessionId);
+  const repoPath = await getWorkspacePath(input.space_id, input.item_id, ctx.userId, ctx.sessionId);
   const searchRoot = resolveInProject(repoPath, input.path ?? '.');
 
   const flags = input.ignore_case ? 'i' : '';
@@ -110,8 +107,8 @@ export async function searchFiles(
   return matches.join('\n') + truncated;
 }
 
-export async function writeFile(input: { project_id: string; path: string; content: string }, ctx: ToolContext): Promise<string> {
-  const repoPath = await getWorkspacePath(input.project_id, ctx.userId, ctx.sessionId);
+export async function writeFile(input: { space_id: string; item_id: string; path: string; content: string }, ctx: ToolContext): Promise<string> {
+  const repoPath = await getWorkspacePath(input.space_id, input.item_id, ctx.userId, ctx.sessionId);
   const target = resolveInProject(repoPath, input.path);
 
   const tier = (ctx.permissionProfile ?? 'fast') === 'strict' ? 'user' : 'agent';

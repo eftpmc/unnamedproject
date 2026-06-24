@@ -1,8 +1,10 @@
 import Anthropic from '@anthropic-ai/sdk';
 import { exec as execCallback } from 'child_process';
 import fs from 'fs';
+import path from 'path';
 import { promisify } from 'util';
-import { createSessionEvent, getDb, getProjectForUser, linkSessionProject, setAgentWorktreeSession, updatePlanStepStatus, maybeCompletePlan, getPlanForStep, getPlanSummaries, getPlanById, getPlanSteps, getExecutionById, getScheduledTasksForUser, createScheduledTask, updateScheduledTask, deleteScheduledTask, resumePlan, getPermissionProfile, createPipeline, getPipelineById, getPipelineTasks, listPipelinesForUser, createPlan, recordAgentUsage, addSessionDiscoveredTools, getSessionDiscoveredTools, upsertMcpRegistryTools, type DbPlan, type DbPlanStep } from '../db/index.js';
+import { createSessionEvent, getDb, getSpaceForUser, linkSessionProject, setAgentWorktreeSession, updatePlanStepStatus, maybeCompletePlan, getPlanForStep, getPlanSummaries, getPlanById, getPlanSteps, getExecutionById, getScheduledTasksForUser, createScheduledTask, updateScheduledTask, deleteScheduledTask, resumePlan, getPermissionProfile, createPipeline, getPipelineById, getPipelineTasks, listPipelinesForUser, createPlan, recordAgentUsage, addSessionDiscoveredTools, getSessionDiscoveredTools, upsertMcpRegistryTools, type DbPlan, type DbPlanStep } from '../db/index.js';
+import { getItemsForSpace, getItemById, createNoteItem, createFileItem, createRepoItem, readItemContent, registerFileItem, type SpaceItem } from './items.js';
 
 const execAsync = promisify(execCallback);
 import { runAgentPipeline, type AgentPipelineCtx } from './agent_pipeline.js';
@@ -20,6 +22,7 @@ import { readFile, listDir, writeFile, searchFiles } from '../tools/file_ops.js'
 import { runCommand, isBlocked } from '../tools/run_command.js';
 import { readChat } from '../tools/read_chat.js';
 import { createProject, updateProject, deleteProject } from '../tools/project_ops.js';
+import { createConnectionTool } from '../tools/connection_ops.js';
 import { runCreatePlan } from '../tools/create_plan.js';
 import { broadcast } from './socket.js';
 import { newId } from '../lib/ids.js';
@@ -32,7 +35,6 @@ import { searchTools } from './toolSearch.js';
 import { resolveRegistryTool, dispatchRegistryTool, ingestMcpTools } from './toolRegistry.js';
 import { extractAndRemember } from './extract-memory.js';
 import { renderVideo, type VideoScene } from './video.js';
-import { createTextArtifact, listProjectArtifacts, getArtifactById, readArtifactContent, registerFileAsArtifact } from './artifacts.js';
 import { listMcpTools } from '../lib/mcp-pool.js';
 import { maybeDistill } from './distill.js';
 
@@ -174,8 +176,8 @@ const PARALLEL_SAFE_TOOLS = new Set([
   'recall',
   'list_chats',
   'read_chat',
-  'list_artifacts',
-  'read_artifact',
+  'list_items',
+  'read_item',
   'list_connections',
   'test_connection',
   'search_files',
@@ -200,11 +202,11 @@ const CORE_TOOLS = new Set([
   // Post-coding mandatory flow
   'git_op', 'run_command',
   // State-awareness checks (system prompt requires these before starting work)
-  'list_plans', 'list_artifacts', 'run_plan',
+  'list_plans', 'list_items', 'run_plan',
   // Codebase understanding
   'project_query',
-  // Connection verification (MCP instructions reference this early)
-  'list_connections',
+  // Connection management
+  'list_connections', 'create_connection',
   // Orchestration
   'create_plan', 'delegate_to_agent',
 ]);
@@ -235,10 +237,10 @@ function emitSessionEvent(userId: string, input: Parameters<typeof createSession
   }
 }
 
-function noteProjectUse(userId: string, sessionId: string, project: { id: string; name: string }, executionId?: string): void {
+function noteProjectUse(userId: string, sessionId: string, space: { id: string; name: string }, executionId?: string): void {
   let linked = false;
   try {
-    linked = linkSessionProject(sessionId, project.id, 'agent');
+    linked = linkSessionProject(sessionId, space.id, 'agent');
   } catch (err) {
     console.error('noteProjectUse: linkSessionProject failed (non-fatal):', err);
     return;
@@ -247,9 +249,9 @@ function noteProjectUse(userId: string, sessionId: string, project: { id: string
   emitSessionEvent(userId, {
     sessionId,
     type: 'project_linked',
-    title: `Scoped to ${project.name}`,
-    body: 'The agent attached this chat to a project automatically.',
-    projectId: project.id,
+    title: `Scoped to ${space.name}`,
+    body: 'The agent attached this chat to a space automatically.',
+    spaceId: space.id,
     executionId: executionId ?? null,
     metadata: { source: 'agent' },
   });
@@ -342,7 +344,7 @@ async function runSubAgent(
 
   const client = new Anthropic({ apiKey });
 
-  const SUB_TOOLS = new Set(['read_file', 'list_dir', 'search_files', 'project_query', 'recall', 'remember', 'write_file', 'create_artifact', 'git_op', 'list_artifacts', 'read_artifact']);
+  const SUB_TOOLS = new Set(['read_file', 'list_dir', 'search_files', 'project_query', 'recall', 'remember', 'write_file', 'create_note', 'git_op', 'list_items', 'read_item']);
   const subtools = toolDefinitions.filter(t => 'name' in t && SUB_TOOLS.has(t.name as string));
 
   const systemPrompt = `You are a focused sub-agent completing a specific task.${projectId ? ` Use project_id "${projectId}" when calling project tools.` : ''} Complete the task fully, then respond with a clear summary of what you accomplished.`;
@@ -420,10 +422,10 @@ async function executePlanStep(
   messageId: string,
   sessionId: string,
 ): Promise<void> {
-  const project = getProjectForUser(plan.project_id, userId);
-  if (!project) throw new Error(`Project ${plan.project_id} not found`);
+  const space = getSpaceForUser(plan.space_id, userId);
+  if (!space) throw new Error(`Space ${plan.space_id} not found`);
 
-  const executionId = createExecution(userId, messageId, project.id, step.agent);
+  const executionId = createExecution(userId, messageId, space.id, step.agent);
   startPlanStep(userId, step.id, executionId);
 
   const toolArgs: Record<string, unknown> = step.tool_args ? JSON.parse(step.tool_args) : {};
@@ -434,18 +436,27 @@ async function executePlanStep(
   const priorCtx = buildPlanPriorContext(step.id);
   const fullPrompt = priorCtx ? `${prompt}\n\n${priorCtx}` : prompt;
 
+  function getRepoItem(): SpaceItem & { type: 'repo' } {
+    const itemId = toolArgs.item_id as string | undefined;
+    if (!itemId) throw new Error(`Plan step "${step.title}" requires tool_args.item_id`);
+    const repoItem = getItemById(itemId);
+    if (!repoItem || repoItem.space_id !== space!.id) throw new Error(`Repo item ${itemId} not found in Space '${space!.name}'`);
+    if (repoItem.type !== 'repo') throw new Error(`Item ${itemId} is not a repo`);
+    return repoItem;
+  }
+
   try {
     let result: string;
 
     switch (step.agent) {
       case 'claude_code': {
-        if (!project.repo_path) throw new Error(`Project '${project.name}' has no repo`);
+        const repoItem = getRepoItem();
         let apiKey: string | null = null;
         try { apiKey = getAnthropicKey(userId); } catch { /* use CLI auth */ }
-        const worktree = await ensureWorktree(project, sessionId);
+        const worktree = await ensureWorktree(repoItem, sessionId);
         let graphKey: string | null = null;
         try { graphKey = getAnthropicKey(userId); } catch {}
-        const ctx: AgentPipelineCtx = { userId, tool: 'claude_code', repoPath: project.repo_path, projectId: project.id, graphKey };
+        const ctx: AgentPipelineCtx = { userId, tool: 'claude_code', repoPath: repoItem.repo_path, projectId: space.id, graphKey };
         await runAgentPipeline(ctx, async () => {
           const r = await invokeClaudeCode(
             { prompt: fullPrompt, model: toolArgs.model as string | undefined },
@@ -458,8 +469,8 @@ async function executePlanStep(
         break;
       }
       case 'codex': {
-        if (!project.repo_path) throw new Error(`Project '${project.name}' has no repo`);
-        const connIds: string[] = JSON.parse(project.enabled_connection_ids ?? '[]');
+        const repoItem = getRepoItem();
+        const connIds: string[] = JSON.parse(space.enabled_connection_ids ?? '[]');
         let codexKey: string | null = null;
         if (connIds.length > 0) {
           const openaiConn = getDb()
@@ -469,10 +480,10 @@ async function executePlanStep(
             codexKey = getDecryptedConfig(openaiConn.id, userId).apiKey;
           }
         }
-        const cWorktree = await ensureWorktree(project, sessionId);
+        const cWorktree = await ensureWorktree(repoItem, sessionId);
         let cGraphKey: string | null = null;
         try { cGraphKey = getAnthropicKey(userId); } catch {}
-        const cCtx: AgentPipelineCtx = { userId, tool: 'codex', repoPath: project.repo_path, projectId: project.id, graphKey: cGraphKey };
+        const cCtx: AgentPipelineCtx = { userId, tool: 'codex', repoPath: repoItem.repo_path, projectId: space.id, graphKey: cGraphKey };
         await runAgentPipeline(cCtx, async () => {
           const cr = await invokeCodex(
             { prompt: fullPrompt, model: toolArgs.model as string | undefined },
@@ -485,10 +496,10 @@ async function executePlanStep(
         break;
       }
       case 'eval': {
-        if (!project.repo_path) throw new Error(`Project '${project.name}' has no repo for eval`);
+        const repoItem = getRepoItem();
         const evalBlocked = isBlocked(prompt);
         if (evalBlocked) throw new Error(evalBlocked);
-        const evalWorktree = await ensureWorktree(project, sessionId);
+        const evalWorktree = await ensureWorktree(repoItem, sessionId);
         const evalDecision = await requestApproval(executionId, userId, 'eval', { command: prompt, cwd: evalWorktree.worktree_path }, 'agent');
         if (evalDecision === 'rejected') { result = 'eval cancelled'; break; }
         try {
@@ -505,19 +516,19 @@ async function executePlanStep(
         break;
       }
       case 'subagent': {
-        result = await runSubAgent(fullPrompt, plan.project_id, userId, executionId, messageId, sessionId, plan.id);
+        result = await runSubAgent(fullPrompt, plan.space_id, userId, executionId, messageId, sessionId, plan.id);
         break;
       }
       case 'git': {
-        if (!project.repo_path) throw new Error(`Project '${project.name}' has no repo`);
-        const gitWorktree = await ensureWorktree(project, sessionId);
+        const repoItem = getRepoItem();
+        const gitWorktree = await ensureWorktree(repoItem, sessionId);
         result = await runGitOp(
           {
             op: (toolArgs.op as 'log' | 'diff' | 'status' | 'commit' | 'push') ?? 'commit',
             message: (toolArgs.message as string | undefined) ?? prompt,
             branch: (toolArgs.branch as string | undefined) ?? gitWorktree.branch,
           },
-          { userId, executionId, projectId: project.id, repoPath: gitWorktree.worktree_path },
+          { userId, executionId, projectId: space.id, repoPath: gitWorktree.worktree_path },
         );
         break;
       }
@@ -527,8 +538,8 @@ async function executePlanStep(
       }
       case 'file_write': {
         result = await writeFile(
-          { project_id: project.id, path: toolArgs.path as string, content: (toolArgs.content as string) ?? prompt },
-          { userId, executionId, projectId: project.id, sessionId, permissionProfile: getPermissionProfile(userId) },
+          { space_id: space.id, item_id: getRepoItem().id, path: toolArgs.path as string, content: (toolArgs.content as string) ?? prompt },
+          { userId, executionId, sessionId, permissionProfile: getPermissionProfile(userId) },
         );
         break;
       }
@@ -662,10 +673,11 @@ async function dispatchTool(
   messageId: string,
   sessionId: string
 ): Promise<string> {
-  const projectId = (toolInput.project_id as string | undefined) ?? 'unknown';
-  const project = getProjectForUser(projectId, userId);
-  const executionId = createExecution(userId, messageId, project?.id ?? null, toolName);
-  if (project) noteProjectUse(userId, sessionId, project, executionId);
+  // Accept space_id (new) or project_id (legacy alias still sent by older prompts)
+  const spaceId = (toolInput.space_id as string | undefined) ?? (toolInput.project_id as string | undefined) ?? 'unknown';
+  const space = getSpaceForUser(spaceId, userId);
+  const executionId = createExecution(userId, messageId, space?.id ?? null, toolName);
+  if (space) noteProjectUse(userId, sessionId, space, executionId);
 
   const planStepId = toolInput.plan_step_id as string | undefined;
   if (planStepId) {
@@ -679,17 +691,26 @@ async function dispatchTool(
   try {
     let result: string;
 
+    function getRepoItemForSpace(): SpaceItem & { type: 'repo' } | null {
+      if (!space) return null;
+      const itemId = toolInput.item_id as string | undefined;
+      if (!itemId) return null;
+      const item = getItemById(itemId);
+      return item?.space_id === space.id && item.type === 'repo' ? item : null;
+    }
+
     switch (toolName) {
       case 'invoke_claude_code': {
-        if (!project) {
-          result = `Error: project ${projectId} not found`;
+        if (!space) {
+          result = `Error: space ${spaceId} not found`;
           break;
         }
-        if (!project.repo_path) {
-          result = `Project '${project.name}' has no repo. Create a new repo-backed project with create_project (with_repo=true) for this work.`;
+        const ccRepoItem = getRepoItemForSpace();
+        if (!ccRepoItem) {
+          result = `Repo item ${toolInput.item_id ?? '(missing)'} not found in Space '${space.name}'.`;
           break;
         }
-        const connectionIds: string[] = JSON.parse(project.enabled_connection_ids ?? '[]');
+        const connectionIds: string[] = JSON.parse(space.enabled_connection_ids ?? '[]');
         let ccApiKey: string | null = null;
         try { ccApiKey = getAnthropicKey(userId); } catch { /* use CLI's local auth */ }
         if (connectionIds.length > 0) {
@@ -698,12 +719,12 @@ async function dispatchTool(
             .get(...connectionIds) as { id: string } | undefined;
           if (anthropicConn) ccApiKey = getDecryptedConfig(anthropicConn.id, userId).apiKey;
         }
-        const ccWorktree = await ensureWorktree(project, sessionId);
+        const ccWorktree = await ensureWorktree(ccRepoItem, sessionId);
         const ccStepId = toolInput.plan_step_id as string | undefined;
         if (ccStepId) startPlanStep(userId, ccStepId, executionId);
         let ccGraphKey: string | null = null;
         try { ccGraphKey = getAnthropicKey(userId); } catch { /* none configured */ }
-        const ccCtx: AgentPipelineCtx = { userId, tool: 'claude_code', repoPath: project.repo_path, projectId: project.id, graphKey: ccGraphKey };
+        const ccCtx: AgentPipelineCtx = { userId, tool: 'claude_code', repoPath: ccRepoItem.repo_path, projectId: space.id, graphKey: ccGraphKey };
         const ccPrior = ccStepId ? buildPlanPriorContext(ccStepId) : null;
         const ccPrompt = ccPrior ? `${toolInput.prompt as string}\n\n${ccPrior}` : toolInput.prompt as string;
         await runAgentPipeline(ccCtx, async () => {
@@ -719,15 +740,16 @@ async function dispatchTool(
         break;
       }
       case 'invoke_codex': {
-        if (!project) {
-          result = `Error: project ${projectId} not found`;
+        if (!space) {
+          result = `Error: space ${spaceId} not found`;
           break;
         }
-        if (!project.repo_path) {
-          result = `Project '${project.name}' has no repo. Create a new repo-backed project with create_project (with_repo=true) for this work.`;
+        const codexRepoItem = getRepoItemForSpace();
+        if (!codexRepoItem) {
+          result = `Repo item ${toolInput.item_id ?? '(missing)'} not found in Space '${space.name}'.`;
           break;
         }
-        const connectionIds: string[] = JSON.parse(project.enabled_connection_ids ?? '[]');
+        const connectionIds: string[] = JSON.parse(space.enabled_connection_ids ?? '[]');
         let codexApiKey: string | null = null;
         if (connectionIds.length > 0) {
           const openaiConn = getDb()
@@ -735,12 +757,12 @@ async function dispatchTool(
             .get(...connectionIds) as { id: string } | undefined;
           if (openaiConn) codexApiKey = getDecryptedConfig(openaiConn.id, userId).apiKey;
         }
-        const codexWorktree = await ensureWorktree(project, sessionId);
+        const codexWorktree = await ensureWorktree(codexRepoItem, sessionId);
         const codexStepId = toolInput.plan_step_id as string | undefined;
         if (codexStepId) startPlanStep(userId, codexStepId, executionId);
         let codexGraphKey: string | null = null;
         try { codexGraphKey = getAnthropicKey(userId); } catch { /* none configured */ }
-        const codexCtx: AgentPipelineCtx = { userId, tool: 'codex', repoPath: project.repo_path, projectId: project.id, graphKey: codexGraphKey };
+        const codexCtx: AgentPipelineCtx = { userId, tool: 'codex', repoPath: codexRepoItem.repo_path, projectId: space.id, graphKey: codexGraphKey };
         const codexPrior = codexStepId ? buildPlanPriorContext(codexStepId) : null;
         const codexPrompt = codexPrior ? `${toolInput.prompt as string}\n\n${codexPrior}` : toolInput.prompt as string;
         await runAgentPipeline(codexCtx, async () => {
@@ -766,20 +788,21 @@ async function dispatchTool(
         break;
       }
       case 'git_op': {
-        if (!project) {
-          result = `Error: project ${projectId} not found`;
+        if (!space) {
+          result = `Error: space ${spaceId} not found`;
           break;
         }
-        if (!project.repo_path) {
-          result = `Project '${project.name}' has no repo. Create a new repo-backed project with create_project (with_repo=true) for this work.`;
+        const gitRepoItem = getRepoItemForSpace();
+        if (!gitRepoItem) {
+          result = `Repo item ${toolInput.item_id ?? '(missing)'} not found in Space '${space.name}'.`;
           break;
         }
-        const gitWorktree = await ensureWorktree(project, sessionId);
+        const gitWorktree = await ensureWorktree(gitRepoItem, sessionId);
         const gitStepId = toolInput.plan_step_id as string | undefined;
         if (gitStepId) startPlanStep(userId, gitStepId, executionId);
         result = await runGitOp(
           { op: toolInput.op as 'log' | 'diff' | 'status' | 'commit' | 'push', message: toolInput.message as string | undefined, branch: toolInput.branch as string | undefined ?? gitWorktree.branch },
-          { userId, executionId, projectId, repoPath: gitWorktree.worktree_path }
+          { userId, executionId, projectId: spaceId, repoPath: gitWorktree.worktree_path }
         );
         if (gitStepId) finishPlanStep(userId, gitStepId, result);
         break;
@@ -787,17 +810,18 @@ async function dispatchTool(
       case 'project_query': {
         let pqKey: string | null = null;
         try { pqKey = getAnthropicKey(userId); } catch { /* none configured */ }
-        result = await runProjectQuery({ project_id: projectId, question: toolInput.question as string }, userId, pqKey);
+        result = await runProjectQuery({ space_id: spaceId, item_id: toolInput.item_id as string, question: toolInput.question as string }, userId, pqKey);
         break;
       }
       case 'rebuild_graph': {
-        if (!project?.repo_path) {
-          result = project ? `Project '${project.name}' has no repo.` : `Project ${projectId} not found.`;
+        const rgRepoItem = getRepoItemForSpace();
+        if (!rgRepoItem) {
+          result = space ? `Space '${space.name}' has no repo.` : `Space ${spaceId} not found.`;
           break;
         }
         let rgKey: string | null = null;
         try { rgKey = getAnthropicKey(userId); } catch { /* none configured */ }
-        await buildGraph(project.repo_path, projectId, rgKey);
+        await buildGraph(rgRepoItem.repo_path, rgRepoItem.id, rgKey);
         result = 'Knowledge graph rebuilt successfully.';
         break;
       }
@@ -807,7 +831,7 @@ async function dispatchTool(
           toolInput.type as string,
           toolInput.key as string,
           toolInput.value as string,
-          toolInput.project_id as string | undefined
+          toolInput.space_id as string | undefined ?? toolInput.project_id as string | undefined
         );
         break;
       case 'recall':
@@ -818,51 +842,52 @@ async function dispatchTool(
         break;
       case 'list_chats': {
         const limit = Math.min(100, (toolInput.limit as number | undefined) ?? 20);
-        const filterProject = toolInput.project_id as string | undefined;
-        const rows = filterProject
-          ? getDb().prepare('SELECT id, title, updated_at, pinned_project_id FROM sessions WHERE user_id = ? AND pinned_project_id = ? ORDER BY updated_at DESC LIMIT ?').all(userId, filterProject, limit)
-          : getDb().prepare('SELECT id, title, updated_at, pinned_project_id FROM sessions WHERE user_id = ? ORDER BY updated_at DESC LIMIT ?').all(userId, limit);
+        const filterSpace = (toolInput.space_id as string | undefined) ?? (toolInput.project_id as string | undefined);
+        const rows = filterSpace
+          ? getDb().prepare('SELECT id, title, updated_at, pinned_space_id FROM sessions WHERE user_id = ? AND pinned_space_id = ? ORDER BY updated_at DESC LIMIT ?').all(userId, filterSpace, limit)
+          : getDb().prepare('SELECT id, title, updated_at, pinned_space_id FROM sessions WHERE user_id = ? ORDER BY updated_at DESC LIMIT ?').all(userId, limit);
         result = JSON.stringify(rows, null, 2);
         break;
       }
       case 'read_chat':
         result = readChat(userId, toolInput.chat_id as string);
         break;
-      case 'register_artifact': {
+      case 'register_file_item': {
         const regStepId = toolInput.plan_step_id as string | undefined;
         if (regStepId) startPlanStep(userId, regStepId, executionId);
-        const art = await registerFileAsArtifact({
-          project_id: toolInput.project_id as string,
+        const itemSpaceId = toolInput.space_id as string;
+        if (!getSpaceForUser(itemSpaceId, userId)) { result = `Error: space ${itemSpaceId} not found`; break; }
+        const item = await registerFileItem({
+          space_id: itemSpaceId,
           source_path: toolInput.file_path as string,
-          title: toolInput.title as string | undefined,
-          kind: toolInput.kind as string | undefined,
+          name: (toolInput.name as string | undefined) ?? path.basename(toolInput.file_path as string),
+          source_session_id: sessionId,
+          source_plan_id: regStepId ? getPlanForStep(regStepId)?.id ?? null : null,
+          source_step_id: regStepId ?? null,
         });
-        result = JSON.stringify({ artifact_id: art.id, project_id: toolInput.project_id as string, title: art.title, kind: art.kind, mime_type: art.mime_type, url: art.url });
+        result = JSON.stringify(item);
         if (regStepId) finishPlanStep(userId, regStepId, result);
         break;
       }
-      case 'list_artifacts': {
-        const pid = toolInput.project_id as string;
-        if (!getProjectForUser(pid, userId)) { result = `Error: project ${pid} not found`; break; }
-        const artifacts = listProjectArtifacts(pid);
-        result = JSON.stringify(artifacts.map(a => ({
-          id: a.id, kind: a.kind, title: a.title, description: a.description,
-          status: a.status, mime_type: a.mime_type, created_at: a.created_at,
-        })), null, 2);
+      case 'list_items': {
+        const itemSpaceId = toolInput.space_id as string;
+        if (!getSpaceForUser(itemSpaceId, userId)) { result = `Error: space ${itemSpaceId} not found`; break; }
+        result = JSON.stringify(getItemsForSpace(itemSpaceId), null, 2);
         break;
       }
-      case 'read_artifact': {
-        const art = getArtifactById(toolInput.artifact_id as string);
-        if (!art && !(toolInput.artifact_id as string).includes(':')) {
-          result = `Error: artifact ${toolInput.artifact_id} not found`;
+      case 'read_item': {
+        const itemSpaceId = toolInput.space_id as string;
+        const item = getItemById(toolInput.item_id as string);
+        if (!getSpaceForUser(itemSpaceId, userId) || !item || item.space_id !== itemSpaceId) {
+          result = `Error: item ${toolInput.item_id} not found in space ${itemSpaceId}`;
           break;
         }
-        const content = await readArtifactContent(toolInput.project_id as string, toolInput.artifact_id as string);
-        if (content === null) {
-          result = 'Error: artifact has no readable text content (binary or URL-only artifact)';
+        if (item.type === 'file' && item.mime_type && !item.mime_type.startsWith('text/') && item.mime_type !== 'application/json') {
+          result = `Error: file item ${item.id} is binary (${item.mime_type})`;
           break;
         }
-        result = content;
+        const content = await readItemContent(item);
+        result = Buffer.isBuffer(content) ? content.toString('utf-8') : content;
         break;
       }
       case 'list_connections': {
@@ -898,6 +923,29 @@ async function dispatchTool(
         }
         break;
       }
+      case 'create_connection': {
+        result = await createConnectionTool(
+          {
+            name: toolInput.name as string,
+            type: toolInput.type as string,
+            purpose: toolInput.purpose as string | undefined,
+            config: toolInput.config as Record<string, unknown>,
+          },
+          { userId, executionId },
+        );
+        if (!result.startsWith('Error:') && result !== 'create_connection cancelled') {
+          const parsed = JSON.parse(result) as { id: string; name: string; type: string; purpose: string };
+          emitSessionEvent(userId, {
+            sessionId,
+            type: 'connection_created',
+            title: `Connected: ${parsed.name}`,
+            body: `${parsed.purpose} · ${parsed.type}`,
+            executionId,
+            metadata: { connection_id: parsed.id, type: parsed.type, purpose: parsed.purpose },
+          });
+        }
+        break;
+      }
       case 'test_connection': {
         const connRow = getDb()
           .prepare("SELECT id, name, type FROM connections WHERE id = ? AND user_id = ?")
@@ -922,19 +970,20 @@ async function dispatchTool(
         break;
       }
       case 'read_file':
-        result = await readFile({ project_id: projectId, path: toolInput.path as string, offset: toolInput.offset as number | undefined, limit: toolInput.limit as number | undefined }, { userId, executionId, projectId, sessionId });
+        result = await readFile({ space_id: spaceId, item_id: toolInput.item_id as string, path: toolInput.path as string, offset: toolInput.offset as number | undefined, limit: toolInput.limit as number | undefined }, { userId, executionId, sessionId });
         break;
       case 'list_dir':
-        result = await listDir({ project_id: projectId, path: toolInput.path as string | undefined }, { userId, executionId, projectId, sessionId });
+        result = await listDir({ space_id: spaceId, item_id: toolInput.item_id as string, path: toolInput.path as string | undefined }, { userId, executionId, sessionId });
         break;
       case 'search_files':
         result = await searchFiles({
-          project_id: projectId,
+          space_id: spaceId,
+          item_id: toolInput.item_id as string,
           pattern: toolInput.pattern as string,
           path: toolInput.path as string | undefined,
           file_glob: toolInput.file_glob as string | undefined,
           ignore_case: toolInput.ignore_case as boolean | undefined,
-        }, { userId, executionId, projectId, sessionId });
+        }, { userId, executionId, sessionId });
         break;
       case 'run_command': {
         const rcStepId = toolInput.plan_step_id as string | undefined;
@@ -942,7 +991,8 @@ async function dispatchTool(
         result = await runCommand(
           {
             command: toolInput.command as string,
-            project_id: toolInput.project_id as string | undefined,
+            space_id: toolInput.space_id as string | undefined,
+            item_id: toolInput.item_id as string | undefined,
             timeout_ms: toolInput.timeout_ms as number | undefined,
           },
           { userId, executionId, permissionProfile: getPermissionProfile(userId) },
@@ -954,38 +1004,37 @@ async function dispatchTool(
         const writeStepId = toolInput.plan_step_id as string | undefined;
         if (writeStepId) startPlanStep(userId, writeStepId, executionId);
         result = await writeFile(
-          { project_id: projectId, path: toolInput.path as string, content: toolInput.content as string },
-          { userId, executionId, projectId, sessionId, permissionProfile: getPermissionProfile(userId) }
+          { space_id: spaceId, item_id: toolInput.item_id as string, path: toolInput.path as string, content: toolInput.content as string },
+          { userId, executionId, sessionId, permissionProfile: getPermissionProfile(userId) }
         );
         if (writeStepId) finishPlanStep(userId, writeStepId, result);
         break;
       }
-      case 'create_artifact': {
-        const artifactStepId = toolInput.plan_step_id as string | undefined;
-        if (artifactStepId) startPlanStep(userId, artifactStepId, executionId);
-        const artifact = await createTextArtifact({
-          project_id: projectId,
-          kind: toolInput.kind as string,
-          title: toolInput.title as string,
-          description: toolInput.description as string | undefined,
+      case 'create_note': {
+        const itemStepId = toolInput.plan_step_id as string | undefined;
+        if (itemStepId) startPlanStep(userId, itemStepId, executionId);
+        const itemSpaceId = toolInput.space_id as string;
+        if (!getSpaceForUser(itemSpaceId, userId)) { result = `Error: space ${itemSpaceId} not found`; break; }
+        const item = createNoteItem({
+          space_id: itemSpaceId,
+          name: toolInput.name as string,
           content: toolInput.content as string,
-          mime_type: toolInput.mime_type as 'text/markdown' | 'text/plain' | 'application/json' | undefined,
-          status: toolInput.status as 'ready' | 'review' | 'running' | 'error' | undefined,
-          source_step_id: artifactStepId ?? null,
-          metadata: { producer: 'create_artifact', execution_id: executionId },
+          source_session_id: sessionId,
+          source_plan_id: itemStepId ? getPlanForStep(itemStepId)?.id ?? null : null,
+          source_step_id: itemStepId ?? null,
         });
-        result = JSON.stringify({ artifact_id: artifact.id, project_id: projectId, title: artifact.title, kind: artifact.kind, mime_type: artifact.mime_type });
+        result = JSON.stringify(item);
         emitSessionEvent(userId, {
           sessionId,
-          type: 'artifact_created',
-          title: `Created artifact: ${artifact.title}`,
-          body: artifact.kind,
-          projectId,
-          artifactId: artifact.id,
+          type: 'item_created',
+          title: `Created note: ${item.name}`,
+          body: 'note',
+          spaceId: itemSpaceId,
+          itemId: item.id,
           executionId,
-          metadata: { kind: artifact.kind, mime_type: artifact.mime_type },
+          metadata: { type: 'note' },
         });
-        if (artifactStepId) finishPlanStep(userId, artifactStepId, result);
+        if (itemStepId) finishPlanStep(userId, itemStepId, result);
         break;
       }
       case 'create_project':
@@ -999,18 +1048,18 @@ async function dispatchTool(
           executionId
         );
         if (!result.startsWith('Error:')) {
-          const createdProject = getDb()
-            .prepare('SELECT id, name FROM projects WHERE user_id = ? AND name = ?')
+          const createdSpace = getDb()
+            .prepare('SELECT id, name FROM spaces WHERE user_id = ? AND name = ?')
             .get(userId, toolInput.name as string) as { id: string; name: string } | undefined;
-          if (createdProject) {
-            try { linkSessionProject(sessionId, createdProject.id, 'agent'); }
+          if (createdSpace) {
+            try { linkSessionProject(sessionId, createdSpace.id, 'agent'); }
             catch (err) { console.error('create_project: linkSessionProject failed (non-fatal):', err); }
             emitSessionEvent(userId, {
               sessionId,
               type: 'project_created',
-              title: `Created project: ${createdProject.name}`,
+              title: `Created space: ${createdSpace.name}`,
               body: 'Created from this chat.',
-              projectId: createdProject.id,
+              spaceId: createdSpace.id,
               executionId,
               metadata: { source: 'agent' },
             });
@@ -1023,7 +1072,6 @@ async function dispatchTool(
             project_id: toolInput.project_id as string,
             name: toolInput.name as string | undefined,
             description: toolInput.description as string | undefined,
-            repo_path: toolInput.repo_path as string | null | undefined,
           },
           userId
         );
@@ -1032,8 +1080,8 @@ async function dispatchTool(
         result = await deleteProject({ project_id: toolInput.project_id as string, delete_files: toolInput.delete_files as boolean }, userId, executionId);
         break;
       case 'list_plans': {
-        const lcPid = toolInput.project_id as string;
-        if (!getProjectForUser(lcPid, userId)) { result = `Error: project ${lcPid} not found`; break; }
+        const lcPid = (toolInput.space_id as string | undefined) ?? (toolInput.project_id as string);
+        if (!getSpaceForUser(lcPid, userId)) { result = `Error: space ${lcPid} not found`; break; }
         const summaries = getPlanSummaries(lcPid);
         result = JSON.stringify(summaries.map(p => ({
           id: p.id,
@@ -1138,7 +1186,7 @@ async function dispatchTool(
       case 'create_plan': {
         result = runCreatePlan(
           {
-            project_id: toolInput.project_id as string,
+            space_id: toolInput.space_id as string,
             title: toolInput.title as string,
             steps: toolInput.steps as Array<{ title: string; agent: 'claude_code' | 'codex' | 'mcp' | 'file_write' | 'git' | 'github' }>,
             session_id: sessionId,
@@ -1146,14 +1194,15 @@ async function dispatchTool(
           userId
         );
         try {
-          const parsed = JSON.parse(result) as { plan_id?: string; project_id?: string };
-          if (parsed.plan_id && parsed.project_id) {
+          const parsed = JSON.parse(result) as { plan_id?: string; space_id?: string };
+          const parsedSpaceId = parsed.space_id;
+          if (parsed.plan_id && parsedSpaceId) {
             emitSessionEvent(userId, {
               sessionId,
               type: 'plan_created',
               title: `Created plan: ${toolInput.title as string}`,
               body: 'Tracks agent work from this chat.',
-              projectId: parsed.project_id,
+              spaceId: parsedSpaceId,
               planId: parsed.plan_id,
               executionId,
               metadata: { source: 'agent' },
@@ -1173,12 +1222,16 @@ async function dispatchTool(
         break;
       }
       case 'create_pipeline': {
+        const pipelineSpaceId = (toolInput.space_id as string | undefined) ?? spaceId;
+        const pipelineSpace = getSpaceForUser(pipelineSpaceId, userId);
+        if (!pipelineSpace) { result = `Error: space ${pipelineSpaceId} not found`; break; }
         const pTitle = toolInput.title as string;
         const pDesc = toolInput.description as string | undefined ?? null;
         const pTasks = toolInput.tasks as Array<{ title: string; agent: DbPlanStep['agent']; prompt?: string; depends_on?: number[]; tool_args?: Record<string, unknown> }>;
-        const { pipeline, tasks: pipelineTasks } = createPipeline(userId, pTitle, pDesc, pTasks);
+        const { pipeline, tasks: pipelineTasks } = createPipeline(pipelineSpaceId, pTitle, pDesc, pTasks);
         result = JSON.stringify({
           pipeline_id: pipeline.id,
+          space_id: pipeline.space_id,
           title: pipeline.title,
           tasks: pipelineTasks.map(t => ({ id: t.id, title: t.title, agent: t.agent, position: t.position })),
         });
@@ -1186,7 +1239,6 @@ async function dispatchTool(
       }
       case 'run_pipeline': {
         const pipelineId = toolInput.pipeline_id as string;
-        const pProjectId = toolInput.project_id as string;
         const pTitleOverride = toolInput.title as string | undefined;
         const pOnError = (toolInput.on_error as 'stop' | 'continue' | undefined) ?? 'stop';
 
@@ -1196,7 +1248,7 @@ async function dispatchTool(
 
         // Instantiate pipeline as a plan — resolve position-based depends_on to step IDs
         const { plan: pPlan, steps: pSteps } = createPlan(
-          pProjectId,
+          pipeline.space_id,
           sessionId,
           pTitleOverride ?? pipeline.title,
           ptasks.map((pt) => ({
@@ -1217,7 +1269,7 @@ async function dispatchTool(
       }
       case 'delegate_to_agent': {
         const daInstructions = toolInput.instructions as string;
-        const daProjectId = toolInput.project_id as string | undefined ?? null;
+        const daProjectId = (toolInput.space_id as string | undefined) ?? (toolInput.project_id as string | undefined) ?? null;
         const daStepId = toolInput.plan_step_id as string | undefined;
         const daPlanId = daStepId ? getPlanForStep(daStepId)?.id ?? null : null;
         result = await runSubAgent(daInstructions, daProjectId, userId, executionId, messageId, sessionId, daPlanId, toolInput.max_turns as number | undefined);
@@ -1228,8 +1280,12 @@ async function dispatchTool(
         const scenes = toolInput.scenes as VideoScene[];
         const videoStepId = toolInput.plan_step_id as string | undefined;
         if (videoStepId) startPlanStep(userId, videoStepId, executionId);
-        renderVideo(projectId, title, scenes, (progress) => {
+        renderVideo(spaceId, title, scenes, (progress) => {
           appendOutput(executionId, userId, `progress:${Math.round(progress * 100)}%\n`);
+        }, {
+          session_id: sessionId,
+          plan_id: videoStepId ? getPlanForStep(videoStepId)?.id ?? null : null,
+          step_id: videoStepId ?? null,
         })
           .then((fileName) => {
             const r = `Rendered ${fileName}`;
@@ -1245,7 +1301,7 @@ async function dispatchTool(
         return JSON.stringify({
           execution_id: executionId,
           status: 'started',
-          message: 'Video render started. Call wait_for_execution with this execution_id to await completion, then check project Artifacts.',
+          message: 'Video render started. Call wait_for_execution with this execution_id to await completion, then list Space items.',
         });
       }
       case 'wait_for_execution': {

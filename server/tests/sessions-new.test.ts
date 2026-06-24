@@ -40,21 +40,21 @@ beforeAll(async () => {
   db.prepare('INSERT INTO messages (id, session_id, role, content) VALUES (?,?,?,?)')
     .run(newId(), sessionId, 'user', 'keep session active for route tests');
   projectId = newId();
-  db.prepare("INSERT INTO projects (id, user_id, name, repo_path) VALUES (?,?,?,?)").run(projectId, userId, 'myproj', '/fake/repo');
+  db.prepare("INSERT INTO spaces (id, user_id, name, enabled_connection_ids) VALUES (?,?,?,?)").run(projectId, userId, 'myproj', '[]');
 });
 
-describe('PATCH /sessions/:id pinned_project_id', () => {
+describe('PATCH /sessions/:id pinned_space_id', () => {
   it('pins a project to a session', async () => {
     const res = await request(app)
       .patch(`/sessions/${sessionId}`)
       .set('Authorization', `Bearer ${token}`)
-      .send({ pinned_project_id: projectId });
+      .send({ pinned_space_id: projectId });
     expect(res.status).toBe(200);
     expect(res.body.ok).toBe(true);
 
     const list = await request(app).get('/sessions').set('Authorization', `Bearer ${token}`);
     const sess = list.body.find((s: { id: string }) => s.id === sessionId);
-    expect(sess.pinned_project_id).toBe(projectId);
+    expect(sess.pinned_space_id).toBe(projectId);
 
     const events = await request(app)
       .get(`/sessions/${sessionId}/events`)
@@ -66,7 +66,7 @@ describe('PATCH /sessions/:id pinned_project_id', () => {
       expect.objectContaining({
         type: 'scope_changed',
         title: 'Scoped to myproj',
-        project_id: projectId,
+        space_id: projectId,
         metadata: expect.objectContaining({ source: 'user' }),
       }),
     ]));
@@ -76,7 +76,7 @@ describe('PATCH /sessions/:id pinned_project_id', () => {
     const res = await request(app)
       .patch(`/sessions/${sessionId}`)
       .set('Authorization', `Bearer ${token}`)
-      .send({ pinned_project_id: null });
+      .send({ pinned_space_id: null });
     expect(res.status).toBe(200);
 
     const events = await request(app)
@@ -86,7 +86,7 @@ describe('PATCH /sessions/:id pinned_project_id', () => {
       expect.objectContaining({
         type: 'scope_changed',
         title: 'Back to Auto',
-        project_id: null,
+        space_id: null,
         metadata: expect.objectContaining({ source: 'user' }),
       }),
     ]));
@@ -99,13 +99,13 @@ describe('PATCH /sessions/:id pinned_project_id', () => {
       .send({ title: 'legacy pin' });
 
     getDb()
-      .prepare('UPDATE sessions SET pinned_project_id = ? WHERE id = ?')
+      .prepare('UPDATE sessions SET pinned_space_id = ? WHERE id = ?')
       .run(projectId, legacy.body.id);
 
     const res = await request(app)
       .patch(`/sessions/${legacy.body.id}`)
       .set('Authorization', `Bearer ${token}`)
-      .send({ pinned_project_id: null });
+      .send({ pinned_space_id: null });
     expect(res.status).toBe(200);
 
     const events = await request(app)
@@ -124,12 +124,12 @@ describe('PATCH /sessions/:id pinned_project_id', () => {
     const res = await request(app)
       .patch(`/sessions/${sessionId}`)
       .set('Authorization', `Bearer ${token}`)
-      .send({ pinned_project_id: missingProjectId });
+      .send({ pinned_space_id: missingProjectId });
     expect(res.status).toBe(404);
 
     const list = await request(app).get('/sessions').set('Authorization', `Bearer ${token}`);
     const sess = list.body.find((s: { id: string }) => s.id === sessionId);
-    expect(sess.pinned_project_id).toBeNull();
+    expect(sess.pinned_space_id).toBeNull();
   });
 });
 
@@ -145,8 +145,11 @@ describe('GET /sessions/:id/worktree', () => {
   it('returns worktree info when worktree exists', async () => {
     const db = getDb();
     const wtId = newId();
-    db.prepare("INSERT INTO agent_worktrees (id, project_id, session_id, branch, worktree_path) VALUES (?,?,?,?,?)")
-      .run(wtId, projectId, sessionId, `agent/${sessionId}`, '/fake/worktree');
+    const itemId = `item_${projectId}_repo`;
+    db.prepare("INSERT INTO space_items (id, space_id, type, name) VALUES (?,?,?,?)").run(itemId, projectId, 'repo', 'myproj');
+    db.prepare("INSERT INTO space_repos (item_id, repo_path) VALUES (?,?)").run(itemId, '/fake/repo');
+    db.prepare("INSERT INTO agent_worktrees (id, item_id, session_id, branch, worktree_path) VALUES (?,?,?,?,?)")
+      .run(wtId, itemId, sessionId, `agent/${sessionId}`, '/fake/worktree');
 
     mockStatus.mockResolvedValueOnce({ files: [{ path: 'foo.ts' }] });
     mockRaw.mockResolvedValueOnce('3\n');

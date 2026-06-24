@@ -4,7 +4,7 @@ import path from 'path';
 import fs from 'fs';
 import { fileURLToPath } from 'url';
 import { getDataDir } from '../db/index.js';
-import { createArtifact } from './artifacts.js';
+import { createFileItem } from './items.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
@@ -29,11 +29,10 @@ export interface VideoScene {
 
 /**
  * Generated video files are not part of a project's git repo, so they are
- * stored under the app's data directory (same root used for the sqlite db
- * and the default projects root), alongside `<dataDir>/projects/<id>/media/`.
+ * stored under the app's data directory and registered as a Space file item.
  */
 export function buildMediaPath(projectId: string, title: string): { dir: string; fileName: string } {
-  const dir = path.join(getDataDir(), 'projects', projectId, 'media');
+  const dir = path.join(getDataDir(), 'spaces', projectId, 'files');
   const rawSlug = title.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '');
   const slug = rawSlug || 'video';
   const fileName = `${Date.now()}-${slug}.mp4`;
@@ -45,6 +44,7 @@ export async function renderVideo(
   title: string,
   scenes: VideoScene[],
   onProgress?: (progress: number) => void,
+  provenance?: { session_id?: string | null; plan_id?: string | null; step_id?: string | null },
 ): Promise<string> {
   // Pre-flight: verify Remotion entry point exists before attempting to bundle
   const entryPoint = path.resolve(__dirname, '../../../remotion/src/index.tsx');
@@ -74,15 +74,16 @@ export async function renderVideo(
     onProgress: ({ progress }: { progress: number }) => onProgress?.(progress),
   });
 
-  createArtifact({
-    project_id: projectId,
-    kind: 'media',
-    title,
-    status: 'ready',
+  const stat = fs.statSync(outputLocation);
+  createFileItem({
+    space_id: projectId,
+    name: title,
+    file_path: outputLocation,
+    size_bytes: stat.size,
     mime_type: 'video/mp4',
-    path: `media/${fileName}`,
-    url: `/projects/${projectId}/media/${encodeURIComponent(fileName)}`,
-    metadata: { filename: fileName, producer: 'generate_video' },
+    source_session_id: provenance?.session_id ?? null,
+    source_plan_id: provenance?.plan_id ?? null,
+    source_step_id: provenance?.step_id ?? null,
   });
 
   return fileName;

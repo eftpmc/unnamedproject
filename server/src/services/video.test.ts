@@ -7,9 +7,9 @@ describe('buildMediaPath', () => {
     vi.useRealTimers();
   });
 
-  it('returns a dir ending in projects/<projectId>/media', () => {
+  it('returns a dir ending in spaces/<spaceId>/files', () => {
     const { dir } = buildMediaPath('proj123', 'My Cool Video');
-    expect(dir.endsWith(path.join('projects', 'proj123', 'media'))).toBe(true);
+    expect(dir.endsWith(path.join('spaces', 'proj123', 'files'))).toBe(true);
   });
 
   it('returns a sanitized fileName matching the expected pattern', () => {

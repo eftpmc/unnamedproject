@@ -1,7 +1,8 @@
 import fs from 'fs/promises';
 import path from 'path';
 import simpleGit from 'simple-git';
-import { getDb, getProjectForUser, getProjectsRoot } from '../db/index.js';
+import { getDb, getSpaceForUser, getProjectsRoot } from '../db/index.js';
+import { getItemsForSpace, createRepoItem, type SpaceItem } from '../services/items.js';
 import { newId } from '../lib/ids.js';
 import { requestApproval } from '../services/executor.js';
 
@@ -17,49 +18,49 @@ export async function createProject(
   userId: string,
   _executionId: string
 ): Promise<string> {
-  let repoPath: string | null = null;
+  const id = newId();
+  getDb()
+    .prepare('INSERT INTO spaces (id, user_id, name, description, enabled_connection_ids) VALUES (?,?,?,?,?)')
+    .run(id, userId, input.name, input.description ?? null, '[]');
 
   if (input.with_repo) {
     const root = getProjectsRoot(userId);
-    repoPath = path.join(root, slugify(input.name));
+    const repoPath = path.join(root, slugify(input.name));
     try {
       await fs.access(repoPath);
+      getDb().prepare('DELETE FROM spaces WHERE id = ?').run(id);
       return `Error: directory already exists at ${repoPath}`;
     } catch {
       // does not exist, proceed
     }
     await fs.mkdir(repoPath, { recursive: true });
     await simpleGit().cwd(repoPath).init();
+    createRepoItem({ space_id: id, name: input.name, repo_path: repoPath });
+    return `Created space '${input.name}' (id: ${id}) with repo at ${repoPath}`;
   }
 
-  const id = newId();
-  getDb()
-    .prepare('INSERT INTO projects (id, user_id, name, description, repo_path, enabled_connection_ids) VALUES (?,?,?,?,?,?)')
-    .run(id, userId, input.name, input.description ?? null, repoPath, '[]');
-
-  return `Created project '${input.name}' (id: ${id})${repoPath ? ` with repo at ${repoPath}` : ' with no repo'}`;
+  return `Created space '${input.name}' (id: ${id}) with no repo`;
 }
 
 export async function updateProject(
-  input: { project_id: string; name?: string; description?: string; repo_path?: string | null },
+  input: { project_id: string; name?: string; description?: string },
   userId: string
 ): Promise<string> {
-  const project = getProjectForUser(input.project_id, userId);
-  if (!project) return `Error: project ${input.project_id} not found`;
+  const space = getSpaceForUser(input.project_id, userId);
+  if (!space) return `Error: space ${input.project_id} not found`;
 
   const updates: string[] = [];
   const values: unknown[] = [];
   if (input.name !== undefined) { updates.push('name = ?'); values.push(input.name); }
   if (input.description !== undefined) { updates.push('description = ?'); values.push(input.description); }
-  if (input.repo_path !== undefined) { updates.push('repo_path = ?'); values.push(input.repo_path); }
 
   if (updates.length > 0) {
     getDb()
-      .prepare(`UPDATE projects SET ${updates.join(', ')} WHERE id = ? AND user_id = ?`)
+      .prepare(`UPDATE spaces SET ${updates.join(', ')} WHERE id = ? AND user_id = ?`)
       .run(...values, input.project_id, userId);
   }
 
-  return `Project '${input.name ?? project.name}' updated`;
+  return `Space '${input.name ?? space.name}' updated`;
 }
 
 export async function deleteProject(
@@ -67,25 +68,29 @@ export async function deleteProject(
   userId: string,
   executionId: string
 ): Promise<string> {
-  const project = getProjectForUser(input.project_id, userId);
-  if (!project) return `Error: project ${input.project_id} not found`;
+  const space = getSpaceForUser(input.project_id, userId);
+  if (!space) return `Error: space ${input.project_id} not found`;
+
+  const repoPaths = getItemsForSpace(space.id)
+    .filter((item): item is SpaceItem & { type: 'repo' } => item.type === 'repo')
+    .map(item => item.repo_path);
 
   const decision = await requestApproval(
     executionId,
     userId,
     'delete_project',
-    { project_id: input.project_id, name: project.name, repo_path: project.repo_path, delete_files: input.delete_files },
+    { space_id: input.project_id, name: space.name, repo_paths: repoPaths, delete_files: input.delete_files },
     'user'
   );
   if (decision === 'rejected') return 'delete_project cancelled';
 
   getDb()
-    .prepare('DELETE FROM projects WHERE id = ? AND user_id = ?')
+    .prepare('DELETE FROM spaces WHERE id = ? AND user_id = ?')
     .run(input.project_id, userId);
 
-  if (input.delete_files && project.repo_path) {
-    await fs.rm(project.repo_path, { recursive: true, force: true });
+  if (input.delete_files) {
+    await Promise.all(repoPaths.map(repoPath => fs.rm(repoPath, { recursive: true, force: true })));
   }
 
-  return `Project '${project.name}' deleted${input.delete_files && project.repo_path ? ' (files removed)' : ''}`;
+  return `Space '${space.name}' deleted${input.delete_files && repoPaths.length > 0 ? ' (files removed)' : ''}`;
 }

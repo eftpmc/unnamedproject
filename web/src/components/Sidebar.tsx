@@ -1,7 +1,7 @@
 import { useNavigate, useLocation, Link } from 'react-router-dom';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { Plus, MessagesSquare, LayoutGrid, Bell, KeyRound } from 'lucide-react';
-import { getChats, createChat, getProjects, getActiveSessions } from '../lib/api.js';
+import { getChats, createChat, getSpaces, getActiveSessions } from '../lib/api.js';
 import { timeAgo, cn } from '../lib/utils.js';
 import { useWsStatus } from '../lib/useWsStatus.js';
 import UserMenu from './UserMenu.js';
@@ -18,7 +18,7 @@ import {
   SidebarMenuButton,
   useSidebar,
 } from '@/components/ui/sidebar';
-import type { Project, Session } from '../types.js';
+import type { Space, Session } from '../types.js';
 
 const RECENT_COUNT = 5;
 
@@ -42,12 +42,12 @@ export default function Sidebar({ className, onNavigate, pendingApprovalCount = 
     queryFn: getChats,
   });
 
-  const { data: projects = [] } = useQuery<Project[]>({
-    queryKey: ['projects'],
-    queryFn: getProjects,
+  const { data: spaces = [] } = useQuery<Space[]>({
+    queryKey: ['spaces'],
+    queryFn: getSpaces,
     staleTime: 60_000,
   });
-  const projectById = Object.fromEntries(projects.map(p => [p.id, p]));
+  const spaceById = Object.fromEntries(spaces.map(s => [s.id, s]));
 
   const { data: activeData } = useQuery({
     queryKey: ['active-sessions'],
@@ -123,9 +123,9 @@ export default function Sidebar({ className, onNavigate, pendingApprovalCount = 
               />
               <NavItem
                 icon={<LayoutGrid size={15} strokeWidth={1.75} />}
-                label="Projects"
-                href="/projects"
-                active={isActive('/projects')}
+                label="Spaces"
+                href="/spaces"
+                active={isActive('/spaces')}
                 onClick={closeSidebar}
               />
             </SidebarMenu>
@@ -141,7 +141,7 @@ export default function Sidebar({ className, onNavigate, pendingApprovalCount = 
               <div className="min-w-0 overflow-hidden">
                 <ul className="flex w-full flex-col gap-0 pb-2 pr-1">
                   {recentChats.map(chat => {
-                    const project = chat.pinned_project_id ? projectById[chat.pinned_project_id] : null;
+                    const space = chat.pinned_space_id ? spaceById[chat.pinned_space_id] : null;
                     return (
                       <li key={chat.id} className="w-full min-w-0">
                         <button
@@ -163,10 +163,10 @@ export default function Sidebar({ className, onNavigate, pendingApprovalCount = 
                           </div>
                           <div className="mt-0.5 flex items-center gap-1.5 min-w-0">
                             <span className="shrink-0 text-[11px] text-faint-fg">{timeAgo(chat.updated_at)}</span>
-                            {project && (
+                            {space && (
                               <>
                                 <span className="text-faint-fg text-[11px]">·</span>
-                                <span className="min-w-0 truncate text-[11px] text-faint-fg">{project.name}</span>
+                                <span className="min-w-0 truncate text-[11px] text-faint-fg">{space.name}</span>
                               </>
                             )}
                           </div>
@@ -175,15 +175,6 @@ export default function Sidebar({ className, onNavigate, pendingApprovalCount = 
                     );
                   })}
                 </ul>
-                {chats.length > RECENT_COUNT && (
-                  <Link
-                    to="/chats"
-                    onClick={closeSidebar}
-                    className="block px-2.5 pb-1 text-[11px] text-faint-fg transition-colors hover:text-muted-foreground"
-                  >
-                    See all {chats.length} chats →
-                  </Link>
-                )}
               </div>
             </SidebarGroupContent>
           </SidebarGroup>

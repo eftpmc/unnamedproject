@@ -5,16 +5,17 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import ProjectPage from './ProjectPage.js';
 
 vi.mock('../lib/api.js', () => ({
-  getProjects: vi.fn().mockResolvedValue([
+  getSpaces: vi.fn().mockResolvedValue([
     {
       id: 'proj-1',
       name: 'Test Project',
       description: null,
-      repo_path: null,
       enabled_connection_ids: [],
     },
   ]),
-  getProjectPlans: vi.fn().mockResolvedValue([]),
+  getSpacePlans: vi.fn().mockResolvedValue([]),
+  get getProjectPlans() { return (this as Record<string, unknown>).getSpacePlans as ReturnType<typeof vi.fn>; },
+  getSpaceItems: vi.fn().mockResolvedValue([]),
   getProjectCapabilities: vi.fn().mockResolvedValue({ has_remotion: false, has_media: false, has_graph: false, has_research: false }),
   getProjectArtifacts: vi.fn().mockResolvedValue({ artifacts: [] }),
   getChats: vi.fn().mockResolvedValue([
@@ -23,7 +24,7 @@ vi.mock('../lib/api.js', () => ({
       title: 'Fix the render bug',
       effort: 'low',
       model: null,
-      pinned_project_id: 'proj-1',
+      pinned_space_id: 'proj-1',
       created_at: Date.now() - 3600_000,
       updated_at: Date.now() - 3600_000,
     },
@@ -32,15 +33,15 @@ vi.mock('../lib/api.js', () => ({
       title: 'Other project chat',
       effort: 'low',
       model: null,
-      pinned_project_id: 'proj-other',
+      pinned_space_id: 'proj-other',
       created_at: Date.now() - 7200_000,
       updated_at: Date.now() - 7200_000,
     },
   ]),
   createChat: vi.fn(),
   updateChatConfig: vi.fn(),
-  deleteProject: vi.fn(),
-  updateProject: vi.fn(),
+  deleteSpace: vi.fn(),
+  updateSpace: vi.fn(),
   getProjectFile: vi.fn().mockResolvedValue(null),
   getProjectWorkspace: vi.fn().mockResolvedValue({ content: '' }),
   updateProjectWorkspace: vi.fn(),

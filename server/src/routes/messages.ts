@@ -135,7 +135,7 @@ router.get('/:sessionId/messages', (req, res) => {
       SELECT e.id as executionId, e.message_id as messageId, e.tool, e.status, e.output_log as outputLog,
              e.result, e.created_at as createdAt, p.name as projectName, a.id as approvalId, a.action
       FROM executions e
-      LEFT JOIN projects p ON p.id = e.project_id
+      LEFT JOIN spaces p ON p.id = e.space_id
       LEFT JOIN approvals a ON a.execution_id = e.id AND a.status = 'pending'
       WHERE e.message_id IN (${messages.map(() => '?').join(',') || "''"})
       ORDER BY e.created_at

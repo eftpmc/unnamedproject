@@ -144,7 +144,7 @@ export default function ArtifactPreviewCard({ artifactId, projectId, title, kind
 
       <div className="border-t border-border-soft px-3.5 py-2">
         <Link
-          to={`/projects/${projectId}/artifacts`}
+          to={`/spaces/${projectId}/artifacts`}
           className="flex items-center justify-center gap-1.5 text-xs font-medium text-foreground/70 transition-colors hover:text-foreground"
         >
           View in Artifacts

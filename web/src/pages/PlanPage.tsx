@@ -197,11 +197,11 @@ export default function PlanPage() {
               Projects
             </Link>
             <ChevronRight size={12} className="text-faint-fg" />
-            <Link to={`/projects/${projectId}`} className="transition-colors hover:text-foreground">
-              {project?.name ?? 'Project'}
+            <Link to={`/spaces/${projectId}`} className="transition-colors hover:text-foreground">
+              {project?.name ?? 'Space'}
             </Link>
             <ChevronRight size={12} className="text-faint-fg" />
-            <Link to={`/projects/${projectId}/plans`} className="text-xs text-muted-foreground hover:text-foreground transition-colors">
+            <Link to={`/spaces/${projectId}/plans`} className="text-xs text-muted-foreground hover:text-foreground transition-colors">
               Plans
             </Link>
             <ChevronRight size={12} className="text-faint-fg" />

@@ -1,6 +1,7 @@
 import { exec } from 'child_process';
 import { promisify } from 'util';
-import { getProjectForUser, getDataDir } from '../db/index.js';
+import { getSpaceForUser, getDataDir } from '../db/index.js';
+import { getItemById } from '../services/items.js';
 import { requestApproval } from '../services/executor.js';
 import type { PermissionProfile } from '../services/permissions.js';
 
@@ -38,7 +39,8 @@ export function isBlocked(command: string): string | null {
 
 interface RunCommandInput {
   command: string;
-  project_id?: string;
+  space_id?: string;
+  item_id?: string;
   timeout_ms?: number;
   plan_step_id?: string;
 }
@@ -54,10 +56,14 @@ export async function runCommand(input: RunCommandInput, ctx: ToolContext): Prom
   if (blocked) return `Error: ${blocked}`;
 
   let cwd: string = getDataDir();
-  if (input.project_id) {
-    const project = getProjectForUser(input.project_id, ctx.userId);
-    if (!project) return `Error: project ${input.project_id} not found`;
-    if (project.repo_path) cwd = project.repo_path;
+  if (input.space_id || input.item_id) {
+    if (!input.space_id || !input.item_id) return 'Error: space_id and item_id must be provided together';
+    const space = getSpaceForUser(input.space_id, ctx.userId);
+    if (!space) return `Error: space ${input.space_id} not found`;
+    const repoItem = getItemById(input.item_id);
+    if (!repoItem || repoItem.space_id !== space.id) return `Error: item ${input.item_id} not found in space ${space.id}`;
+    if (repoItem.type !== 'repo') return `Error: item ${input.item_id} is not a repo`;
+    cwd = repoItem.repo_path;
   }
 
   const tier = ctx.permissionProfile === 'strict' ? 'user' : 'agent';

@@ -159,7 +159,7 @@ function Overview({ space, items, plans, chats }: { space: Space; items: SpaceIt
                 type="button"
                 key={`${entry.type}-${entry.key}`}
                 onClick={() => navigate(entry.href)}
-                className="flex items-center gap-3 rounded-lg border border-border-soft bg-card px-4 py-3.5 text-left transition hover:-translate-y-px hover:border-border hover:shadow-sm"
+                className="flex w-full items-center gap-3 rounded-lg border border-border-soft bg-card px-4 py-3.5 text-left transition-[transform,box-shadow,border-color] hover:-translate-y-px hover:border-border hover:shadow-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/30"
               >
                 <ItemIcon type={entry.type === 'Plan' || entry.type === 'Chat' ? entry.type : entry.type as SpaceItemType} />
                 <span className="min-w-0 flex-1">

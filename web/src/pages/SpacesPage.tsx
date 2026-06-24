@@ -96,7 +96,7 @@ export default function SpacesPage() {
                     aria-label={`Open Space: ${space.name}`}
                     onClick={() => navigate(`/spaces/${space.id}`)}
                     onKeyDown={e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); navigate(`/spaces/${space.id}`); } }}
-                    className="flex cursor-pointer items-center gap-3 rounded-lg border border-border-soft bg-card px-4 py-3.5 transition hover:-translate-y-px hover:border-border hover:shadow-sm"
+                    className="flex cursor-pointer items-center gap-3 rounded-lg border border-border-soft bg-card px-4 py-3.5 transition-[transform,box-shadow,border-color] hover:-translate-y-px hover:border-border hover:shadow-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/30"
                   >
                     <div className="grid size-8 shrink-0 place-items-center rounded-lg bg-muted text-xs font-semibold text-muted-foreground">
                       {space.name.slice(0, 1).toUpperCase()}

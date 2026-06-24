@@ -1,7 +1,6 @@
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
-import rehypeHighlight from 'rehype-highlight';
 import { cn } from '@/lib/utils';
 import { updateItemTask } from '../lib/api.js';
 import FileBrowser from './FileBrowser.js';

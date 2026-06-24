@@ -28,6 +28,7 @@ import {
   deleteSpaceItem,
   deleteSpacePipeline,
   getChats,
+  getConnections,
   getItemContent,
   getSpaceItems,
   getSpacePipelines,
@@ -53,7 +54,7 @@ import {
 import { ContentColumn, EmptyPanel, PageBody, PageHeader, PageLoading, PageSection, PageShell, Surface } from '@/components/ui/app-layout';
 import { StatusPill } from '@/components/ui/status-pill';
 import FileBrowser from '../components/FileBrowser.js';
-import type { Pipeline, Plan, Session, Space, SpaceItem, SpaceItemType } from '../types.js';
+import type { Connection, Pipeline, Plan, Session, Space, SpaceItem, SpaceItemType } from '../types.js';
 
 type Section = 'overview' | 'chats' | 'items' | 'plans' | 'pipelines' | 'settings';
 
@@ -470,6 +471,10 @@ function SettingsSection({ space }: { space: Space }) {
   const [name, setName] = useState(space.name);
   const [description, setDescription] = useState(space.description ?? '');
   const [confirmDelete, setConfirmDelete] = useState(false);
+
+  const { data: connections = [] } = useQuery<Connection[]>({ queryKey: ['connections'], queryFn: getConnections });
+  const mcpConnections = connections.filter(c => c.type === 'mcp');
+
   const updateMutation = useMutation({
     mutationFn: () => updateSpace(space.id, { name: name.trim() || space.name, description: description.trim() }),
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ['spaces'] }),
@@ -482,30 +487,74 @@ function SettingsSection({ space }: { space: Space }) {
     },
   });
 
+  function toggleConnection(id: string) {
+    const current = space.enabled_connection_ids ?? [];
+    const updated = current.includes(id) ? current.filter(c => c !== id) : [...current, id];
+    updateSpace(space.id, { enabled_connection_ids: updated }).then(() =>
+      queryClient.invalidateQueries({ queryKey: ['spaces'] }),
+    );
+  }
+
   return (
     <PageBody>
-      <div className="mx-auto flex max-w-2xl flex-col gap-8">
-        <section className="space-y-4">
-          <div><h2 className="text-sm font-semibold">General</h2><p className="mt-1 text-xs text-muted-foreground">Basic information shown across chats and navigation.</p></div>
-          <div>
-            <label className="mb-1.5 block text-xs font-medium text-muted-foreground">Space name</label>
-            <Input value={name} onChange={event => setName(event.target.value)} />
-          </div>
-          <div>
-            <label className="mb-1.5 block text-xs font-medium text-muted-foreground">Description</label>
-            <textarea value={description} onChange={event => setDescription(event.target.value)} rows={4} className="w-full resize-y rounded-lg border border-input bg-transparent px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-ring" />
-          </div>
-          <div className="flex justify-end">
-            <Button size="sm" className="h-8 gap-1.5 text-xs" disabled={updateMutation.isPending} onClick={() => updateMutation.mutate()}>
-              <Check size={13} />{updateMutation.isPending ? 'Saving…' : 'Save changes'}
-            </Button>
-          </div>
-        </section>
-        <section className="flex items-center justify-between gap-4 rounded-lg border border-destructive/25 bg-destructive/5 p-4">
-          <div><div className="text-sm font-medium">Delete Space</div><div className="mt-0.5 text-xs text-muted-foreground">Permanently removes its Items, plans, pipelines, and links.</div></div>
-          <Button variant="destructive" size="sm" onClick={() => setConfirmDelete(true)}>Delete</Button>
-        </section>
-      </div>
+      <ContentColumn className="max-w-2xl">
+        <div className="flex flex-col gap-8">
+          <section className="space-y-4">
+            <div><h2 className="text-sm font-semibold">General</h2><p className="mt-1 text-xs text-muted-foreground">Basic information shown across chats and navigation.</p></div>
+            <div>
+              <label className="mb-1.5 block text-xs font-medium text-muted-foreground">Space name</label>
+              <Input value={name} onChange={event => setName(event.target.value)} />
+            </div>
+            <div>
+              <label className="mb-1.5 block text-xs font-medium text-muted-foreground">Description</label>
+              <textarea value={description} onChange={event => setDescription(event.target.value)} rows={4} className="w-full resize-y rounded-lg border border-input bg-transparent px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-ring" />
+            </div>
+            <div className="flex justify-end">
+              <Button size="sm" className="h-8 gap-1.5 text-xs" disabled={updateMutation.isPending} onClick={() => updateMutation.mutate()}>
+                <Check size={13} />{updateMutation.isPending ? 'Saving…' : 'Save changes'}
+              </Button>
+            </div>
+          </section>
+
+          <section className="space-y-3">
+            <div><h2 className="text-sm font-semibold">MCP tools</h2><p className="mt-1 text-xs text-muted-foreground">Tools enabled here are available to the agent when working in this Space.</p></div>
+            {mcpConnections.length === 0 ? (
+              <p className="text-xs text-muted-foreground">No MCP servers connected. Add them in <Link to="/settings" className="underline underline-offset-2 hover:text-foreground">Settings → MCP</Link>.</p>
+            ) : (
+              <div className="flex flex-col gap-2">
+                {mcpConnections.map(conn => {
+                  const enabled = (space.enabled_connection_ids ?? []).includes(conn.id);
+                  return (
+                    <div key={conn.id} className="flex items-center justify-between gap-3 rounded-lg border border-border-soft bg-card px-4 py-3">
+                      <div className="min-w-0">
+                        <div className="text-sm font-medium text-foreground">{conn.name}</div>
+                        <div className="text-xs text-faint-fg">MCP server</div>
+                      </div>
+                      <button
+                        type="button"
+                        role="switch"
+                        aria-checked={enabled}
+                        onClick={() => toggleConnection(conn.id)}
+                        className={cn(
+                          'relative inline-flex h-5 w-9 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/30',
+                          enabled ? 'bg-primary' : 'bg-muted',
+                        )}
+                      >
+                        <span className={cn('pointer-events-none inline-block size-4 rounded-full bg-white shadow-sm transition-transform', enabled ? 'translate-x-4' : 'translate-x-0')} />
+                      </button>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+          </section>
+
+          <section className="flex items-center justify-between gap-4 rounded-lg border border-destructive/25 bg-destructive/5 p-4">
+            <div><div className="text-sm font-medium">Delete Space</div><div className="mt-0.5 text-xs text-muted-foreground">Permanently removes its Items, plans, pipelines, and links.</div></div>
+            <Button variant="destructive" size="sm" onClick={() => setConfirmDelete(true)}>Delete</Button>
+          </section>
+        </div>
+      </ContentColumn>
       {confirmDelete && (
         <ConfirmDialog
           title={`Delete ${space.name}?`}

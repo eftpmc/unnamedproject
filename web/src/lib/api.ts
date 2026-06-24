@@ -148,7 +148,7 @@ export function deleteSpace(id: string): Promise<void> {
   return request(`/spaces/${id}`, { method: 'DELETE' });
 }
 
-export function updateSpace(id: string, body: { description?: string; name?: string }): Promise<void> {
+export function updateSpace(id: string, body: { description?: string; name?: string; enabled_connection_ids?: string[] }): Promise<void> {
   return request(`/spaces/${id}`, { method: 'PATCH', body: JSON.stringify(body) });
 }
 

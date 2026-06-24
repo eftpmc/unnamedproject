@@ -14,6 +14,74 @@ export function getDataDir(): string {
   return process.env.DATA_DIR ? path.resolve(process.env.DATA_DIR) : defaultDataDir;
 }
 
+function addDocumentItems(database: Database.Database): void {
+  // 1. Widen space_items.type CHECK to include 'document'
+  const itemsSql = (database.prepare("SELECT sql FROM sqlite_master WHERE type='table' AND name='space_items'").get() as { sql: string } | undefined)?.sql;
+  if (itemsSql && !itemsSql.includes("'document'")) {
+    database.exec(`
+      PRAGMA foreign_keys = OFF;
+      ALTER TABLE space_items RENAME TO space_items_pre_v9;
+      CREATE TABLE space_items (
+        id TEXT PRIMARY KEY,
+        space_id TEXT NOT NULL REFERENCES spaces(id) ON DELETE CASCADE,
+        type TEXT NOT NULL CHECK(type IN ('repo','file','note','document')),
+        name TEXT NOT NULL,
+        source_session_id TEXT REFERENCES sessions(id) ON DELETE SET NULL,
+        source_plan_id TEXT REFERENCES plans(id) ON DELETE SET NULL,
+        source_step_id TEXT REFERENCES plan_steps(id) ON DELETE SET NULL,
+        created_at INTEGER NOT NULL DEFAULT (unixepoch())
+      );
+      INSERT INTO space_items SELECT * FROM space_items_pre_v9;
+      DROP TABLE space_items_pre_v9;
+      PRAGMA foreign_keys = ON;
+    `);
+  }
+
+  // 2. Create space_documents table
+  database.exec(`
+    CREATE TABLE IF NOT EXISTS space_documents (
+      item_id TEXT PRIMARY KEY REFERENCES space_items(id) ON DELETE CASCADE,
+      template TEXT NOT NULL DEFAULT 'document',
+      blocks TEXT NOT NULL DEFAULT '[]'
+    );
+  `);
+
+  // 3. Add overview_blocks column to space_repos if missing
+  const repoCols = database.prepare("SELECT name FROM pragma_table_info('space_repos')").all() as { name: string }[];
+  if (!repoCols.some(c => c.name === 'overview_blocks')) {
+    database.exec('ALTER TABLE space_repos ADD COLUMN overview_blocks TEXT');
+  }
+
+  // 4. Widen session_events.type CHECK to include 'item_updated'
+  const eventsSql = (database.prepare("SELECT sql FROM sqlite_master WHERE type='table' AND name='session_events'").get() as { sql: string } | undefined)?.sql;
+  if (eventsSql && !eventsSql.includes("'item_updated'")) {
+    database.exec(`
+      PRAGMA foreign_keys = OFF;
+      ALTER TABLE session_events RENAME TO session_events_pre_v9;
+      CREATE TABLE session_events (
+        id TEXT PRIMARY KEY,
+        session_id TEXT NOT NULL REFERENCES sessions(id) ON DELETE CASCADE,
+        type TEXT NOT NULL CHECK(type IN (
+          'scope_changed','project_linked','project_created','plan_created',
+          'artifact_created','item_created','item_updated','approval_requested','approval_resolved',
+          'mcp_required','subagent_started','subagent_completed','connection_created'
+        )),
+        title TEXT NOT NULL,
+        body TEXT,
+        space_id TEXT REFERENCES spaces(id) ON DELETE SET NULL,
+        plan_id TEXT REFERENCES plans(id) ON DELETE SET NULL,
+        item_id TEXT REFERENCES space_items(id) ON DELETE SET NULL,
+        execution_id TEXT,
+        metadata TEXT NOT NULL DEFAULT '{}',
+        created_at INTEGER NOT NULL DEFAULT (unixepoch())
+      );
+      INSERT INTO session_events SELECT * FROM session_events_pre_v9;
+      DROP TABLE session_events_pre_v9;
+      PRAGMA foreign_keys = ON;
+    `);
+  }
+}
+
 // Ordered, versioned schema migrations. Version 1 is the baseline: the full
 // historical schema plus every in-place migration that predates this runner,
 // kept idempotent so it lands any existing or fresh database at today's schema
@@ -37,6 +105,7 @@ export const migrations: Migration[] = [
   }},
   { version: 7, name: 'finalize-spaces-items-and-pipelines', noTransaction: true, up: finalizeSpacesItemsAndPipelines },
   { version: 8, name: 'repair-pipeline-space-foreign-key', noTransaction: true, up: repairPipelineSpaceForeignKey },
+  { version: 9, name: 'add-document-items', noTransaction: true, up: addDocumentItems },
 ];
 
 function tableSql(database: Database.Database, name: string): string | undefined {
@@ -1327,6 +1396,7 @@ export type SessionEventType =
   | 'plan_created'
   | 'artifact_created'
   | 'item_created'
+  | 'item_updated'
   | 'approval_requested'
   | 'approval_resolved'
   | 'mcp_required'

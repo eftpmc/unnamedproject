@@ -54,6 +54,7 @@ import {
 import { ContentColumn, EmptyPanel, PageBody, PageHeader, PageLoading, PageSection, PageShell, Surface } from '@/components/ui/app-layout';
 import { StatusPill } from '@/components/ui/status-pill';
 import FileBrowser from '../components/FileBrowser.js';
+import BlockRenderer from '../components/BlockRenderer.js';
 import type { Connection, Pipeline, Plan, Session, Space, SpaceItem, SpaceItemType } from '../types.js';
 
 type Section = 'overview' | 'chats' | 'items' | 'plans' | 'pipelines' | 'settings';
@@ -615,6 +616,7 @@ function ItemDetail({ space, item }: { space: Space; item: SpaceItem }) {
       {item.type === 'repo' && <RepoDetail space={space} item={item} />}
       {item.type === 'note' && <NoteDetail space={space} item={item} />}
       {item.type === 'file' && <FileDetail space={space} item={item} />}
+      {item.type === 'document' && <DocumentDetail space={space} item={item} />}
       {confirmDelete && (
         <ConfirmDialog
           title={`Delete ${item.name}?`}
@@ -631,12 +633,51 @@ function ItemDetail({ space, item }: { space: Space; item: SpaceItem }) {
 function RepoDetail({ space, item }: { space: Space; item: SpaceItem & { type: 'repo' } }) {
   return (
     <PageBody className="p-4 sm:p-5">
+      {item.overview_blocks && item.overview_blocks.length > 0 && (
+        <div className="mb-6 flex flex-col gap-4">
+          {item.overview_blocks.map((block, i) => (
+            <BlockRenderer key={i} block={block} spaceId={space.id} itemId={item.id} />
+          ))}
+        </div>
+      )}
       <div className="mb-4 flex items-center gap-3 rounded-lg border border-border-soft bg-card px-4 py-3">
         <GitBranch size={15} className="text-muted-foreground" />
         <span className="min-w-0 flex-1 truncate font-mono text-xs text-muted-foreground">{item.repo_path}</span>
         {item.default_branch && <span className="rounded-md bg-muted px-2 py-1 font-mono text-[11px]">{item.default_branch}</span>}
       </div>
       <FileBrowser spaceId={space.id} itemId={item.id} itemName={item.name} />
+    </PageBody>
+  );
+}
+
+function DocumentDetail({ space, item }: { space: Space; item: SpaceItem & { type: 'document' } }) {
+  const TEMPLATE_LABELS: Record<string, string> = {
+    document: 'Document',
+    spec: 'Spec',
+    kanban: 'Kanban',
+    report: 'Report',
+  };
+
+  return (
+    <PageBody>
+      <ContentColumn className="max-w-2xl py-6">
+        <div className="mb-4 flex items-center gap-2">
+          <span className="rounded-md bg-muted px-2 py-0.5 text-[11px] font-medium text-muted-foreground">
+            {TEMPLATE_LABELS[item.template] ?? item.template}
+          </span>
+        </div>
+        {item.blocks.length === 0 ? (
+          <div className="rounded-lg border border-dashed border-border bg-background/50 px-4 py-8 text-center text-sm text-muted-foreground">
+            This document has no content yet. Ask the agent to fill it in.
+          </div>
+        ) : (
+          <div className="flex flex-col gap-4">
+            {item.blocks.map((block, i) => (
+              <BlockRenderer key={i} block={block} spaceId={space.id} itemId={item.id} />
+            ))}
+          </div>
+        )}
+      </ContentColumn>
     </PageBody>
   );
 }

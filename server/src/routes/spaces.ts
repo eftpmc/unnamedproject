@@ -6,6 +6,7 @@ import { getDataDir, getDb } from '../db/index.js';
 import { newId } from '../lib/ids.js';
 import { requireAuthHeaderOrQuery, type AuthedRequest } from '../middleware/auth.js';
 import {
+  createDocumentItem,
   createFileItem,
   createNoteItem,
   createRepoItem,
@@ -13,8 +14,13 @@ import {
   getItemById,
   getItemsForSpace,
   readItemContent,
+  updateDocumentBlocks,
+  updateRepoOverviewBlocks,
+  updateTaskDone,
+  type Block,
   type SpaceItem,
 } from '../services/items.js';
+import { ITEM_TEMPLATES } from '../lib/item-templates.js';
 import { detectCapabilities } from '../services/projectCapabilities.js';
 
 const router = Router();
@@ -155,8 +161,21 @@ router.get('/:spaceId/items', (req, res) => {
 router.post('/:spaceId/items', (req, res) => {
   if (!requireSpace(req, res)) return;
   const { type, name } = req.body as { type?: string; name?: string };
-  if (!name?.trim() || !['repo', 'file', 'note'].includes(type ?? '')) {
+  if (!name?.trim() || !['repo', 'file', 'note', 'document'].includes(type ?? '')) {
     res.status(400).json({ error: 'valid type and name required' });
+    return;
+  }
+  if (type === 'document') {
+    const template = (req.body.template as string | undefined) ?? 'document';
+    const blocks = Array.isArray(req.body.blocks) && req.body.blocks.length > 0
+      ? req.body.blocks
+      : (ITEM_TEMPLATES[template] ?? ITEM_TEMPLATES['document']);
+    res.status(201).json(createDocumentItem({
+      space_id: req.params.spaceId,
+      name: name.trim(),
+      template,
+      blocks,
+    }));
     return;
   }
   if (type === 'repo') {
@@ -221,7 +240,12 @@ router.patch('/:spaceId/items/:itemId', (req, res) => {
     res.status(404).json({ error: 'Item not found in this space' });
     return;
   }
-  const { name, content } = req.body as { name?: string; content?: string };
+  const { name, content, blocks, overview_blocks } = req.body as {
+    name?: string;
+    content?: string;
+    blocks?: unknown[];
+    overview_blocks?: unknown[] | null;
+  };
   if (name !== undefined) {
     if (!name.trim()) {
       res.status(400).json({ error: 'name cannot be empty' });
@@ -235,6 +259,48 @@ router.patch('/:spaceId/items/:itemId', (req, res) => {
       return;
     }
     getDb().prepare('UPDATE space_notes SET content = ? WHERE item_id = ?').run(content, item.id);
+  }
+  if (blocks !== undefined) {
+    if (item.type !== 'document') {
+      res.status(400).json({ error: `blocks only supported for document items` });
+      return;
+    }
+    if (!Array.isArray(blocks)) {
+      res.status(400).json({ error: 'blocks must be an array' });
+      return;
+    }
+    updateDocumentBlocks(item.id, blocks as Block[]);
+  }
+  if (overview_blocks !== undefined) {
+    if (item.type !== 'repo') {
+      res.status(400).json({ error: `overview_blocks only supported for repo items` });
+      return;
+    }
+    updateRepoOverviewBlocks(item.id, overview_blocks as Block[] | null);
+  }
+  res.json(getItemById(item.id));
+});
+
+router.patch('/:spaceId/items/:itemId/tasks/:taskId', (req, res) => {
+  if (!requireSpace(req, res)) return;
+  const item = getItemById(req.params.itemId);
+  if (!item || item.space_id !== req.params.spaceId) {
+    res.status(404).json({ error: 'Item not found in this space' });
+    return;
+  }
+  if (item.type !== 'document') {
+    res.status(400).json({ error: 'Task updates only supported on document items' });
+    return;
+  }
+  const { done } = req.body as { done?: boolean };
+  if (typeof done !== 'boolean') {
+    res.status(400).json({ error: 'done (boolean) required' });
+    return;
+  }
+  const found = updateTaskDone(item.id, req.params.taskId, done);
+  if (!found) {
+    res.status(404).json({ error: `Task ${req.params.taskId} not found` });
+    return;
   }
   res.json(getItemById(item.id));
 });

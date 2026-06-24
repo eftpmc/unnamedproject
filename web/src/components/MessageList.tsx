@@ -273,6 +273,10 @@ function CopyButton({ text }: { text: string }) {
 
 const NEAR_BOTTOM_THRESHOLD = 120;
 
+const TEMPLATE_LABELS: Record<string, string> = {
+  document: 'Doc', spec: 'Spec', kanban: 'Kanban', report: 'Report', repo: 'Repo', note: 'Note',
+};
+
 export default function MessageList({ messages, executions, streamingIds, sessionId, onEditMessage, canEdit, events = [], failedMessageId, onRetryFailedMessage }: MessageListProps) {
   const lastUserMessageId = [...messages].reverse().find(m => m.role === 'user')?.id ?? null;
   const bottomRef = useRef<HTMLDivElement>(null);
@@ -444,9 +448,6 @@ export default function MessageList({ messages, executions, streamingIds, sessio
             ) {
               const isUpdate = item.event.type === 'item_updated';
               const typeLabel = (item.event.metadata as { itemType?: string })?.itemType ?? 'item';
-              const TEMPLATE_LABELS: Record<string, string> = {
-                document: 'Doc', spec: 'Spec', kanban: 'Kanban', report: 'Report', repo: 'Repo', note: 'Note',
-              };
               const label = TEMPLATE_LABELS[typeLabel] ?? typeLabel;
               return (
                 <div key={`event-${item.event.id}`} className="flex max-w-[94%] flex-col sm:max-w-[86%]">

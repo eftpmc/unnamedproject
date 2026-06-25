@@ -14,14 +14,57 @@ export function getDataDir(): string {
   return process.env.DATA_DIR ? path.resolve(process.env.DATA_DIR) : defaultDataDir;
 }
 
+// Rebuilds every table whose CREATE TABLE statement references `referencedTable`
+// so the references point at its current schema, then runs `createReferenced`
+// to recreate `referencedTable` itself. SQLite auto-rewrites a table's FK
+// reference text when the table it points at is renamed, so naively renaming
+// `referencedTable` out of the way and dropping it afterward leaves every
+// child table pointing at a name that no longer exists. Capturing each
+// child's CREATE SQL before the rename (still saying `referencedTable`)
+// and replaying it after recreation keeps every FK correct.
+function rebuildTableAndReferencingTables(
+  database: Database.Database,
+  referencedTable: string,
+  createReferenced: string,
+): void {
+  const referencing = database
+    .prepare(
+      "SELECT name, sql FROM sqlite_master WHERE type='table' AND name != ? AND sql LIKE ?",
+    )
+    .all(referencedTable, `%REFERENCES ${referencedTable}(id)%`) as { name: string; sql: string }[];
+
+  const tmpName = `_${referencedTable}_rebuild_tmp`;
+  database.pragma('foreign_keys = OFF');
+  database.exec(`ALTER TABLE ${referencedTable} RENAME TO ${tmpName};`);
+  database.exec(createReferenced);
+  database.exec(`INSERT INTO ${referencedTable} SELECT * FROM ${tmpName};`);
+
+  for (const { name, sql } of referencing) {
+    const childTmp = `_${name}_rebuild_tmp`;
+    const cols = (database.prepare(`SELECT name FROM pragma_table_info('${name}')`).all() as { name: string }[])
+      .map(c => c.name)
+      .join(', ');
+    database.exec(`ALTER TABLE ${name} RENAME TO ${childTmp};`);
+    database.exec(sql); // captured before the rename, so it still says `referencedTable`
+    database.exec(`INSERT INTO ${name} (${cols}) SELECT ${cols} FROM ${childTmp};`);
+    database.exec(`DROP TABLE ${childTmp};`);
+  }
+
+  database.exec(`DROP TABLE ${tmpName};`);
+  database.pragma('foreign_keys = ON');
+}
+
 export function addDocumentItems(database: Database.Database): void {
-  // 1. Widen space_items.type CHECK to include 'document'
+  // 1. Widen space_items.type CHECK to include 'document'. Every table that
+  // references space_items (space_repos, space_files, space_notes,
+  // agent_worktrees, session_events, ...) gets rebuilt too so its FK still
+  // points at the live table — see rebuildTableAndReferencingTables.
   const itemsSql = (database.prepare("SELECT sql FROM sqlite_master WHERE type='table' AND name='space_items'").get() as { sql: string } | undefined)?.sql;
   if (itemsSql && !itemsSql.includes("'document'")) {
-    database.exec(`
-      PRAGMA foreign_keys = OFF;
-      ALTER TABLE space_items RENAME TO space_items_pre_v9;
-      CREATE TABLE space_items (
+    rebuildTableAndReferencingTables(
+      database,
+      'space_items',
+      `CREATE TABLE space_items (
         id TEXT PRIMARY KEY,
         space_id TEXT NOT NULL REFERENCES spaces(id) ON DELETE CASCADE,
         type TEXT NOT NULL CHECK(type IN ('repo','file','note','document')),
@@ -30,11 +73,8 @@ export function addDocumentItems(database: Database.Database): void {
         source_plan_id TEXT REFERENCES plans(id) ON DELETE SET NULL,
         source_step_id TEXT REFERENCES plan_steps(id) ON DELETE SET NULL,
         created_at INTEGER NOT NULL DEFAULT (unixepoch())
-      );
-      INSERT INTO space_items SELECT * FROM space_items_pre_v9;
-      DROP TABLE space_items_pre_v9;
-      PRAGMA foreign_keys = ON;
-    `);
+      );`,
+    );
   }
 
   // 2. Create space_documents table
@@ -106,6 +146,7 @@ export const migrations: Migration[] = [
   { version: 7, name: 'finalize-spaces-items-and-pipelines', noTransaction: true, up: finalizeSpacesItemsAndPipelines },
   { version: 8, name: 'repair-pipeline-space-foreign-key', noTransaction: true, up: repairPipelineSpaceForeignKey },
   { version: 9, name: 'add-document-items', noTransaction: true, up: addDocumentItems },
+  { version: 10, name: 'repair-document-items-foreign-keys', noTransaction: true, up: repairDocumentItemsForeignKeys },
 ];
 
 function tableSql(database: Database.Database, name: string): string | undefined {
@@ -547,6 +588,37 @@ function repairPipelineSpaceForeignKey(database: Database.Database): void {
        OR EXISTS (SELECT 1 FROM spaces WHERE user_id = pipeline.space_id);
     DROP TABLE pipelines_pre_v8;
   `);
+  database.pragma('foreign_keys = ON');
+}
+
+// The original v9 migration renamed space_items, which (per SQLite's default
+// legacy_alter_table=OFF behavior) auto-rewrote space_repos/space_files/
+// space_notes' FK references to point at the renamed table, then dropped it —
+// leaving those FKs dangling at a table that no longer exists. v9 itself now
+// rebuilds them correctly, but databases that already applied the broken v9
+// are stuck (the migration runner never re-invokes an applied version), so
+// this repairs them in place.
+export function repairDocumentItemsForeignKeys(database: Database.Database): void {
+  // Finds every table left referencing the table that v9 dropped, regardless
+  // of which table it is (space_repos/space_files/space_notes/agent_worktrees
+  // today, possibly others later), and rewrites its FK to point at space_items.
+  const dangling = database
+    .prepare("SELECT name, sql FROM sqlite_master WHERE type='table' AND sql LIKE '%space_items_pre_v9%'")
+    .all() as { name: string; sql: string }[];
+  if (dangling.length === 0) return;
+
+  database.pragma('foreign_keys = OFF');
+  for (const { name, sql } of dangling) {
+    const fixedSql = sql.replace(/["`]?space_items_pre_v9["`]?/g, 'space_items');
+    const tmpName = `_${name}_v9_repair`;
+    const cols = (database.prepare(`SELECT name FROM pragma_table_info('${name}')`).all() as { name: string }[])
+      .map(c => c.name)
+      .join(', ');
+    database.exec(`ALTER TABLE ${name} RENAME TO ${tmpName};`);
+    database.exec(fixedSql);
+    database.exec(`INSERT INTO ${name} (${cols}) SELECT ${cols} FROM ${tmpName};`);
+    database.exec(`DROP TABLE ${tmpName};`);
+  }
   database.pragma('foreign_keys = ON');
 }
 

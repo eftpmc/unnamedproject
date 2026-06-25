@@ -1,6 +1,6 @@
 import { describe, it, expect, beforeEach } from 'vitest';
 import Database from 'better-sqlite3';
-import { addDocumentItems } from '../db/index.js';
+import { addDocumentItems, repairDocumentItemsForeignKeys } from '../db/index.js';
 
 function buildPreV9Db(): Database.Database {
   const db = new Database(':memory:');
@@ -25,6 +25,23 @@ function buildPreV9Db(): Database.Database {
       item_id TEXT PRIMARY KEY REFERENCES space_items(id) ON DELETE CASCADE,
       repo_path TEXT NOT NULL,
       default_branch TEXT
+    );
+    CREATE TABLE space_files (
+      item_id TEXT PRIMARY KEY REFERENCES space_items(id) ON DELETE CASCADE,
+      file_path TEXT NOT NULL,
+      size_bytes INTEGER,
+      mime_type TEXT
+    );
+    CREATE TABLE space_notes (
+      item_id TEXT PRIMARY KEY REFERENCES space_items(id) ON DELETE CASCADE,
+      content TEXT NOT NULL
+    );
+    CREATE TABLE agent_worktrees (
+      id TEXT PRIMARY KEY,
+      item_id TEXT NOT NULL REFERENCES space_items(id) ON DELETE CASCADE,
+      session_id TEXT NOT NULL REFERENCES sessions(id) ON DELETE CASCADE,
+      branch TEXT NOT NULL,
+      worktree_path TEXT NOT NULL
     );
     CREATE TABLE session_events (
       id TEXT PRIMARY KEY,
@@ -87,5 +104,71 @@ describe('migration v9: addDocumentItems', () => {
 
   it('is idempotent — running twice does not throw', () => {
     expect(() => addDocumentItems(db)).not.toThrow();
+  });
+});
+
+describe('migration v10: repairDocumentItemsForeignKeys', () => {
+  function buildDanglingFkDb(): Database.Database {
+    const db = buildPreV9Db();
+    db.pragma('foreign_keys = OFF');
+    db.exec(`
+      ALTER TABLE space_items RENAME TO space_items_pre_v9;
+      CREATE TABLE space_items (
+        id TEXT PRIMARY KEY,
+        space_id TEXT NOT NULL REFERENCES spaces(id) ON DELETE CASCADE,
+        type TEXT NOT NULL CHECK(type IN ('repo','file','note','document')),
+        name TEXT NOT NULL,
+        source_session_id TEXT REFERENCES sessions(id) ON DELETE SET NULL,
+        source_plan_id TEXT REFERENCES plans(id) ON DELETE SET NULL,
+        source_step_id TEXT REFERENCES plan_steps(id) ON DELETE SET NULL,
+        created_at INTEGER NOT NULL DEFAULT (unixepoch())
+      );
+      INSERT INTO space_items SELECT * FROM space_items_pre_v9;
+      DROP TABLE space_items_pre_v9;
+      ALTER TABLE space_repos ADD COLUMN overview_blocks TEXT;
+    `);
+    db.pragma('foreign_keys = ON');
+    return db;
+  }
+
+  it('rebuilds every table referencing the dropped table, including ones not hardcoded (agent_worktrees)', () => {
+    const db = buildDanglingFkDb();
+    // The dangling FK (pointing at the dropped space_items_pre_v9) makes any
+    // write to space_repos fail under foreign_keys=ON — this is the live bug.
+    // Seed data with enforcement off, the same way it would already be broken.
+    db.pragma('foreign_keys = OFF');
+    db.exec("INSERT INTO spaces VALUES ('s1','u1','S',NULL,'[]')");
+    db.exec("INSERT INTO sessions VALUES ('sess1','u1','T',1)");
+    db.exec("INSERT INTO space_items VALUES ('repo1','s1','repo','R',NULL,NULL,NULL,1)");
+    db.exec("INSERT INTO space_repos VALUES ('repo1','/tmp/r',NULL,NULL)");
+    db.exec("INSERT INTO agent_worktrees VALUES ('wt1','repo1','sess1','main','/tmp/wt')");
+    db.pragma('foreign_keys = ON');
+    expect(() => db.exec("INSERT INTO space_repos (item_id, repo_path) VALUES ('repo2','/tmp/r2')"))
+      .toThrow(/space_items_pre_v9/);
+
+    repairDocumentItemsForeignKeys(db);
+
+    expect(() => db.exec("INSERT INTO space_items VALUES ('repo2','s1','repo','R2',NULL,NULL,NULL,1)")).not.toThrow();
+    expect(() => db.exec("INSERT INTO space_repos (item_id, repo_path) VALUES ('repo2','/tmp/r2')")).not.toThrow();
+    expect(() => db.exec("INSERT INTO agent_worktrees VALUES ('wt2','repo2','sess1','feature','/tmp/wt2')")).not.toThrow();
+
+    for (const table of ['space_repos', 'space_files', 'space_notes', 'agent_worktrees']) {
+      const sql = (db.prepare("SELECT sql FROM sqlite_master WHERE type='table' AND name = ?").get(table) as { sql: string }).sql;
+      expect(sql).not.toMatch(/space_items_pre_v9/);
+      expect(sql).toMatch(/REFERENCES\s+space_items\(id\)/);
+    }
+    const repo = db.prepare("SELECT * FROM space_repos WHERE item_id = 'repo1'").get() as { repo_path: string };
+    expect(repo.repo_path).toBe('/tmp/r');
+    const wt = db.prepare("SELECT * FROM agent_worktrees WHERE id = 'wt1'").get() as { branch: string };
+    expect(wt.branch).toBe('main');
+  });
+
+  it('is a no-op when foreign keys already reference space_items', () => {
+    const db = buildPreV9Db();
+    addDocumentItems(db);
+    const before = db.prepare("SELECT sql FROM sqlite_master WHERE type='table' AND name='space_repos'").get();
+    expect(() => repairDocumentItemsForeignKeys(db)).not.toThrow();
+    const after = db.prepare("SELECT sql FROM sqlite_master WHERE type='table' AND name='space_repos'").get();
+    expect(after).toEqual(before);
   });
 });

@@ -57,6 +57,11 @@ describe('SpacePage', () => {
     expect(screen.getByText('Fix the render bug')).toBeInTheDocument();
   });
 
+  it('marks the Overview tab active on the space root route', async () => {
+    renderPage('/spaces/space-1');
+    expect(await screen.findByRole('link', { name: 'Overview' })).toHaveAttribute('aria-current', 'page');
+  });
+
   it('marks the Chats tab active on the chats sub-route', async () => {
     renderPage('/spaces/space-1/chats');
     expect(await screen.findByRole('link', { name: 'Chats' })).toHaveAttribute('aria-current', 'page');

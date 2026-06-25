@@ -808,6 +808,7 @@ function formatBytes(bytes: number) {
 
 function SpaceTabs({ spaceId, section }: { spaceId: string; section: Section }) {
   const tabs: { label: string; key: Section }[] = [
+    { label: 'Overview', key: 'overview' },
     { label: 'Chats', key: 'chats' },
     { label: 'Items', key: 'items' },
     { label: 'Plans', key: 'plans' },
@@ -820,7 +821,7 @@ function SpaceTabs({ spaceId, section }: { spaceId: string; section: Section }) 
         {tabs.map(tab => (
           <Link
             key={tab.key}
-            to={`/spaces/${spaceId}/${tab.key}`}
+            to={tab.key === 'overview' ? `/spaces/${spaceId}` : `/spaces/${spaceId}/${tab.key}`}
             aria-current={section === tab.key ? 'page' : undefined}
             className={cn(
               '-mb-px border-b-2 px-4 py-2.5 text-sm font-medium transition-colors',

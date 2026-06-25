@@ -1,7 +1,13 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useNavigate } from 'react-router-dom';
-import { Bell, GitBranch, PanelRight, X } from 'lucide-react';
+import { Bell, ChevronDown, GitBranch, PanelRight, X } from 'lucide-react';
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from '@/components/ui/dropdown-menu';
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from '@/components/ui/sheet';
 import ContextPanel from './ContextPanel.js';
 import MessageList from './MessageList.js';
@@ -518,33 +524,45 @@ export default function ChatView({ chatId }: ChatViewProps) {
       )}
       <div className="relative flex min-w-0 flex-1 flex-col">
       <PageHeader
-        title={<EditableTitle title={chat?.title ?? 'Untitled chat'} onSave={(t) => configMutation.mutate({ title: t })} />}
-        className="border-b border-border-soft px-5 py-2.5"
+        title={(
+          <div className="flex min-w-0 items-center gap-1">
+            <EditableTitle title={chat?.title ?? 'Untitled chat'} onSave={(t) => configMutation.mutate({ title: t })} />
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <button
+                  type="button"
+                  aria-label="Chat settings"
+                  className="flex shrink-0 items-center justify-center rounded-md p-1 text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
+                >
+                  <ChevronDown size={14} />
+                </button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="start" className="w-56">
+                <ScopePopover
+                  spaces={projects}
+                  pinnedProject={pinnedProject}
+                  inferredProject={inferredProject}
+                  agentActive={agentActive}
+                  onOpenSpace={(spaceId) => navigate(`/spaces/${spaceId}`)}
+                  onScopeChange={(spaceId) => configMutation.mutate({ pinned_space_id: spaceId })}
+                />
+                {worktree && (
+                  <DropdownMenuItem onSelect={() => setDiffOpen(true)}>
+                    <GitBranch size={14} className="shrink-0" />
+                    <span className="flex-1 truncate font-mono text-xs">{worktree.branch}</span>
+                    {worktree.files_changed > 0 && (
+                      <span className="text-warning">{worktree.files_changed} changed</span>
+                    )}
+                  </DropdownMenuItem>
+                )}
+              </DropdownMenuContent>
+            </DropdownMenu>
+          </div>
+        )}
+        className="border-0 px-5 py-2.5"
         description={lastInputTokens !== null ? <ContextBar inputTokens={lastInputTokens} /> : undefined}
         actions={
           <div className="flex items-center gap-2">
-            <ScopePopover
-              spaces={projects}
-              pinnedProject={pinnedProject}
-              inferredProject={inferredProject}
-              agentActive={agentActive}
-              onOpenSpace={(spaceId) => navigate(`/spaces/${spaceId}`)}
-              onScopeChange={(spaceId) => configMutation.mutate({ pinned_space_id: spaceId })}
-            />
-            {worktree && (
-              <button
-                type="button"
-                onClick={() => setDiffOpen(true)}
-                title={worktree.files_changed > 0 ? `${worktree.files_changed} uncommitted file${worktree.files_changed !== 1 ? 's' : ''} — click to view diff` : worktree.branch}
-                className="flex items-center gap-1 rounded-md border border-border-soft bg-muted/60 px-1.5 py-0.5 font-mono text-[11px] text-muted-foreground transition-colors hover:border-border hover:bg-muted"
-              >
-                <GitBranch size={10} className="shrink-0" />
-                {worktree.branch}
-                {worktree.files_changed > 0 && (
-                  <span className="text-warning">·{worktree.files_changed}</span>
-                )}
-              </button>
-            )}
             <button
               type="button"
               onClick={toggleCtx}

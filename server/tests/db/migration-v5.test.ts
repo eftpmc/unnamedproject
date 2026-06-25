@@ -164,9 +164,10 @@ describe('migration v5: spaces rename and item model', () => {
   });
 
   it('lands on the latest version and v5 is idempotent', async () => {
-    expect(db.pragma('user_version', { simple: true })).toBe(8);
-    expect(db.pragma('foreign_key_check')).toEqual([]);
     const { migrations } = await import('../../src/db/index.js');
+    const latestVersion = Math.max(...migrations.map(m => m.version));
+    expect(db.pragma('user_version', { simple: true })).toBe(latestVersion);
+    expect(db.pragma('foreign_key_check')).toEqual([]);
     const migration = migrations.find(candidate => candidate.version === 5)!;
     expect(() => migration.up(db)).not.toThrow();
     expect(db.pragma('foreign_key_check')).toEqual([]);
@@ -194,6 +195,7 @@ describe('migration v7: finalize an already-migrated v6 database', () => {
         created_at INTEGER NOT NULL
       );
       CREATE TABLE space_files (item_id TEXT PRIMARY KEY, file_path TEXT NOT NULL, size_bytes INTEGER, mime_type TEXT);
+      CREATE TABLE space_repos (item_id TEXT PRIMARY KEY REFERENCES space_items(id), repo_path TEXT NOT NULL, default_branch TEXT);
       CREATE TABLE artifacts (
         id TEXT PRIMARY KEY,
         space_id TEXT NOT NULL,
@@ -206,11 +208,25 @@ describe('migration v7: finalize an already-migrated v6 database', () => {
       );
       CREATE TABLE session_events (
         id TEXT PRIMARY KEY,
-        item_id TEXT
+        session_id TEXT NOT NULL REFERENCES sessions(id),
+        type TEXT NOT NULL CHECK(type IN (
+          'scope_changed','project_linked','project_created','plan_created',
+          'artifact_created','item_created','approval_requested','approval_resolved',
+          'mcp_required','subagent_started','subagent_completed','connection_created'
+        )),
+        title TEXT NOT NULL,
+        body TEXT,
+        space_id TEXT REFERENCES spaces(id),
+        plan_id TEXT REFERENCES plans(id),
+        item_id TEXT,
+        execution_id TEXT REFERENCES executions(id),
+        metadata TEXT NOT NULL DEFAULT '{}',
+        created_at INTEGER NOT NULL DEFAULT (unixepoch())
       );
       INSERT INTO spaces VALUES ('s1');
+      INSERT INTO sessions VALUES ('sess1');
       INSERT INTO artifacts VALUES ('a1', 's1', 'Report', 'text/markdown', 'artifacts/a1.md', NULL, NULL, 123);
-      INSERT INTO session_events VALUES ('e1', 'a1');
+      INSERT INTO session_events (id, session_id, type, title, item_id) VALUES ('e1', 'sess1', 'artifact_created', 'Artifact created', 'a1');
       PRAGMA user_version = 6;
     `);
 
@@ -246,6 +262,7 @@ describe('migration v8: repair pipeline Space ownership', () => {
         description TEXT,
         created_at INTEGER NOT NULL
       );
+      CREATE TABLE space_repos (item_id TEXT PRIMARY KEY, repo_path TEXT NOT NULL, default_branch TEXT);
       INSERT INTO users VALUES ('u1');
       INSERT INTO spaces VALUES ('s1', 'u1', 1);
       INSERT INTO pipelines VALUES ('p1', 'u1', 'Release', NULL, 2);

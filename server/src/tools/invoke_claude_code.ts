@@ -12,16 +12,26 @@ interface ClaudeCodeInput {
   model?: string;
 }
 
-interface McpServerConfig { command: string; args?: string[]; env?: Record<string, string> }
+export interface McpServerConfig {
+  // stdio transport
+  command?: string;
+  args?: string[];
+  env?: Record<string, string>;
+  // HTTP transport
+  url?: string;
+  headers?: Record<string, string>;
+}
 
 interface ToolContext {
   userId: string;
   executionId: string;
-  repoPath: string;
+  repoPath?: string;   // optional — defaults to cwd for conversational sessions
   apiKey: string | null;
   resumeSessionId?: string | null;
   mcpServers?: Record<string, McpServerConfig>;
   permissionProfile?: PermissionProfile;
+  signal?: AbortSignal;
+  onText?: (delta: string) => void;      // for streaming chat
   onSessionId?: (id: string) => void;
 }
 
@@ -58,7 +68,15 @@ export async function invokeClaudeCode(input: ClaudeCodeInput, ctx: ToolContext)
   if (ctx.mcpServers && Object.keys(ctx.mcpServers).length > 0) {
     mcpConfigDir = await fs.mkdtemp(path.join(os.tmpdir(), 'unnamed-claude-mcp-'));
     const mcpConfigPath = path.join(mcpConfigDir, 'mcp.json');
-    await fs.writeFile(mcpConfigPath, JSON.stringify({ mcpServers: ctx.mcpServers }));
+    const servers: Record<string, unknown> = {};
+    for (const [name, cfg] of Object.entries(ctx.mcpServers)) {
+      if (cfg.url) {
+        servers[name] = { type: 'http', url: cfg.url, ...(cfg.headers ? { headers: cfg.headers } : {}) };
+      } else {
+        servers[name] = { command: cfg.command, args: cfg.args ?? [], env: cfg.env ?? {} };
+      }
+    }
+    await fs.writeFile(mcpConfigPath, JSON.stringify({ mcpServers: servers }));
     args.push('--mcp-config', mcpConfigPath);
   }
   args.push('--');
@@ -66,7 +84,7 @@ export async function invokeClaudeCode(input: ClaudeCodeInput, ctx: ToolContext)
 
   return new Promise((resolve, reject) => {
     const proc = spawn('claude', args, {
-      cwd: ctx.repoPath,
+      cwd: ctx.repoPath ?? process.cwd(),
       env: getDelegateEnv('claude_code', ctx.apiKey, profile),
     });
 
@@ -114,6 +132,7 @@ export async function invokeClaudeCode(input: ClaudeCodeInput, ctx: ToolContext)
             }
             if (block.type === 'text' && block.text) {
               appendOutput(ctx.executionId, ctx.userId, block.text);
+              ctx.onText?.(block.text);
             }
           }
         }

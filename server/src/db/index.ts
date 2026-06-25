@@ -741,8 +741,8 @@ export function repairDocumentItemsForeignKeys(database: Database.Database): voi
   database.pragma('foreign_keys = ON');
 }
 
-export function initDb(): void {
-  const dataDir = getDataDir();
+export function initDb(overrideDataDir?: string): void {
+  const dataDir = overrideDataDir ?? getDataDir();
   fs.mkdirSync(dataDir, { recursive: true });
   const dbPath = path.join(dataDir, 'app.db');
   db = new Database(dbPath);

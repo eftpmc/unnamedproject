@@ -82,7 +82,7 @@ export default function ChatsPage() {
 
   return (
     <PageShell>
-      <PageHeader title="Chats" />
+      <PageHeader title="Chats" className="border-0 pb-0" contentClassName="max-w-2xl" />
 
       {isLoading ? (
         <PageLoading rows={5} />

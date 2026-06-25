@@ -56,6 +56,8 @@ export default function SpacesPage() {
     <PageShell>
       <PageHeader
         title="Spaces"
+        className="border-0 pb-0"
+        contentClassName="max-w-2xl"
         actions={(
           <Button size="sm" className="h-8 gap-1.5 text-xs" onClick={() => setOpen(true)}>
             <Plus size={14} />

@@ -54,6 +54,7 @@ import {
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
 import { ContentColumn, EmptyPanel, PageBody, PageHeader, PageLoading, PageSection, PageShell, Surface } from '@/components/ui/app-layout';
+import { TabStrip } from '@/components/ui/tab-strip';
 import { StatusPill } from '@/components/ui/status-pill';
 import FileBrowser from '../components/FileBrowser.js';
 import BlockRenderer from '../components/BlockRenderer.js';
@@ -803,6 +804,7 @@ function formatBytes(bytes: number) {
 }
 
 function SpaceTabs({ spaceId, section }: { spaceId: string; section: Section }) {
+  const navigate = useNavigate();
   const tabs: { label: string; key: Section }[] = [
     { label: 'Overview', key: 'overview' },
     { label: 'Chats', key: 'chats' },
@@ -812,28 +814,29 @@ function SpaceTabs({ spaceId, section }: { spaceId: string; section: Section }) 
     { label: 'Settings', key: 'settings' },
   ];
   return (
-    <div className="overflow-x-auto px-5 py-3 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+    <div className="px-5 py-3">
       <div className="mx-auto w-full max-w-2xl">
-        <nav
-          className="inline-flex h-9 w-fit items-center gap-1 rounded-lg bg-muted p-[3px]"
-          aria-label="Space sections"
-        >
-          {tabs.map(tab => (
+        <TabStrip
+          tabs={tabs}
+          activeKey={section}
+          ariaLabel="Space sections"
+          onSelect={tab => navigate(tab.key === 'overview' ? `/spaces/${spaceId}` : `/spaces/${spaceId}/${tab.key}`)}
+          renderTab={(tab, isActive) => (
             <Link
               key={tab.key}
               to={tab.key === 'overview' ? `/spaces/${spaceId}` : `/spaces/${spaceId}/${tab.key}`}
-              aria-current={section === tab.key ? 'page' : undefined}
+              aria-current={isActive ? 'page' : undefined}
               className={cn(
-                'inline-flex h-full items-center justify-center rounded-md px-3 text-sm font-medium transition-all',
-                section === tab.key
+                'inline-flex h-full items-center justify-center whitespace-nowrap rounded-md px-3 text-sm font-medium transition-all',
+                isActive
                   ? 'bg-background text-foreground shadow-sm'
                   : 'text-muted-foreground hover:text-foreground',
               )}
             >
               {tab.label}
             </Link>
-          ))}
-        </nav>
+          )}
+        />
       </div>
     </div>
   );

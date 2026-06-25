@@ -12,6 +12,7 @@ import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Textarea } from '@/components/ui/textarea';
 import { ContentColumn, PageBody, PageHeader, PageShell } from '@/components/ui/app-layout';
+import { TabStrip } from '@/components/ui/tab-strip';
 import { cn } from '@/lib/utils';
 import {
   createConnection,
@@ -709,25 +710,29 @@ export default function Settings() {
       />
 
       {/* Tab strip */}
-      <div className="shrink-0 overflow-x-auto px-5 py-3 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+      <div className="shrink-0 px-5 py-3">
         <div className="mx-auto w-full max-w-3xl">
-          <div className="inline-flex h-9 w-fit items-center gap-1 rounded-lg bg-muted p-[3px]">
-            {TABS.map(t => (
+          <TabStrip
+            tabs={TABS.map(t => ({ key: t.id, label: t.label }))}
+            activeKey={tab}
+            ariaLabel="Settings sections"
+            onSelect={t => setTab(t.key as Tab)}
+            renderTab={(t, isActive) => (
               <button
-                key={t.id}
+                key={t.key}
                 type="button"
-                onClick={() => setTab(t.id)}
+                onClick={() => setTab(t.key as Tab)}
                 className={cn(
                   'inline-flex h-full items-center justify-center rounded-md px-3 text-sm font-medium whitespace-nowrap transition-all',
-                  tab === t.id
+                  isActive
                     ? 'bg-background text-foreground shadow-sm'
                     : 'text-muted-foreground hover:text-foreground',
                 )}
               >
                 {t.label}
               </button>
-            ))}
-          </div>
+            )}
+          />
         </div>
       </div>
 

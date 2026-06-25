@@ -22,7 +22,7 @@ import { remember, recall, forget } from '../tools/memory_tools.js';
 import { readFile, listDir, writeFile, searchFiles } from '../tools/file_ops.js';
 import { runCommand, isBlocked } from '../tools/run_command.js';
 import { readChat } from '../tools/read_chat.js';
-import { createProject, updateProject, deleteProject } from '../tools/project_ops.js';
+import { listProjects, createProject, updateProject, deleteProject } from '../tools/project_ops.js';
 import { createConnectionTool } from '../tools/connection_ops.js';
 import { runCreatePlan } from '../tools/create_plan.js';
 import { broadcast } from './socket.js';
@@ -179,6 +179,7 @@ const PARALLEL_SAFE_TOOLS = new Set([
   'read_chat',
   'list_items',
   'read_item',
+  'list_spaces',
   'list_connections',
   'test_connection',
   'search_files',
@@ -212,6 +213,10 @@ const CORE_TOOLS = new Set([
   'create_plan', 'delegate_to_agent',
   // Item management
   'create_item', 'update_item', 'read_item',
+  // Space management — list before create, never guess a space_id. delete_space
+  // stays discovery-only (tool_search) like other destructive delete_* tools —
+  // it's user-approved and rare enough not to need default-turn availability.
+  'list_spaces', 'create_space', 'update_space',
 ]);
 
 export function resolveToolsForTurn(userId: string, sessionId: string): Anthropic.Tool[] {
@@ -350,7 +355,7 @@ async function runSubAgent(
   const SUB_TOOLS = new Set(['read_file', 'list_dir', 'search_files', 'project_query', 'recall', 'remember', 'write_file', 'create_note', 'git_op', 'list_items', 'read_item']);
   const subtools = toolDefinitions.filter(t => 'name' in t && SUB_TOOLS.has(t.name as string));
 
-  const systemPrompt = `You are a focused sub-agent completing a specific task.${projectId ? ` Use project_id "${projectId}" when calling project tools.` : ''} Complete the task fully, then respond with a clear summary of what you accomplished.`;
+  const systemPrompt = `You are a focused sub-agent completing a specific task.${projectId ? ` Use space_id "${projectId}" when calling Space tools.` : ''} Complete the task fully, then respond with a clear summary of what you accomplished.`;
 
   const messages: Anthropic.MessageParam[] = [{ role: 'user', content: instructions }];
   const parentSession = getDb()
@@ -1035,7 +1040,10 @@ async function dispatchTool(
         if (itemStepId) finishPlanStep(userId, itemStepId, result);
         break;
       }
-      case 'create_project':
+      case 'list_spaces':
+        result = await listProjects(userId);
+        break;
+      case 'create_space':
         result = await createProject(
           {
             name: toolInput.name as string,
@@ -1051,7 +1059,7 @@ async function dispatchTool(
             .get(userId, toolInput.name as string) as { id: string; name: string } | undefined;
           if (createdSpace) {
             try { linkSessionProject(sessionId, createdSpace.id, 'agent'); }
-            catch (err) { console.error('create_project: linkSessionProject failed (non-fatal):', err); }
+            catch (err) { console.error('create_space: linkSessionProject failed (non-fatal):', err); }
             emitSessionEvent(userId, {
               sessionId,
               type: 'project_created',
@@ -1127,18 +1135,25 @@ async function dispatchTool(
         }
         break;
       }
-      case 'update_project':
+      case 'update_space':
         result = await updateProject(
           {
-            project_id: toolInput.project_id as string,
+            space_id: (toolInput.space_id as string | undefined) ?? (toolInput.project_id as string),
             name: toolInput.name as string | undefined,
             description: toolInput.description as string | undefined,
           },
           userId
         );
         break;
-      case 'delete_project':
-        result = await deleteProject({ project_id: toolInput.project_id as string, delete_files: toolInput.delete_files as boolean }, userId, executionId);
+      case 'delete_space':
+        result = await deleteProject(
+          {
+            space_id: (toolInput.space_id as string | undefined) ?? (toolInput.project_id as string),
+            delete_files: toolInput.delete_files as boolean,
+          },
+          userId,
+          executionId
+        );
         break;
       case 'list_plans': {
         const lcPid = (toolInput.space_id as string | undefined) ?? (toolInput.project_id as string);

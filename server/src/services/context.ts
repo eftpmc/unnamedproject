@@ -26,14 +26,14 @@ function readWorkspaceMd(space: DbSpace, repoPath: string | null): string | null
 function baseBlock(intent: Intent): string {
   const isCode = intent.domain === 'code' || intent.domain === 'multi' || intent.domain === 'general';
   const autoApproved = isCode
-    ? 'invoke_claude_code, invoke_codex, generate_video, git_op add/commit, run_command, create_project, update_project, project_query, rebuild_graph, search_files, read_file, list_dir, recall, remember, forget, list_chats, read_chat, register_file_item, create_note, list_items, read_item, list_connections, test_connection, tool_search, create_plan, run_plan, run_pipeline, resume_plan, list_plans, get_plan, get_execution_output, list_scheduled_tasks, create_scheduled_task, update_scheduled_task'
-    : 'create_project, search_files, read_file, list_dir, recall, remember, forget, write_file, run_command, list_chats, read_chat, create_note, list_items, read_item, list_connections, test_connection, tool_search';
+    ? 'invoke_claude_code, invoke_codex, generate_video, git_op add/commit, run_command, list_spaces, create_space, update_space, project_query, rebuild_graph, search_files, read_file, list_dir, recall, remember, forget, list_chats, read_chat, register_file_item, create_note, list_items, read_item, list_connections, test_connection, tool_search, create_plan, run_plan, run_pipeline, resume_plan, list_plans, get_plan, get_execution_output, list_scheduled_tasks, create_scheduled_task, update_scheduled_task'
+    : 'list_spaces, create_space, search_files, read_file, list_dir, recall, remember, forget, write_file, run_command, list_chats, read_chat, create_note, list_items, read_item, list_connections, test_connection, tool_search';
 
   return `You are a personal AI operator and orchestrator. You decide how work gets done — you never implement code, write files, or run git operations yourself when the task belongs to a coding agent.
 
 ## Core rules
 - Auto-approved (do without asking): ${autoApproved}
-- User-approved (proceed and the system handles the pause): git_op push, delete_project, delete_scheduled_task
+- User-approved (proceed and the system handles the pause): git_op push, delete_space, delete_scheduled_task
 - write_file auto-approves on fast/trusted profiles; on strict it pauses for user approval like any other tool
 - If a task has multiple coordinated workstreams: call create_plan first, then dispatch steps with their plan_step_id. Never dispatch parallel agents without a plan tracking them.
 - Never ask the user for permission on an auto-approved action — just do it.
@@ -45,6 +45,7 @@ Before starting work in the active Space, check what already exists there:
 - Call list_items with the active space_id — see what's already present before generating a new report or research output.
 - If a plan shows status 'error', use resume_plan to reset failed steps and re-dispatch only those — don't create a duplicate plan.
 Only check other Spaces when the user's request explicitly involves them.
+If no Space is active and you need a space_id, call list_spaces first — never guess one (e.g. "default"). If list_spaces comes back empty, call create_space rather than giving up or working around the lack of a Space.
 
 ## MCP connections
 GitHub, web search, and other external service integrations are provided through MCP servers configured in Settings → MCP. To use an MCP tool, first use tool_search to discover available tools by describing what you need, or use list_connections to see all configured servers and their tools. Never guess a connection_id or tool name. Use test_connection to verify an MCP server is reachable before dispatching dependent work. If the user asks you to do something that requires GitHub or web search and no suitable MCP is configured, tell them which type of MCP server to add (e.g. GitHub MCP for repo/PR/issue operations, a search MCP like Brave or Exa for web research).
@@ -203,7 +204,7 @@ function projectsListBlock(userId: string): string {
     .prepare('SELECT id, name, description FROM spaces WHERE user_id = ?')
     .all(userId) as Array<{ id: string; name: string; description: string | null }>;
   if (spaces.length === 0) return 'No spaces yet.';
-  return `Available projects:\n${spaces.map(p => `- ${p.name} (id: ${p.id})${p.description ? ': ' + p.description : ''}`).join('\n')}`;
+  return `Available Spaces:\n${spaces.map(p => `- ${p.name} (id: ${p.id})${p.description ? ': ' + p.description : ''}`).join('\n')}`;
 }
 
 function formatUsageLine(label: string, spent: number, budget: number | null, dailySpent: number, dailyBudget: number | null): string {

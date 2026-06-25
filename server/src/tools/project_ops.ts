@@ -1,7 +1,7 @@
 import fs from 'fs/promises';
 import path from 'path';
 import simpleGit from 'simple-git';
-import { getDb, getSpaceForUser, getProjectsRoot } from '../db/index.js';
+import { getDb, getSpaceForUser, getSpacesForUser, getProjectsRoot } from '../db/index.js';
 import { getItemsForSpace, createRepoItem, type SpaceItem } from '../services/items.js';
 import { newId } from '../lib/ids.js';
 import { requestApproval } from '../services/executor.js';
@@ -11,6 +11,11 @@ function slugify(name: string): string {
     .toLowerCase()
     .replace(/[^a-z0-9]+/g, '-')
     .replace(/(^-+|-+$)/g, '') || 'project';
+}
+
+export async function listProjects(userId: string): Promise<string> {
+  const spaces = getSpacesForUser(userId).map(s => ({ id: s.id, name: s.name, description: s.description }));
+  return JSON.stringify(spaces);
 }
 
 export async function createProject(
@@ -43,11 +48,11 @@ export async function createProject(
 }
 
 export async function updateProject(
-  input: { project_id: string; name?: string; description?: string },
+  input: { space_id: string; name?: string; description?: string },
   userId: string
 ): Promise<string> {
-  const space = getSpaceForUser(input.project_id, userId);
-  if (!space) return `Error: space ${input.project_id} not found`;
+  const space = getSpaceForUser(input.space_id, userId);
+  if (!space) return `Error: space ${input.space_id} not found`;
 
   const updates: string[] = [];
   const values: unknown[] = [];
@@ -57,19 +62,19 @@ export async function updateProject(
   if (updates.length > 0) {
     getDb()
       .prepare(`UPDATE spaces SET ${updates.join(', ')} WHERE id = ? AND user_id = ?`)
-      .run(...values, input.project_id, userId);
+      .run(...values, input.space_id, userId);
   }
 
   return `Space '${input.name ?? space.name}' updated`;
 }
 
 export async function deleteProject(
-  input: { project_id: string; delete_files: boolean },
+  input: { space_id: string; delete_files: boolean },
   userId: string,
   executionId: string
 ): Promise<string> {
-  const space = getSpaceForUser(input.project_id, userId);
-  if (!space) return `Error: space ${input.project_id} not found`;
+  const space = getSpaceForUser(input.space_id, userId);
+  if (!space) return `Error: space ${input.space_id} not found`;
 
   const repoPaths = getItemsForSpace(space.id)
     .filter((item): item is SpaceItem & { type: 'repo' } => item.type === 'repo')
@@ -78,15 +83,15 @@ export async function deleteProject(
   const decision = await requestApproval(
     executionId,
     userId,
-    'delete_project',
-    { space_id: input.project_id, name: space.name, repo_paths: repoPaths, delete_files: input.delete_files },
+    'delete_space',
+    { space_id: input.space_id, name: space.name, repo_paths: repoPaths, delete_files: input.delete_files },
     'user'
   );
-  if (decision === 'rejected') return 'delete_project cancelled';
+  if (decision === 'rejected') return 'delete_space cancelled';
 
   getDb()
     .prepare('DELETE FROM spaces WHERE id = ? AND user_id = ?')
-    .run(input.project_id, userId);
+    .run(input.space_id, userId);
 
   if (input.delete_files) {
     await Promise.all(repoPaths.map(repoPath => fs.rm(repoPath, { recursive: true, force: true })));

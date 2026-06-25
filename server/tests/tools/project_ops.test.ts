@@ -2,7 +2,7 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 import fs from 'fs';
 import os from 'os';
 import path from 'path';
-import { createProject, updateProject, deleteProject } from '../../src/tools/project_ops.js';
+import { listProjects, createProject, updateProject, deleteProject } from '../../src/tools/project_ops.js';
 
 const dbState = {
   spaces: new Map<string, { id: string; user_id: string; name: string; description: string | null }>(),
@@ -44,6 +44,7 @@ vi.mock('../../src/db/index.js', () => ({
     const s = dbState.spaces.get(id);
     return s && s.user_id === userId ? { ...s, enabled_connection_ids: '[]' } : undefined;
   },
+  getSpacesForUser: (userId: string) => [...dbState.spaces.values()].filter(s => s.user_id === userId),
   getProjectsRoot: (_userId: string) => dbState.projectsRoot,
 }));
 
@@ -77,7 +78,23 @@ beforeEach(() => {
   dbState.projectsRoot = tmpRoot;
 });
 
-describe('create_project', () => {
+describe('list_spaces', () => {
+  it('returns an empty array when the user has no Spaces', async () => {
+    const result = await listProjects(userId);
+    expect(JSON.parse(result)).toEqual([]);
+  });
+
+  it('returns only the requesting user\'s Spaces with id, name, description', async () => {
+    dbState.spaces.set('p1', { id: 'p1', user_id: userId, name: 'api', description: 'desc' });
+    dbState.spaces.set('p2', { id: 'p2', user_id: 'other-user', name: 'not mine', description: null });
+
+    const result = await listProjects(userId);
+
+    expect(JSON.parse(result)).toEqual([{ id: 'p1', name: 'api', description: 'desc' }]);
+  });
+});
+
+describe('create_space', () => {
   it('creates a project without a repo', async () => {
     const result = await createProject({ name: 'Notes', with_repo: false }, userId, 'exec-1');
     expect(result).toContain('new-id');
@@ -100,21 +117,21 @@ describe('create_project', () => {
   });
 });
 
-describe('update_project', () => {
+describe('update_space', () => {
   it('updates the description', async () => {
     dbState.spaces.set('p1', { id: 'p1', user_id: userId, name: 'api', description: 'old' });
-    const result = await updateProject({ project_id: 'p1', description: 'new desc' }, userId);
+    const result = await updateProject({ space_id: 'p1', description: 'new desc' }, userId);
     expect(result).toContain('updated');
   });
 });
 
-describe('delete_project', () => {
+describe('delete_space', () => {
   it('removes the project record without deleting files when delete_files is false', async () => {
     const repoDir = fs.mkdtempSync(path.join(os.tmpdir(), 'proj-repo-'));
     dbState.spaces.set('p1', { id: 'p1', user_id: userId, name: 'api', description: null });
     dbState.items.set('item-p1', { id: 'item-p1', space_id: 'p1', type: 'repo', name: 'api', repo_path: repoDir });
 
-    const result = await deleteProject({ project_id: 'p1', delete_files: false }, userId, 'exec-1');
+    const result = await deleteProject({ space_id: 'p1', delete_files: false }, userId, 'exec-1');
 
     expect(result).toContain('deleted');
     expect(dbState.spaces.has('p1')).toBe(false);
@@ -127,7 +144,7 @@ describe('delete_project', () => {
     dbState.spaces.set('p1', { id: 'p1', user_id: userId, name: 'api', description: null });
     dbState.items.set('item-p1', { id: 'item-p1', space_id: 'p1', type: 'repo', name: 'api', repo_path: repoDir });
 
-    const result = await deleteProject({ project_id: 'p1', delete_files: true }, userId, 'exec-1');
+    const result = await deleteProject({ space_id: 'p1', delete_files: true }, userId, 'exec-1');
 
     expect(result).toContain('deleted');
     expect(dbState.spaces.has('p1')).toBe(false);
@@ -139,7 +156,7 @@ describe('delete_project', () => {
     vi.mocked(requestApproval).mockResolvedValueOnce('rejected');
     dbState.spaces.set('p1', { id: 'p1', user_id: userId, name: 'api', description: null });
 
-    const result = await deleteProject({ project_id: 'p1', delete_files: false }, userId, 'exec-1');
+    const result = await deleteProject({ space_id: 'p1', delete_files: false }, userId, 'exec-1');
 
     expect(result).toContain('cancelled');
     expect(dbState.spaces.has('p1')).toBe(true);

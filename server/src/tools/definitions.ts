@@ -136,7 +136,15 @@ export const toolDefinitions: Anthropic.Tool[] = [
     },
   },
   {
-    name: 'create_project',
+    name: 'list_spaces',
+    description: 'List all Spaces owned by the user, with id, name, and description. Call this before create_space when no active Space is known — never guess a space_id.',
+    input_schema: {
+      type: 'object',
+      properties: {},
+    },
+  },
+  {
+    name: 'create_space',
     description: "Create a new Space. If with_repo is true, creates a git repo under the configured Spaces root.",
     input_schema: {
       type: 'object',
@@ -149,28 +157,28 @@ export const toolDefinitions: Anthropic.Tool[] = [
     },
   },
   {
-    name: 'update_project',
+    name: 'update_space',
     description: "Update a Space's name or description.",
     input_schema: {
       type: 'object',
       properties: {
-        project_id: { type: 'string' },
+        space_id: { type: 'string' },
         name: { type: 'string', description: 'New Space name' },
         description: { type: 'string', description: 'New description' },
       },
-      required: ['project_id'],
+      required: ['space_id'],
     },
   },
   {
-    name: 'delete_project',
+    name: 'delete_space',
     description: 'Delete a Space. Requires user approval. Optionally deletes all linked repository directories from disk.',
     input_schema: {
       type: 'object',
       properties: {
-        project_id: { type: 'string', description: 'Legacy parameter name for the Space ID' },
+        space_id: { type: 'string' },
         delete_files: { type: 'boolean', description: 'Whether to also delete linked repository directories from disk' },
       },
-      required: ['project_id', 'delete_files'],
+      required: ['space_id', 'delete_files'],
     },
   },
   {

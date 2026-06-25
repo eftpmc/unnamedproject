@@ -127,7 +127,7 @@ describe('agent', () => {
     expect(payload).not.toHaveProperty('thinking');
   });
 
-  it('includes available projects in the system prompt', async () => {
+  it('includes available Spaces in the system prompt', async () => {
     const db = getDb();
     db.prepare('INSERT INTO spaces (id, user_id, name, description, enabled_connection_ids) VALUES (?,?,?,?,?)')
       .run(newId(), userId, 'demo', 'Demo project', '[]');
@@ -138,21 +138,31 @@ describe('agent', () => {
     await runAgentTurn(userId, sessionId, msgId);
 
     const call = streamMock.mock.calls[streamMock.mock.calls.length - 1][0];
-    expect(call.system).toContain('Available projects');
+    expect(call.system).toContain('Available Spaces');
     expect(call.system).toContain('demo');
   });
 
-  it('makes project tools available via tool_search discovery', async () => {
+  it('makes delete_space available via tool_search discovery', async () => {
     const { addSessionDiscoveredTools } = await import('../../src/db/index.js');
     const { resolveToolsForTurn } = await import('../../src/services/agent.js');
     const discoverySessionId = newId();
     getDb().prepare('INSERT INTO sessions (id, user_id) VALUES (?,?)').run(discoverySessionId, userId);
 
-    addSessionDiscoveredTools(discoverySessionId, ['create_project', 'delete_project']);
+    addSessionDiscoveredTools(discoverySessionId, ['delete_space']);
     const tools = resolveToolsForTurn(userId, discoverySessionId);
     const names = tools.map(t => t.name);
-    expect(names).toContain('create_project');
-    expect(names).toContain('delete_project');
+    expect(names).toContain('delete_space');
+  });
+
+  it('makes list_spaces, create_space, and update_space available by default, with no tool_search needed', async () => {
+    const { resolveToolsForTurn } = await import('../../src/services/agent.js');
+    const sessionId = newId();
+    getDb().prepare('INSERT INTO sessions (id, user_id) VALUES (?,?)').run(sessionId, userId);
+
+    const names = resolveToolsForTurn(userId, sessionId).map(t => t.name);
+    expect(names).toContain('list_spaces');
+    expect(names).toContain('create_space');
+    expect(names).toContain('update_space');
   });
 
   it('returns "no repo" error for git_op on a project without repo_path and does not call runGitOp', async () => {

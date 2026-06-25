@@ -20,7 +20,7 @@ export interface ConversationProvider {
   resolveModel(): Promise<string>;
 }
 
-export function getConversationProvider(userId: string): ConversationProvider {
+export async function getConversationProvider(userId: string): Promise<ConversationProvider> {
   const conn = getDb()
     .prepare("SELECT id, type FROM connections WHERE user_id = ? AND type IN ('claude_code','codex') ORDER BY created_at LIMIT 1")
     .get(userId) as { id: string; type: string } | undefined;
@@ -33,8 +33,8 @@ export function getConversationProvider(userId: string): ConversationProvider {
     const apiKey = cfg.apiKey as string | undefined;
 
     if (conn.type === 'codex') {
-      // CodexProvider is added in Task 8
-      throw new Error('CodexProvider not yet implemented');
+      const { CodexProvider } = await import('./conversation/codex-provider.js');
+      return new CodexProvider({ mode, model: model ?? 'codex-mini-latest', permissionProfile, apiKey });
     }
     return new ClaudeCodeProvider({ mode, model, permissionProfile, apiKey });
   }

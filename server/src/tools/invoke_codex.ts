@@ -14,12 +14,14 @@ interface McpServerConfig { command: string; args?: string[]; env?: Record<strin
 interface ToolContext {
   userId: string;
   executionId: string;
-  repoPath: string;
+  repoPath?: string;
   apiKey: string | null;
   resumeSessionId?: string | null;
   mcpServers?: Record<string, McpServerConfig>;
   permissionProfile?: PermissionProfile;
+  signal?: AbortSignal;
   onSessionId?: (id: string) => void;
+  onText?: (delta: string) => void;
 }
 
 export interface CodexResult {
@@ -88,7 +90,7 @@ export async function invokeCodex(input: CodexInput, ctx: ToolContext): Promise<
 
   return new Promise((resolve, reject) => {
     const proc = spawn('codex', args, {
-      cwd: ctx.repoPath,
+      cwd: ctx.repoPath ?? process.cwd(),
       stdio: ['ignore', 'pipe', 'pipe'],
       env: getDelegateEnv('codex', ctx.apiKey, profile),
     });
@@ -134,6 +136,7 @@ export async function invokeCodex(input: CodexInput, ctx: ToolContext): Promise<
           if (item?.type === 'agent_message' && item.text) {
             resultText = item.text;
             appendOutput(ctx.executionId, ctx.userId, item.text + '\n');
+            ctx.onText?.(item.text);
           }
         }
         if (event.type === 'turn.completed') {

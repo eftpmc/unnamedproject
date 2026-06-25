@@ -67,7 +67,7 @@ describe('ClaudeCodeProvider', () => {
 describe('getConversationProvider', () => {
   it('falls back to ClaudeCodeProvider when no connection configured', async () => {
     const { getConversationProvider } = await import('../../src/services/conversation-provider.js');
-    const provider = getConversationProvider('u1');
+    const provider = await getConversationProvider('u1');
     expect(provider.type).toBe('claude_code');
   });
 });

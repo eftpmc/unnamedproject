@@ -9,14 +9,16 @@ import { ingestMcpTools } from '../services/toolRegistry.js';
 const router = Router();
 router.use(requireAuth);
 
-const VALID_TYPES = ['anthropic', 'openai', 'github', 'mcp', 'local'] as const;
+const VALID_TYPES = ['anthropic', 'openai', 'github', 'mcp', 'local', 'claude_code', 'codex'] as const;
 const VALID_PURPOSES = ['lead_agent', 'claude_code', 'codex', 'github', 'mcp', 'tool'] as const;
 
 // For most purposes exactly one type is valid. lead_agent accepts all three provider types.
+// claude_code and codex are self-describing types — purpose is derived from the type.
+// The entries below still guard against manually setting purpose=claude_code/codex on a foreign type.
 const PURPOSE_ALLOWED_TYPES: Record<string, string[]> = {
   lead_agent: ['anthropic', 'openai', 'local'],
-  claude_code: ['anthropic'],
-  codex: ['openai'],
+  claude_code: ['claude_code'],
+  codex: ['codex'],
   github: ['github'],
   mcp: ['mcp'],
 };
@@ -48,13 +50,19 @@ export function createConnectionRecord(
   if (!VALID_TYPES.includes(type as (typeof VALID_TYPES)[number])) {
     throw new ConnectionValidationError(`type must be one of ${VALID_TYPES.join(', ')}`);
   }
-  const connectionPurpose = purpose ?? 'tool';
-  if (!VALID_PURPOSES.includes(connectionPurpose as (typeof VALID_PURPOSES)[number])) {
-    throw new ConnectionValidationError(`purpose must be one of ${VALID_PURPOSES.join(', ')}`);
-  }
-  const allowedTypes = PURPOSE_ALLOWED_TYPES[connectionPurpose];
-  if (allowedTypes && !allowedTypes.includes(type)) {
-    throw new ConnectionValidationError(`Purpose '${connectionPurpose}' does not support type '${type}'. Allowed: ${allowedTypes.join(', ')}`);
+  // claude_code and codex are self-describing: purpose is derived from the type
+  let connectionPurpose: string;
+  if (type === 'claude_code' || type === 'codex') {
+    connectionPurpose = type;
+  } else {
+    connectionPurpose = purpose ?? 'tool';
+    if (!VALID_PURPOSES.includes(connectionPurpose as (typeof VALID_PURPOSES)[number])) {
+      throw new ConnectionValidationError(`purpose must be one of ${VALID_PURPOSES.join(', ')}`);
+    }
+    const allowedTypes = PURPOSE_ALLOWED_TYPES[connectionPurpose];
+    if (allowedTypes && !allowedTypes.includes(type)) {
+      throw new ConnectionValidationError(`Purpose '${connectionPurpose}' does not support type '${type}'. Allowed: ${allowedTypes.join(', ')}`);
+    }
   }
   // Validate required config fields for lead_agent non-anthropic providers
   if (connectionPurpose === 'lead_agent' && type === 'openai') {
@@ -90,8 +98,8 @@ export function createConnectionRecord(
 router.post('/', (req, res) => {
   const { userId } = req as AuthedRequest;
   try {
-    const { id } = createConnectionRecord(userId, req.body as { name?: string; type?: string; purpose?: string; config?: unknown });
-    res.status(201).json({ id });
+    const { id, type: connectionType } = createConnectionRecord(userId, req.body as { name?: string; type?: string; purpose?: string; config?: unknown });
+    res.status(201).json({ id, type: connectionType });
   } catch (err) {
     if (err instanceof ConnectionValidationError) {
       res.status(err.status).json({ error: err.message });

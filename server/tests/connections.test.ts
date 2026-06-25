@@ -122,6 +122,32 @@ describe('connections', () => {
     });
   });
 
+  it('creates a claude_code connection', async () => {
+    const res = await request(app)
+      .post('/connections')
+      .set('Authorization', `Bearer ${token}`)
+      .send({
+        name: 'My Claude Code',
+        type: 'claude_code',
+        config: { mode: 'local', model: 'claude-sonnet-4-6', permissionProfile: 'default' },
+      });
+    expect(res.status).toBe(201);
+    expect(res.body.type).toBe('claude_code');
+  });
+
+  it('creates a codex connection with api key', async () => {
+    const res = await request(app)
+      .post('/connections')
+      .set('Authorization', `Bearer ${token}`)
+      .send({
+        name: 'My Codex',
+        type: 'codex',
+        config: { mode: 'api', model: 'codex-mini-latest', permissionProfile: 'default', apiKey: 'sk-test' },
+      });
+    expect(res.status).toBe(201);
+    expect(res.body.type).toBe('codex');
+  });
+
   it('deletes a connection', async () => {
     const res = await request(app)
       .delete(`/connections/${connectionId}`)

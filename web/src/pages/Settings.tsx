@@ -68,20 +68,18 @@ const SETUP_META: Record<SetupKind, {
   claude_code: {
     title: 'Claude Code',
     description: 'Runs coding tasks in a workspace repo.',
-    type: 'anthropic',
-    placeholder: 'sk-ant-... (optional)',
+    type: 'claude_code',
+    placeholder: 'sk-ant-...',
     secretLabel: 'Anthropic API key',
     secretOptional: true,
-    secretOptionalHint: "Leave blank to use this server's local `claude` CLI login (subscription auth) instead of a metered API key.",
   },
   codex: {
     title: 'Codex',
     description: 'Runs Codex coding tasks in a workspace repo.',
-    type: 'openai',
-    placeholder: 'sk-... (optional)',
+    type: 'codex',
+    placeholder: 'sk-...',
     secretLabel: 'OpenAI API key',
     secretOptional: true,
-    secretOptionalHint: "Leave blank to use this server's local `codex` CLI login instead of a metered API key.",
   },
   mcp: {
     title: 'MCP Server',
@@ -105,6 +103,9 @@ interface SetupFormState {
   openaiModelName: string;
   localBaseUrl: string;
   localModelName: string;
+  providerMode: 'local' | 'api';
+  providerModel: string;
+  providerPermissionProfile: 'default' | 'fast' | 'strict';
 }
 
 const INITIAL_SETUP_FORM: SetupFormState = {
@@ -120,6 +121,9 @@ const INITIAL_SETUP_FORM: SetupFormState = {
   openaiModelName: '',
   localBaseUrl: '',
   localModelName: '',
+  providerMode: 'local',
+  providerModel: '',
+  providerPermissionProfile: 'default',
 };
 
 interface McpPreset {
@@ -366,7 +370,7 @@ function SetupModal({
   if (!activeSetup) return null;
   const meta = SETUP_META[activeSetup];
   const existing = connections.find(c => c.purpose === activeSetup);
-  const { setupName, secret, mcpCommand, mcpArgs, mcpEnv, mcpPreset, mcpExtraArg, mcpEnvValues, leadAgentProvider, openaiModelName, localBaseUrl, localModelName } = form;
+  const { setupName, secret, mcpCommand, mcpArgs, mcpEnv, mcpPreset, mcpExtraArg, mcpEnvValues, leadAgentProvider, openaiModelName, localBaseUrl, localModelName, providerMode, providerModel, providerPermissionProfile } = form;
 
   const selectedPreset = activeSetup === 'mcp' && mcpPreset !== 'custom'
     ? MCP_PRESETS.find(p => p.id === mcpPreset)
@@ -441,64 +445,61 @@ function SetupModal({
                   <div><Label>Env JSON</Label><Textarea rows={2} placeholder='{"TOKEN":"..."}' value={mcpEnv} onChange={e => updateForm({ mcpEnv: e.target.value })} className="text-sm font-mono resize-y" /></div>
                 </>
               )
-            ) : activeSetup === 'lead_agent' ? (
+            ) : (activeSetup === 'claude_code' || activeSetup === 'codex') ? (
               <>
                 <div>
-                  <Label>Provider</Label>
-                  <div className="mt-1 grid grid-cols-3 gap-2">
-                    {(['anthropic', 'openai', 'local'] as const).map(provider => (
+                  <Label>Mode</Label>
+                  <div className="mt-1 grid grid-cols-2 gap-2">
+                    {(['local', 'api'] as const).map(mode => (
                       <button
-                        key={provider}
+                        key={mode}
                         type="button"
-                        onClick={() => updateForm({ leadAgentProvider: provider })}
+                        onClick={() => updateForm({ providerMode: mode })}
                         className={cn(
                           'rounded-md border px-3 py-2 text-sm font-medium transition-colors',
-                          leadAgentProvider === provider
+                          providerMode === mode
                             ? 'border-primary bg-primary/10 text-foreground'
                             : 'border-border-soft text-muted-foreground hover:bg-muted',
                         )}
                       >
-                        {provider === 'anthropic' ? 'Claude' : provider === 'openai' ? 'OpenAI' : 'Local Model'}
+                        {mode === 'local' ? 'Local subscription' : 'API key'}
                       </button>
                     ))}
                   </div>
                 </div>
-
-                {leadAgentProvider === 'anthropic' && (
+                <div>
+                  <Label>Model</Label>
+                  <Input
+                    placeholder={activeSetup === 'claude_code' ? 'claude-sonnet-4-6' : 'codex-mini-latest'}
+                    value={providerModel}
+                    onChange={e => updateForm({ providerModel: e.target.value })}
+                    className="text-sm"
+                  />
+                </div>
+                <div>
+                  <Label>Permission profile</Label>
+                  <Select value={providerPermissionProfile} onValueChange={value => updateForm({ providerPermissionProfile: value as 'default' | 'fast' | 'strict' })}>
+                    <SelectTrigger className="mt-1">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="default">Default</SelectItem>
+                      <SelectItem value="fast">Fast</SelectItem>
+                      <SelectItem value="strict">Strict</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+                {providerMode === 'api' && (
                   <div>
-                    <Label>Anthropic API key</Label>
-                    <Input type="password" placeholder="sk-ant-..." value={secret} onChange={e => updateForm({ secret: e.target.value })} className="text-sm" />
+                    <Label>{activeSetup === 'claude_code' ? 'Anthropic API key' : 'OpenAI API key'}</Label>
+                    <Input
+                      type="password"
+                      placeholder={activeSetup === 'claude_code' ? 'sk-ant-...' : 'sk-...'}
+                      value={secret}
+                      onChange={e => updateForm({ secret: e.target.value })}
+                      className="text-sm"
+                    />
                   </div>
-                )}
-
-                {leadAgentProvider === 'openai' && (
-                  <>
-                    <div>
-                      <Label>OpenAI API key</Label>
-                      <Input type="password" placeholder="sk-..." value={secret} onChange={e => updateForm({ secret: e.target.value })} className="text-sm" />
-                    </div>
-                    <div>
-                      <Label>Model name</Label>
-                      <Input placeholder="gpt-4o" value={openaiModelName} onChange={e => updateForm({ openaiModelName: e.target.value })} className="text-sm" />
-                    </div>
-                  </>
-                )}
-
-                {leadAgentProvider === 'local' && (
-                  <>
-                    <div>
-                      <Label>Base URL</Label>
-                      <Input placeholder="http://localhost:11434/v1" value={localBaseUrl} onChange={e => updateForm({ localBaseUrl: e.target.value })} className="text-sm" />
-                    </div>
-                    <div>
-                      <Label>Model name</Label>
-                      <Input placeholder="qwen2.5:14b" value={localModelName} onChange={e => updateForm({ localModelName: e.target.value })} className="text-sm" />
-                    </div>
-                    <div>
-                      <Label>API key (optional)</Label>
-                      <Input type="password" placeholder="Leave blank for unauthenticated" value={secret} onChange={e => updateForm({ secret: e.target.value })} className="text-sm" />
-                    </div>
-                  </>
                 )}
               </>
             ) : (
@@ -549,7 +550,6 @@ export default function Settings() {
   const [agentBudgetsError, setAgentBudgetsError] = useState('');
   const [taskIntervals, setTaskIntervals] = useState<Record<string, string>>({});
 
-  const leadAgent = connections.find(c => c.purpose === 'lead_agent');
   const mcpConnections = connections.filter(c => c.purpose === 'mcp');
 
   useEffect(() => {
@@ -569,7 +569,7 @@ export default function Settings() {
     mutationFn: () => {
       if (!activeSetup) throw new Error('Pick what you want to set up');
       const meta = SETUP_META[activeSetup];
-      const { setupName, secret, mcpCommand, mcpArgs, mcpEnv, mcpPreset, mcpExtraArg, mcpEnvValues, leadAgentProvider, openaiModelName, localBaseUrl, localModelName } = form;
+      const { setupName, secret, mcpCommand, mcpArgs, mcpEnv, mcpPreset, mcpExtraArg, mcpEnvValues, leadAgentProvider, openaiModelName, localBaseUrl, localModelName, providerMode, providerModel, providerPermissionProfile } = form;
       let config: Record<string, unknown>;
 
       if (activeSetup === 'mcp') {
@@ -614,6 +614,15 @@ export default function Settings() {
           };
         }
         return createConnection({ name: setupName.trim() || meta.title, type: leadAgentProvider, purpose: activeSetup, config });
+      } else if (activeSetup === 'claude_code' || activeSetup === 'codex') {
+        const defaultModel = activeSetup === 'claude_code' ? 'claude-sonnet-4-6' : 'codex-mini-latest';
+        config = {
+          mode: providerMode,
+          model: providerModel.trim() || defaultModel,
+          permissionProfile: providerPermissionProfile,
+          ...(providerMode === 'api' && secret.trim() ? { apiKey: secret.trim() } : {}),
+        };
+        return createConnection({ name: setupName.trim() || meta.title, type: meta.type, config });
       } else {
         if (!secret.trim() && !meta.secretOptional) throw new Error(`${meta.secretLabel} required`);
         config = { apiKey: secret.trim() };
@@ -742,11 +751,6 @@ export default function Settings() {
           {/* ── Agents ─────────────────────────────────── */}
           {tab === 'agents' && (
             <div className="flex flex-col gap-7">
-              <div>
-                <SectionLabel>Lead agent</SectionLabel>
-                <ConnectionRow kind="lead_agent" connections={connections} onOpenSetup={openSetupModal} onRequestDelete={id => setPendingDelete({ id })} />
-              </div>
-
               <div>
                 <SectionLabel>Permissions</SectionLabel>
                 <div className="rounded-lg border border-border-soft bg-card p-4 flex flex-col gap-4">

@@ -606,23 +606,18 @@ function ItemDetail({ space, item }: { space: Space; item: SpaceItem }) {
     <PageShell>
       <PageHeader
         title={item.name}
+        className="border-0 pb-0"
+        contentClassName="max-w-2xl"
         breadcrumb={(
-          <nav className="flex items-center gap-1.5 text-xs text-muted-foreground">
-            <Link to={`/spaces/${space.id}/items`} className="hover:text-foreground">Items</Link>
-            <ChevronRight size={12} />
-            <span className="text-foreground">{item.name}</span>
-          </nav>
+          <Button variant="ghost" size="sm" className="h-7 gap-1.5 px-1.5 text-xs text-muted-foreground hover:text-foreground" onClick={() => navigate(`/spaces/${space.id}/items`)}>
+            <ArrowLeft size={13} />Back
+          </Button>
         )}
         actions={(
-          <div className="flex items-center gap-2">
-            <Button variant="ghost" size="sm" className="h-8 gap-1.5 text-xs" onClick={() => navigate(`/spaces/${space.id}/items`)}>
-              <ArrowLeft size={13} />Back
-            </Button>
-            <DropdownMenu>
-              <DropdownMenuTrigger asChild><Button variant="ghost" size="icon-sm"><MoreHorizontal size={15} /></Button></DropdownMenuTrigger>
-              <DropdownMenuContent align="end"><DropdownMenuItem variant="destructive" onSelect={() => setConfirmDelete(true)}><Trash2 size={14} />Delete Item</DropdownMenuItem></DropdownMenuContent>
-            </DropdownMenu>
-          </div>
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild><Button variant="ghost" size="icon-sm"><MoreHorizontal size={15} /></Button></DropdownMenuTrigger>
+            <DropdownMenuContent align="end"><DropdownMenuItem variant="destructive" onSelect={() => setConfirmDelete(true)}><Trash2 size={14} />Delete Item</DropdownMenuItem></DropdownMenuContent>
+          </DropdownMenu>
         )}
       />
       {item.type === 'repo' && <RepoDetail space={space} item={item} />}

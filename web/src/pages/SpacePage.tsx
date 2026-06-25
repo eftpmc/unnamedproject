@@ -57,7 +57,7 @@ import { ContentColumn, EmptyPanel, PageBody, PageHeader, PageLoading, PageSecti
 import { StatusPill } from '@/components/ui/status-pill';
 import FileBrowser from '../components/FileBrowser.js';
 import BlockRenderer from '../components/BlockRenderer.js';
-import type { Connection, Pipeline, Plan, Session, Space, SpaceItem, SpaceItemType } from '../types.js';
+import type { Block, Connection, Pipeline, Plan, Session, Space, SpaceItem, SpaceItemType } from '../types.js';
 
 type Section = 'overview' | 'chats' | 'items' | 'plans' | 'pipelines' | 'settings';
 
@@ -667,6 +667,10 @@ function RepoDetail({ space, item }: { space: Space; item: SpaceItem & { type: '
   );
 }
 
+function isBlockEmpty(block: Block): boolean {
+  return block.type === 'text' && !block.content.trim();
+}
+
 function DocumentDetail({ space, item }: { space: Space; item: SpaceItem & { type: 'document' } }) {
   return (
     <PageBody>
@@ -676,7 +680,7 @@ function DocumentDetail({ space, item }: { space: Space; item: SpaceItem & { typ
             {TEMPLATE_LABELS[item.template] ?? item.template}
           </span>
         </div>
-        {item.blocks.length === 0 ? (
+        {item.blocks.every(isBlockEmpty) ? (
           <div className="rounded-lg border border-dashed border-border bg-background/50 px-4 py-8 text-center text-sm text-muted-foreground">
             This document has no content yet. Ask the agent to fill it in.
           </div>

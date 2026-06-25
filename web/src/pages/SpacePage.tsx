@@ -57,7 +57,7 @@ import { ContentColumn, EmptyPanel, PageBody, PageHeader, PageLoading, PageSecti
 import { StatusPill } from '@/components/ui/status-pill';
 import FileBrowser from '../components/FileBrowser.js';
 import BlockRenderer from '../components/BlockRenderer.js';
-import type { Connection, Pipeline, Plan, Session, Space, SpaceItem, SpaceItemType } from '../types.js';
+import type { Block, Connection, Pipeline, Plan, Session, Space, SpaceItem, SpaceItemType } from '../types.js';
 
 type Section = 'overview' | 'chats' | 'items' | 'plans' | 'pipelines' | 'settings';
 
@@ -111,20 +111,11 @@ export default function SpacePage() {
       : <PageShell><PageHeader title="Item not found" /></PageShell>;
   }
 
-  const title = section === 'overview' ? space.name : section[0].toUpperCase() + section.slice(1);
-  const description = section === 'overview' ? space.description || 'Everything related to this work, in one place.' : undefined;
-
   return (
     <PageShell>
       <PageHeader
-        className="border-0"
-        title={title}
-        description={description}
-        breadcrumb={section === 'overview' ? undefined : (
-          <Link to={`/spaces/${space.id}`} className="text-xs text-muted-foreground transition-colors hover:text-foreground">
-            {space.name}
-          </Link>
-        )}
+        className="border-0 pb-0"
+        title={space.name}
         actions={section !== 'settings' ? (
           <Button size="sm" className="h-8 gap-1.5 text-xs" onClick={() => startChat.mutate()} disabled={startChat.isPending}>
             <MessageSquare size={14} />
@@ -676,6 +667,10 @@ function RepoDetail({ space, item }: { space: Space; item: SpaceItem & { type: '
   );
 }
 
+function isBlockEmpty(block: Block): boolean {
+  return block.type === 'text' && !block.content.trim();
+}
+
 function DocumentDetail({ space, item }: { space: Space; item: SpaceItem & { type: 'document' } }) {
   return (
     <PageBody>
@@ -685,7 +680,7 @@ function DocumentDetail({ space, item }: { space: Space; item: SpaceItem & { typ
             {TEMPLATE_LABELS[item.template] ?? item.template}
           </span>
         </div>
-        {item.blocks.length === 0 ? (
+        {item.blocks.every(isBlockEmpty) ? (
           <div className="rounded-lg border border-dashed border-border bg-background/50 px-4 py-8 text-center text-sm text-muted-foreground">
             This document has no content yet. Ask the agent to fill it in.
           </div>
@@ -808,6 +803,7 @@ function formatBytes(bytes: number) {
 
 function SpaceTabs({ spaceId, section }: { spaceId: string; section: Section }) {
   const tabs: { label: string; key: Section }[] = [
+    { label: 'Overview', key: 'overview' },
     { label: 'Chats', key: 'chats' },
     { label: 'Items', key: 'items' },
     { label: 'Plans', key: 'plans' },
@@ -815,18 +811,21 @@ function SpaceTabs({ spaceId, section }: { spaceId: string; section: Section }) 
     { label: 'Settings', key: 'settings' },
   ];
   return (
-    <div className="border-b border-border-soft px-6">
-      <nav className="flex" aria-label="Space sections">
+    <div className="px-6 py-3">
+      <nav
+        className="inline-flex h-9 w-fit items-center gap-1 rounded-lg bg-muted p-[3px]"
+        aria-label="Space sections"
+      >
         {tabs.map(tab => (
           <Link
             key={tab.key}
-            to={`/spaces/${spaceId}/${tab.key}`}
+            to={tab.key === 'overview' ? `/spaces/${spaceId}` : `/spaces/${spaceId}/${tab.key}`}
             aria-current={section === tab.key ? 'page' : undefined}
             className={cn(
-              '-mb-px border-b-2 px-4 py-2.5 text-sm font-medium transition-colors',
+              'inline-flex h-full items-center justify-center rounded-md px-3 text-sm font-medium transition-all',
               section === tab.key
-                ? 'border-foreground text-foreground'
-                : 'border-transparent text-muted-foreground hover:text-foreground',
+                ? 'bg-background text-foreground shadow-sm'
+                : 'text-muted-foreground hover:text-foreground',
             )}
           >
             {tab.label}

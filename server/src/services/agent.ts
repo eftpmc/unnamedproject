@@ -3,7 +3,7 @@ import { exec as execCallback } from 'child_process';
 import fs from 'fs';
 import path from 'path';
 import { promisify } from 'util';
-import { createSessionEvent, getDb, getSpaceForUser, linkSessionProject, setAgentWorktreeSession, updatePlanStepStatus, maybeCompletePlan, getPlanForStep, getPlanSummaries, getPlanById, getPlanSteps, getExecutionById, getScheduledTasksForUser, createScheduledTask, updateScheduledTask, deleteScheduledTask, resumePlan, getPermissionProfile, createPipeline, getPipelineById, getPipelineTasks, listPipelinesForUser, createPlan, recordAgentUsage, addSessionDiscoveredTools, getSessionDiscoveredTools, upsertMcpRegistryTools, type DbPlan, type DbPlanStep } from '../db/index.js';
+import { createSessionEvent, getDb, getSpaceForUser, linkSessionProject, setAgentWorktreeSession, updatePlanStepStatus, maybeCompletePlan, getPlanForStep, getPlanSummaries, getPlanById, getPlanSteps, getExecutionById, getScheduledTasksForUser, createScheduledTask, updateScheduledTask, deleteScheduledTask, resumePlan, getPermissionProfile, createPipeline, getPipelineById, getPipelineTasks, listPipelinesForUser, createPlan, recordAgentUsage, addSessionDiscoveredTools, getSessionDiscoveredTools, upsertMcpRegistryTools, setSessionProviderInfo, type DbPlan, type DbPlanStep, type AgentUsageTool } from '../db/index.js';
 import { getItemsForSpace, getItemById, createNoteItem, createFileItem, createRepoItem, readItemContent, registerFileItem, type SpaceItem, type Block } from './items.js';
 import {
   runCreateItem,
@@ -45,6 +45,8 @@ import { extractAndRemember } from './extract-memory.js';
 import { renderVideo, type VideoScene } from './video.js';
 import { listMcpTools } from '../lib/mcp-pool.js';
 import { maybeDistill } from './distill.js';
+import { generateMcpToken } from '../mcp/auth.js';
+import { getConversationProvider } from './conversation-provider.js';
 
 const activeTurnControllers = new Map<string, AbortController>();
 
@@ -1466,134 +1468,61 @@ async function dispatchTool(
 }
 
 export async function runAgentTurn(userId: string, sessionId: string, userMessageId: string): Promise<void> {
-  const provider = getLeadAgentProvider(userId);
+  const provider = await getConversationProvider(userId);
 
   const session = getDb()
-    .prepare('SELECT effort, model, summary FROM sessions WHERE id = ?')
-    .get(sessionId) as { effort: EffortLevel; model: string | null; summary: string | null } | undefined;
-  const effort = session?.effort ?? DEFAULT_EFFORT;
+    .prepare('SELECT model, provider_session_id FROM sessions WHERE id = ?')
+    .get(sessionId) as { model: string | null; provider_session_id: string | null } | undefined;
 
-  const history = getDb()
-    .prepare('SELECT id, role, content FROM messages WHERE session_id = ? ORDER BY created_at')
-    .all(sessionId) as DbMessage[];
+  const lastUserMsg = getDb()
+    .prepare("SELECT content FROM messages WHERE session_id = ? AND role = 'user' ORDER BY created_at DESC LIMIT 1")
+    .get(sessionId) as { content: string } | undefined;
 
-  const attachments = history.length
-    ? getDb()
-      .prepare(`
-        SELECT a.message_id as messageId, a.filename, a.mime_type as mimeType,
-               a.size_bytes as sizeBytes, a.storage_path as storagePath
-        FROM message_attachments a
-        WHERE a.message_id IN (${history.map(() => '?').join(',')})
-        ORDER BY a.created_at, a.filename
-      `)
-      .all(...history.map(m => m.id)) as DbMessageAttachment[]
-    : [];
-  const attachmentsByMessage = new Map<string, DbMessageAttachment[]>();
-  for (const attachment of attachments) {
-    const list = attachmentsByMessage.get(attachment.messageId) ?? [];
-    list.push(attachment);
-    attachmentsByMessage.set(attachment.messageId, list);
-  }
+  const prompt = lastUserMsg?.content ?? '';
+  const intent = classifyIntent(prompt);
+  const systemPromptSuffix = buildContext(userId, sessionId, intent);
 
-  const lastUserMsg = [...history].reverse().find(m => m.role === 'user')?.content ?? '';
-
-  // Fire and forget — warms the model list cache for the UI
-  listClaudeModels(userId).catch(() => {});
-
-  const intent = classifyIntent(lastUserMsg);
-  const model = await provider.resolveModel(session, intent, effort);
-
-  const systemPrompt = buildContext(userId, sessionId, intent);
-  const tools = resolveToolsForTurn(userId, sessionId);
-
-  // When a session summary exists, use a sliding window of the last 20 messages
-  // to keep context bounded; prepend the summary as a synthetic exchange.
-  const windowedHistory = session?.summary
-    ? history.slice(-20)
-    : history;
-
-  const messages: Anthropic.MessageParam[] = windowedHistory.map(m => ({
-    role: m.role as 'user' | 'assistant',
-    content: m.role === 'user'
-      ? buildMessageContent(m.content, attachmentsByMessage.get(m.id) ?? [])
-      : m.content,
-  }));
-
-  if (session?.summary && messages.length > 0) {
-    messages.unshift(
-      { role: 'user', content: `Earlier in this session: ${session.summary}` },
-      { role: 'assistant', content: `Session context noted.` },
-    );
-  }
-
-  let currentMessages = [...messages];
+  const port = process.env.PORT ?? '3000';
+  const mcpToken = generateMcpToken(userId);
+  const mcpServers = {
+    app: { url: `http://localhost:${port}/mcp`, headers: { Authorization: `Bearer ${mcpToken}` } },
+  };
 
   const replyId = newId();
   const replyCreatedAt = Math.floor(Date.now() / 1000);
-  let fullText = '';
   let started = false;
-  let totalInputTokens = 0;
-  let totalOutputTokens = 0;
+  let fullText = '';
 
   const abortController = new AbortController();
   activeTurnControllers.set(sessionId, abortController);
 
   try {
-    while (true) {
-      if (abortController.signal.aborted) break;
-
-      let contentBlocks: Anthropic.ContentBlock[] = [];
-      let turnInputTokens = 0;
-      let turnOutputTokens = 0;
-      for (let attempt = 0; ; attempt++) {
-        try {
-          ({ contentBlocks, inputTokens: turnInputTokens, outputTokens: turnOutputTokens } =
-            await provider.stream({
-              model,
-              system: systemPrompt,
-              tools,
-              messages: currentMessages,
-              signal: abortController.signal,
-              onText: (delta) => {
-                if (!started) {
-                  started = true;
-                  getDb()
-                    .prepare('INSERT INTO messages (id, session_id, role, content, created_at) VALUES (?,?,?,?,?)')
-                    .run(replyId, sessionId, 'assistant', '', replyCreatedAt);
-                  broadcast(userId, { type: 'message_started', sessionId, message: { id: replyId, role: 'assistant', content: '', created_at: replyCreatedAt } });
-                }
-                fullText += delta;
-                broadcast(userId, { type: 'message_delta', sessionId, messageId: replyId, delta });
-              },
-            }));
-          break;
-        } catch (err) {
-          // Only safe to retry before any text has reached the client — once streamed, a retry would duplicate output.
-          if (started || attempt >= 2 || !isTransientApiError(err)) throw err;
-          await new Promise(resolve => setTimeout(resolve, 300 * 2 ** attempt));
+    await provider.invoke({
+      userId,
+      prompt,
+      resumeSessionId: session?.provider_session_id,
+      systemPromptSuffix,
+      mcpServers,
+      model: session?.model ?? undefined,
+      signal: abortController.signal,
+      onText: (delta) => {
+        if (!started) {
+          started = true;
+          getDb()
+            .prepare('INSERT INTO messages (id, session_id, role, content, created_at) VALUES (?,?,?,?,?)')
+            .run(replyId, sessionId, 'assistant', '', replyCreatedAt);
+          broadcast(userId, { type: 'message_started', sessionId, message: { id: replyId, role: 'assistant', content: '', created_at: replyCreatedAt } });
         }
-      }
-      totalInputTokens += turnInputTokens;
-      totalOutputTokens += turnOutputTokens;
-
-      const toolUseBlocks = contentBlocks.filter(b => b.type === 'tool_use') as Anthropic.ToolUseBlock[];
-      if (toolUseBlocks.length > 0) {
-
-        currentMessages.push({ role: 'assistant', content: contentBlocks });
-
-        const toolResults = await dispatchToolBlocks(toolUseBlocks, userId, userMessageId, sessionId);
-
-        currentMessages.push({ role: 'user', content: toolResults });
-        continue;
-      }
-
-      break;
-    }
+        fullText += delta;
+        broadcast(userId, { type: 'message_delta', sessionId, messageId: replyId, delta });
+      },
+      onSessionId: (id) => {
+        setSessionProviderInfo(sessionId, provider.type, id);
+      },
+    });
   } catch (err) {
     const wasStopped = abortController.signal.aborted;
     if (started) {
-      // Persist whatever was streamed so far rather than leaving an empty
-      // assistant message in history (the API rejects empty assistant content).
       if (fullText) {
         getDb().prepare('UPDATE messages SET content = ? WHERE id = ?').run(fullText, replyId);
         broadcast(userId, { type: 'message_created', sessionId, message: { id: replyId, role: 'assistant', content: fullText, created_at: replyCreatedAt } });
@@ -1614,33 +1543,22 @@ export async function runAgentTurn(userId: string, sessionId: string, userMessag
   }
 
   if (fullText) {
-    getDb()
-      .prepare('UPDATE messages SET content = ? WHERE id = ?')
-      .run(fullText, replyId);
+    getDb().prepare('UPDATE messages SET content = ? WHERE id = ?').run(fullText, replyId);
     broadcast(userId, { type: 'message_created', sessionId, message: { id: replyId, role: 'assistant', content: fullText, created_at: replyCreatedAt } });
   }
 
   getDb()
     .prepare("UPDATE session_turns SET status = 'done', completed_at = unixepoch() WHERE session_id = ? AND user_message_id = ? AND status = 'running'")
     .run(sessionId, userMessageId);
-  getDb()
-    .prepare('UPDATE sessions SET updated_at = unixepoch() WHERE id = ?')
-    .run(sessionId);
-  broadcast(userId, { type: 'turn_complete', sessionId, status: 'done', inputTokens: totalInputTokens });
+  getDb().prepare('UPDATE sessions SET updated_at = unixepoch() WHERE id = ?').run(sessionId);
+  broadcast(userId, { type: 'turn_complete', sessionId, status: 'done' });
 
-  recordAgentUsage(userId, 'lead_agent', tokensToUsd(model, totalInputTokens, totalOutputTokens));
+  recordAgentUsage(userId, provider.type as AgentUsageTool, 0);
 
-  // Fire-and-forget: generate title after first turn
   maybeGenerateSessionTitle(userId, sessionId).catch(() => {});
-
   try {
     const anthropicKey = getAnthropicKey(userId);
     extractAndRemember(userId, sessionId, anthropicKey).catch(() => {});
     maybeDistill(userId, sessionId, anthropicKey).catch(() => {});
-  } catch {
-    if (process.env.ANTHROPIC_API_KEY) {
-      extractAndRemember(userId, sessionId, process.env.ANTHROPIC_API_KEY).catch(() => {});
-      maybeDistill(userId, sessionId, process.env.ANTHROPIC_API_KEY).catch(() => {});
-    }
-  }
+  } catch { /* no key — skip */ }
 }

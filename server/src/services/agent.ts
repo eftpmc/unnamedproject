@@ -196,23 +196,29 @@ const PARALLEL_SAFE_TOOLS = new Set([
 
 const CORE_TOOLS = new Set([
   // Discovery + memory
-  'tool_search', 'recall', 'remember',
+  'tool_search', 'recall', 'remember', 'forget',
   // File access
-  'read_file', 'search_files', 'list_dir', 'write_file',
+  'read_file', 'search_files', 'list_dir', 'write_file', 'register_file_item',
   // Coding agents — always available; the auto-approved list references these on turn 1
-  'invoke_claude_code', 'invoke_codex',
+  'invoke_claude_code', 'invoke_codex', 'get_execution_output',
   // Post-coding mandatory flow
   'git_op', 'run_command',
   // State-awareness checks (system prompt requires these before starting work)
-  'list_plans', 'list_items', 'run_plan',
+  'list_plans', 'get_plan', 'list_items', 'run_plan', 'resume_plan',
   // Codebase understanding
-  'project_query',
+  'project_query', 'rebuild_graph',
   // Connection management
-  'list_connections', 'create_connection',
+  'list_connections', 'create_connection', 'test_connection',
   // Orchestration
-  'create_plan', 'delegate_to_agent',
+  'create_plan', 'delegate_to_agent', 'run_pipeline',
+  // Chat history
+  'list_chats', 'read_chat',
+  // Media generation
+  'generate_video',
+  // Scheduled tasks
+  'list_scheduled_tasks', 'create_scheduled_task', 'update_scheduled_task',
   // Item management
-  'create_item', 'update_item', 'read_item',
+  'create_item', 'update_item', 'read_item', 'create_note',
   // Space management — list before create, never guess a space_id. delete_space
   // stays discovery-only (tool_search) like other destructive delete_* tools —
   // it's user-approved and rare enough not to need default-turn availability.

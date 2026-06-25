@@ -969,7 +969,7 @@ describe('tool discovery in runAgentTurn', () => {
     const names = tools.map(t => t.name);
     expect(names).toContain('tool_search');
     expect(names).toContain('delegate_to_agent');
-    expect(names).not.toContain('generate_video'); // not in core, not yet discovered
+    expect(names).not.toContain('delete_space'); // not in core, not yet discovered
   });
 
   it('includes a previously discovered tool on subsequent calls', async () => {

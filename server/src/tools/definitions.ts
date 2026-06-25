@@ -270,7 +270,7 @@ export const toolDefinitions: Anthropic.Tool[] = [
   },
   {
     name: 'list_items',
-    description: 'List all repo, file, and note items in a Space, including provenance fields.',
+    description: 'List all repo, file, note, and document items in a Space, including provenance fields.',
     input_schema: {
       type: 'object',
       properties: {

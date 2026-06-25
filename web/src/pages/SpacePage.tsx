@@ -816,18 +816,21 @@ function SpaceTabs({ spaceId, section }: { spaceId: string; section: Section }) 
     { label: 'Settings', key: 'settings' },
   ];
   return (
-    <div className="border-b border-border-soft px-6">
-      <nav className="flex" aria-label="Space sections">
+    <div className="px-6 py-3">
+      <nav
+        className="inline-flex h-9 w-fit items-center gap-1 rounded-lg bg-muted p-[3px]"
+        aria-label="Space sections"
+      >
         {tabs.map(tab => (
           <Link
             key={tab.key}
             to={tab.key === 'overview' ? `/spaces/${spaceId}` : `/spaces/${spaceId}/${tab.key}`}
             aria-current={section === tab.key ? 'page' : undefined}
             className={cn(
-              '-mb-px border-b-2 px-4 py-2.5 text-sm font-medium transition-colors',
+              'inline-flex h-full items-center justify-center rounded-md px-3 text-sm font-medium transition-all',
               section === tab.key
-                ? 'border-foreground text-foreground'
-                : 'border-transparent text-muted-foreground hover:text-foreground',
+                ? 'bg-background text-foreground shadow-sm'
+                : 'text-muted-foreground hover:text-foreground',
             )}
           >
             {tab.label}

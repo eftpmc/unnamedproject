@@ -201,6 +201,44 @@ export function addItemTemplates(database: Database.Database): void {
   }
 }
 
+export function addConversationProviderColumns(database: Database.Database): void {
+  // sessions: provider_type + provider_session_id
+  const sessionSql = tableSql(database, 'sessions');
+  if (sessionSql) {
+    const sessionCols = (database.prepare("PRAGMA table_info(sessions)").all() as Array<{ name: string }>).map(r => r.name);
+    if (!sessionCols.includes('provider_type')) {
+      database.exec("ALTER TABLE sessions ADD COLUMN provider_type TEXT");
+    }
+    if (!sessionCols.includes('provider_session_id')) {
+      database.exec("ALTER TABLE sessions ADD COLUMN provider_session_id TEXT");
+    }
+  }
+
+  // connections: widen type CHECK to include claude_code + codex
+  const connSql = tableSql(database, 'connections');
+  if (connSql && !connSql.includes('claude_code')) {
+    database.exec(`
+      PRAGMA foreign_keys = OFF;
+      PRAGMA legacy_alter_table = ON;
+      ALTER TABLE connections RENAME TO connections_pre_provider_types;
+      PRAGMA legacy_alter_table = OFF;
+      CREATE TABLE connections (
+        id TEXT PRIMARY KEY,
+        user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+        name TEXT NOT NULL,
+        type TEXT NOT NULL CHECK(type IN ('anthropic','openai','github','mcp','local','claude_code','codex')),
+        purpose TEXT NOT NULL DEFAULT 'tool',
+        encrypted_config TEXT NOT NULL,
+        created_at INTEGER NOT NULL DEFAULT (unixepoch()),
+        UNIQUE(user_id, name)
+      );
+      INSERT INTO connections SELECT * FROM connections_pre_provider_types;
+      DROP TABLE connections_pre_provider_types;
+      PRAGMA foreign_keys = ON;
+    `);
+  }
+}
+
 // Ordered, versioned schema migrations. Version 1 is the baseline: the full
 // historical schema plus every in-place migration that predates this runner,
 // kept idempotent so it lands any existing or fresh database at today's schema
@@ -227,6 +265,7 @@ export const migrations: Migration[] = [
   { version: 9, name: 'add-document-items', noTransaction: true, up: addDocumentItems },
   { version: 10, name: 'repair-document-items-foreign-keys', noTransaction: true, up: repairDocumentItemsForeignKeys },
   { version: 11, name: 'add-item-templates', noTransaction: true, up: addItemTemplates },
+  { version: 12, name: 'add-conversation-provider-columns', noTransaction: true, up: addConversationProviderColumns },
 ];
 
 function tableSql(database: Database.Database, name: string): string | undefined {

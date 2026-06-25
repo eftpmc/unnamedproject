@@ -1079,6 +1079,8 @@ async function dispatchTool(
         }
         break;
       case 'create_item': {
+        const createItemStepId = toolInput.plan_step_id as string | undefined;
+        if (createItemStepId) startPlanStep(userId, createItemStepId, executionId);
         result = await runCreateItem(
           {
             space_id: toolInput.space_id as string,
@@ -1089,6 +1091,9 @@ async function dispatchTool(
             repo_path: toolInput.repo_path as string | undefined,
             default_branch: toolInput.default_branch as string | undefined,
             content: toolInput.content as string | undefined,
+            source_session_id: sessionId,
+            source_plan_id: createItemStepId ? getPlanForStep(createItemStepId)?.id ?? null : null,
+            source_step_id: createItemStepId ?? null,
           },
           userId,
         );
@@ -1109,6 +1114,7 @@ async function dispatchTool(
             }
           } catch { /* non-fatal */ }
         }
+        if (createItemStepId) finishPlanStep(userId, createItemStepId, result);
         break;
       }
       case 'update_item': {

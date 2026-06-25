@@ -22,6 +22,9 @@ export async function runCreateItem(
     repo_path?: string;
     default_branch?: string;
     content?: string;
+    source_session_id?: string | null;
+    source_plan_id?: string | null;
+    source_step_id?: string | null;
   },
   userId: string,
 ): Promise<string> {
@@ -31,13 +34,19 @@ export async function runCreateItem(
   const name = input.name?.trim();
   if (!name) return 'Error: name is required';
 
+  const provenance = {
+    source_session_id: input.source_session_id,
+    source_plan_id: input.source_plan_id,
+    source_step_id: input.source_step_id,
+  };
+
   if (input.type === 'document') {
     const template = input.template ?? 'document';
     const blocks =
       Array.isArray(input.blocks) && input.blocks.length > 0
         ? input.blocks
         : (ITEM_TEMPLATES[template] ?? ITEM_TEMPLATES['document']);
-    const item = createDocumentItem({ space_id: input.space_id, name, template, blocks });
+    const item = createDocumentItem({ space_id: input.space_id, name, template, blocks, ...provenance });
     return JSON.stringify(item);
   }
 
@@ -48,12 +57,13 @@ export async function runCreateItem(
       name,
       repo_path: input.repo_path,
       default_branch: input.default_branch,
+      ...provenance,
     });
     return JSON.stringify(item);
   }
 
   if (input.type === 'note') {
-    const item = createNoteItem({ space_id: input.space_id, name, content: input.content ?? '' });
+    const item = createNoteItem({ space_id: input.space_id, name, content: input.content ?? '', ...provenance });
     return JSON.stringify(item);
   }
 

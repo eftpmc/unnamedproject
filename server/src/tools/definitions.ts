@@ -305,6 +305,7 @@ export const toolDefinitions: Anthropic.Tool[] = [
         repo_path: { type: 'string', description: 'Absolute filesystem path to the repository (only for type=repo)' },
         default_branch: { type: 'string', description: 'Default branch name (only for type=repo, optional)' },
         content: { type: 'string', description: 'Markdown content (only for type=note)' },
+        plan_step_id: { type: 'string', description: 'Plan step ID to link this item to and mark done, when applicable' },
       },
       required: ['space_id', 'name', 'type'],
     },

@@ -67,6 +67,24 @@ describe('runCreateItem', () => {
     expect(result.type).toBe('note');
     expect(result.content).toBe('hello world');
   });
+
+  it('links a created item to a session and plan step when provenance is passed', async () => {
+    const { runCreateItem } = await import('./item_ops.js');
+    const result = JSON.parse(await runCreateItem(
+      {
+        space_id: 'sp1',
+        name: 'Tracked Doc',
+        type: 'document',
+        source_session_id: 'sess1',
+        source_plan_id: 'plan1',
+        source_step_id: 'step1',
+      },
+      'u1',
+    ));
+    expect(result.source_session_id).toBe('sess1');
+    expect(result.source_plan_id).toBe('plan1');
+    expect(result.source_step_id).toBe('step1');
+  });
 });
 
 describe('runUpdateItem', () => {

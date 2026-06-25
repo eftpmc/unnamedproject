@@ -281,12 +281,14 @@ export function removeLeadAgentConnections(database: Database.Database): void {
 }
 
 function dropPlanSystem(database: Database.Database): void {
+  const eventsSqlCheck = tableSql(database, 'session_events');
   const planStepsExists = database
     .prepare("SELECT 1 FROM sqlite_master WHERE type='table' AND name='plan_steps'")
     .get();
-  if (!planStepsExists) return;
+  // Skip if nothing to clean up
+  if (!planStepsExists && !(eventsSqlCheck?.includes('plan_id'))) return;
   database.pragma('foreign_keys = OFF');
-  database.exec('DROP TABLE IF EXISTS plan_steps; DROP TABLE IF EXISTS plans;');
+  database.exec('DROP TABLE IF EXISTS plan_steps; DROP TABLE IF EXISTS plans; DROP TABLE IF EXISTS pipeline_tasks; DROP TABLE IF EXISTS pipelines;');
 
   // Rebuild space_items without the FK columns that referenced the dropped tables.
   const itemsSql = tableSql(database, 'space_items');
@@ -341,6 +343,100 @@ function dropPlanSystem(database: Database.Database): void {
   database.pragma('foreign_keys = ON');
 }
 
+function repairSpaceItemChildFks(database: Database.Database): void {
+  const affected = [
+    {
+      name: 'space_repos',
+      create: `CREATE TABLE space_repos (
+        item_id TEXT PRIMARY KEY REFERENCES space_items(id) ON DELETE CASCADE,
+        repo_path TEXT NOT NULL,
+        default_branch TEXT,
+        overview_blocks TEXT
+      );`,
+    },
+    {
+      name: 'space_files',
+      create: `CREATE TABLE space_files (
+        item_id TEXT PRIMARY KEY REFERENCES space_items(id) ON DELETE CASCADE,
+        file_path TEXT NOT NULL,
+        size_bytes INTEGER,
+        mime_type TEXT
+      );`,
+    },
+    {
+      name: 'space_notes',
+      create: `CREATE TABLE space_notes (
+        item_id TEXT PRIMARY KEY REFERENCES space_items(id) ON DELETE CASCADE,
+        content TEXT NOT NULL
+      );`,
+    },
+    {
+      name: 'space_documents',
+      create: `CREATE TABLE space_documents (
+        item_id TEXT PRIMARY KEY REFERENCES space_items(id) ON DELETE CASCADE,
+        template TEXT NOT NULL DEFAULT 'document',
+        blocks TEXT NOT NULL DEFAULT '[]'
+      );`,
+    },
+    {
+      name: 'agent_worktrees',
+      create: `CREATE TABLE agent_worktrees (
+        id TEXT PRIMARY KEY,
+        item_id TEXT NOT NULL REFERENCES space_items(id) ON DELETE CASCADE,
+        session_id TEXT NOT NULL REFERENCES sessions(id) ON DELETE CASCADE,
+        branch TEXT NOT NULL,
+        worktree_path TEXT NOT NULL,
+        claude_session_id TEXT,
+        codex_session_id TEXT,
+        created_at INTEGER NOT NULL DEFAULT (unixepoch()),
+        UNIQUE(item_id, session_id)
+      );`,
+    },
+  ];
+  database.pragma('foreign_keys = OFF');
+  for (const { name, create } of affected) {
+    const sql = tableSql(database, name);
+    if (!sql || !sql.includes('_space_items_drop_plans_tmp')) continue;
+    const cols = (database.prepare(`SELECT name FROM pragma_table_info('${name}')`).all() as { name: string }[])
+      .map(c => c.name).join(', ');
+    const tmp = `_${name}_repair_fk_tmp`;
+    database.exec(`ALTER TABLE ${name} RENAME TO ${tmp};`);
+    database.exec(create);
+    database.exec(`INSERT INTO ${name} (${cols}) SELECT ${cols} FROM ${tmp};`);
+    database.exec(`DROP TABLE ${tmp};`);
+  }
+  database.pragma('foreign_keys = ON');
+}
+
+function repairSessionEventsItemFk(database: Database.Database): void {
+  const sql = tableSql(database, 'session_events');
+  if (!sql || (sql.includes('REFERENCES space_items') && !sql.includes('_drop_plans_tmp'))) return;
+  database.pragma('foreign_keys = OFF');
+  const keepCols = (database.prepare("SELECT name FROM pragma_table_info('session_events')").all() as { name: string }[])
+    .map(c => c.name).join(', ');
+  const tmp = '_session_events_repair_item_fk_tmp';
+  database.exec(`ALTER TABLE session_events RENAME TO ${tmp};`);
+  database.exec(`CREATE TABLE session_events (
+    id TEXT PRIMARY KEY,
+    session_id TEXT NOT NULL REFERENCES sessions(id) ON DELETE CASCADE,
+    type TEXT NOT NULL CHECK(type IN (
+      'scope_changed','project_linked','project_created','plan_created',
+      'artifact_created','item_created','item_updated','approval_requested','approval_resolved',
+      'mcp_required','subagent_started','subagent_completed','connection_created'
+    )),
+    title TEXT NOT NULL,
+    body TEXT,
+    space_id TEXT REFERENCES spaces(id) ON DELETE SET NULL,
+    item_id TEXT REFERENCES space_items(id) ON DELETE SET NULL,
+    execution_id TEXT REFERENCES executions(id) ON DELETE SET NULL,
+    metadata TEXT NOT NULL DEFAULT '{}',
+    created_at INTEGER NOT NULL DEFAULT (unixepoch())
+  );`);
+  database.exec(`INSERT INTO session_events (${keepCols}) SELECT ${keepCols} FROM ${tmp};`);
+  database.exec(`DROP TABLE ${tmp};`);
+  database.pragma('foreign_keys = ON');
+}
+
 // Ordered, versioned schema migrations. Version 1 is the baseline: the full
 // historical schema plus every in-place migration that predates this runner,
 // kept idempotent so it lands any existing or fresh database at today's schema
@@ -369,6 +465,9 @@ export const migrations: Migration[] = [
   { version: 11, name: 'add-item-templates', noTransaction: true, up: addItemTemplates },
   { version: 12, name: 'add-conversation-provider-columns', noTransaction: true, up: addConversationProviderColumns },
   { version: 13, name: 'remove-lead-agent-connections', noTransaction: true, up: removeLeadAgentConnections },
+  { version: 14, name: 'drop-plan-system', noTransaction: true, up: dropPlanSystem },
+  { version: 15, name: 'repair-session-events-item-fk', noTransaction: true, up: repairSessionEventsItemFk },
+  { version: 16, name: 'repair-space-item-child-fks', noTransaction: true, up: repairSpaceItemChildFks },
 ];
 
 function tableSql(database: Database.Database, name: string): string | undefined {

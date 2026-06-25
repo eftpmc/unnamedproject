@@ -117,8 +117,10 @@ describe('migration v5: spaces rename and item model', () => {
   it('renames projects to spaces and preserves rows and foreign keys', () => {
     const space = db.prepare("SELECT name FROM spaces WHERE id = 'p1'").get() as { name: string };
     expect(space.name).toBe('My Project');
-    for (const table of ['plans', 'executions', 'memories', 'session_project_links', 'agent_worktrees', 'session_events']) {
-      const row = db.prepare('SELECT sql FROM sqlite_master WHERE name = ?').get(table) as { sql: string };
+    // plans and pipelines are dropped by v14; remaining tables should have no projects FK
+    for (const table of ['executions', 'memories', 'session_project_links', 'agent_worktrees', 'session_events']) {
+      const row = db.prepare('SELECT sql FROM sqlite_master WHERE name = ?').get(table) as { sql: string } | undefined;
+      if (!row) continue; // table may have been dropped by a later migration
       expect(row.sql.toLowerCase()).not.toContain('references projects');
     }
   });
@@ -147,9 +149,8 @@ describe('migration v5: spaces rename and item model', () => {
     expect((db.prepare("SELECT space_id FROM memories WHERE id = 'mem1'").get() as { space_id: string }).space_id).toBe('p1');
     const repoItem = db.prepare("SELECT id FROM space_items WHERE type = 'repo'").get() as { id: string };
     expect((db.prepare("SELECT item_id FROM agent_worktrees WHERE id = 'wt1'").get() as { item_id: string }).item_id).toBe(repoItem.id);
-    expect((db.prepare("SELECT space_id FROM pipelines WHERE id = 'pipe1'").get() as { space_id: string }).space_id).toBe('p1');
-    const pipelineSql = db.prepare("SELECT sql FROM sqlite_master WHERE name = 'pipelines'").get() as { sql: string };
-    expect(pipelineSql.sql.toLowerCase()).toContain('space_id text not null references spaces');
+    // pipelines is dropped by v14 — only verify it no longer exists
+    expect(db.prepare("SELECT sql FROM sqlite_master WHERE name = 'pipelines'").get()).toBeUndefined();
   });
 
   it('allows new item events while preserving historical artifact events', () => {

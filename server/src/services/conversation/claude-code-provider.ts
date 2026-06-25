@@ -1,6 +1,5 @@
 import { invokeClaudeCode } from '../../tools/invoke_claude_code.js';
 import { createExecution, completeExecution } from '../executor.js';
-import { newId } from '../../lib/ids.js';
 import { normalizePermissionProfile } from '../permissions.js';
 import type { McpServerConfig } from '../../tools/invoke_claude_code.js';
 import type { ConversationProvider, InvokeParams } from '../conversation-provider.js';
@@ -20,7 +19,7 @@ export class ClaudeCodeProvider implements ConversationProvider {
 
   async invoke(params: InvokeParams): Promise<{ costUsd?: number }> {
     const userId = params.userId ?? 'system';
-    const executionId = createExecution(userId, newId(), null, 'claude_code');
+    const executionId = createExecution(userId, null, null, 'claude_code');
     try {
       const result = await invokeClaudeCode(
         { prompt: params.prompt, model: this.config.model },

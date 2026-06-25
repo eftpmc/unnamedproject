@@ -1,6 +1,5 @@
 import { invokeCodex } from '../../tools/invoke_codex.js';
 import { createExecution, completeExecution } from '../executor.js';
-import { newId } from '../../lib/ids.js';
 import type { ConversationProvider, InvokeParams } from '../conversation-provider.js';
 
 interface CodexConfig {
@@ -18,7 +17,7 @@ export class CodexProvider implements ConversationProvider {
 
   async invoke(params: InvokeParams): Promise<{ costUsd?: number }> {
     const userId = params.userId ?? 'system';
-    const executionId = createExecution(userId, newId(), null, 'codex');
+    const executionId = createExecution(userId, null, null, 'codex');
     try {
       const result = await invokeCodex(
         { prompt: params.prompt, model: this.config.model },

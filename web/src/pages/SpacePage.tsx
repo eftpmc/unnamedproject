@@ -10,6 +10,7 @@ import {
   ChevronRight,
   File,
   FileText,
+  FileType,
   FolderGit2,
   GitBranch,
   ListTodo,
@@ -45,6 +46,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { ConfirmDialog } from '@/components/ui/confirm-dialog';
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -208,6 +210,9 @@ function ChatsSection({ chats, onNewChat }: { chats: Session[]; onNewChat: () =>
   );
 }
 
+const ITEM_TYPES: SpaceItemType[] = ['repo', 'file', 'note', 'document'];
+const DOCUMENT_TEMPLATES = ['document', 'spec', 'kanban', 'report'] as const;
+
 function ItemsSection({ space, items }: { space: Space; items: SpaceItem[] }) {
   const queryClient = useQueryClient();
   const navigate = useNavigate();
@@ -216,8 +221,10 @@ function ItemsSection({ space, items }: { space: Space; items: SpaceItem[] }) {
   const [type, setType] = useState<SpaceItemType>('repo');
   const [name, setName] = useState('');
   const [value, setValue] = useState('');
+  const [template, setTemplate] = useState<typeof DOCUMENT_TEMPLATES[number]>('document');
   const [pendingDelete, setPendingDelete] = useState<SpaceItem | null>(null);
   const visible = filter === 'all' ? items : items.filter(item => item.type === filter);
+  const requiresValue = type === 'repo' || type === 'file' || type === 'note';
 
   const createMutation = useMutation({
     mutationFn: () => createSpaceItem(space.id, {
@@ -226,12 +233,14 @@ function ItemsSection({ space, items }: { space: Space; items: SpaceItem[] }) {
       ...(type === 'repo' ? { repo_path: value.trim() } : {}),
       ...(type === 'file' ? { file_path: value.trim() } : {}),
       ...(type === 'note' ? { content: value } : {}),
+      ...(type === 'document' ? { template } : {}),
     }),
     onSuccess: item => {
       queryClient.invalidateQueries({ queryKey: ['space-items', space.id] });
       setDialogOpen(false);
       setName('');
       setValue('');
+      setTemplate('document');
       navigate(`/spaces/${space.id}/items/${item.id}`);
     },
   });
@@ -247,28 +256,24 @@ function ItemsSection({ space, items }: { space: Space; items: SpaceItem[] }) {
     <PageBody>
       <ContentColumn className="max-w-2xl">
         <div className="mb-5 flex flex-wrap items-center justify-between gap-3">
-          <div className="flex items-center gap-1 rounded-lg bg-muted p-1">
-            {(['all', 'repo', 'file', 'note'] as const).map(candidate => (
-              <button
-                type="button"
-                key={candidate}
-                onClick={() => setFilter(candidate)}
-                className={cn(
-                  'rounded-md px-3 py-1.5 text-xs font-medium capitalize text-muted-foreground transition-colors',
-                  filter === candidate && 'bg-card text-foreground shadow-xs',
-                )}
-              >
-                {candidate}
-              </button>
-            ))}
-          </div>
+          <Select value={filter} onValueChange={value => setFilter(value as 'all' | SpaceItemType)}>
+            <SelectTrigger size="sm" className="h-8 w-32 text-xs capitalize">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">All</SelectItem>
+              {ITEM_TYPES.map(candidate => (
+                <SelectItem key={candidate} value={candidate} className="capitalize">{candidate}</SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
           <Button size="sm" className="h-8 gap-1.5 text-xs" onClick={() => setDialogOpen(true)}>
             <Plus size={14} />Add Item
           </Button>
         </div>
 
         {visible.length === 0 ? (
-          <EmptyPanel title={items.length === 0 ? 'No Items yet' : `No ${filter} Items`} description="Add a repository, file reference, or note to this Space." />
+          <EmptyPanel title={items.length === 0 ? 'No Items yet' : `No ${filter} Items`} description="Add a repository, file reference, note, or document to this Space." />
         ) : (
           <div className="flex flex-col gap-2">
             {visible.map(item => (
@@ -278,7 +283,10 @@ function ItemsSection({ space, items }: { space: Space; items: SpaceItem[] }) {
                   <span className="min-w-0 flex-1">
                     <span className="block truncate text-sm font-medium">{item.name}</span>
                     <span className="mt-0.5 block truncate text-xs text-faint-fg">
-                      {item.type === 'repo' ? item.repo_path : item.type === 'file' ? item.mime_type || item.file_path : 'Note'}
+                      {item.type === 'repo' ? item.repo_path
+                        : item.type === 'file' ? item.mime_type || item.file_path
+                        : item.type === 'document' ? (TEMPLATE_LABELS[item.template] ?? item.template)
+                        : 'Note'}
                       {item.source_plan_id ? ' · Generated by a plan' : ''}
                     </span>
                   </span>
@@ -308,7 +316,7 @@ function ItemsSection({ space, items }: { space: Space; items: SpaceItem[] }) {
             <DialogDescription>Items are the durable contents of this Space.</DialogDescription>
           </DialogHeader>
           <div className="flex gap-1 rounded-lg bg-muted p-1">
-            {(['repo', 'file', 'note'] as const).map(candidate => (
+            {ITEM_TYPES.map(candidate => (
               <button
                 key={candidate}
                 type="button"
@@ -328,6 +336,17 @@ function ItemsSection({ space, items }: { space: Space; items: SpaceItem[] }) {
               placeholder="Write a note…"
               className="w-full resize-y rounded-lg border border-input bg-transparent px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-ring"
             />
+          ) : type === 'document' ? (
+            <Select value={template} onValueChange={value => setTemplate(value as typeof DOCUMENT_TEMPLATES[number])}>
+              <SelectTrigger className="w-full">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                {DOCUMENT_TEMPLATES.map(candidate => (
+                  <SelectItem key={candidate} value={candidate}>{TEMPLATE_LABELS[candidate]}</SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
           ) : (
             <Input
               value={value}
@@ -337,7 +356,7 @@ function ItemsSection({ space, items }: { space: Space; items: SpaceItem[] }) {
           )}
           <DialogFooter>
             <Button variant="ghost" onClick={() => setDialogOpen(false)}>Cancel</Button>
-            <Button disabled={!name.trim() || !value.trim() || createMutation.isPending} onClick={() => createMutation.mutate()}>
+            <Button disabled={!name.trim() || (requiresValue && !value.trim()) || createMutation.isPending} onClick={() => createMutation.mutate()}>
               Add Item
             </Button>
           </DialogFooter>
@@ -766,6 +785,7 @@ function ItemIcon({ type }: { type: SpaceItemType | 'Plan' | 'Chat' }) {
     repo: <FolderGit2 size={15} />,
     file: <FileText size={15} />,
     note: <NotebookPen size={15} />,
+    document: <FileType size={15} />,
     Plan: <ListTodo size={15} />,
     Chat: <MessageSquare size={15} />,
   };

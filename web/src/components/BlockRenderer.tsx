@@ -1,6 +1,21 @@
+import { Component, type ReactNode } from 'react';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
+import {
+  Bar,
+  BarChart,
+  Cell,
+  Line,
+  LineChart,
+  Pie,
+  PieChart,
+  ResponsiveContainer,
+  Tooltip,
+  XAxis,
+  YAxis,
+} from 'recharts';
+import { ArrowDown, ArrowRight, ArrowUp } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { updateItemTask } from '../lib/api.js';
 import FileBrowser from './FileBrowser.js';
@@ -12,7 +27,37 @@ interface BlockRendererProps {
   itemId: string;
 }
 
+// A block render failure (malformed data slipping past server validation,
+// a third-party chart lib choking on an edge case, etc.) should blank that
+// one block, not the rest of the item — each block gets its own boundary,
+// keyed on its content so a later fix (new block data) remounts and clears
+// the error instead of getting stuck showing a stale failure.
+class BlockErrorBoundary extends Component<{ children: ReactNode }, { hasError: boolean }> {
+  state = { hasError: false };
+  static getDerivedStateFromError() {
+    return { hasError: true };
+  }
+  render() {
+    if (this.state.hasError) {
+      return (
+        <div className="rounded-lg border border-dashed border-red-300 bg-red-50/50 px-3 py-2 text-xs text-red-700 dark:border-red-800/40 dark:bg-red-950/30 dark:text-red-300">
+          This block failed to render.
+        </div>
+      );
+    }
+    return this.props.children;
+  }
+}
+
 export default function BlockRenderer({ block, spaceId, itemId }: BlockRendererProps) {
+  return (
+    <BlockErrorBoundary key={JSON.stringify(block)}>
+      {renderBlock(block, spaceId, itemId)}
+    </BlockErrorBoundary>
+  );
+}
+
+function renderBlock(block: Block, spaceId: string, itemId: string) {
   switch (block.type) {
     case 'text':      return <TextBlock block={block} />;
     case 'heading':   return <HeadingBlock block={block} />;
@@ -22,6 +67,11 @@ export default function BlockRenderer({ block, spaceId, itemId }: BlockRendererP
     case 'task-list': return <TaskListBlock block={block} spaceId={spaceId} itemId={itemId} />;
     case 'callout':   return <CalloutBlock block={block} />;
     case 'file-browser': return <FileBrowser spaceId={spaceId} itemId={itemId} />;
+    case 'chart':     return <ChartBlock block={block} />;
+    case 'stat':      return <StatBlock block={block} />;
+    case 'list':      return <ListBlock block={block} />;
+    case 'progress':  return <ProgressBlock block={block} />;
+    default:          return null;
   }
 }
 
@@ -154,6 +204,111 @@ function CalloutBlock({ block }: { block: Extract<Block, { type: 'callout' }> })
   return (
     <div className={cn('rounded-lg border-l-4 px-4 py-3 text-[13px] leading-relaxed', CALLOUT_STYLES[block.variant])}>
       {block.content}
+    </div>
+  );
+}
+
+const CHART_COLORS = ['#6366f1', '#22c55e', '#f59e0b', '#ef4444', '#06b6d4', '#a855f7', '#ec4899'];
+
+function ChartBlock({ block }: { block: Extract<Block, { type: 'chart' }> }) {
+  if (block.data.length === 0) {
+    return (
+      <div className="rounded-lg border border-dashed border-border bg-background/50 px-3 py-2 text-xs text-faint-fg">
+        No data yet.
+      </div>
+    );
+  }
+
+  return (
+    <div className="rounded-xl border border-border-soft bg-card p-3">
+      {block.title && <div className="mb-2 text-xs font-medium text-muted-foreground">{block.title}</div>}
+      <div className="h-56 w-full">
+        <ResponsiveContainer width="100%" height="100%">
+          {block.chartType === 'pie' ? (
+            <PieChart>
+              <Tooltip />
+              <Pie data={block.data} dataKey="value" nameKey="label" outerRadius="80%">
+                {block.data.map((entry, i) => (
+                  <Cell key={entry.label} fill={CHART_COLORS[i % CHART_COLORS.length]} />
+                ))}
+              </Pie>
+            </PieChart>
+          ) : block.chartType === 'bar' ? (
+            <BarChart data={block.data}>
+              <XAxis dataKey="label" tick={{ fontSize: 11 }} />
+              <YAxis tick={{ fontSize: 11 }} />
+              <Tooltip />
+              <Bar dataKey="value" fill={CHART_COLORS[0]} radius={4} />
+            </BarChart>
+          ) : (
+            <LineChart data={block.data}>
+              <XAxis dataKey="label" tick={{ fontSize: 11 }} />
+              <YAxis tick={{ fontSize: 11 }} />
+              <Tooltip />
+              <Line type="monotone" dataKey="value" stroke={CHART_COLORS[0]} strokeWidth={2} dot={{ r: 3 }} />
+            </LineChart>
+          )}
+        </ResponsiveContainer>
+      </div>
+    </div>
+  );
+}
+
+const TREND_ICON = { up: ArrowUp, down: ArrowDown, flat: ArrowRight };
+const TREND_COLOR = {
+  up: 'text-green-600 dark:text-green-400',
+  down: 'text-red-600 dark:text-red-400',
+  flat: 'text-muted-foreground',
+};
+
+function StatBlock({ block }: { block: Extract<Block, { type: 'stat' }> }) {
+  const TrendIcon = block.trend ? TREND_ICON[block.trend.direction] : null;
+  return (
+    <div className="rounded-xl border border-border-soft bg-card px-4 py-3">
+      <div className="text-xs font-medium text-muted-foreground">{block.label}</div>
+      <div className="mt-1 flex items-baseline gap-2">
+        <span className="text-2xl font-semibold text-foreground">{block.value}</span>
+        {block.trend && TrendIcon && (
+          <span className={cn('flex items-center gap-0.5 text-xs font-medium', TREND_COLOR[block.trend.direction])}>
+            <TrendIcon size={12} />
+            {block.trend.label}
+          </span>
+        )}
+      </div>
+    </div>
+  );
+}
+
+function ListBlock({ block }: { block: Extract<Block, { type: 'list' }> }) {
+  if (block.items.length === 0) {
+    return (
+      <div className="rounded-lg border border-dashed border-border bg-background/50 px-3 py-2 text-xs text-faint-fg">
+        No items yet.
+      </div>
+    );
+  }
+  const Tag = block.ordered ? 'ol' : 'ul';
+  return (
+    <Tag className={cn('flex flex-col gap-1 text-sm text-fg-soft', block.ordered ? 'ml-5 list-decimal' : 'ml-5 list-disc')}>
+      {block.items.map((item, i) => <li key={i}>{item}</li>)}
+    </Tag>
+  );
+}
+
+function ProgressBlock({ block }: { block: Extract<Block, { type: 'progress' }> }) {
+  const max = block.max ?? 100;
+  const pct = max > 0 ? Math.min(100, Math.max(0, (block.value / max) * 100)) : 0;
+  return (
+    <div className="flex flex-col gap-1.5">
+      {block.label && (
+        <div className="flex items-center justify-between text-xs text-muted-foreground">
+          <span>{block.label}</span>
+          <span>{block.value}/{max}</span>
+        </div>
+      )}
+      <div className="h-2 w-full overflow-hidden rounded-full bg-muted">
+        <div className="h-full rounded-full bg-primary transition-[width]" style={{ width: `${pct}%` }} />
+      </div>
     </div>
   );
 }

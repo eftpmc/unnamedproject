@@ -1,5 +1,5 @@
 import { getToken, setToken, clearToken } from './auth.js';
-import type { Session, Message, Space, SpaceItem, SpaceItemType, Connection, EffortLevel, ClaudeModelInfo, UserSettings, AgentBudgets, Memory, ScheduledTask, SessionWorktree, Plan, PlanStep, Pipeline, PipelineTask, PermissionProfile, SessionEvent, SessionSpaceLink, Block } from '../types.js';
+import type { Session, Message, Space, SpaceItem, SpaceItemType, Connection, EffortLevel, ClaudeModelInfo, UserSettings, AgentBudgets, Memory, ScheduledTask, SessionWorktree, Plan, PlanStep, Pipeline, PipelineTask, PermissionProfile, SessionEvent, SessionSpaceLink, Block, ItemTemplate } from '../types.js';
 
 async function request<T>(path: string, init: RequestInit = {}): Promise<T> {
   const token = getToken();
@@ -158,9 +158,24 @@ export function getSpaceItems(spaceId: string): Promise<SpaceItem[]> {
 
 export function createSpaceItem(
   spaceId: string,
-  input: { type: SpaceItemType; name: string; repo_path?: string; file_path?: string; content?: string; template?: string; blocks?: Block[] },
+  input: { type: SpaceItemType; name: string; repo_path?: string; file_path?: string; content?: string; template_id?: string },
 ): Promise<SpaceItem> {
   return request(`/spaces/${spaceId}/items`, { method: 'POST', body: JSON.stringify(input) });
+}
+
+export function listItemTemplates(): Promise<ItemTemplate[]> {
+  return request('/spaces/item-templates');
+}
+
+export function createItemTemplate(input: { name: string; blocks: Block[] }): Promise<ItemTemplate> {
+  return request('/spaces/item-templates', { method: 'POST', body: JSON.stringify(input) });
+}
+
+export function updateItemTemplate(
+  templateId: string,
+  input: { blocks: Block[]; name?: string },
+): Promise<ItemTemplate> {
+  return request(`/spaces/item-templates/${templateId}`, { method: 'PATCH', body: JSON.stringify(input) });
 }
 
 export function deleteSpaceItem(spaceId: string, itemId: string): Promise<void> {

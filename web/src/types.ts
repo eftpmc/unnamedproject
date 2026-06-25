@@ -100,7 +100,7 @@ export interface Space {
   created_at?: number;
 }
 
-export type Block =
+export type BlockContent =
   | { type: 'text'; content: string }
   | { type: 'heading'; level: 1 | 2 | 3; text: string }
   | { type: 'code'; language: string; content: string }
@@ -108,7 +108,13 @@ export type Block =
   | { type: 'image'; url: string; alt?: string; caption?: string }
   | { type: 'task-list'; tasks: { id: string; text: string; done: boolean }[] }
   | { type: 'callout'; variant: 'info' | 'warning' | 'success' | 'error'; content: string }
-  | { type: 'file-browser' };
+  | { type: 'file-browser' }
+  | { type: 'chart'; chartType: 'line' | 'bar' | 'pie'; title?: string; data: { label: string; value: number }[] }
+  | { type: 'stat'; label: string; value: string; trend?: { direction: 'up' | 'down' | 'flat'; label?: string } }
+  | { type: 'list'; ordered?: boolean; items: string[] }
+  | { type: 'progress'; label?: string; value: number; max?: number };
+
+export type Block = BlockContent & { id?: string };
 
 export type SpaceItemType = 'repo' | 'file' | 'note' | 'document';
 
@@ -127,7 +133,18 @@ export type SpaceItem =
   | (SpaceItemBase & { type: 'repo'; repo_path: string; default_branch: string | null; overview_blocks: Block[] | null })
   | (SpaceItemBase & { type: 'file'; file_path: string; size_bytes: number | null; mime_type: string | null })
   | (SpaceItemBase & { type: 'note'; content: string })
-  | (SpaceItemBase & { type: 'document'; template: string; blocks: Block[] });
+  | (SpaceItemBase & { type: 'document'; template_id: string; blocks: Block[] });
+
+export interface ItemTemplate {
+  id: string;
+  user_id: string | null;
+  kind: 'system' | 'blocks';
+  name: string;
+  blocks: Block[] | null;
+  item_type: SpaceItemType;
+  is_builtin: boolean;
+  created_at: number;
+}
 
 export interface FileEntry {
   name: string;

@@ -1,5 +1,20 @@
 import type Anthropic from '@anthropic-ai/sdk';
 
+const BLOCK_CATALOG = `Available block types:
+- { type: 'text', content: string } — markdown text
+- { type: 'heading', level: 1|2|3, text: string }
+- { type: 'code', language: string, content: string }
+- { type: 'table', headers: string[], rows: string[][] }
+- { type: 'image', url: string, alt?: string, caption?: string }
+- { type: 'list', ordered?: boolean, items: string[] } — a plain bullet/numbered list
+- { type: 'task-list', tasks: { id: string, text: string, done: boolean }[] } — checkable items; users can toggle done
+- { type: 'callout', variant: 'info'|'warning'|'success'|'error', content: string }
+- { type: 'chart', chartType: 'line'|'bar'|'pie', title?: string, data: { label: string, value: number }[] }
+- { type: 'stat', label: string, value: string, trend?: { direction: 'up'|'down'|'flat', label?: string } } — a single metric tile
+- { type: 'progress', label?: string, value: number, max?: number } — a progress bar
+- { type: 'file-browser' } — renders the repo's file tree (repo overview only)
+Every block may carry a top-level 'id' (e.g. { id: 'open-issues-stat', type: 'stat', ... }) — give one to any block you expect to update later (especially stat/chart/progress blocks on a dashboard-like item), since update_item's block_id+block patch only works on blocks that have one. Blocks without an id can only be changed via a full blocks replace.`;
+
 export const toolDefinitions: Anthropic.Tool[] = [
   {
     name: 'invoke_claude_code',
@@ -292,16 +307,48 @@ export const toolDefinitions: Anthropic.Tool[] = [
     },
   },
   {
+    name: 'list_item_templates',
+    description: 'Lists item templates available to create items from: system templates (repo, file, note) and block templates (builtin and custom). Use this to find a template_id for create_item, or to see a template\'s current blocks before editing it with update_item_template.',
+    input_schema: {
+      type: 'object',
+      properties: {},
+    },
+  },
+  {
+    name: 'create_item_template',
+    description: `Designs a new reusable block template (a named block layout/screen). Use this when no existing template fits what you want to build for the user — e.g. a custom dashboard, tracker, or report layout.\n\n${BLOCK_CATALOG}`,
+    input_schema: {
+      type: 'object',
+      properties: {
+        name: { type: 'string', description: 'Display name for the template' },
+        blocks: { type: 'array', description: 'Block array defining the template\'s starter layout' },
+      },
+      required: ['name', 'blocks'],
+    },
+  },
+  {
+    name: 'update_item_template',
+    description: 'Redesigns an existing block template\'s blocks (including builtin templates). Only affects items created after this change — items already created from the template keep their own content.',
+    input_schema: {
+      type: 'object',
+      properties: {
+        template_id: { type: 'string', description: 'ID of the template to update' },
+        blocks: { type: 'array', description: 'Full replacement block array for the template' },
+        name: { type: 'string', description: 'New display name (optional)' },
+      },
+      required: ['template_id', 'blocks'],
+    },
+  },
+  {
     name: 'create_item',
-    description: 'Creates an item in a space. For documents: provide template and optional blocks. For repos: provide repo_path. For notes: provide content. File items are not supported (files are upload-only).',
+    description: 'Creates an item in a space, always from a template. For documents: provide template_id (use list_item_templates to find one, or create_item_template to design a new one first; omit to use the plain Document template). For repos: provide repo_path. For notes: provide content. File items are not supported (files are upload-only).',
     input_schema: {
       type: 'object',
       properties: {
         space_id: { type: 'string', description: 'ID of the Space to create the item in' },
         name: { type: 'string', description: 'Display name for the item' },
         type: { type: 'string', enum: ['document', 'repo', 'note'], description: 'Item type' },
-        template: { type: 'string', enum: ['document', 'spec', 'kanban', 'report'], description: 'Document template (only for type=document). Omit to use default starter blocks.' },
-        blocks: { type: 'array', description: 'Block array (only for type=document). Omit to use template starter blocks.' },
+        template_id: { type: 'string', description: 'Block template ID (only for type=document). Omit to use the plain Document template.' },
         repo_path: { type: 'string', description: 'Absolute filesystem path to the repository (only for type=repo)' },
         default_branch: { type: 'string', description: 'Default branch name (only for type=repo, optional)' },
         content: { type: 'string', description: 'Markdown content (only for type=note)' },
@@ -312,13 +359,15 @@ export const toolDefinitions: Anthropic.Tool[] = [
   },
   {
     name: 'update_item',
-    description: 'Updates an item\'s content. Pass blocks to replace a document\'s blocks, overview_blocks to set a repo\'s overview section, or content to update a note. Only pass fields that apply to the item type.',
+    description: `Updates an item's content. Pass blocks to replace a document's entire blocks array, or — much cheaper for a document with several blocks (e.g. a dashboard) — pass block_id + block to replace just one block in place. block_id only works if the block was given a stable 'id' when created; blocks without one require a full blocks replace. Pass overview_blocks to set a repo's overview section, or content to update a note. Only pass fields that apply to the item type.\n\n${BLOCK_CATALOG}`,
     input_schema: {
       type: 'object',
       properties: {
         space_id: { type: 'string', description: 'ID of the Space containing the item' },
         item_id: { type: 'string', description: 'ID of the item to update' },
         blocks: { type: 'array', description: 'Full replacement blocks array (document items only)' },
+        block_id: { type: 'string', description: 'id of a single existing block to replace (document items only; use with block, not blocks)' },
+        block: { type: 'object', description: 'Replacement block content for block_id' },
         overview_blocks: { description: 'Overview blocks array or null to clear (repo items only)' },
         content: { type: 'string', description: 'Replacement markdown content (note items only)' },
       },

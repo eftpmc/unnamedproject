@@ -9,7 +9,10 @@ vi.mock('../lib/api.js', () => ({
   getSpaceItems: vi.fn().mockResolvedValue([
     { id: 'repo-1', space_id: 'space-1', type: 'repo', name: 'Web repo', repo_path: '/tmp/web', default_branch: 'main', source_session_id: null, source_plan_id: null, source_step_id: null, created_at: 10 },
     { id: 'note-1', space_id: 'space-1', type: 'note', name: 'Release notes', content: '# Ready', source_session_id: null, source_plan_id: null, source_step_id: null, created_at: 9 },
-    { id: 'doc-1', space_id: 'space-1', type: 'document', name: 'Empty Doc', template: 'document', blocks: [{ type: 'text', content: '' }], source_session_id: null, source_plan_id: null, source_step_id: null, created_at: 8 },
+    { id: 'doc-1', space_id: 'space-1', type: 'document', name: 'Empty Doc', template_id: 'tpl_document', blocks: [{ type: 'text', content: '' }], source_session_id: null, source_plan_id: null, source_step_id: null, created_at: 8 },
+  ]),
+  listItemTemplates: vi.fn().mockResolvedValue([
+    { id: 'tpl_document', user_id: null, kind: 'blocks', name: 'Document', blocks: [{ type: 'text', content: '' }], item_type: 'document', is_builtin: true, created_at: 1 },
   ]),
   getSpacePlans: vi.fn().mockResolvedValue([]),
   getChats: vi.fn().mockResolvedValue([{ id: 'chat-1', title: 'Fix the render bug', effort: 'low', model: null, pinned_space_id: 'space-1', created_at: 1, updated_at: 2 }]),

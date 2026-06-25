@@ -5,7 +5,14 @@ import path from 'path';
 import { promisify } from 'util';
 import { createSessionEvent, getDb, getSpaceForUser, linkSessionProject, setAgentWorktreeSession, updatePlanStepStatus, maybeCompletePlan, getPlanForStep, getPlanSummaries, getPlanById, getPlanSteps, getExecutionById, getScheduledTasksForUser, createScheduledTask, updateScheduledTask, deleteScheduledTask, resumePlan, getPermissionProfile, createPipeline, getPipelineById, getPipelineTasks, listPipelinesForUser, createPlan, recordAgentUsage, addSessionDiscoveredTools, getSessionDiscoveredTools, upsertMcpRegistryTools, type DbPlan, type DbPlanStep } from '../db/index.js';
 import { getItemsForSpace, getItemById, createNoteItem, createFileItem, createRepoItem, readItemContent, registerFileItem, type SpaceItem, type Block } from './items.js';
-import { runCreateItem, runUpdateItem, runReadItem } from '../tools/item_ops.js';
+import {
+  runCreateItem,
+  runUpdateItem,
+  runReadItem,
+  runListItemTemplates,
+  runCreateItemTemplate,
+  runUpdateItemTemplate,
+} from '../tools/item_ops.js';
 
 const execAsync = promisify(execCallback);
 import { runAgentPipeline, type AgentPipelineCtx } from './agent_pipeline.js';
@@ -179,6 +186,7 @@ const PARALLEL_SAFE_TOOLS = new Set([
   'read_chat',
   'list_items',
   'read_item',
+  'list_item_templates',
   'list_spaces',
   'list_connections',
   'test_connection',
@@ -219,6 +227,7 @@ const CORE_TOOLS = new Set([
   'list_scheduled_tasks', 'create_scheduled_task', 'update_scheduled_task',
   // Item management
   'create_item', 'update_item', 'read_item', 'create_note',
+  'list_item_templates', 'create_item_template', 'update_item_template',
   // Space management — list before create, never guess a space_id. delete_space
   // stays discovery-only (tool_search) like other destructive delete_* tools —
   // it's user-approved and rare enough not to need default-turn availability.
@@ -1086,8 +1095,7 @@ async function dispatchTool(
             space_id: toolInput.space_id as string,
             name: toolInput.name as string,
             type: toolInput.type as string,
-            template: toolInput.template as string | undefined,
-            blocks: toolInput.blocks as Block[] | undefined,
+            template_id: toolInput.template_id as string | undefined,
             repo_path: toolInput.repo_path as string | undefined,
             default_branch: toolInput.default_branch as string | undefined,
             content: toolInput.content as string | undefined,
@@ -1123,6 +1131,8 @@ async function dispatchTool(
             space_id: toolInput.space_id as string,
             item_id: toolInput.item_id as string,
             blocks: toolInput.blocks as Block[] | undefined,
+            block_id: toolInput.block_id as string | undefined,
+            block: toolInput.block as Block | undefined,
             overview_blocks: toolInput.overview_blocks as Block[] | null | undefined,
             content: toolInput.content as string | undefined,
           },
@@ -1145,6 +1155,25 @@ async function dispatchTool(
             }
           } catch { /* non-fatal */ }
         }
+        break;
+      }
+      case 'list_item_templates': {
+        result = await runListItemTemplates(userId);
+        break;
+      }
+      case 'create_item_template': {
+        result = await runCreateItemTemplate(
+          { name: toolInput.name as string, blocks: toolInput.blocks as Block[] },
+          userId,
+        );
+        break;
+      }
+      case 'update_item_template': {
+        result = await runUpdateItemTemplate({
+          template_id: toolInput.template_id as string,
+          blocks: toolInput.blocks as Block[],
+          name: toolInput.name as string | undefined,
+        });
         break;
       }
       case 'update_space':

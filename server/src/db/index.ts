@@ -122,6 +122,85 @@ export function addDocumentItems(database: Database.Database): void {
   }
 }
 
+const BUILTIN_BLOCK_TEMPLATES: { id: string; name: string; blocks: unknown[] }[] = [
+  { id: 'tpl_document', name: 'Document', blocks: [{ type: 'text', content: '' }] },
+  {
+    id: 'tpl_spec',
+    name: 'Spec',
+    blocks: [
+      { type: 'heading', level: 1, text: 'Overview' },
+      { type: 'callout', variant: 'info', content: 'Describe the problem this solves.' },
+      { type: 'heading', level: 2, text: 'Approach' },
+      { type: 'text', content: '' },
+      { type: 'heading', level: 2, text: 'Success Criteria' },
+      { type: 'task-list', tasks: [] },
+      { type: 'heading', level: 2, text: 'Open Questions' },
+      { type: 'task-list', tasks: [] },
+    ],
+  },
+  {
+    id: 'tpl_kanban',
+    name: 'Kanban',
+    blocks: [
+      { type: 'heading', level: 1, text: 'Tasks' },
+      { type: 'heading', level: 2, text: 'To Do' },
+      { type: 'task-list', tasks: [] },
+      { type: 'heading', level: 2, text: 'In Progress' },
+      { type: 'task-list', tasks: [] },
+      { type: 'heading', level: 2, text: 'Done' },
+      { type: 'task-list', tasks: [] },
+    ],
+  },
+  {
+    id: 'tpl_report',
+    name: 'Report',
+    blocks: [
+      { type: 'heading', level: 1, text: 'Report' },
+      { type: 'text', content: '' },
+      { type: 'heading', level: 2, text: 'Details' },
+      { type: 'text', content: '' },
+    ],
+  },
+];
+
+const LEGACY_TEMPLATE_KEY_TO_ID: Record<string, string> = {
+  document: 'tpl_document',
+  spec: 'tpl_spec',
+  kanban: 'tpl_kanban',
+  report: 'tpl_report',
+};
+
+export function addItemTemplates(database: Database.Database): void {
+  database.exec(`
+    CREATE TABLE IF NOT EXISTS item_templates (
+      id TEXT PRIMARY KEY,
+      user_id TEXT,
+      kind TEXT NOT NULL CHECK(kind IN ('system', 'blocks')),
+      name TEXT NOT NULL,
+      blocks TEXT,
+      item_type TEXT NOT NULL CHECK(item_type IN ('repo', 'file', 'note', 'document')),
+      is_builtin INTEGER NOT NULL DEFAULT 0,
+      created_at INTEGER NOT NULL DEFAULT (unixepoch())
+    );
+  `);
+
+  const insertTemplate = database.prepare(`
+    INSERT OR IGNORE INTO item_templates (id, user_id, kind, name, blocks, item_type, is_builtin)
+    VALUES (?, NULL, ?, ?, ?, ?, 1)
+  `);
+  insertTemplate.run('tpl_repo', 'system', 'Repo', null, 'repo');
+  insertTemplate.run('tpl_file', 'system', 'File', null, 'file');
+  insertTemplate.run('tpl_note', 'system', 'Note', null, 'note');
+  for (const t of BUILTIN_BLOCK_TEMPLATES) {
+    insertTemplate.run(t.id, 'blocks', t.name, JSON.stringify(t.blocks), 'document');
+  }
+
+  const remap = database.prepare("UPDATE space_documents SET template = ? WHERE template = ?");
+  for (const [legacyKey, id] of Object.entries(LEGACY_TEMPLATE_KEY_TO_ID)) {
+    remap.run(id, legacyKey);
+  }
+}
+
 // Ordered, versioned schema migrations. Version 1 is the baseline: the full
 // historical schema plus every in-place migration that predates this runner,
 // kept idempotent so it lands any existing or fresh database at today's schema
@@ -147,6 +226,7 @@ export const migrations: Migration[] = [
   { version: 8, name: 'repair-pipeline-space-foreign-key', noTransaction: true, up: repairPipelineSpaceForeignKey },
   { version: 9, name: 'add-document-items', noTransaction: true, up: addDocumentItems },
   { version: 10, name: 'repair-document-items-foreign-keys', noTransaction: true, up: repairDocumentItemsForeignKeys },
+  { version: 11, name: 'add-item-templates', noTransaction: true, up: addItemTemplates },
 ];
 
 function tableSql(database: Database.Database, name: string): string | undefined {

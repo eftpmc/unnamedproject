@@ -4,21 +4,22 @@ import {
   createNoteItem,
   createRepoItem,
   updateDocumentBlocks,
+  updateDocumentBlock,
   updateNoteContent,
   updateRepoOverviewBlocks,
   getItemById,
   readItemContent,
   type Block,
 } from '../services/items.js';
-import { ITEM_TEMPLATES } from '../lib/item-templates.js';
+import { listItemTemplates, getItemTemplate, createItemTemplate, updateItemTemplate } from '../services/templates.js';
+import { validateBlock, validateBlocks } from '../lib/blocks.js';
 
 export async function runCreateItem(
   input: {
     space_id: string;
     name: string;
     type: string;
-    template?: string;
-    blocks?: Block[];
+    template_id?: string;
     repo_path?: string;
     default_branch?: string;
     content?: string;
@@ -41,12 +42,18 @@ export async function runCreateItem(
   };
 
   if (input.type === 'document') {
-    const template = input.template ?? 'document';
-    const blocks =
-      Array.isArray(input.blocks) && input.blocks.length > 0
-        ? input.blocks
-        : (ITEM_TEMPLATES[template] ?? ITEM_TEMPLATES['document']);
-    const item = createDocumentItem({ space_id: input.space_id, name, template, blocks, ...provenance });
+    const templateId = input.template_id ?? 'tpl_document';
+    const template = getItemTemplate(templateId);
+    if (!template || template.kind !== 'blocks') {
+      return `Error: unknown template '${templateId}'. Use list_item_templates to see available templates.`;
+    }
+    const item = createDocumentItem({
+      space_id: input.space_id,
+      name,
+      template_id: templateId,
+      blocks: template.blocks ?? [],
+      ...provenance,
+    });
     return JSON.stringify(item);
   }
 
@@ -75,6 +82,8 @@ export async function runUpdateItem(
     space_id: string;
     item_id: string;
     blocks?: Block[];
+    block_id?: string;
+    block?: Block;
     overview_blocks?: Block[] | null;
     content?: string;
   },
@@ -89,11 +98,26 @@ export async function runUpdateItem(
   if (input.blocks !== undefined) {
     if (item.type !== 'document') return `Error: blocks only applies to document items`;
     if (!Array.isArray(input.blocks)) return 'Error: blocks must be an array';
+    const blocksError = validateBlocks(input.blocks);
+    if (blocksError) return `Error: ${blocksError}`;
     updateDocumentBlocks(item.id, input.blocks);
+  }
+
+  if (input.block_id !== undefined) {
+    if (item.type !== 'document') return `Error: block_id only applies to document items`;
+    if (!input.block || typeof input.block !== 'object') return 'Error: block is required when block_id is set';
+    const blockError = validateBlock(input.block, 'block');
+    if (blockError) return `Error: ${blockError}`;
+    const found = updateDocumentBlock(item.id, input.block_id, input.block);
+    if (!found) return `Error: no block with id '${input.block_id}' on item ${item.id} — it may predate having an id, in which case use blocks (full replace) instead`;
   }
 
   if (input.overview_blocks !== undefined) {
     if (item.type !== 'repo') return `Error: overview_blocks only applies to repo items`;
+    if (input.overview_blocks !== null) {
+      const overviewError = validateBlocks(input.overview_blocks);
+      if (overviewError) return `Error: ${overviewError}`;
+    }
     updateRepoOverviewBlocks(item.id, input.overview_blocks);
   }
 
@@ -121,4 +145,31 @@ export async function runReadItem(
   }
 
   return JSON.stringify(item);
+}
+
+export async function runListItemTemplates(userId: string): Promise<string> {
+  return JSON.stringify(listItemTemplates(userId));
+}
+
+export async function runCreateItemTemplate(
+  input: { name: string; blocks: Block[] },
+  userId: string,
+): Promise<string> {
+  const name = input.name?.trim();
+  if (!name) return 'Error: name is required';
+  if (!Array.isArray(input.blocks)) return 'Error: blocks must be an array';
+  const blocksError = validateBlocks(input.blocks);
+  if (blocksError) return `Error: ${blocksError}`;
+  return JSON.stringify(createItemTemplate(userId, name, input.blocks));
+}
+
+export async function runUpdateItemTemplate(
+  input: { template_id: string; blocks: Block[]; name?: string },
+): Promise<string> {
+  if (!Array.isArray(input.blocks)) return 'Error: blocks must be an array';
+  const blocksError = validateBlocks(input.blocks);
+  if (blocksError) return `Error: ${blocksError}`;
+  const updated = updateItemTemplate(input.template_id, input.blocks, input.name?.trim());
+  if (!updated) return `Error: template '${input.template_id}' not found or not editable`;
+  return JSON.stringify(updated);
 }

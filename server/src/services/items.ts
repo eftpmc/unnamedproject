@@ -5,7 +5,7 @@ import { newId } from '../lib/ids.js';
 
 export type SpaceItemType = 'repo' | 'file' | 'note' | 'document';
 
-export type Block =
+export type BlockContent =
   | { type: 'text'; content: string }
   | { type: 'heading'; level: 1 | 2 | 3; text: string }
   | { type: 'code'; language: string; content: string }
@@ -13,7 +13,17 @@ export type Block =
   | { type: 'image'; url: string; alt?: string; caption?: string }
   | { type: 'task-list'; tasks: { id: string; text: string; done: boolean }[] }
   | { type: 'callout'; variant: 'info' | 'warning' | 'success' | 'error'; content: string }
-  | { type: 'file-browser' };
+  | { type: 'file-browser' }
+  | { type: 'chart'; chartType: 'line' | 'bar' | 'pie'; title?: string; data: { label: string; value: number }[] }
+  | { type: 'stat'; label: string; value: string; trend?: { direction: 'up' | 'down' | 'flat'; label?: string } }
+  | { type: 'list'; ordered?: boolean; items: string[] }
+  | { type: 'progress'; label?: string; value: number; max?: number };
+
+// `id` is optional because legacy blocks predate it, but any block the agent
+// wants to target later with a single-block patch (see updateDocumentBlock)
+// needs a stable one — full-array replacement is the only way to touch a
+// block with no id.
+export type Block = BlockContent & { id?: string };
 
 interface SpaceItemRow {
   id: string;
@@ -32,7 +42,7 @@ export type SpaceItem =
   | (SpaceItemBase & { type: 'repo'; repo_path: string; default_branch: string | null; overview_blocks: Block[] | null })
   | (SpaceItemBase & { type: 'file'; file_path: string; size_bytes: number | null; mime_type: string | null })
   | (SpaceItemBase & { type: 'note'; content: string })
-  | (SpaceItemBase & { type: 'document'; template: string; blocks: Block[] });
+  | (SpaceItemBase & { type: 'document'; template_id: string; blocks: Block[] });
 
 export interface CreateItemInput {
   space_id: string;
@@ -116,19 +126,34 @@ export function createNoteItem(input: CreateItemInput & { content: string }): Sp
 }
 
 export function createDocumentItem(
-  input: CreateItemInput & { template: string; blocks: Block[] },
+  input: CreateItemInput & { template_id: string; blocks: Block[] },
 ): SpaceItem {
   return getDb().transaction((): SpaceItem => {
     const base = insertBaseRow(input, 'document');
     getDb().prepare(
       'INSERT INTO space_documents (item_id, template, blocks) VALUES (?, ?, ?)',
-    ).run(base.id, input.template, JSON.stringify(input.blocks));
-    return { ...base, type: 'document', template: input.template, blocks: input.blocks };
+    ).run(base.id, input.template_id, JSON.stringify(input.blocks));
+    return { ...base, type: 'document', template_id: input.template_id, blocks: input.blocks };
   })();
 }
 
 export function updateDocumentBlocks(itemId: string, blocks: Block[]): void {
   getDb().prepare('UPDATE space_documents SET blocks = ? WHERE item_id = ?').run(JSON.stringify(blocks), itemId);
+}
+
+// Replaces a single block in place, found by its `id`. Returns false if the
+// item isn't a document or no block with that id exists — callers should
+// fall back to updateDocumentBlocks (full replace) for blocks that predate
+// having an id.
+export function updateDocumentBlock(itemId: string, blockId: string, block: Block): boolean {
+  const item = getItemById(itemId);
+  if (!item || item.type !== 'document') return false;
+  const index = item.blocks.findIndex(b => b.id === blockId);
+  if (index === -1) return false;
+  const updated = [...item.blocks];
+  updated[index] = { ...block, id: blockId };
+  updateDocumentBlocks(itemId, updated);
+  return true;
 }
 
 export function updateNoteContent(itemId: string, content: string): void {
@@ -183,7 +208,7 @@ function hydrate(row: SpaceItemRow): SpaceItem {
     return {
       ...row,
       type: 'document',
-      template: subtype.template,
+      template_id: subtype.template,
       blocks: JSON.parse(subtype.blocks) as Block[],
     };
   }

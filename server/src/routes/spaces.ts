@@ -15,12 +15,14 @@ import {
   getItemsForSpace,
   readItemContent,
   updateDocumentBlocks,
+  updateDocumentBlock,
   updateRepoOverviewBlocks,
   updateTaskDone,
   type Block,
   type SpaceItem,
 } from '../services/items.js';
-import { ITEM_TEMPLATES } from '../lib/item-templates.js';
+import { listItemTemplates, getItemTemplate, createItemTemplate, updateItemTemplate } from '../services/templates.js';
+import { validateBlock, validateBlocks } from '../lib/blocks.js';
 import { detectCapabilities } from '../services/projectCapabilities.js';
 
 const router = Router();
@@ -158,6 +160,45 @@ router.get('/:spaceId/items', (req, res) => {
   res.json(getItemsForSpace(req.params.spaceId));
 });
 
+router.get('/item-templates', (req, res) => {
+  const { userId } = req as unknown as AuthedRequest;
+  res.json(listItemTemplates(userId));
+});
+
+router.post('/item-templates', (req, res) => {
+  const { userId } = req as unknown as AuthedRequest;
+  const { name, blocks } = req.body as { name?: string; blocks?: unknown[] };
+  if (!name?.trim() || !Array.isArray(blocks)) {
+    res.status(400).json({ error: 'name and blocks required' });
+    return;
+  }
+  const blocksError = validateBlocks(blocks);
+  if (blocksError) {
+    res.status(400).json({ error: blocksError });
+    return;
+  }
+  res.status(201).json(createItemTemplate(userId, name.trim(), blocks as Block[]));
+});
+
+router.patch('/item-templates/:templateId', (req, res) => {
+  const { name, blocks } = req.body as { name?: string; blocks?: unknown[] };
+  if (!Array.isArray(blocks)) {
+    res.status(400).json({ error: 'blocks required' });
+    return;
+  }
+  const blocksError = validateBlocks(blocks);
+  if (blocksError) {
+    res.status(400).json({ error: blocksError });
+    return;
+  }
+  const updated = updateItemTemplate(req.params.templateId, blocks as Block[], name?.trim());
+  if (!updated) {
+    res.status(404).json({ error: 'Template not found or not editable' });
+    return;
+  }
+  res.json(updated);
+});
+
 router.post('/:spaceId/items', (req, res) => {
   if (!requireSpace(req, res)) return;
   const { type, name } = req.body as { type?: string; name?: string };
@@ -166,15 +207,17 @@ router.post('/:spaceId/items', (req, res) => {
     return;
   }
   if (type === 'document') {
-    const template = (req.body.template as string | undefined) ?? 'document';
-    const blocks = Array.isArray(req.body.blocks) && req.body.blocks.length > 0
-      ? req.body.blocks
-      : (ITEM_TEMPLATES[template] ?? ITEM_TEMPLATES['document']);
+    const templateId = (req.body.template_id as string | undefined) ?? 'tpl_document';
+    const template = getItemTemplate(templateId);
+    if (!template || template.kind !== 'blocks') {
+      res.status(404).json({ error: `Unknown template '${templateId}'` });
+      return;
+    }
     res.status(201).json(createDocumentItem({
       space_id: req.params.spaceId,
       name: name.trim(),
-      template,
-      blocks,
+      template_id: templateId,
+      blocks: template.blocks ?? [],
     }));
     return;
   }
@@ -240,11 +283,13 @@ router.patch('/:spaceId/items/:itemId', (req, res) => {
     res.status(404).json({ error: 'Item not found in this space' });
     return;
   }
-  const { name, content, blocks, overview_blocks } = req.body as {
+  const { name, content, blocks, overview_blocks, block_id, block } = req.body as {
     name?: string;
     content?: string;
     blocks?: unknown[];
     overview_blocks?: unknown[] | null;
+    block_id?: string;
+    block?: unknown;
   };
   if (name !== undefined) {
     if (!name.trim()) {
@@ -269,12 +314,39 @@ router.patch('/:spaceId/items/:itemId', (req, res) => {
       res.status(400).json({ error: 'blocks must be an array' });
       return;
     }
+    const blocksError = validateBlocks(blocks);
+    if (blocksError) {
+      res.status(400).json({ error: blocksError });
+      return;
+    }
     updateDocumentBlocks(item.id, blocks as Block[]);
+  }
+  if (block_id !== undefined) {
+    if (item.type !== 'document') {
+      res.status(400).json({ error: `block_id only supported for document items` });
+      return;
+    }
+    const blockError = validateBlock(block, 'block');
+    if (blockError) {
+      res.status(400).json({ error: blockError });
+      return;
+    }
+    if (!updateDocumentBlock(item.id, block_id, block as Block)) {
+      res.status(404).json({ error: `No block with id '${block_id}' on this item — it may predate having an id, in which case use blocks (full replace) instead` });
+      return;
+    }
   }
   if (overview_blocks !== undefined) {
     if (item.type !== 'repo') {
       res.status(400).json({ error: `overview_blocks only supported for repo items` });
       return;
+    }
+    if (overview_blocks !== null) {
+      const overviewError = validateBlocks(overview_blocks);
+      if (overviewError) {
+        res.status(400).json({ error: overviewError });
+        return;
+      }
     }
     updateRepoOverviewBlocks(item.id, overview_blocks as Block[] | null);
   }

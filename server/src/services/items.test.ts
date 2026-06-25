@@ -68,29 +68,52 @@ describe('items service', () => {
   it('createDocumentItem stores blocks as JSON', async () => {
     const { createDocumentItem } = await import('./items.js');
     const blocks = [{ type: 'text' as const, content: 'hello' }];
-    const item = createDocumentItem({ space_id: 'space1', name: 'My Doc', template: 'document', blocks });
+    const item = createDocumentItem({ space_id: 'space1', name: 'My Doc', template_id: 'tpl_document', blocks });
     expect(item.type).toBe('document');
     if (item.type !== 'document') throw new Error('expected document');
-    expect(item.template).toBe('document');
+    expect(item.template_id).toBe('tpl_document');
     expect(item.blocks).toEqual(blocks);
     expect(item.id).toBeTruthy();
   });
 
   it('createDocumentItem with empty blocks stores empty array', async () => {
     const { createDocumentItem } = await import('./items.js');
-    const item = createDocumentItem({ space_id: 'space1', name: 'Empty Doc', template: 'spec', blocks: [] });
+    const item = createDocumentItem({ space_id: 'space1', name: 'Empty Doc', template_id: 'tpl_spec', blocks: [] });
     if (item.type !== 'document') throw new Error('expected document');
     expect(item.blocks).toEqual([]);
   });
 
   it('updateDocumentBlocks replaces blocks', async () => {
     const { createDocumentItem, updateDocumentBlocks, getItemById } = await import('./items.js');
-    const item = createDocumentItem({ space_id: 'space1', name: 'Doc', template: 'document', blocks: [] });
+    const item = createDocumentItem({ space_id: 'space1', name: 'Doc', template_id: 'tpl_document', blocks: [] });
     const newBlocks = [{ type: 'heading' as const, level: 1 as const, text: 'Title' }];
     updateDocumentBlocks(item.id, newBlocks);
     const updated = getItemById(item.id);
     expect(updated?.type).toBe('document');
     if (updated?.type === 'document') expect(updated.blocks).toEqual(newBlocks);
+  });
+
+  it('updateDocumentBlock replaces a single block by id, leaving others untouched', async () => {
+    const { createDocumentItem, updateDocumentBlock, getItemById } = await import('./items.js');
+    const blocks = [
+      { id: 'h1', type: 'heading' as const, level: 1 as const, text: 'Title' },
+      { id: 'stat1', type: 'stat' as const, label: 'Open Issues', value: '14' },
+    ];
+    const item = createDocumentItem({ space_id: 'space1', name: 'Doc', template_id: 'tpl_document', blocks });
+    const found = updateDocumentBlock(item.id, 'stat1', { id: 'stat1', type: 'stat', label: 'Open Issues', value: '9' });
+    expect(found).toBe(true);
+    const updated = getItemById(item.id);
+    if (updated?.type === 'document') {
+      expect(updated.blocks[0]).toEqual(blocks[0]);
+      expect(updated.blocks[1]).toEqual({ id: 'stat1', type: 'stat', label: 'Open Issues', value: '9' });
+    }
+  });
+
+  it('updateDocumentBlock returns false for an unknown block id', async () => {
+    const { createDocumentItem, updateDocumentBlock } = await import('./items.js');
+    const item = createDocumentItem({ space_id: 'space1', name: 'Doc', template_id: 'tpl_document', blocks: [] });
+    const found = updateDocumentBlock(item.id, 'nope', { type: 'text', content: 'x' });
+    expect(found).toBe(false);
   });
 
   it('updateRepoOverviewBlocks stores and retrieves overview blocks', async () => {
@@ -106,7 +129,7 @@ describe('items service', () => {
   it('updateTaskDone sets done=true on a matching task', async () => {
     const { createDocumentItem, updateTaskDone, getItemById } = await import('./items.js');
     const blocks = [{ type: 'task-list' as const, tasks: [{ id: 'task1', text: 'Do thing', done: false }] }];
-    const item = createDocumentItem({ space_id: 'space1', name: 'Kanban', template: 'kanban', blocks });
+    const item = createDocumentItem({ space_id: 'space1', name: 'Kanban', template_id: 'tpl_kanban', blocks });
     const found = updateTaskDone(item.id, 'task1', true);
     expect(found).toBe(true);
     const updated = getItemById(item.id);
@@ -119,7 +142,7 @@ describe('items service', () => {
   it('updateTaskDone returns false for unknown taskId', async () => {
     const { createDocumentItem, updateTaskDone } = await import('./items.js');
     const blocks = [{ type: 'task-list' as const, tasks: [{ id: 'task1', text: 'Do thing', done: false }] }];
-    const item = createDocumentItem({ space_id: 'space1', name: 'K', template: 'document', blocks });
+    const item = createDocumentItem({ space_id: 'space1', name: 'K', template_id: 'tpl_document', blocks });
     const found = updateTaskDone(item.id, 'nonexistent', true);
     expect(found).toBe(false);
   });

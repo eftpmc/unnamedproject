@@ -708,23 +708,24 @@ export default function Settings() {
       />
 
       {/* Tab strip */}
-      <div className="flex shrink-0 gap-0 overflow-x-auto border-b border-border-soft px-5 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
-        {TABS.map(t => (
-          <button
-            key={t.id}
-            type="button"
-            onClick={() => setTab(t.id)}
-            className={cn(
-              'border-b-2 px-1 pb-3 pt-3 text-sm font-medium whitespace-nowrap transition-colors',
-              'mx-3 first:ml-0',
-              tab === t.id
-                ? 'border-primary text-foreground'
-                : 'border-transparent text-muted-foreground hover:text-fg-soft',
-            )}
-          >
-            {t.label}
-          </button>
-        ))}
+      <div className="shrink-0 overflow-x-auto px-5 py-3 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+        <div className="inline-flex h-9 w-fit items-center gap-1 rounded-lg bg-muted p-[3px]">
+          {TABS.map(t => (
+            <button
+              key={t.id}
+              type="button"
+              onClick={() => setTab(t.id)}
+              className={cn(
+                'inline-flex h-full items-center justify-center rounded-md px-3 text-sm font-medium whitespace-nowrap transition-all',
+                tab === t.id
+                  ? 'bg-background text-foreground shadow-sm'
+                  : 'text-muted-foreground hover:text-foreground',
+              )}
+            >
+              {t.label}
+            </button>
+          ))}
+        </div>
       </div>
 
       <PageBody>

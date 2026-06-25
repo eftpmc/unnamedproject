@@ -1,6 +1,7 @@
 import { Router } from 'express';
 import { verifyMcpToken } from './auth.js';
 import { listTools, getTool } from './registry.js';
+import './handlers/index.js';
 
 const router = Router();
 

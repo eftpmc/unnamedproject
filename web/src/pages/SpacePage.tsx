@@ -116,7 +116,7 @@ export default function SpacePage() {
     <PageShell>
       <PageHeader
         className="border-0 pb-0"
-        contentClassName="max-w-2xl"
+        contentClassName="max-w-4xl"
         title={space.name}
         actions={section !== 'settings' ? (
           <Button size="sm" className="h-8 gap-1.5 text-xs" onClick={() => startChat.mutate()} disabled={startChat.isPending}>
@@ -146,7 +146,7 @@ function Overview({ space, items, plans, chats }: { space: Space; items: SpaceIt
 
   return (
     <PageBody>
-      <ContentColumn className="max-w-2xl">
+      <ContentColumn className="max-w-4xl">
         {recent.length === 0 ? (
           <EmptyPanel title="Nothing here yet" description="Start a chat or add an item to this Space." />
         ) : (
@@ -178,7 +178,7 @@ function ChatsSection({ chats, onNewChat }: { chats: Session[]; onNewChat: () =>
   const navigate = useNavigate();
   return (
     <PageBody>
-      <ContentColumn className="max-w-2xl">
+      <ContentColumn className="max-w-4xl">
         {chats.length === 0 ? (
           <EmptyPanel title="No chats yet" description="Chats started from this Space stay connected to its context." action={<Button size="sm" onClick={onNewChat}>Start chat</Button>} />
         ) : (
@@ -247,7 +247,7 @@ function ItemsSection({ space, items }: { space: Space; items: SpaceItem[] }) {
 
   return (
     <PageBody>
-      <ContentColumn className="max-w-2xl">
+      <ContentColumn className="max-w-4xl">
         <div className="mb-5 flex flex-wrap items-center justify-between gap-3">
           <Select value={filter} onValueChange={value => setFilter(value as 'all' | SpaceItemType)}>
             <SelectTrigger size="sm" className="h-8 w-32 text-xs capitalize">
@@ -380,7 +380,7 @@ function PlansSection({ space, plans, items }: { space: Space; plans: Plan[]; it
 
   return (
     <PageBody>
-      <ContentColumn className="max-w-2xl">
+      <ContentColumn className="max-w-4xl">
         {plans.length === 0 ? (
           <EmptyPanel title="No plans yet" description="Ask the agent to plan or execute a multi-step effort." />
         ) : (
@@ -437,7 +437,7 @@ function PipelinesSection({ space }: { space: Space }) {
   const pipelines = data?.pipelines ?? [];
   return (
     <PageBody>
-      <ContentColumn className="max-w-2xl">
+      <ContentColumn className="max-w-4xl">
         {pipelines.length === 0 ? (
           <EmptyPanel title="No pipelines yet" description="Pipelines are reusable workflows owned by this Space. Ask the agent to create one." />
         ) : (
@@ -519,7 +519,7 @@ function SettingsSection({ space }: { space: Space }) {
 
   return (
     <PageBody>
-      <ContentColumn className="max-w-2xl">
+      <ContentColumn className="max-w-4xl">
         <div className="flex flex-col gap-8">
           <section className="space-y-4">
             <div><h2 className="text-sm font-semibold">General</h2><p className="mt-1 text-xs text-muted-foreground">Basic information shown across chats and navigation.</p></div>
@@ -607,7 +607,7 @@ function ItemDetail({ space, item }: { space: Space; item: SpaceItem }) {
       <PageHeader
         title={item.name}
         className="border-0 pb-0"
-        contentClassName="max-w-2xl"
+        contentClassName="max-w-4xl"
         breadcrumb={(
           <Button variant="ghost" size="sm" className="h-7 gap-1.5 px-1.5 text-xs text-muted-foreground hover:text-foreground" onClick={() => navigate(`/spaces/${space.id}/items`)}>
             <ArrowLeft size={13} />Back
@@ -671,7 +671,7 @@ function isBlockEmpty(block: Block): boolean {
 function DocumentDetail({ space, item }: { space: Space; item: SpaceItem & { type: 'document' } }) {
   return (
     <PageBody>
-      <ContentColumn className="max-w-2xl py-6">
+      <ContentColumn className="max-w-4xl py-6">
         <div className="mb-4 flex items-center gap-2">
           <span className="rounded-md bg-muted px-2 py-0.5 text-[11px] font-medium text-muted-foreground">
             {TEMPLATE_LABELS[item.template] ?? item.template}
@@ -810,7 +810,7 @@ function SpaceTabs({ spaceId, section }: { spaceId: string; section: Section }) 
   ];
   return (
     <div className="px-5 py-3">
-      <div className="mx-auto w-full max-w-2xl">
+      <div className="mx-auto w-full max-w-4xl">
         <TabStrip
           tabs={tabs}
           activeKey={section}

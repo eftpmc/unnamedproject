@@ -706,12 +706,12 @@ export default function Settings() {
       <PageHeader
         title="Settings"
         className="border-b-0 pb-0"
-        contentClassName="max-w-3xl"
+        contentClassName="max-w-4xl"
       />
 
       {/* Tab strip */}
       <div className="shrink-0 px-5 py-3">
-        <div className="mx-auto w-full max-w-3xl">
+        <div className="mx-auto w-full max-w-4xl">
           <TabStrip
             tabs={TABS.map(t => ({ key: t.id, label: t.label }))}
             activeKey={tab}
@@ -737,7 +737,7 @@ export default function Settings() {
       </div>
 
       <PageBody>
-        <ContentColumn className="max-w-3xl">
+        <ContentColumn className="max-w-4xl">
 
           {/* ── Agents ─────────────────────────────────── */}
           {tab === 'agents' && (

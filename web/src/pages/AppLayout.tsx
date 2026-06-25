@@ -135,7 +135,7 @@ export default function AppLayout() {
   return (
     <SidebarProvider
       className="h-full min-h-0 bg-muted/45 text-foreground"
-      style={{ '--sidebar-width': '14rem' } as CSSProperties}
+      style={{ '--sidebar-width': '17rem' } as CSSProperties}
     >
       <Sidebar
         pendingApprovalCount={pendingApprovals.size}

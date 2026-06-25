@@ -57,7 +57,7 @@ export default function SpacesPage() {
       <PageHeader
         title="Spaces"
         className="border-0 pb-0"
-        contentClassName="max-w-2xl"
+        contentClassName="max-w-4xl"
         actions={(
           <Button size="sm" className="h-8 gap-1.5 text-xs" onClick={() => setOpen(true)}>
             <Plus size={14} />
@@ -75,7 +75,7 @@ export default function SpacesPage() {
         />
       ) : (
         <PageBody>
-          <ContentColumn className="max-w-2xl">
+          <ContentColumn className="max-w-4xl">
             <div className="relative mb-5">
               <Search size={14} className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-faint-fg" />
               <input

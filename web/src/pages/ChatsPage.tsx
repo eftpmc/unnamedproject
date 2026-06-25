@@ -82,13 +82,13 @@ export default function ChatsPage() {
 
   return (
     <PageShell>
-      <PageHeader title="Chats" className="border-0 pb-0" contentClassName="max-w-2xl" />
+      <PageHeader title="Chats" className="border-0 pb-0" contentClassName="max-w-4xl" />
 
       {isLoading ? (
         <PageLoading rows={5} />
       ) : (
         <PageBody>
-          <ContentColumn className="max-w-2xl">
+          <ContentColumn className="max-w-4xl">
             <div className="relative mb-5">
               <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-faint-fg pointer-events-none" />
               <input

@@ -35,7 +35,7 @@ export function registerGitHandlers(): void {
         },
         { userId, executionId, projectId: args.space_id as string, repoPath: worktree.worktree_path },
       );
-      completeExecution(executionId, userId, 'done', result);
+      completeExecution(executionId, userId, result.startsWith('Error:') ? 'error' : 'done', result);
       return result;
     },
   });

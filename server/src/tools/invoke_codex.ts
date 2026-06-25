@@ -9,7 +9,15 @@ interface CodexInput {
   model?: string;
 }
 
-interface McpServerConfig { command: string; args?: string[]; env?: Record<string, string> }
+interface McpServerConfig {
+  // stdio transport
+  command?: string;
+  args?: string[];
+  env?: Record<string, string>;
+  // HTTP transport
+  url?: string;
+  headers?: Record<string, string>;
+}
 
 interface ToolContext {
   userId: string;
@@ -58,12 +66,22 @@ function tomlInlineTable(obj: Record<string, string>): string {
 function mcpServerConfigOverrides(servers: Record<string, McpServerConfig>): string[] {
   const overrides: string[] = [];
   for (const [name, cfg] of Object.entries(servers)) {
-    overrides.push(`-c`, `mcp_servers.${name}.command=${tomlString(cfg.command)}`);
-    if (cfg.args && cfg.args.length > 0) {
-      overrides.push(`-c`, `mcp_servers.${name}.args=${JSON.stringify(cfg.args)}`);
-    }
-    if (cfg.env && Object.keys(cfg.env).length > 0) {
-      overrides.push(`-c`, `mcp_servers.${name}.env=${tomlInlineTable(cfg.env)}`);
+    if (cfg.url) {
+      // HTTP transport
+      overrides.push(`-c`, `mcp_servers.${name}.url=${tomlString(cfg.url)}`);
+      overrides.push(`-c`, `mcp_servers.${name}.type="streamable_http"`);
+      if (cfg.headers && Object.keys(cfg.headers).length > 0) {
+        overrides.push(`-c`, `mcp_servers.${name}.headers=${tomlInlineTable(cfg.headers)}`);
+      }
+    } else if (cfg.command) {
+      // stdio transport
+      overrides.push(`-c`, `mcp_servers.${name}.command=${tomlString(cfg.command)}`);
+      if (cfg.args && cfg.args.length > 0) {
+        overrides.push(`-c`, `mcp_servers.${name}.args=${JSON.stringify(cfg.args)}`);
+      }
+      if (cfg.env && Object.keys(cfg.env).length > 0) {
+        overrides.push(`-c`, `mcp_servers.${name}.env=${tomlInlineTable(cfg.env)}`);
+      }
     }
   }
   return overrides;
@@ -96,6 +114,10 @@ export async function invokeCodex(input: CodexInput, ctx: ToolContext): Promise<
     });
 
     registerProcess(ctx.executionId, proc);
+
+    ctx.signal?.addEventListener('abort', () => {
+      proc.kill('SIGTERM');
+    }, { once: true });
 
     let buffer = '';
     let sessionId: string | null = null;

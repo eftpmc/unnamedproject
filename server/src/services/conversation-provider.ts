@@ -28,7 +28,7 @@ export async function getConversationProvider(userId: string): Promise<Conversat
   if (conn) {
     const cfg = getDecryptedConfig(conn.id, userId);
     const mode = (cfg.mode as 'local' | 'api') ?? 'local';
-    const model = (cfg.model as string) ?? 'claude-sonnet-4-6';
+    const model = cfg.model as string | undefined;
     const permissionProfile = (cfg.permissionProfile as string) ?? 'default';
     const apiKey = cfg.apiKey as string | undefined;
 
@@ -36,7 +36,7 @@ export async function getConversationProvider(userId: string): Promise<Conversat
       const { CodexProvider } = await import('./conversation/codex-provider.js');
       return new CodexProvider({ mode, model: model ?? 'codex-mini-latest', permissionProfile, apiKey });
     }
-    return new ClaudeCodeProvider({ mode, model, permissionProfile, apiKey });
+    return new ClaudeCodeProvider({ mode, model: model ?? 'claude-sonnet-4-6', permissionProfile, apiKey });
   }
 
   // Default: local Claude Code CLI

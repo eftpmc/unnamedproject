@@ -14,15 +14,11 @@ vi.mock('../lib/api.js', () => ({
   listItemTemplates: vi.fn().mockResolvedValue([
     { id: 'tpl_document', user_id: null, kind: 'blocks', name: 'Document', blocks: [{ type: 'text', content: '' }], item_type: 'document', is_builtin: true, created_at: 1 },
   ]),
-  getSpacePlans: vi.fn().mockResolvedValue([]),
   getChats: vi.fn().mockResolvedValue([{ id: 'chat-1', title: 'Fix the render bug', effort: 'low', model: null, pinned_space_id: 'space-1', created_at: 1, updated_at: 2 }]),
-  getSpacePipelines: vi.fn().mockResolvedValue({ pipelines: [] }),
   createChat: vi.fn(),
   updateChatConfig: vi.fn(),
   createSpaceItem: vi.fn(),
   deleteSpaceItem: vi.fn(),
-  deleteSpacePipeline: vi.fn(),
-  runSpacePipeline: vi.fn(),
   updateSpace: vi.fn(),
   deleteSpace: vi.fn(),
   updateSpaceItem: vi.fn(),
@@ -51,9 +47,9 @@ describe('SpacePage', () => {
     expect(await screen.findByText('Test Space')).toBeInTheDocument();
     expect(screen.getByRole('link', { name: 'Chats' })).toBeInTheDocument();
     expect(screen.getByRole('link', { name: 'Items' })).toBeInTheDocument();
-    expect(screen.getByRole('link', { name: 'Plans' })).toBeInTheDocument();
-    expect(screen.getByRole('link', { name: 'Pipelines' })).toBeInTheDocument();
     expect(screen.getByRole('link', { name: 'Settings' })).toBeInTheDocument();
+    expect(screen.queryByRole('link', { name: 'Plans' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('link', { name: 'Pipelines' })).not.toBeInTheDocument();
     // Stat cards removed — "Running" label no longer present
     expect(screen.queryByText('Running')).not.toBeInTheDocument();
     // Activity items present

@@ -31,8 +31,6 @@ interface SpaceItemRow {
   type: SpaceItemType;
   name: string;
   source_session_id: string | null;
-  source_plan_id: string | null;
-  source_step_id: string | null;
   created_at: number;
 }
 
@@ -48,8 +46,6 @@ export interface CreateItemInput {
   space_id: string;
   name: string;
   source_session_id?: string | null;
-  source_plan_id?: string | null;
-  source_step_id?: string | null;
 }
 
 function insertBaseRow(input: CreateItemInput, type: SpaceItemType): SpaceItemRow {
@@ -59,23 +55,19 @@ function insertBaseRow(input: CreateItemInput, type: SpaceItemType): SpaceItemRo
     type,
     name: input.name,
     source_session_id: input.source_session_id ?? null,
-    source_plan_id: input.source_plan_id ?? null,
-    source_step_id: input.source_step_id ?? null,
     created_at: Math.floor(Date.now() / 1000),
   };
   getDb().prepare(`
     INSERT INTO space_items (
       id, space_id, type, name,
-      source_session_id, source_plan_id, source_step_id, created_at
-    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+      source_session_id, created_at
+    ) VALUES (?, ?, ?, ?, ?, ?)
   `).run(
     row.id,
     row.space_id,
     row.type,
     row.name,
     row.source_session_id,
-    row.source_plan_id,
-    row.source_step_id,
     row.created_at,
   );
   return row;

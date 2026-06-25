@@ -18,8 +18,6 @@ import messagesRoutes from './routes/messages.js';
 import executionsRoutes from './routes/executions.js';
 import memoryRoutes from './routes/memory.js';
 import scheduledTasksRoutes from './routes/scheduled_tasks.js';
-import plansRoutes from './routes/plans.js';
-import pipelinesRoutes from './routes/pipelines.js';
 import mcpRouter from './mcp/index.js';
 
 const PORT = process.env.PORT ?? '3000';
@@ -90,7 +88,6 @@ reconcileOrphanedExecutions();
 // (Express 4 does not do this on its own).
 app.use('/auth', authLimiter, wrapAsyncErrors(authRoutes));
 app.use('/connections', wrapAsyncErrors(connectionsRoutes));
-app.use('/spaces/:spaceId/pipelines', wrapAsyncErrors(pipelinesRoutes));
 app.use('/spaces', wrapAsyncErrors(spacesRoutes));
 app.use('/settings', wrapAsyncErrors(settingsRoutes));
 app.use('/sessions', wrapAsyncErrors(sessionsRoutes));
@@ -98,7 +95,6 @@ app.use('/sessions', wrapAsyncErrors(messagesRoutes));
 app.use('/executions', wrapAsyncErrors(executionsRoutes));
 app.use('/memory', wrapAsyncErrors(memoryRoutes));
 app.use('/scheduled-tasks', wrapAsyncErrors(scheduledTasksRoutes));
-app.use('/plans', wrapAsyncErrors(plansRoutes));
 
 app.use('/mcp', mcpRouter);
 

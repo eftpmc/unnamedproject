@@ -24,8 +24,6 @@ export async function runCreateItem(
     default_branch?: string;
     content?: string;
     source_session_id?: string | null;
-    source_plan_id?: string | null;
-    source_step_id?: string | null;
   },
   userId: string,
 ): Promise<string> {
@@ -37,8 +35,6 @@ export async function runCreateItem(
 
   const provenance = {
     source_session_id: input.source_session_id,
-    source_plan_id: input.source_plan_id,
-    source_step_id: input.source_step_id,
   };
 
   if (input.type === 'document') {

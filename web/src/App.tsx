@@ -7,7 +7,6 @@ import Settings from './pages/Settings.js';
 import ChatsPage from './pages/ChatsPage.js';
 import SpacesPage from './pages/SpacesPage.js';
 import SpacePage from './pages/SpacePage.js';
-import PlanPage from './pages/PlanPage.js';
 import { TooltipProvider } from '@/components/ui/tooltip';
 
 const queryClient = new QueryClient({
@@ -15,9 +14,8 @@ const queryClient = new QueryClient({
 });
 
 function LegacyProjectRedirect({ suffix = '' }: { suffix?: string }) {
-  const { projectId, planId } = useParams<{ projectId: string; planId?: string }>();
-  const tail = suffix.replace(':planId', planId ?? '');
-  return <Navigate to={`/spaces/${projectId}${tail}`} replace />;
+  const { projectId } = useParams<{ projectId: string }>();
+  return <Navigate to={`/spaces/${projectId}${suffix}`} replace />;
 }
 
 const router = createBrowserRouter([
@@ -38,13 +36,9 @@ const router = createBrowserRouter([
       { path: 'spaces/:spaceId/chats', element: <SpacePage /> },
       { path: 'spaces/:spaceId/items', element: <SpacePage /> },
       { path: 'spaces/:spaceId/items/:itemId', element: <SpacePage /> },
-      { path: 'spaces/:spaceId/plans', element: <SpacePage /> },
-      { path: 'spaces/:spaceId/plans/:planId', element: <PlanPage /> },
-      { path: 'spaces/:spaceId/pipelines', element: <SpacePage /> },
       { path: 'spaces/:spaceId/settings', element: <SpacePage /> },
       { path: 'projects', element: <Navigate to="/spaces" replace /> },
       { path: 'projects/:projectId', element: <LegacyProjectRedirect /> },
-      { path: 'projects/:projectId/plans/:planId', element: <LegacyProjectRedirect suffix="/plans/:planId" /> },
       { path: 'projects/:projectId/:tab', element: <LegacyProjectRedirect /> },
       { path: 'pipelines', element: <Navigate to="/spaces" replace /> },
       { path: 'settings', element: <Settings /> },

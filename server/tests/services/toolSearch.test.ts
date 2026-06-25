@@ -9,8 +9,8 @@ vi.mock('../../src/services/toolRegistry.js', () => ({
 describe('searchTools', () => {
   it('matches first-party tools by description keyword', async () => {
     const { searchTools } = await import('../../src/services/toolSearch.js');
-    const results = searchTools('user-1', 'render a video');
-    expect(results.map(r => r.name)).toContain('generate_video');
+    const results = searchTools('user-1', 'retrieve memory entries');
+    expect(results.map(r => r.name)).toContain('recall');
   });
 
   it('matches MCP registry tools by description keyword', async () => {

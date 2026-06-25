@@ -6,20 +6,15 @@ import 'highlight.js/styles/github-dark.css';
 import { ArrowDown, ArrowRight, Check, ChevronDown, ChevronUp, Copy, FileStack, FileText, GitMerge, Image, ListChecks, Pencil, Plug, Sparkles, Target } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import ExecutionCard from './ExecutionCard.js';
-import PlanCard from './PlanCard.js';
 import { StatusPill } from '@/components/ui/status-pill';
 import { getToken } from '../lib/auth.js';
 import { cn } from '../lib/utils.js';
 import type { Message, MessageAttachment, SessionEvent } from '../types.js';
 
-const DELEGATE_TOOLS = new Set(['invoke_claude_code', 'invoke_codex', 'delegate_to_agent']);
-
-// Cards that always stay individually visible: delegated work, errors/approvals
-// awaiting a decision, and tool calls that render as a richer preview card.
+// Cards that always stay individually visible: errors/approvals awaiting a
+// decision, and tool calls that render as a richer preview card.
 function isGroupExempt(exec: InlineExecution): boolean {
-  if (DELEGATE_TOOLS.has(exec.tool)) return true;
   if (exec.status === 'error' || exec.status === 'awaiting_approval') return true;
-  if (exec.tool === 'create_plan') return true;
   if ((exec.tool === 'create_note' || exec.tool === 'register_file_item') && exec.status === 'done' && exec.result) {
     try {
       const parsed = JSON.parse(exec.result) as Record<string, unknown>;
@@ -216,8 +211,6 @@ function stripEmoji(text: string): string {
 }
 
 function renderExecutionCard(exec: InlineExecution) {
-  // create_plan is surfaced via the plan_created session event as a PlanCard — skip the execution card
-  if (exec.tool === 'create_plan') return null;
   if (exec.status === 'done' && exec.result) {
     try {
       const parsed = JSON.parse(exec.result) as Record<string, unknown>;
@@ -244,7 +237,7 @@ function renderExecutionCard(exec: InlineExecution) {
 
 function eventIcon(type: SessionEvent['type']) {
   if (type === 'scope_changed' || type === 'project_linked') return Target;
-  if (type === 'plan_created' || type === 'artifact_created' || type === 'project_created') return Sparkles;
+  if (type === 'artifact_created' || type === 'project_created') return Sparkles;
   if (type === 'item_created' || type === 'item_updated') return FileStack;
   return GitMerge;
 }
@@ -431,13 +424,6 @@ export default function MessageList({ messages, executions, streamingIds, sessio
                       Open Settings → MCP <ArrowRight size={11} />
                     </Link>
                   </div>
-                </div>
-              );
-            }
-            if (item.event.type === 'plan_created' && item.event.plan_id && item.event.space_id) {
-              return (
-                <div key={`event-${item.event.id}`} className="flex max-w-[94%] flex-col sm:max-w-[86%]">
-                  <PlanCard planId={item.event.plan_id} spaceId={item.event.space_id} />
                 </div>
               );
             }

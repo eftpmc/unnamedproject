@@ -123,7 +123,7 @@ describe('migration v5: spaces rename and item model', () => {
     }
   });
 
-  it('backfills the repository and artifact as items without losing paths or provenance', () => {
+  it('backfills the repository and artifact as items', () => {
     const spaceSql = db.prepare("SELECT sql FROM sqlite_master WHERE name = 'spaces'").get() as { sql: string };
     expect(spaceSql.sql).not.toContain('repo_path');
     const artifactSql = db.prepare("SELECT sql FROM sqlite_master WHERE name = 'artifacts'").get() as { sql: string } | undefined;
@@ -133,11 +133,7 @@ describe('migration v5: spaces rename and item model', () => {
     const repo = db.prepare('SELECT repo_path FROM space_repos WHERE item_id = ?').get(repoItem.id) as { repo_path: string };
     expect(repo.repo_path).toBe('/repos/p1');
 
-    const fileItem = db.prepare("SELECT id, source_plan_id, source_step_id FROM space_items WHERE space_id = 'p1' AND type = 'file'").get() as {
-      id: string; source_plan_id: string | null; source_step_id: string | null;
-    };
-    expect(fileItem.source_plan_id).toBe('plan1');
-    expect(fileItem.source_step_id).toBe('step1');
+    const fileItem = db.prepare("SELECT id FROM space_items WHERE space_id = 'p1' AND type = 'file'").get() as { id: string };
     const file = db.prepare('SELECT file_path FROM space_files WHERE item_id = ?').get(fileItem.id) as { file_path: string };
     expect(file.file_path).toBe('artifacts/art1.md');
     const event = db.prepare("SELECT item_id FROM session_events WHERE id = 'ev1'").get() as { item_id: string };

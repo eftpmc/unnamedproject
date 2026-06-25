@@ -1,10 +1,9 @@
 import { useQuery } from '@tanstack/react-query';
 import { useNavigate } from 'react-router-dom';
 import { X, GitMerge, Check, Bell, FileStack, ArrowRight, Target } from 'lucide-react';
-import { getSpaceItems, getSpacePlans } from '../lib/api.js';
+import { getSpaceItems } from '../lib/api.js';
 import { cn } from '@/lib/utils';
-import { StatusPill } from '@/components/ui/status-pill';
-import type { Plan, Space, SessionSpaceLink } from '../types.js';
+import type { Space, SessionSpaceLink } from '../types.js';
 
 interface Approval {
   executionId: string;
@@ -111,19 +110,6 @@ function PanelContent({
   });
   const recentItems = items.slice(0, 3);
 
-  const { data: plans = [] } = useQuery<Plan[]>({
-    queryKey: ['space-plans', primarySpace?.id],
-    queryFn: () => getSpacePlans(primarySpace!.id),
-    enabled: !!primarySpace,
-    staleTime: 15_000,
-    refetchInterval: (query) => {
-      const data = query.state.data ?? [];
-      return data.some(p => p.status === 'running') ? 8_000 : false;
-    },
-  });
-  const activePlans = plans.filter(p => p.status === 'running' || p.status === 'error').slice(0, 3);
-  const recentPlans = activePlans.length > 0 ? activePlans : plans.slice(0, 3);
-
   const hasSpaces = pinnedSpace || linkedSpaces.length > 0;
 
   return (
@@ -213,36 +199,6 @@ function PanelContent({
               <Check size={11} strokeWidth={2.5} />
               Approve
             </button>
-          </div>
-        </section>
-      )}
-
-      {primarySpace && recentPlans.length > 0 && (
-        <section className="flex flex-col gap-2">
-          <div className="flex items-center justify-between">
-            <span className="text-[11px] font-medium text-muted-foreground">Plans</span>
-            <button
-              type="button"
-              onClick={() => navigate(`/spaces/${primarySpace.id}/plans`)}
-              className="flex items-center gap-0.5 text-[11px] text-faint-fg transition-colors hover:text-muted-foreground"
-            >
-              All <ArrowRight size={10} />
-            </button>
-          </div>
-          <div className="flex flex-col gap-1.5">
-            {recentPlans.map(plan => (
-              <button
-                key={plan.id}
-                type="button"
-                onClick={() => navigate(`/spaces/${primarySpace.id}/plans/${plan.id}`)}
-                className="flex items-center gap-2.5 rounded-lg border border-border-soft bg-card p-2.5 text-left transition-colors hover:bg-muted/40"
-              >
-                <div className="min-w-0 flex-1">
-                  <div className="truncate text-xs font-medium text-foreground">{plan.title}</div>
-                </div>
-                <StatusPill status={plan.status} />
-              </button>
-            ))}
           </div>
         </section>
       )}

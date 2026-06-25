@@ -91,7 +91,7 @@ describe('migration v9: addDocumentItems', () => {
   it('space_items.type CHECK allows document', () => {
     db.exec("INSERT INTO spaces VALUES ('s1','u1','S',NULL,'[]')");
     expect(() => {
-      db.exec("INSERT INTO space_items VALUES ('i1','s1','document','Doc',NULL,NULL,NULL,1)");
+      db.exec("INSERT INTO space_items (id, space_id, type, name) VALUES ('i1','s1','document','Doc')");
     }).not.toThrow();
   });
 

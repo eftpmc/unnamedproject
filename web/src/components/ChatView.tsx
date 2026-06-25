@@ -365,7 +365,7 @@ export default function ChatView({ chatId }: ChatViewProps) {
           return new Set();
         });
       }
-      if (ev.status === 'done' && ev.inputTokens) setLastInputTokens(ev.inputTokens);
+      if (ev.status === 'done' && ev.inputTokens != null) setLastInputTokens(ev.inputTokens);
     }
 
     if (event.type === 'execution_update') {

@@ -1,11 +1,10 @@
-import { useEffect, useMemo, useState, type ReactNode } from 'react';
+import { useEffect, useState, type ReactNode } from 'react';
 import { Link, useLocation, useNavigate, useParams } from 'react-router-dom';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import {
   ArrowLeft,
-  Boxes,
   Check,
   ChevronRight,
   File,
@@ -13,30 +12,23 @@ import {
   FileType,
   FolderGit2,
   GitBranch,
-  ListTodo,
   MessageSquare,
   MoreHorizontal,
   NotebookPen,
-  Play,
   Plus,
   Trash2,
-  Workflow,
 } from 'lucide-react';
 import {
   createChat,
   createSpaceItem,
   deleteSpace,
   deleteSpaceItem,
-  deleteSpacePipeline,
   getChats,
   getConnections,
   getItemContent,
   getSpaceItems,
-  getSpacePipelines,
-  getSpacePlans,
   getSpaces,
   listItemTemplates,
-  runSpacePipeline,
   updateChatConfig,
   updateSpace,
   updateSpaceItem,
@@ -54,18 +46,17 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
-import { ContentColumn, EmptyPanel, PageBody, PageHeader, PageLoading, PageSection, PageShell, Surface } from '@/components/ui/app-layout';
+import { ContentColumn, EmptyPanel, PageBody, PageHeader, PageLoading, PageShell, Surface } from '@/components/ui/app-layout';
 import { TabStrip } from '@/components/ui/tab-strip';
-import { StatusPill } from '@/components/ui/status-pill';
 import FileBrowser from '../components/FileBrowser.js';
 import BlockRenderer from '../components/BlockRenderer.js';
-import type { Block, Connection, Pipeline, Plan, Session, Space, SpaceItem, SpaceItemType } from '../types.js';
+import type { Block, Connection, Session, Space, SpaceItem, SpaceItemType } from '../types.js';
 
-type Section = 'overview' | 'chats' | 'items' | 'plans' | 'pipelines' | 'settings';
+type Section = 'overview' | 'chats' | 'items' | 'settings';
 
 function sectionFromPath(pathname: string, spaceId: string): Section {
   const suffix = pathname.slice(`/spaces/${spaceId}`.length).split('/').filter(Boolean)[0];
-  return ['chats', 'items', 'plans', 'pipelines', 'settings'].includes(suffix) ? suffix as Section : 'overview';
+  return ['chats', 'items', 'settings'].includes(suffix) ? suffix as Section : 'overview';
 }
 
 export default function SpacePage() {
@@ -80,11 +71,6 @@ export default function SpacePage() {
   const { data: items = [] } = useQuery({
     queryKey: ['space-items', spaceId],
     queryFn: () => getSpaceItems(spaceId!),
-    enabled: !!spaceId,
-  });
-  const { data: plans = [] } = useQuery({
-    queryKey: ['space-plans', spaceId],
-    queryFn: () => getSpacePlans(spaceId!),
     enabled: !!spaceId,
   });
   const { data: chats = [] } = useQuery<Session[]>({ queryKey: ['chats'], queryFn: getChats });
@@ -127,22 +113,19 @@ export default function SpacePage() {
         ) : undefined}
       />
       <SpaceTabs spaceId={space.id} section={section} />
-      {section === 'overview' && <Overview space={space} items={items} plans={plans} chats={spaceChats} />}
+      {section === 'overview' && <Overview space={space} items={items} chats={spaceChats} />}
       {section === 'chats' && <ChatsSection chats={spaceChats} onNewChat={() => startChat.mutate()} />}
       {section === 'items' && <ItemsSection space={space} items={items} />}
-      {section === 'plans' && <PlansSection space={space} plans={plans} items={items} />}
-      {section === 'pipelines' && <PipelinesSection space={space} />}
       {section === 'settings' && <SettingsSection space={space} />}
     </PageShell>
   );
 }
 
-function Overview({ space, items, plans, chats }: { space: Space; items: SpaceItem[]; plans: Plan[]; chats: Session[] }) {
+function Overview({ space, items, chats }: { space: Space; items: SpaceItem[]; chats: Session[] }) {
   const navigate = useNavigate();
   const recent = [
-    ...plans.map(plan => ({ key: plan.id, type: 'Plan' as const, title: plan.title, time: plan.created_at, href: `/spaces/${space.id}/plans/${plan.id}`, status: plan.status })),
-    ...chats.map(chat => ({ key: chat.id, type: 'Chat' as const, title: chat.title ?? 'Untitled chat', time: chat.updated_at, href: `/c/${chat.id}`, status: null })),
-    ...items.map(item => ({ key: item.id, type: item.type, title: item.name, time: item.created_at, href: `/spaces/${space.id}/items/${item.id}`, status: null })),
+    ...chats.map(chat => ({ key: chat.id, type: 'Chat' as const, title: chat.title ?? 'Untitled chat', time: chat.updated_at, href: `/c/${chat.id}` })),
+    ...items.map(item => ({ key: item.id, type: item.type, title: item.name, time: item.created_at, href: `/spaces/${space.id}/items/${item.id}` })),
   ].sort((a, b) => b.time - a.time).slice(0, 12);
 
   return (
@@ -159,12 +142,11 @@ function Overview({ space, items, plans, chats }: { space: Space; items: SpaceIt
                 onClick={() => navigate(entry.href)}
                 className="flex w-full items-center gap-3 rounded-lg border border-border-soft bg-card px-4 py-3.5 text-left transition-[transform,box-shadow,border-color] hover:-translate-y-px hover:border-border hover:shadow-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/30"
               >
-                <ItemIcon type={entry.type === 'Plan' || entry.type === 'Chat' ? entry.type : entry.type as SpaceItemType} />
+                <ItemIcon type={entry.type === 'Chat' ? entry.type : entry.type as SpaceItemType} />
                 <span className="min-w-0 flex-1">
                   <span className="block truncate text-sm font-medium text-foreground">{entry.title}</span>
                   <span className="block text-xs capitalize text-faint-fg">{entry.type} · {timeAgo(entry.time)}</span>
                 </span>
-                {entry.status && <StatusPill status={entry.status as Plan['status']} />}
                 <ChevronRight size={15} className="shrink-0 text-faint-fg" />
               </button>
             ))}
@@ -286,7 +268,6 @@ function ItemsSection({ space, items }: { space: Space; items: SpaceItem[] }) {
                         : item.type === 'file' ? item.mime_type || item.file_path
                         : item.type === 'document' ? (blockTemplates.find(t => t.id === item.template_id)?.name ?? item.template_id)
                         : 'Note'}
-                      {item.source_plan_id ? ' · Generated by a plan' : ''}
                     </span>
                   </span>
                   <span className="shrink-0 text-xs text-faint-fg">{timeAgo(item.created_at)}</span>
@@ -366,124 +347,6 @@ function ItemsSection({ space, items }: { space: Space; items: SpaceItem[] }) {
         <ConfirmDialog
           title={`Delete ${pendingDelete.name}?`}
           description="This removes the Item from the Space. Repository contents on disk are not deleted."
-          confirmLabel="Delete"
-          onConfirm={() => deleteMutation.mutate(pendingDelete.id)}
-          onCancel={() => setPendingDelete(null)}
-        />
-      )}
-    </PageBody>
-  );
-}
-
-function PlansSection({ space, plans, items }: { space: Space; plans: Plan[]; items: SpaceItem[] }) {
-  const generatedCounts = useMemo(() => {
-    const counts = new Map<string, number>();
-    items.forEach(item => {
-      if (item.source_plan_id) counts.set(item.source_plan_id, (counts.get(item.source_plan_id) ?? 0) + 1);
-    });
-    return counts;
-  }, [items]);
-
-  return (
-    <PageBody>
-      <ContentColumn className="max-w-4xl">
-        {plans.length === 0 ? (
-          <EmptyPanel title="No plans yet" description="Ask the agent to plan or execute a multi-step effort." />
-        ) : (
-          <div className="flex flex-col gap-2">
-            {plans.map(plan => <PlanCard key={plan.id} plan={plan} spaceId={space.id} generatedCount={generatedCounts.get(plan.id) ?? 0} />)}
-          </div>
-        )}
-      </ContentColumn>
-    </PageBody>
-  );
-}
-
-function PlanCard({ plan, spaceId, generatedCount = 0 }: { plan: Plan; spaceId: string; generatedCount?: number }) {
-  return (
-    <Link
-      to={`/spaces/${spaceId}/plans/${plan.id}`}
-      className="flex w-full items-center gap-3 rounded-lg border border-border-soft bg-card px-4 py-3.5 transition-[transform,box-shadow,border-color] hover:-translate-y-px hover:border-border hover:shadow-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/30"
-    >
-      <ListTodo size={15} className="shrink-0 text-muted-foreground" />
-      <div className="min-w-0 flex-1">
-        <div className="flex items-center gap-2">
-          <span className="truncate text-sm font-medium">{plan.title}</span>
-          <StatusPill status={plan.status} />
-        </div>
-        <div className="mt-0.5 text-xs text-faint-fg">{generatedCount} generated Items · {timeAgo(plan.created_at)}</div>
-      </div>
-      <ChevronRight size={15} className="shrink-0 text-faint-fg" />
-    </Link>
-  );
-}
-
-function PipelinesSection({ space }: { space: Space }) {
-  const queryClient = useQueryClient();
-  const navigate = useNavigate();
-  const [running, setRunning] = useState<Pipeline | null>(null);
-  const [pendingDelete, setPendingDelete] = useState<Pipeline | null>(null);
-  const { data, isLoading } = useQuery({
-    queryKey: ['space-pipelines', space.id],
-    queryFn: () => getSpacePipelines(space.id),
-  });
-  const deleteMutation = useMutation({
-    mutationFn: (id: string) => deleteSpacePipeline(space.id, id),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['space-pipelines', space.id] });
-      setPendingDelete(null);
-    },
-  });
-  const runMutation = useMutation({
-    mutationFn: (id: string) => runSpacePipeline(space.id, id),
-    onSuccess: result => navigate(`/spaces/${space.id}/plans/${result.plan_id}`),
-  });
-
-  if (isLoading) return <PageLoading rows={3} />;
-  const pipelines = data?.pipelines ?? [];
-  return (
-    <PageBody>
-      <ContentColumn className="max-w-4xl">
-        {pipelines.length === 0 ? (
-          <EmptyPanel title="No pipelines yet" description="Pipelines are reusable workflows owned by this Space. Ask the agent to create one." />
-        ) : (
-          <div className="flex flex-col gap-2">
-            {pipelines.map(pipeline => (
-              <div key={pipeline.id} className="flex items-center gap-3 rounded-lg border border-border-soft bg-card px-4 py-3.5">
-                <Workflow size={15} className="shrink-0 text-muted-foreground" />
-                <div className="min-w-0 flex-1">
-                  <div className="truncate text-sm font-medium">{pipeline.title}</div>
-                  <div className="mt-0.5 text-xs text-faint-fg">{pipeline.description || `${pipeline.task_count ?? 0} steps`}</div>
-                </div>
-                <Button size="sm" className="h-8 gap-1.5 text-xs" onClick={() => setRunning(pipeline)}><Play size={12} />Run</Button>
-                <DropdownMenu>
-                  <DropdownMenuTrigger asChild><Button variant="ghost" size="icon-sm"><MoreHorizontal size={14} /></Button></DropdownMenuTrigger>
-                  <DropdownMenuContent align="end">
-                    <DropdownMenuItem variant="destructive" onSelect={() => setPendingDelete(pipeline)}><Trash2 size={14} />Delete</DropdownMenuItem>
-                  </DropdownMenuContent>
-                </DropdownMenu>
-              </div>
-            ))}
-          </div>
-        )}
-      </ContentColumn>
-
-      {running && (
-        <Dialog open onOpenChange={open => !open && setRunning(null)}>
-          <DialogContent>
-            <DialogHeader><DialogTitle>Run pipeline</DialogTitle><DialogDescription>{running.title} will create a new plan in {space.name}.</DialogDescription></DialogHeader>
-            {runMutation.isError && <p className="text-sm text-destructive">The pipeline could not be started.</p>}
-            <DialogFooter>
-              <Button variant="ghost" onClick={() => setRunning(null)}>Cancel</Button>
-              <Button disabled={runMutation.isPending} onClick={() => runMutation.mutate(running.id)}>{runMutation.isPending ? 'Starting…' : 'Run now'}</Button>
-            </DialogFooter>
-          </DialogContent>
-        </Dialog>
-      )}
-      {pendingDelete && (
-        <ConfirmDialog
-          title={`Delete ${pendingDelete.title}?`}
-          description="Plans already created from this pipeline are not affected."
           confirmLabel="Delete"
           onConfirm={() => deleteMutation.mutate(pendingDelete.id)}
           onCancel={() => setPendingDelete(null)}
@@ -578,7 +441,7 @@ function SettingsSection({ space }: { space: Space }) {
           </section>
 
           <section className="flex items-center justify-between gap-4 rounded-lg border border-destructive/25 bg-destructive/5 p-4">
-            <div><div className="text-sm font-medium">Delete Space</div><div className="mt-0.5 text-xs text-muted-foreground">Permanently removes its Items, plans, pipelines, and links.</div></div>
+            <div><div className="text-sm font-medium">Delete Space</div><div className="mt-0.5 text-xs text-muted-foreground">Permanently removes its Items and links.</div></div>
             <Button variant="destructive" size="sm" onClick={() => setConfirmDelete(true)}>Delete</Button>
           </section>
         </div>
@@ -757,7 +620,6 @@ function FileDetail({ space, item }: { space: Space; item: SpaceItem & { type: '
         <div className="mb-4 flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
           <span className="rounded-md bg-muted px-2 py-1">{item.mime_type || 'Unknown type'}</span>
           {item.size_bytes != null && <span>{formatBytes(item.size_bytes)}</span>}
-          {item.source_plan_id && <Link className="text-on-accent-soft hover:underline" to={`/spaces/${space.id}/plans/${item.source_plan_id}`}>Generated by plan</Link>}
         </div>
         <Surface className="min-h-96 overflow-hidden">
           {isLoading && <div className="grid min-h-96 place-items-center text-sm text-muted-foreground">Loading file…</div>}
@@ -776,13 +638,12 @@ function FileDetail({ space, item }: { space: Space; item: SpaceItem & { type: '
   );
 }
 
-function ItemIcon({ type }: { type: SpaceItemType | 'Plan' | 'Chat' }) {
+function ItemIcon({ type }: { type: SpaceItemType | 'Chat' }) {
   const icon: Record<string, ReactNode> = {
     repo: <FolderGit2 size={15} />,
     file: <FileText size={15} />,
     note: <NotebookPen size={15} />,
     document: <FileType size={15} />,
-    Plan: <ListTodo size={15} />,
     Chat: <MessageSquare size={15} />,
   };
   return <span className="grid size-8 shrink-0 place-items-center rounded-lg bg-muted text-muted-foreground">{icon[type]}</span>;
@@ -808,8 +669,6 @@ function SpaceTabs({ spaceId, section }: { spaceId: string; section: Section }) 
     { label: 'Overview', key: 'overview' },
     { label: 'Chats', key: 'chats' },
     { label: 'Items', key: 'items' },
-    { label: 'Plans', key: 'plans' },
-    { label: 'Pipelines', key: 'pipelines' },
     { label: 'Settings', key: 'settings' },
   ];
   return (

@@ -44,7 +44,6 @@ export type SessionEventType =
   | 'scope_changed'
   | 'project_linked'
   | 'project_created'
-  | 'plan_created'
   | 'artifact_created'
   | 'item_created'
   | 'item_updated'
@@ -278,60 +277,3 @@ export interface ScheduledTask {
   last_run_at: number | null;
 }
 
-export interface PlanStep {
-  id: string;
-  plan_id: string;
-  title: string;
-  agent: 'claude_code' | 'codex' | 'mcp' | 'file_write' | 'git' | 'github' | 'eval' | 'subagent';
-  status: 'waiting' | 'running' | 'done' | 'error';
-  execution_id: string | null;
-  position: number;
-  prompt: string | null;
-  depends_on: string | null;
-  created_at: number;
-  completed_at: number | null;
-}
-
-export interface Plan {
-  id: string;
-  space_id: string;
-  session_id: string | null;
-  title: string;
-  status: 'running' | 'done' | 'error' | 'cancelled';
-  created_at: number;
-  completed_at: number | null;
-}
-
-export interface Pipeline {
-  id: string;
-  space_id: string;
-  title: string;
-  description: string | null;
-  created_at: number;
-  task_count?: number;
-  agents?: PlanStep['agent'][];
-}
-
-export interface PipelineTask {
-  id: string;
-  pipeline_id: string;
-  title: string;
-  agent: PlanStep['agent'];
-  prompt: string | null;
-  tool_args: string | null;
-  depends_on: string | null;
-  position: number;
-  created_at: number;
-}
-
-export interface WSPlanStepUpdated extends WSEvent {
-  type: 'plan_step_updated';
-  stepId: string;
-  status: PlanStep['status'];
-}
-
-export interface WSPlanUpdated extends WSEvent {
-  type: 'plan_updated';
-  planId: string;
-  status: Plan['status'];
-}

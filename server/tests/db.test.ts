@@ -25,9 +25,9 @@ describe('database schema', () => {
     expect(names).toContain('approvals');
     expect(names).toContain('memories');
     expect(names).toContain('scheduled_tasks');
-    // campaigns/campaign_tasks were renamed to plans/plan_steps.
-    expect(names).toContain('plans');
-    expect(names).toContain('plan_steps');
+    // plans/plan_steps have been dropped — the ConversationProvider handles orchestration.
+    expect(names).not.toContain('plans');
+    expect(names).not.toContain('plan_steps');
     expect(names).not.toContain('campaigns');
   });
 
@@ -36,13 +36,13 @@ describe('database schema', () => {
     expect(version).toBeGreaterThanOrEqual(1);
   });
 
-  it('has no foreign keys dangling at the dropped campaign tables', () => {
+  it('has no foreign keys referencing dropped campaign/plan tables', () => {
     const db = getDb();
-    for (const name of ['plan_steps', 'artifacts', 'session_events']) {
+    for (const name of ['space_items', 'artifacts', 'session_events']) {
       const sql = (db
         .prepare("SELECT sql FROM sqlite_master WHERE type='table' AND name = ?")
         .get(name) as { sql: string } | undefined)?.sql ?? '';
-      expect(sql, `${name} references a dropped table`).not.toMatch(/REFERENCES\s+campaigns?\b|campaign_tasks/);
+      expect(sql, `${name} references a dropped table`).not.toMatch(/REFERENCES\s+campaigns?\b|campaign_tasks|plans\b|plan_steps/);
     }
   });
 

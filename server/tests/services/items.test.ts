@@ -48,13 +48,9 @@ describe('items service', () => {
       name: 'Generated Report',
       content: '# Report',
       source_session_id: null,
-      source_plan_id: null,
-      source_step_id: null,
     });
     expect(generated).toMatchObject({
       source_session_id: null,
-      source_plan_id: null,
-      source_step_id: null,
     });
     expect(getItemsForSpace('sp1').map(item => item.type)).toEqual(
       expect.arrayContaining(['repo', 'file', 'note']),

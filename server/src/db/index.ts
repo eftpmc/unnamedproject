@@ -37,7 +37,10 @@ function rebuildTableAndReferencingTables(
   database.pragma('foreign_keys = OFF');
   database.exec(`ALTER TABLE ${referencedTable} RENAME TO ${tmpName};`);
   database.exec(createReferenced);
-  database.exec(`INSERT INTO ${referencedTable} SELECT * FROM ${tmpName};`);
+  const newCols = (database.prepare(`SELECT name FROM pragma_table_info('${referencedTable}')`).all() as { name: string }[])
+    .map(c => c.name)
+    .join(', ');
+  database.exec(`INSERT INTO ${referencedTable} (${newCols}) SELECT ${newCols} FROM ${tmpName};`);
 
   for (const { name, sql } of referencing) {
     const childTmp = `_${name}_rebuild_tmp`;
@@ -70,8 +73,6 @@ export function addDocumentItems(database: Database.Database): void {
         type TEXT NOT NULL CHECK(type IN ('repo','file','note','document')),
         name TEXT NOT NULL,
         source_session_id TEXT REFERENCES sessions(id) ON DELETE SET NULL,
-        source_plan_id TEXT REFERENCES plans(id) ON DELETE SET NULL,
-        source_step_id TEXT REFERENCES plan_steps(id) ON DELETE SET NULL,
         created_at INTEGER NOT NULL DEFAULT (unixepoch())
       );`,
     );
@@ -237,6 +238,67 @@ export function addConversationProviderColumns(database: Database.Database): voi
       PRAGMA foreign_keys = ON;
     `);
   }
+}
+
+function dropPlanSystem(database: Database.Database): void {
+  const planStepsExists = database
+    .prepare("SELECT 1 FROM sqlite_master WHERE type='table' AND name='plan_steps'")
+    .get();
+  if (!planStepsExists) return;
+  database.pragma('foreign_keys = OFF');
+  database.exec('DROP TABLE IF EXISTS plan_steps; DROP TABLE IF EXISTS plans;');
+
+  // Rebuild space_items without the FK columns that referenced the dropped tables.
+  const itemsSql = tableSql(database, 'space_items');
+  if (itemsSql && (itemsSql.includes('source_plan_id') || itemsSql.includes('source_step_id'))) {
+    const keepCols = (database.prepare("SELECT name FROM pragma_table_info('space_items')").all() as { name: string }[])
+      .map(c => c.name)
+      .filter(n => n !== 'source_plan_id' && n !== 'source_step_id')
+      .join(', ');
+    const tmpName = '_space_items_drop_plans_tmp';
+    database.exec(`ALTER TABLE space_items RENAME TO ${tmpName};`);
+    database.exec(`CREATE TABLE space_items (
+      id TEXT PRIMARY KEY,
+      space_id TEXT NOT NULL REFERENCES spaces(id) ON DELETE CASCADE,
+      type TEXT NOT NULL CHECK(type IN ('repo','file','note','document')),
+      name TEXT NOT NULL,
+      source_session_id TEXT REFERENCES sessions(id) ON DELETE SET NULL,
+      created_at INTEGER NOT NULL DEFAULT (unixepoch())
+    );`);
+    database.exec(`INSERT INTO space_items (${keepCols}) SELECT ${keepCols} FROM ${tmpName};`);
+    database.exec(`DROP TABLE ${tmpName};`);
+  }
+
+  // Rebuild session_events to remove the plan_id FK column pointing at the dropped table.
+  const eventsSql = tableSql(database, 'session_events');
+  if (eventsSql && eventsSql.includes('plan_id')) {
+    const keepCols = (database.prepare("SELECT name FROM pragma_table_info('session_events')").all() as { name: string }[])
+      .map(c => c.name)
+      .filter(n => n !== 'plan_id')
+      .join(', ');
+    const evtTmp = '_session_events_drop_plans_tmp';
+    database.exec(`ALTER TABLE session_events RENAME TO ${evtTmp};`);
+    database.exec(`CREATE TABLE session_events (
+      id TEXT PRIMARY KEY,
+      session_id TEXT NOT NULL REFERENCES sessions(id) ON DELETE CASCADE,
+      type TEXT NOT NULL CHECK(type IN (
+        'scope_changed','project_linked','project_created','plan_created',
+        'artifact_created','item_created','item_updated','approval_requested','approval_resolved',
+        'mcp_required','subagent_started','subagent_completed','connection_created'
+      )),
+      title TEXT NOT NULL,
+      body TEXT,
+      space_id TEXT REFERENCES spaces(id) ON DELETE SET NULL,
+      item_id TEXT REFERENCES space_items(id) ON DELETE SET NULL,
+      execution_id TEXT REFERENCES executions(id) ON DELETE SET NULL,
+      metadata TEXT NOT NULL DEFAULT '{}',
+      created_at INTEGER NOT NULL DEFAULT (unixepoch())
+    );`);
+    database.exec(`INSERT INTO session_events (${keepCols}) SELECT ${keepCols} FROM ${evtTmp};`);
+    database.exec(`DROP TABLE ${evtTmp};`);
+  }
+
+  database.pragma('foreign_keys = ON');
 }
 
 // Ordered, versioned schema migrations. Version 1 is the baseline: the full
@@ -421,8 +483,6 @@ function renameProjectsToSpacesAndAddItems(database: Database.Database): void {
       type TEXT NOT NULL CHECK(type IN ('repo','file','note')),
       name TEXT NOT NULL,
       source_session_id TEXT REFERENCES sessions(id) ON DELETE SET NULL,
-      source_plan_id TEXT REFERENCES plans(id) ON DELETE SET NULL,
-      source_step_id TEXT REFERENCES plan_steps(id) ON DELETE SET NULL,
       created_at INTEGER NOT NULL DEFAULT (unixepoch())
     );
     CREATE TABLE IF NOT EXISTS space_repos (
@@ -506,13 +566,9 @@ function renameProjectsToSpacesAndAddItems(database: Database.Database): void {
       title: string;
       mime_type: string;
       path: string | null;
-      source_plan_id: string | null;
-      source_step_id: string | null;
     }>;
     const insertItem = database.prepare(`
-      INSERT INTO space_items (
-        id, space_id, type, name, source_plan_id, source_step_id
-      ) VALUES (?, ?, 'file', ?, ?, ?)
+      INSERT INTO space_items (id, space_id, type, name) VALUES (?, ?, 'file', ?)
     `);
     const insertFile = database.prepare(
       'INSERT INTO space_files (item_id, file_path, mime_type) VALUES (?, ?, ?)',
@@ -527,8 +583,6 @@ function renameProjectsToSpacesAndAddItems(database: Database.Database): void {
         itemId,
         artifactSpaceId,
         artifact.title,
-        artifact.source_plan_id,
-        artifact.source_step_id,
       );
       insertFile.run(itemId, artifact.path ?? '', artifact.mime_type);
     }
@@ -635,14 +689,12 @@ function finalizeSpacesItemsAndPipelines(database: Database.Database): void {
       title: string;
       mime_type: string;
       path: string | null;
-      source_plan_id: string | null;
-      source_step_id: string | null;
       created_at: number;
     }>;
     const insertItem = database.prepare(`
       INSERT OR IGNORE INTO space_items (
-        id, space_id, type, name, source_plan_id, source_step_id, created_at
-      ) VALUES (?, ?, 'file', ?, ?, ?, ?)
+        id, space_id, type, name, created_at
+      ) VALUES (?, ?, 'file', ?, ?)
     `);
     const insertFile = database.prepare(`
       INSERT OR IGNORE INTO space_files (item_id, file_path, mime_type)
@@ -656,8 +708,6 @@ function finalizeSpacesItemsAndPipelines(database: Database.Database): void {
         itemId,
         spaceId,
         artifact.title,
-        artifact.source_plan_id,
-        artifact.source_step_id,
         artifact.created_at,
       );
       insertFile.run(itemId, artifact.path ?? '', artifact.mime_type);
@@ -762,6 +812,10 @@ export function initDb(overrideDataDir?: string): void {
       }
     },
   });
+
+  // Drop plan system tables on existing DBs — runs outside migrations so it
+  // executes idempotently on every startup without needing a migration version bump.
+  dropPlanSystem(db);
 }
 
 export function getDb(): Database.Database {
@@ -1513,7 +1567,6 @@ export function reconcileOrphanedExecutions(): void {
   }
 
   db.prepare("UPDATE session_turns SET status = 'error', error = 'Interrupted by server restart', completed_at = unixepoch() WHERE status = 'running'").run();
-  db.prepare("UPDATE plan_steps SET status = 'error', completed_at = unixepoch() WHERE status = 'running'").run();
   if (stale.length || staleTurns.length) {
     console.log(`Reconciled ${stale.length} orphaned execution(s) and ${staleTurns.length} orphaned turn(s) from a previous run.`);
   }
@@ -1602,7 +1655,6 @@ export interface DbSessionEvent {
   title: string;
   body: string | null;
   space_id: string | null;
-  plan_id: string | null;
   item_id: string | null;
   execution_id: string | null;
   metadata: string;
@@ -1615,7 +1667,6 @@ export function createSessionEvent(input: {
   title: string;
   body?: string | null;
   spaceId?: string | null;
-  planId?: string | null;
   itemId?: string | null;
   executionId?: string | null;
   metadata?: Record<string, unknown>;
@@ -1623,8 +1674,8 @@ export function createSessionEvent(input: {
   const id = newId();
   getDb()
     .prepare(`
-      INSERT INTO session_events (id, session_id, type, title, body, space_id, plan_id, item_id, execution_id, metadata)
-      VALUES (?,?,?,?,?,?,?,?,?,?)
+      INSERT INTO session_events (id, session_id, type, title, body, space_id, item_id, execution_id, metadata)
+      VALUES (?,?,?,?,?,?,?,?,?)
     `)
     .run(
       id,
@@ -1633,7 +1684,6 @@ export function createSessionEvent(input: {
       input.title,
       input.body ?? null,
       input.spaceId ?? null,
-      input.planId ?? null,
       input.itemId ?? null,
       input.executionId ?? null,
       JSON.stringify(input.metadata ?? {}),

@@ -26,7 +26,6 @@ export const toolDefinitions: Anthropic.Tool[] = [
         item_id: { type: 'string', description: 'ID of the repo item to work in' },
         prompt: { type: 'string', description: 'The task to give Claude Code. Be specific and thorough — it can handle complex, multi-file work. Include context, constraints, and what done looks like.' },
         model: { type: 'string', description: "Optional model override for this run, e.g. 'sonnet', 'opus', 'haiku', 'fable', or a full model ID. Defaults to the CLI's configured default." },
-        plan_step_id: { type: 'string', description: 'Plan step ID to link this execution to (from create_plan response)' },
       },
       required: ['space_id', 'item_id', 'prompt'],
     },
@@ -41,14 +40,13 @@ export const toolDefinitions: Anthropic.Tool[] = [
         item_id: { type: 'string', description: 'ID of the repo item to work in' },
         prompt: { type: 'string', description: 'The task to give Codex. Be specific — include codebase context, what to build, and what done looks like.' },
         model: { type: 'string', description: "Optional OpenAI model override for this run, e.g. 'gpt-5'. Defaults to the CLI's configured default." },
-        plan_step_id: { type: 'string', description: 'Plan step ID to link this execution to (from create_plan response)' },
       },
       required: ['space_id', 'item_id', 'prompt'],
     },
   },
   {
     name: 'tool_search',
-    description: 'Search for a tool by describing what you need to do. Returns the best-matching tools (name + description) across first-party tools and connected MCP servers. Once a tool is returned here, you can call it directly by name on this or any later turn in the conversation — it stays available for the rest of the session. If nothing relevant comes back, try rephrasing the query. Does not search agent roles — use delegate_to_agent directly for sub-agent delegation.',
+    description: 'Search for a tool by describing what you need to do. Returns the best-matching tools (name + description) across first-party tools and connected MCP servers. Once a tool is returned here, you can call it directly by name on this or any later turn in the conversation — it stays available for the rest of the session. If nothing relevant comes back, try rephrasing the query.',
     input_schema: {
       type: 'object',
       properties: {
@@ -67,7 +65,6 @@ export const toolDefinitions: Anthropic.Tool[] = [
         space_id: { type: 'string', description: 'Optional Space containing the repo item. Must be paired with item_id.' },
         item_id: { type: 'string', description: 'Optional repo item to use as the working directory. Must be paired with space_id.' },
         timeout_ms: { type: 'number', description: 'Timeout in milliseconds. Defaults to 30000, max 60000.' },
-        plan_step_id: { type: 'string', description: 'Plan step ID to link this execution to (from create_plan response)' },
       },
       required: ['command'],
     },
@@ -83,14 +80,13 @@ export const toolDefinitions: Anthropic.Tool[] = [
         op: { type: 'string', enum: ['log', 'diff', 'status', 'add', 'commit', 'push'] },
         message: { type: 'string', description: 'Commit message (for commit op)' },
         branch: { type: 'string', description: "Branch name to push (for push op, defaults to this session's agent branch)" },
-        plan_step_id: { type: 'string', description: 'Plan step ID to link this execution to (from create_plan response)' },
       },
       required: ['space_id', 'item_id', 'op'],
     },
   },
   {
     name: 'project_query',
-    description: 'Ask a question about a project codebase (structure, where something is implemented, how things connect). Queries a pre-built knowledge graph — fast and token-efficient. The graph is rebuilt automatically after invoke_claude_code/invoke_codex finish, so it should already reflect recent changes; call rebuild_graph manually only if you suspect it is stale (e.g. after manual write_file edits).',
+    description: 'Ask a question about a project codebase (structure, where something is implemented, how things connect). Queries a pre-built knowledge graph — fast and token-efficient. The graph is rebuilt automatically after coding agents finish, so it should already reflect recent changes; call rebuild_graph manually only if you suspect it is stale.',
     input_schema: {
       type: 'object',
       properties: {
@@ -103,7 +99,7 @@ export const toolDefinitions: Anthropic.Tool[] = [
   },
   {
     name: 'rebuild_graph',
-    description: 'Rebuild the knowledge graph for a project. The graph is rebuilt automatically after invoke_claude_code and invoke_codex finish — you do not need to call this after a coding agent session. Only call it manually when you suspect the graph is stale, e.g. after editing files directly with write_file.',
+    description: 'Rebuild the knowledge graph for a project. The graph is rebuilt automatically after coding agents finish — you do not need to call this after a coding agent session. Only call it manually when you suspect the graph is stale, e.g. after editing files directly.',
     input_schema: {
       type: 'object',
       properties: {
@@ -250,23 +246,8 @@ export const toolDefinitions: Anthropic.Tool[] = [
         item_id: { type: 'string', description: 'Repo item to write into' },
         path: { type: 'string', description: 'Path relative to the workspace root' },
         content: { type: 'string', description: 'New file contents' },
-        plan_step_id: { type: 'string', description: 'Plan step ID to link this execution to (from create_plan response)' },
       },
       required: ['space_id', 'item_id', 'path', 'content'],
-    },
-  },
-  {
-    name: 'create_note',
-    description: 'Create a durable note item in a Space for research, reports, summaries, drafts, test results, or other text output.',
-    input_schema: {
-      type: 'object',
-      properties: {
-        space_id: { type: 'string', description: 'Space that owns the note' },
-        name: { type: 'string', description: 'Human-readable note name' },
-        content: { type: 'string', description: 'Markdown or plain-text note content' },
-        plan_step_id: { type: 'string', description: 'Plan step ID to link this item to, when applicable' },
-      },
-      required: ['space_id', 'name', 'content'],
     },
   },
   {
@@ -278,9 +259,21 @@ export const toolDefinitions: Anthropic.Tool[] = [
         space_id: { type: 'string', description: 'Space that owns the file item' },
         file_path: { type: 'string', description: 'Absolute path to the file to register' },
         name: { type: 'string', description: 'Human-readable name (defaults to filename)' },
-        plan_step_id: { type: 'string', description: 'Plan step ID to mark done when this step is part of a plan.' },
       },
       required: ['space_id', 'file_path'],
+    },
+  },
+  {
+    name: 'create_note',
+    description: 'Create a durable note item in a Space for research, reports, summaries, drafts, test results, or other text output.',
+    input_schema: {
+      type: 'object',
+      properties: {
+        space_id: { type: 'string', description: 'Space that owns the note' },
+        name: { type: 'string', description: 'Human-readable note name' },
+        content: { type: 'string', description: 'Markdown or plain-text note content' },
+      },
+      required: ['space_id', 'name', 'content'],
     },
   },
   {
@@ -352,7 +345,6 @@ export const toolDefinitions: Anthropic.Tool[] = [
         repo_path: { type: 'string', description: 'Absolute filesystem path to the repository (only for type=repo)' },
         default_branch: { type: 'string', description: 'Default branch name (only for type=repo, optional)' },
         content: { type: 'string', description: 'Markdown content (only for type=note)' },
-        plan_step_id: { type: 'string', description: 'Plan step ID to link this item to and mark done, when applicable' },
       },
       required: ['space_id', 'name', 'type'],
     },
@@ -376,7 +368,7 @@ export const toolDefinitions: Anthropic.Tool[] = [
   },
   {
     name: 'list_connections',
-    description: 'List configured connections (API keys, GitHub, MCP servers). For MCP connections, includes available tool names — use tool_search to discover and call them by name.',
+    description: 'List configured connections (API keys, GitHub, MCP servers). For MCP connections, includes available tool names.',
     input_schema: {
       type: 'object',
       properties: {},
@@ -430,155 +422,6 @@ export const toolDefinitions: Anthropic.Tool[] = [
     },
   },
   {
-    name: 'create_plan',
-    description: 'Create a plan to track a coordinated multi-step effort. Supports two execution modes:\n\n**Manual dispatch** (existing): Call create_plan to get step IDs, then call invoke_claude_code / invoke_codex / etc. with plan_step_id to execute steps manually — useful when you need to inspect results between steps.\n\n**Auto-dispatch** (recommended for parallel work): Add a `prompt` to each step and `depends_on` (array of 0-based step indices) to declare dependencies, then call run_plan with the plan_id. Steps without dependencies run immediately in parallel; steps with dependencies wait for their deps to complete.\n\nStep agent types:\n- claude_code / codex: Fully autonomous coding agents — each step runs as an independent session that can implement entire features end-to-end: reading the codebase, writing and editing files across modules, running tests and fixing failures, installing dependencies, refactoring, and more. Write rich, detailed prompts for these steps exactly as you would for a direct invoke_claude_code call — describe what already exists, what to build, relevant constraints, and what "done" looks like. Do not write thin command-style prompts for coding agent steps; they are capable of handling ambitious, complex work.\n- mcp: MCP tool call\n- file_write: write a file\n- git: git operation\n- github: GitHub API\n- eval: run a shell command (prompt = the command, e.g. "npm test")\n- subagent: spawn a focused sub-agent with its own context window (lighter than a coding agent — use for analysis, summarization, or orchestration tasks, not for coding work)',
-    input_schema: {
-      type: 'object',
-      properties: {
-        space_id: { type: 'string', description: 'Space this plan belongs to' },
-        title: { type: 'string', description: 'Short name for the plan, e.g. "Auth refactor"' },
-        steps: {
-          type: 'array',
-          description: 'Ordered list of planned steps',
-          items: {
-            type: 'object',
-            properties: {
-              title: { type: 'string', description: 'Short label for this step' },
-              agent: { type: 'string', enum: ['claude_code', 'codex', 'mcp', 'file_write', 'git', 'github', 'eval', 'subagent'], description: 'Which executor to use' },
-              prompt: { type: 'string', description: 'Instruction for the agent / command for eval / message for git commit. Required when using run_plan auto-dispatch. For claude_code/codex steps: write the same rich, detailed brief you would give a direct invoke_claude_code call — what already exists, what to build, and what done looks like. These are full independent sessions, not simple commands.' },
-              depends_on: { type: 'array', items: { type: 'number' }, description: 'Zero-based indices of steps this step depends on. Steps with no depends_on run immediately in parallel when using run_plan.' },
-              tool_args: { type: 'object', description: 'Additional tool-specific arguments (e.g. {"op":"commit","branch":"main"} for git, {"path":"src/foo.ts","content":"..."} for file_write, {"connection_id":"...","tool_name":"...","tool_input":{}} for mcp, {"model":"opus"} to override the model for claude_code/codex steps)' },
-            },
-            required: ['title', 'agent'],
-          },
-        },
-      },
-      required: ['space_id', 'title', 'steps'],
-    },
-  },
-  {
-    name: 'run_plan',
-    description: 'Auto-dispatch all steps in a plan, running dependency-free steps in parallel and waiting for dependencies before starting dependent steps. Steps with no depends_on run immediately in parallel; steps only start once all their depends_on steps are done. Stops on first error by default. Use after create_plan when steps have prompts set.',
-    input_schema: {
-      type: 'object',
-      properties: {
-        plan_id: { type: 'string', description: 'ID of the plan to execute (returned by create_plan)' },
-        on_error: { type: 'string', enum: ['stop', 'continue'], description: 'Whether to stop the entire plan on first step error (default: stop) or continue with independent steps.' },
-      },
-      required: ['plan_id'],
-    },
-  },
-  {
-    name: 'create_pipeline',
-    description: 'Create a reusable workflow template (pipeline) with named tasks and dependency declarations. Pipelines can be run multiple times via run_pipeline, which instantiates them as plans. Useful for recurring multi-step workflows like "test → build → deploy".',
-    input_schema: {
-      type: 'object',
-      properties: {
-        space_id: { type: 'string', description: 'Space that owns this pipeline' },
-        title: { type: 'string', description: 'Name of the pipeline, e.g. "CI: test and deploy"' },
-        description: { type: 'string', description: 'What this pipeline does' },
-        tasks: {
-          type: 'array',
-          description: 'Ordered list of task templates',
-          items: {
-            type: 'object',
-            properties: {
-              title: { type: 'string' },
-              agent: { type: 'string', enum: ['claude_code', 'codex', 'mcp', 'file_write', 'git', 'github', 'eval', 'subagent'] },
-              prompt: { type: 'string', description: 'Default instruction/command for this task step. For claude_code/codex tasks: write the same rich, detailed brief you would give a direct invoke_claude_code call — what already exists, what to build, and what done looks like. These are full independent sessions, not simple commands.' },
-              depends_on: { type: 'array', items: { type: 'number' }, description: 'Zero-based indices of tasks this step depends on' },
-              tool_args: { type: 'object', description: 'Default tool-specific arguments for this step' },
-            },
-            required: ['title', 'agent'],
-          },
-        },
-      },
-      required: ['space_id', 'title', 'tasks'],
-    },
-  },
-  {
-    name: 'run_pipeline',
-    description: 'Instantiate a pipeline template as a plan and auto-dispatch all its steps. Equivalent to create_plan + run_plan for a saved pipeline template.',
-    input_schema: {
-      type: 'object',
-      properties: {
-        pipeline_id: { type: 'string', description: 'ID of the pipeline to run (from create_pipeline)' },
-        title: { type: 'string', description: 'Optional plan title override. Defaults to the pipeline title.' },
-        on_error: { type: 'string', enum: ['stop', 'continue'], description: 'Whether to stop on first task error (default: stop)' },
-      },
-      required: ['pipeline_id'],
-    },
-  },
-  {
-    name: 'delegate_to_agent',
-    description: 'Spawn a focused sub-agent with its own context window to complete a specific task. The sub-agent can read files, search code, write files, and create Space items, but cannot spawn further agents or create plans. Returns when the sub-agent finishes. Use for self-contained tasks that benefit from a fresh context.',
-    input_schema: {
-      type: 'object',
-      properties: {
-        instructions: { type: 'string', description: 'Clear instructions for what the sub-agent should do and return' },
-        space_id: { type: 'string', description: 'Optional Space context for the sub-agent' },
-        max_turns: { type: 'integer', description: 'Maximum turns the sub-agent may take (1–50, default 15). Raise for complex multi-step tasks.', minimum: 1, maximum: 50 },
-      },
-      required: ['instructions'],
-    },
-  },
-  {
-    name: 'resume_plan',
-    description: 'Resume a failed plan by resetting errored steps back to waiting. Returns the full step list with updated statuses so you know which steps need to be re-dispatched (done steps are left alone). After calling this, re-dispatch only the waiting steps with their existing step IDs.',
-    input_schema: {
-      type: 'object',
-      properties: {
-        plan_id: { type: 'string', description: 'ID of the failed plan to resume' },
-      },
-      required: ['plan_id'],
-    },
-  },
-  {
-    name: 'list_plans',
-    description: 'List plans for a Space — id, title, status, step counts, and timestamps.',
-    input_schema: {
-      type: 'object',
-      properties: {
-        space_id: { type: 'string', description: 'ID of the Space' },
-      },
-      required: ['space_id'],
-    },
-  },
-  {
-    name: 'get_plan',
-    description: 'Get full detail for a single plan — all steps with their statuses, execution IDs, and final result strings. Use after list_plans to inspect a specific plan. To read full output logs for a step, use get_execution_output with the step\'s execution_id.',
-    input_schema: {
-      type: 'object',
-      properties: {
-        plan_id: { type: 'string', description: 'ID of the plan' },
-      },
-      required: ['plan_id'],
-    },
-  },
-  {
-    name: 'get_execution_output',
-    description: 'Get the full output log and result for a single execution (a step run). Use this to read error details or full agent output for a specific plan step. Get the execution_id from get_plan.',
-    input_schema: {
-      type: 'object',
-      properties: {
-        execution_id: { type: 'string', description: 'ID of the execution to inspect' },
-      },
-      required: ['execution_id'],
-    },
-  },
-  {
-    name: 'wait_for_execution',
-    description: 'Block until an execution reaches a terminal state (done or error), then return its result and output log. Use after generate_video (or any fire-and-forget tool) when downstream work depends on its completion. Times out after timeout_seconds (default 300, max 600) and returns an error string if still running.',
-    input_schema: {
-      type: 'object',
-      properties: {
-        execution_id: { type: 'string', description: 'ID of the execution to wait for' },
-        timeout_seconds: { type: 'integer', description: 'Max seconds to wait before returning a timeout error (default 300, max 600)', minimum: 1, maximum: 600 },
-      },
-      required: ['execution_id'],
-    },
-  },
-  {
     name: 'list_scheduled_tasks',
     description: 'List all scheduled tasks for the user — their type, interval, enabled status, and next/last run times.',
     input_schema: { type: 'object', properties: {} },
@@ -618,6 +461,29 @@ export const toolDefinitions: Anthropic.Tool[] = [
         task_id: { type: 'string' },
       },
       required: ['task_id'],
+    },
+  },
+  {
+    name: 'get_execution_output',
+    description: 'Get the full output log and result for a single execution. Use this to read error details or full agent output.',
+    input_schema: {
+      type: 'object',
+      properties: {
+        execution_id: { type: 'string', description: 'ID of the execution to inspect' },
+      },
+      required: ['execution_id'],
+    },
+  },
+  {
+    name: 'wait_for_execution',
+    description: 'Block until an execution reaches a terminal state (done or error), then return its result and output log. Use after generate_video (or any fire-and-forget tool) when downstream work depends on its completion. Times out after timeout_seconds (default 300, max 600) and returns an error string if still running.',
+    input_schema: {
+      type: 'object',
+      properties: {
+        execution_id: { type: 'string', description: 'ID of the execution to wait for' },
+        timeout_seconds: { type: 'integer', description: 'Max seconds to wait before returning a timeout error (default 300, max 600)', minimum: 1, maximum: 600 },
+      },
+      required: ['execution_id'],
     },
   },
   {

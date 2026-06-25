@@ -1,5 +1,5 @@
 import { getToken, setToken, clearToken } from './auth.js';
-import type { Session, Message, Space, SpaceItem, SpaceItemType, Connection, EffortLevel, ClaudeModelInfo, UserSettings, AgentBudgets, Memory, ScheduledTask, SessionWorktree, Plan, PlanStep, Pipeline, PipelineTask, PermissionProfile, SessionEvent, SessionSpaceLink, Block, ItemTemplate } from '../types.js';
+import type { Session, Message, Space, SpaceItem, SpaceItemType, Connection, EffortLevel, ClaudeModelInfo, UserSettings, AgentBudgets, Memory, ScheduledTask, SessionWorktree, PermissionProfile, SessionEvent, SessionSpaceLink, Block, ItemTemplate } from '../types.js';
 
 async function request<T>(path: string, init: RequestInit = {}): Promise<T> {
   const token = getToken();
@@ -253,10 +253,6 @@ export function getItemCapabilities(spaceId: string, itemId: string): Promise<Sp
   return request(`/spaces/${spaceId}/items/${itemId}/capabilities`);
 }
 
-export function getSpacePlans(spaceId: string): Promise<Plan[]> {
-  return request(`/spaces/${spaceId}/plans`);
-}
-
 export function getSettings(): Promise<UserSettings> {
   return request('/settings');
 }
@@ -305,41 +301,3 @@ export function runScheduledTask(id: string): Promise<void> {
   return request(`/scheduled-tasks/${id}/run`, { method: 'POST' });
 }
 
-export function getAllPlans(): Promise<{ plans: (Plan & { space_name: string })[] }> {
-  return request('/plans');
-}
-
-export function getPlan(planId: string): Promise<{ plan: Plan; steps: PlanStep[] }> {
-  return request(`/plans/${planId}`);
-}
-
-export function cancelPlan(planId: string): Promise<{ plan: Plan }> {
-  return request(`/plans/${planId}/cancel`, { method: 'POST' });
-}
-
-export function resumePlan(planId: string): Promise<{ plan: Plan; steps: PlanStep[] }> {
-  return request(`/plans/${planId}/resume`, { method: 'POST' });
-}
-
-export function getSpacePipelines(spaceId: string): Promise<{ pipelines: Pipeline[] }> {
-  return request(`/spaces/${spaceId}/pipelines`);
-}
-
-export function getSpacePipeline(spaceId: string, id: string): Promise<{ pipeline: Pipeline; tasks: PipelineTask[] }> {
-  return request(`/spaces/${spaceId}/pipelines/${id}`);
-}
-
-export function deleteSpacePipeline(spaceId: string, id: string): Promise<void> {
-  return request(`/spaces/${spaceId}/pipelines/${id}`, { method: 'DELETE' });
-}
-
-export function runSpacePipeline(
-  spaceId: string,
-  id: string,
-  opts?: { title?: string; on_error?: 'stop' | 'continue' }
-): Promise<{ plan_id: string; space_id: string }> {
-  return request(`/spaces/${spaceId}/pipelines/${id}/run`, {
-    method: 'POST',
-    body: JSON.stringify(opts ?? {}),
-  });
-}

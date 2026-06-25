@@ -44,7 +44,7 @@ export async function renderVideo(
   title: string,
   scenes: VideoScene[],
   onProgress?: (progress: number) => void,
-  provenance?: { session_id?: string | null; plan_id?: string | null; step_id?: string | null },
+  provenance?: { session_id?: string | null },
 ): Promise<string> {
   // Pre-flight: verify Remotion entry point exists before attempting to bundle
   const entryPoint = path.resolve(__dirname, '../../../remotion/src/index.tsx');
@@ -82,8 +82,6 @@ export async function renderVideo(
     size_bytes: stat.size,
     mime_type: 'video/mp4',
     source_session_id: provenance?.session_id ?? null,
-    source_plan_id: provenance?.plan_id ?? null,
-    source_step_id: provenance?.step_id ?? null,
   });
 
   return fileName;

@@ -63,8 +63,6 @@ export function registerItemHandlers(): void {
           default_branch: args.default_branch as string | undefined,
           content: args.content as string | undefined,
           source_session_id: null,
-          source_plan_id: null,
-          source_step_id: null,
         },
         userId,
       ),
@@ -119,8 +117,6 @@ export function registerItemHandlers(): void {
         name: args.name as string,
         content: args.content as string,
         source_session_id: null,
-        source_plan_id: null,
-        source_step_id: null,
       });
       return JSON.stringify(item);
     },

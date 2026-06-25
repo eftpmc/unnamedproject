@@ -404,12 +404,6 @@ router.get('/:spaceId/items/:itemId/content', async (req, res) => {
   }
 });
 
-router.get('/:spaceId/plans', (req, res) => {
-  if (!requireSpace(req, res)) return;
-  res.json(getDb().prepare(
-    'SELECT * FROM plans WHERE space_id = ? ORDER BY created_at DESC',
-  ).all(req.params.spaceId));
-});
 
 router.get('/:spaceId/items/:itemId/tree', async (req, res) => {
   const item = requireRepoItem(req, res);

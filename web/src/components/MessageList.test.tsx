@@ -9,10 +9,6 @@ vi.mock('./ExecutionCard.js', () => ({
   default: ({ tool }: { tool: string }) => <div>{tool}</div>,
 }));
 
-vi.mock('./PlanCard.js', () => ({
-  default: () => <div>Plan card</div>,
-}));
-
 describe('MessageList', () => {
   it('does not render empty assistant messages without executions', () => {
     const messages: Message[] = [

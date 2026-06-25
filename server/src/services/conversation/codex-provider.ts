@@ -19,23 +19,29 @@ export class CodexProvider implements ConversationProvider {
   }
 
   async invoke(params: InvokeParams): Promise<{ costUsd?: number }> {
-    const executionId = createExecution(params.userId ?? 'system', newId(), null, 'codex');
-    const result = await invokeCodex(
-      { prompt: params.prompt, model: this.config.model },
-      {
-        userId: params.userId ?? 'system',
-        executionId,
-        apiKey: this.config.apiKey ?? null,
-        resumeSessionId: params.resumeSessionId,
-        mcpServers: params.mcpServers as Record<string, { command: string; args?: string[]; env?: Record<string, string> }>,
-        permissionProfile: this.config.permissionProfile as 'default' | 'fast' | 'strict',
-        signal: params.signal,
-        onText: params.onText,
-        onSessionId: params.onSessionId,
-      },
-    );
-    completeExecution(executionId, params.userId ?? 'system', 'done', result.result);
-    return { costUsd: result.costUsd };
+    const userId = params.userId ?? 'system';
+    const executionId = createExecution(userId, newId(), null, 'codex');
+    try {
+      const result = await invokeCodex(
+        { prompt: params.prompt, model: this.config.model },
+        {
+          userId,
+          executionId,
+          apiKey: this.config.apiKey ?? null,
+          resumeSessionId: params.resumeSessionId,
+          mcpServers: params.mcpServers,
+          permissionProfile: this.config.permissionProfile as 'default' | 'fast' | 'strict',
+          signal: params.signal,
+          onText: params.onText,
+          onSessionId: params.onSessionId,
+        },
+      );
+      completeExecution(executionId, userId, 'done', result.result);
+      return { costUsd: result.costUsd };
+    } catch (err) {
+      completeExecution(executionId, userId, 'error', err instanceof Error ? err.message : String(err));
+      throw err;
+    }
   }
 
   async resolveModel(): Promise<string> {

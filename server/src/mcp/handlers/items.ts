@@ -18,7 +18,7 @@ export function registerItemHandlers(): void {
       properties: { space_id: { type: 'string' } },
       required: ['space_id'],
     },
-    handler: async (args) => JSON.stringify(getItemsForSpace(args.space_id as string), null, 2),
+    handler: async (args, _userId) => JSON.stringify(getItemsForSpace(args.space_id as string), null, 2),
   });
 
   registerTool({
@@ -113,7 +113,7 @@ export function registerItemHandlers(): void {
       },
       required: ['space_id', 'name', 'content'],
     },
-    handler: async (args) => {
+    handler: async (args, _userId) => {
       const item = createNoteItem({
         space_id: args.space_id as string,
         name: args.name as string,
@@ -160,7 +160,7 @@ export function registerItemHandlers(): void {
       },
       required: ['template_id', 'blocks'],
     },
-    handler: async (args) =>
+    handler: async (args, _userId) =>
       runUpdateItemTemplate({
         template_id: args.template_id as string,
         name: args.name as string | undefined,

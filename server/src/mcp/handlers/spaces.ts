@@ -1,7 +1,6 @@
 import { registerTool } from '../registry.js';
-import { listProjects, updateProject, deleteProject } from '../../tools/project_ops.js';
+import { listProjects, createProject, updateProject, deleteProject } from '../../tools/project_ops.js';
 import { getDb } from '../../db/index.js';
-import { newId } from '../../lib/ids.js';
 
 export function registerSpaceHandlers(): void {
   registerTool({
@@ -23,13 +22,12 @@ export function registerSpaceHandlers(): void {
       required: ['name'],
     },
     handler: async (args, userId) => {
-      const id = newId();
-      const name = args.name as string;
-      const description = (args.description as string | undefined) ?? null;
-      getDb()
-        .prepare('INSERT INTO spaces (id, user_id, name, description, enabled_connection_ids) VALUES (?,?,?,?,?)')
-        .run(id, userId, name, description, '[]');
-      return JSON.stringify({ id, name, description });
+      await createProject({ name: args.name as string, description: args.description as string | undefined, with_repo: false }, userId, 'mcp');
+      const space = getDb()
+        .prepare('SELECT id, name, description FROM spaces WHERE user_id = ? AND name = ? ORDER BY created_at DESC LIMIT 1')
+        .get(userId, args.name as string) as { id: string; name: string; description: string | null } | undefined;
+      if (!space) return 'Error: failed to create space';
+      return JSON.stringify(space);
     },
   });
 

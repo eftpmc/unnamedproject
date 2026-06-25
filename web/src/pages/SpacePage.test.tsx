@@ -88,4 +88,20 @@ describe('SpacePage', () => {
     expect(await screen.findByText('Repository browser')).toBeInTheDocument();
     expect(screen.queryByRole('link', { name: 'Pipelines' })).not.toBeInTheDocument();
   });
+
+  it('shows the persistent space-name header on every tab, with no per-tab title or breadcrumb', async () => {
+    renderPage('/spaces/space-1/items');
+    // Space name appears as the header title on a non-Overview tab.
+    expect(await screen.findByRole('heading', { name: 'Test Space' })).toBeInTheDocument();
+    // No separate "Items" page title.
+    expect(screen.queryByRole('heading', { name: 'Items' })).not.toBeInTheDocument();
+    // No breadcrumb link back to the space (the old single stray link).
+    expect(screen.queryByRole('link', { name: 'Test Space' })).not.toBeInTheDocument();
+  });
+
+  it('does not show the space description anywhere', async () => {
+    renderPage('/spaces/space-1');
+    expect(screen.queryByText('A useful Space')).not.toBeInTheDocument();
+    expect(screen.queryByText('Everything related to this work, in one place.')).not.toBeInTheDocument();
+  });
 });

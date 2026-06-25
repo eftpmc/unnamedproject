@@ -111,20 +111,11 @@ export default function SpacePage() {
       : <PageShell><PageHeader title="Item not found" /></PageShell>;
   }
 
-  const title = section === 'overview' ? space.name : section[0].toUpperCase() + section.slice(1);
-  const description = section === 'overview' ? space.description || 'Everything related to this work, in one place.' : undefined;
-
   return (
     <PageShell>
       <PageHeader
-        className="border-0"
-        title={title}
-        description={description}
-        breadcrumb={section === 'overview' ? undefined : (
-          <Link to={`/spaces/${space.id}`} className="text-xs text-muted-foreground transition-colors hover:text-foreground">
-            {space.name}
-          </Link>
-        )}
+        className="border-0 pb-0"
+        title={space.name}
         actions={section !== 'settings' ? (
           <Button size="sm" className="h-8 gap-1.5 text-xs" onClick={() => startChat.mutate()} disabled={startChat.isPending}>
             <MessageSquare size={14} />

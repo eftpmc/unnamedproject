@@ -15,25 +15,30 @@ function PageHeader({
   actions,
   breadcrumb,
   className,
+  contentClassName,
 }: {
   title: React.ReactNode;
   description?: React.ReactNode;
   actions?: React.ReactNode;
   breadcrumb?: React.ReactNode;
   className?: string;
+  /** Constrains and centers the header's inner content (e.g. "max-w-2xl") to match a page's content column width. The header's own background/border stay full-width. */
+  contentClassName?: string;
 }) {
   return (
     <header className={cn('shrink-0 border-b border-border-soft px-5 py-4', className)}>
-      {breadcrumb && <div className="mb-1.5">{breadcrumb}</div>}
-      <div className="flex min-h-8 items-center justify-between gap-3">
-        <h1 className="truncate text-[15px] font-semibold tracking-tight text-foreground">
-          {title}
-        </h1>
-        {actions && <div className="flex shrink-0 items-center gap-2">{actions}</div>}
+      <div className={cn('mx-auto w-full', contentClassName)}>
+        {breadcrumb && <div className="mb-1.5">{breadcrumb}</div>}
+        <div className="flex min-h-8 items-center justify-between gap-3">
+          <h1 className="truncate text-[15px] font-semibold tracking-tight text-foreground">
+            {title}
+          </h1>
+          {actions && <div className="flex shrink-0 items-center gap-2">{actions}</div>}
+        </div>
+        {description && (
+          <div className="mt-1 text-sm leading-relaxed text-muted-foreground">{description}</div>
+        )}
       </div>
-      {description && (
-        <div className="mt-1 text-sm leading-relaxed text-muted-foreground">{description}</div>
-      )}
     </header>
   );
 }

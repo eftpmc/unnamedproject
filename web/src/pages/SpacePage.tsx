@@ -115,6 +115,7 @@ export default function SpacePage() {
     <PageShell>
       <PageHeader
         className="border-0 pb-0"
+        contentClassName="max-w-2xl"
         title={space.name}
         actions={section !== 'settings' ? (
           <Button size="sm" className="h-8 gap-1.5 text-xs" onClick={() => startChat.mutate()} disabled={startChat.isPending}>
@@ -812,26 +813,28 @@ function SpaceTabs({ spaceId, section }: { spaceId: string; section: Section }) 
   ];
   return (
     <div className="overflow-x-auto px-5 py-3 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
-      <nav
-        className="inline-flex h-9 w-fit items-center gap-1 rounded-lg bg-muted p-[3px]"
-        aria-label="Space sections"
-      >
-        {tabs.map(tab => (
-          <Link
-            key={tab.key}
-            to={tab.key === 'overview' ? `/spaces/${spaceId}` : `/spaces/${spaceId}/${tab.key}`}
-            aria-current={section === tab.key ? 'page' : undefined}
-            className={cn(
-              'inline-flex h-full items-center justify-center rounded-md px-3 text-sm font-medium transition-all',
-              section === tab.key
-                ? 'bg-background text-foreground shadow-sm'
-                : 'text-muted-foreground hover:text-foreground',
-            )}
-          >
-            {tab.label}
-          </Link>
-        ))}
-      </nav>
+      <div className="mx-auto w-full max-w-2xl">
+        <nav
+          className="inline-flex h-9 w-fit items-center gap-1 rounded-lg bg-muted p-[3px]"
+          aria-label="Space sections"
+        >
+          {tabs.map(tab => (
+            <Link
+              key={tab.key}
+              to={tab.key === 'overview' ? `/spaces/${spaceId}` : `/spaces/${spaceId}/${tab.key}`}
+              aria-current={section === tab.key ? 'page' : undefined}
+              className={cn(
+                'inline-flex h-full items-center justify-center rounded-md px-3 text-sm font-medium transition-all',
+                section === tab.key
+                  ? 'bg-background text-foreground shadow-sm'
+                  : 'text-muted-foreground hover:text-foreground',
+              )}
+            >
+              {tab.label}
+            </Link>
+          ))}
+        </nav>
+      </div>
     </div>
   );
 }

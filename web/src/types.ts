@@ -169,7 +169,7 @@ export interface Connection {
   id: string;
   name: string;
   type: 'anthropic' | 'openai' | 'github' | 'mcp' | 'local' | 'claude_code' | 'codex';
-  purpose: 'lead_agent' | 'claude_code' | 'codex' | 'github' | 'mcp' | 'tool';
+  purpose: 'claude_code' | 'codex' | 'github' | 'mcp' | 'tool';
   created_at: number;
 }
 

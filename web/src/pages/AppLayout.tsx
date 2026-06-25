@@ -56,7 +56,7 @@ export default function AppLayout() {
     queryFn: getConnections,
     staleTime: 60_000,
   });
-  const hasLeadAgent = connections.some(c => c.purpose === 'lead_agent');
+  const hasLeadAgent = connections.some(c => c.purpose === 'claude_code' || c.purpose === 'codex');
 
   useEffect(() => {
     connect();

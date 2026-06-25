@@ -376,13 +376,13 @@ export const toolDefinitions: Anthropic.Tool[] = [
   },
   {
     name: 'create_connection',
-    description: "Create a new connection (API key, GitHub token, MCP server, or local model endpoint) from credentials the user gives you in chat. Always requires the user's explicit approval before the credential is stored — you'll see whether they approved or denied. Use purpose 'lead_agent' for the main conversation model, 'claude_code'/'codex' for coding agent auth, 'github' for a GitHub token, 'mcp' for an MCP server, or 'tool' for anything else. For type 'mcp', config needs command (string), and optionally args (array) and env (object). For type 'anthropic'/'openai'/'github', config needs apiKey. For type 'local', config needs baseUrl and modelName, apiKey optional. For lead_agent with type 'openai', config also needs modelName; with type 'local', config needs baseUrl and modelName.",
+    description: "Create a new connection (API key, GitHub token, MCP server) from credentials the user gives you in chat. Always requires the user's explicit approval before the credential is stored — you'll see whether they approved or denied. Use purpose 'claude_code' for a Claude Code connection, 'codex' for Codex, 'github' for a GitHub token, 'mcp' for an MCP server, or 'tool' for anything else. For type 'mcp', config needs command (string), and optionally args (array) and env (object). For type 'anthropic'/'openai'/'github', config needs apiKey.",
     input_schema: {
       type: 'object',
       properties: {
         name: { type: 'string', description: 'Human-readable name for this connection' },
         type: { type: 'string', enum: ['anthropic', 'openai', 'github', 'mcp', 'local'], description: 'Connection type' },
-        purpose: { type: 'string', enum: ['lead_agent', 'claude_code', 'codex', 'github', 'mcp', 'tool'], description: "What this connection is used for. Defaults to 'tool'." },
+        purpose: { type: 'string', enum: ['claude_code', 'codex', 'github', 'mcp', 'tool'], description: "What this connection is used for. Defaults to 'tool'." },
         config: { type: 'object', description: "Credential/config payload, e.g. {\"apiKey\":\"...\"} or {\"command\":\"npx\",\"args\":[...],\"env\":{...}} for mcp." },
       },
       required: ['name', 'type', 'config'],

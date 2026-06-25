@@ -28,11 +28,9 @@ function compose(middleware: AgentMiddleware[]): (ctx: AgentPipelineCtx) => Prom
   };
 }
 
-const TOOL_LABELS: Record<AgentUsageTool, string> = {
+const TOOL_LABELS: Partial<Record<AgentUsageTool, string>> = {
   claude_code: 'Claude Code',
   codex: 'Codex',
-  lead_agent: 'Lead Agent',
-  subagent: 'Sub-agent',
 };
 
 /** Hard-stops the run before it starts if the daily or monthly budget for this tool is already used up. */

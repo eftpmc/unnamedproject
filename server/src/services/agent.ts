@@ -1,12 +1,8 @@
-import Anthropic from '@anthropic-ai/sdk';
 import { getDb, recordAgentUsage, setSessionProviderInfo, type AgentUsageTool } from '../db/index.js';
 import { broadcast } from './socket.js';
 import { newId } from '../lib/ids.js';
-import { getAnthropicKey } from './anthropic.js';
 import { classifyIntent } from './intent.js';
 import { buildContext } from './context.js';
-import { extractAndRemember } from './extract-memory.js';
-import { maybeDistill } from './distill.js';
 import { generateMcpToken } from '../mcp/auth.js';
 import { getConversationProvider } from './conversation-provider.js';
 
@@ -23,44 +19,21 @@ export function getActiveSessionIds(): string[] {
   return Array.from(activeTurnControllers.keys());
 }
 
-async function maybeGenerateSessionTitle(userId: string, sessionId: string): Promise<void> {
-  // Only generate if session has no title yet
+function maybeGenerateSessionTitle(userId: string, sessionId: string): void {
   const session = getDb()
     .prepare('SELECT title FROM sessions WHERE id = ?')
     .get(sessionId) as { title: string | null } | undefined;
   if (!session || session.title) return;
 
-  // Get the first user message
   const firstUser = getDb()
     .prepare("SELECT content FROM messages WHERE session_id = ? AND role = 'user' ORDER BY created_at LIMIT 1")
     .get(sessionId) as { content: string } | undefined;
   if (!firstUser) return;
 
-  let apiKey: string;
-  try {
-    apiKey = getAnthropicKey(userId);
-  } catch {
-    return; // no key configured, skip silently
-  }
-
-  try {
-    const client = new Anthropic({ apiKey });
-    const response = await client.messages.create({
-      model: 'claude-haiku-4-5-20251001',
-      max_tokens: 40,
-      messages: [{
-        role: 'user',
-        content: `Write a short title (4-6 words) for a conversation that starts with this message. Reply with only the title, no quotes or punctuation:\n\n${firstUser.content.slice(0, 500)}`,
-      }],
-    });
-    const title = response.content[0].type === 'text' ? response.content[0].text.trim() : null;
-    if (!title) return;
-
-    getDb().prepare('UPDATE sessions SET title = ? WHERE id = ?').run(title, sessionId);
-    broadcast(userId, { type: 'session_title_updated', sessionId, title });
-  } catch {
-    // title generation is best-effort, never throw
-  }
+  const words = firstUser.content.trim().split(/\s+/);
+  const title = words.slice(0, 6).join(' ') + (words.length > 6 ? '…' : '');
+  getDb().prepare('UPDATE sessions SET title = ? WHERE id = ?').run(title, sessionId);
+  broadcast(userId, { type: 'session_title_updated', sessionId, title });
 }
 
 export async function runAgentTurn(userId: string, sessionId: string, userMessageId: string): Promise<void> {
@@ -151,16 +124,5 @@ export async function runAgentTurn(userId: string, sessionId: string, userMessag
   broadcast(userId, { type: 'turn_complete', sessionId, status: 'done' });
 
   recordAgentUsage(userId, provider.type as AgentUsageTool, invokeResult.costUsd ?? 0);
-
-  maybeGenerateSessionTitle(userId, sessionId).catch(() => {});
-  try {
-    const anthropicKey = getAnthropicKey(userId);
-    extractAndRemember(userId, sessionId, anthropicKey).catch(() => {});
-    maybeDistill(userId, sessionId, anthropicKey).catch(() => {});
-  } catch {
-    if (process.env.ANTHROPIC_API_KEY) {
-      extractAndRemember(userId, sessionId, process.env.ANTHROPIC_API_KEY).catch(() => {});
-      maybeDistill(userId, sessionId, process.env.ANTHROPIC_API_KEY).catch(() => {});
-    }
-  }
+  maybeGenerateSessionTitle(userId, sessionId);
 }

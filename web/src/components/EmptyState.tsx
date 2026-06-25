@@ -30,7 +30,7 @@ export default function EmptyState({ hasLeadAgent }: EmptyStateProps) {
             </div>
             <h2 className="text-base font-semibold text-foreground">One step before you start</h2>
             <p className="mt-1.5 text-sm leading-relaxed text-muted-foreground">
-              Connect an Anthropic API key to power the lead agent.
+              Connect Claude Code or Codex to power your conversations.
             </p>
           </div>
           <button
@@ -39,8 +39,8 @@ export default function EmptyState({ hasLeadAgent }: EmptyStateProps) {
             className="flex w-full items-center justify-between rounded-xl border border-border-soft bg-card px-4 py-3.5 text-left transition-[border-color,box-shadow] hover:border-border hover:shadow-sm"
           >
             <div>
-              <div className="text-sm font-medium text-foreground">Open Settings → Agents</div>
-              <div className="mt-0.5 text-xs text-muted-foreground">Add your Anthropic API key to get started</div>
+              <div className="text-sm font-medium text-foreground">Open Settings → Tools</div>
+              <div className="mt-0.5 text-xs text-muted-foreground">Add Claude Code or Codex to get started</div>
             </div>
             <ArrowRight size={15} className="shrink-0 text-faint-fg" />
           </button>

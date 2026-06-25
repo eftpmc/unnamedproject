@@ -10,13 +10,11 @@ const router = Router();
 router.use(requireAuth);
 
 const VALID_TYPES = ['anthropic', 'openai', 'github', 'mcp', 'local', 'claude_code', 'codex'] as const;
-const VALID_PURPOSES = ['lead_agent', 'claude_code', 'codex', 'github', 'mcp', 'tool'] as const;
+const VALID_PURPOSES = ['claude_code', 'codex', 'github', 'mcp', 'tool'] as const;
 
-// For most purposes exactly one type is valid. lead_agent accepts all three provider types.
 // claude_code and codex are self-describing types — purpose is derived from the type.
 // The entries below still guard against manually setting purpose=claude_code/codex on a foreign type.
 const PURPOSE_ALLOWED_TYPES: Record<string, string[]> = {
-  lead_agent: ['anthropic', 'openai', 'local'],
   claude_code: ['claude_code'],
   codex: ['codex'],
   github: ['github'],
@@ -62,22 +60,6 @@ export function createConnectionRecord(
     const allowedTypes = PURPOSE_ALLOWED_TYPES[connectionPurpose];
     if (allowedTypes && !allowedTypes.includes(type)) {
       throw new ConnectionValidationError(`Purpose '${connectionPurpose}' does not support type '${type}'. Allowed: ${allowedTypes.join(', ')}`);
-    }
-  }
-  // Validate required config fields for lead_agent non-anthropic providers
-  if (connectionPurpose === 'lead_agent' && type === 'openai') {
-    const cfg = config as Record<string, unknown>;
-    if (!cfg.modelName || typeof cfg.modelName !== 'string') {
-      throw new ConnectionValidationError("OpenAI lead agent connection requires 'modelName' in config (e.g. 'gpt-4o')");
-    }
-  }
-  if (connectionPurpose === 'lead_agent' && type === 'local') {
-    const cfg = config as Record<string, unknown>;
-    if (!cfg.baseUrl || typeof cfg.baseUrl !== 'string') {
-      throw new ConnectionValidationError("Local lead agent connection requires 'baseUrl' in config (e.g. 'http://localhost:11434/v1')");
-    }
-    if (!cfg.modelName || typeof cfg.modelName !== 'string') {
-      throw new ConnectionValidationError("Local lead agent connection requires 'modelName' in config (e.g. 'qwen2.5:14b')");
     }
   }
   const id = newId();

@@ -47,7 +47,7 @@ const TABS: { id: Tab; label: string }[] = [
   { id: 'account', label: 'Account' },
 ];
 
-type SetupKind = 'lead_agent' | 'claude_code' | 'codex' | 'mcp';
+type SetupKind = 'claude_code' | 'codex' | 'mcp';
 
 const SETUP_META: Record<SetupKind, {
   title: string;
@@ -58,16 +58,9 @@ const SETUP_META: Record<SetupKind, {
   secretOptional?: boolean;
   secretOptionalHint?: string;
 }> = {
-  lead_agent: {
-    title: 'Lead Agent',
-    description: 'Runs the main conversation and decides when tools are needed.',
-    type: 'anthropic',
-    placeholder: 'sk-ant-...',
-    secretLabel: 'Anthropic API key',
-  },
   claude_code: {
     title: 'Claude Code',
-    description: 'Runs coding tasks in a workspace repo.',
+    description: 'Powers your conversations. Handles all tasks — coding, research, orchestration.',
     type: 'claude_code',
     placeholder: 'sk-ant-...',
     secretLabel: 'Anthropic API key',
@@ -75,7 +68,7 @@ const SETUP_META: Record<SetupKind, {
   },
   codex: {
     title: 'Codex',
-    description: 'Runs Codex coding tasks in a workspace repo.',
+    description: 'Powers your conversations using the OpenAI Codex CLI.',
     type: 'codex',
     placeholder: 'sk-...',
     secretLabel: 'OpenAI API key',
@@ -99,10 +92,6 @@ interface SetupFormState {
   mcpPreset: string;
   mcpExtraArg: string;
   mcpEnvValues: Record<string, string>;
-  leadAgentProvider: 'anthropic' | 'openai' | 'local';
-  openaiModelName: string;
-  localBaseUrl: string;
-  localModelName: string;
   providerMode: 'local' | 'api';
   providerModel: string;
   providerPermissionProfile: 'default' | 'fast' | 'strict';
@@ -117,10 +106,6 @@ const INITIAL_SETUP_FORM: SetupFormState = {
   mcpPreset: 'custom',
   mcpExtraArg: '',
   mcpEnvValues: {},
-  leadAgentProvider: 'anthropic',
-  openaiModelName: '',
-  localBaseUrl: '',
-  localModelName: '',
   providerMode: 'local',
   providerModel: '',
   providerPermissionProfile: 'default',
@@ -332,11 +317,6 @@ function ConnectionRow({
         {connection ? (
           <div className="flex items-center gap-2">
             {health?.ok === false ? <ConnectionErrorBadge /> : <ConnectedBadge />}
-            {kind === 'lead_agent' && (
-              <span className="text-xs text-muted-foreground">
-                {connection.type === 'local' ? 'local model' : connection.type === 'openai' ? 'OpenAI' : 'Claude'}
-              </span>
-            )}
           </div>
         ) : <NotSetBadge />}
         <Button size="sm" variant={connection ? 'ghost' : 'default'} onClick={() => onOpenSetup(kind)}>
@@ -370,7 +350,7 @@ function SetupModal({
   if (!activeSetup) return null;
   const meta = SETUP_META[activeSetup];
   const existing = connections.find(c => c.purpose === activeSetup);
-  const { setupName, secret, mcpCommand, mcpArgs, mcpEnv, mcpPreset, mcpExtraArg, mcpEnvValues, leadAgentProvider, openaiModelName, localBaseUrl, localModelName, providerMode, providerModel, providerPermissionProfile } = form;
+  const { setupName, secret, mcpCommand, mcpArgs, mcpEnv, mcpPreset, mcpExtraArg, mcpEnvValues, providerMode, providerModel, providerPermissionProfile } = form;
 
   const selectedPreset = activeSetup === 'mcp' && mcpPreset !== 'custom'
     ? MCP_PRESETS.find(p => p.id === mcpPreset)
@@ -390,11 +370,6 @@ function SetupModal({
               <div className="text-sm text-foreground">{existing.name}</div>
               <div className="mt-1 flex items-center gap-2">
                 <ConnectedBadge />
-                {activeSetup === 'lead_agent' && (
-                  <span className="text-xs text-muted-foreground">
-                    {existing.type === 'local' ? 'local model' : existing.type === 'openai' ? 'OpenAI' : 'Claude'}
-                  </span>
-                )}
               </div>
             </div>
             <DeleteBtn onClick={() => onDelete(existing.id)} />
@@ -569,7 +544,7 @@ export default function Settings() {
     mutationFn: () => {
       if (!activeSetup) throw new Error('Pick what you want to set up');
       const meta = SETUP_META[activeSetup];
-      const { setupName, secret, mcpCommand, mcpArgs, mcpEnv, mcpPreset, mcpExtraArg, mcpEnvValues, leadAgentProvider, openaiModelName, localBaseUrl, localModelName, providerMode, providerModel, providerPermissionProfile } = form;
+      const { setupName, secret, mcpCommand, mcpArgs, mcpEnv, mcpPreset, mcpExtraArg, mcpEnvValues, providerMode, providerModel, providerPermissionProfile } = form;
       let config: Record<string, unknown>;
 
       if (activeSetup === 'mcp') {
@@ -596,24 +571,6 @@ export default function Settings() {
           }
           config = { command: mcpCommand.trim(), args: mcpArgs.trim() || '[]', env: mcpEnv.trim() || '{}' };
         }
-      } else if (activeSetup === 'lead_agent') {
-        if (leadAgentProvider === 'anthropic') {
-          if (!secret.trim()) throw new Error('Anthropic API key required');
-          config = { apiKey: secret.trim() };
-        } else if (leadAgentProvider === 'openai') {
-          if (!secret.trim()) throw new Error('OpenAI API key required');
-          if (!openaiModelName.trim()) throw new Error('Model name required');
-          config = { apiKey: secret.trim(), modelName: openaiModelName.trim() };
-        } else {
-          if (!localBaseUrl.trim()) throw new Error('Base URL required');
-          if (!localModelName.trim()) throw new Error('Model name required');
-          config = {
-            baseUrl: localBaseUrl.trim(),
-            modelName: localModelName.trim(),
-            ...(secret.trim() ? { apiKey: secret.trim() } : {}),
-          };
-        }
-        return createConnection({ name: setupName.trim() || meta.title, type: leadAgentProvider, purpose: activeSetup, config });
       } else if (activeSetup === 'claude_code' || activeSetup === 'codex') {
         if (providerMode === 'api' && !secret.trim()) {
           throw new Error('API key is required for API key mode');

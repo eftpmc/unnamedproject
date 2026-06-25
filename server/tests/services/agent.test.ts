@@ -27,8 +27,6 @@ vi.mock('../../src/services/executor.js', () => ({
   requestApproval: vi.fn().mockResolvedValue('approved'),
 }));
 vi.mock('../../src/mcp/auth.js', () => ({ generateMcpToken: vi.fn().mockReturnValue('mcp-tok') }));
-vi.mock('../../src/services/extract-memory.js', () => ({ extractAndRemember: vi.fn().mockResolvedValue(undefined) }));
-vi.mock('../../src/services/distill.js', () => ({ maybeDistill: vi.fn().mockResolvedValue(undefined) }));
 
 beforeAll(() => {
   closeDb();

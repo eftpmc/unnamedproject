@@ -240,6 +240,46 @@ export function addConversationProviderColumns(database: Database.Database): voi
   }
 }
 
+export function removeLeadAgentConnections(database: Database.Database): void {
+  const connSql = tableSql(database, 'connections');
+  if (!connSql) return;
+
+  // Convert any lead_agent connections to claude_code if the user has no claude_code connection yet;
+  // otherwise delete them — they were only used for background API calls that no longer exist.
+  database.exec(`
+    UPDATE connections
+    SET purpose = 'claude_code', type = 'anthropic'
+    WHERE purpose = 'lead_agent'
+      AND user_id NOT IN (
+        SELECT user_id FROM connections WHERE purpose = 'claude_code'
+      );
+
+    DELETE FROM connections WHERE purpose = 'lead_agent';
+  `);
+
+  // Rebuild connections table to remove lead_agent from the purpose CHECK constraint.
+  if (connSql.includes("'lead_agent'")) {
+    database.pragma('foreign_keys = OFF');
+    database.exec(`
+      ALTER TABLE connections RENAME TO _connections_drop_lead_agent_tmp;
+      CREATE TABLE connections (
+        id TEXT PRIMARY KEY,
+        user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+        name TEXT NOT NULL,
+        type TEXT NOT NULL CHECK(type IN ('anthropic','openai','github','mcp','local','claude_code','codex')),
+        purpose TEXT NOT NULL DEFAULT 'tool'
+          CHECK(purpose IN ('claude_code','codex','github','mcp','tool')),
+        encrypted_config TEXT NOT NULL,
+        created_at INTEGER NOT NULL DEFAULT (unixepoch()),
+        UNIQUE(user_id, name)
+      );
+      INSERT INTO connections SELECT * FROM _connections_drop_lead_agent_tmp;
+      DROP TABLE _connections_drop_lead_agent_tmp;
+    `);
+    database.pragma('foreign_keys = ON');
+  }
+}
+
 function dropPlanSystem(database: Database.Database): void {
   const planStepsExists = database
     .prepare("SELECT 1 FROM sqlite_master WHERE type='table' AND name='plan_steps'")
@@ -328,6 +368,7 @@ export const migrations: Migration[] = [
   { version: 10, name: 'repair-document-items-foreign-keys', noTransaction: true, up: repairDocumentItemsForeignKeys },
   { version: 11, name: 'add-item-templates', noTransaction: true, up: addItemTemplates },
   { version: 12, name: 'add-conversation-provider-columns', noTransaction: true, up: addConversationProviderColumns },
+  { version: 13, name: 'remove-lead-agent-connections', noTransaction: true, up: removeLeadAgentConnections },
 ];
 
 function tableSql(database: Database.Database, name: string): string | undefined {
@@ -842,7 +883,7 @@ function applySchema(): void {
       name TEXT NOT NULL,
       type TEXT NOT NULL CHECK(type IN ('anthropic','openai','github','mcp')),
       purpose TEXT NOT NULL DEFAULT 'tool'
-        CHECK(purpose IN ('lead_agent','claude_code','codex','github','mcp','tool')),
+        CHECK(purpose IN ('claude_code','codex','github','mcp','tool')),
       encrypted_config TEXT NOT NULL,
       created_at INTEGER NOT NULL DEFAULT (unixepoch()),
       UNIQUE(user_id, name)
@@ -1742,9 +1783,9 @@ export function setProjectsRoot(userId: string, projectsRoot: string): void {
     .run(userId, projectsRoot);
 }
 
-export type AgentUsageTool = 'claude_code' | 'codex' | 'lead_agent' | 'subagent';
+export type AgentUsageTool = 'claude_code' | 'codex' | 'lead_agent' | 'subagent'; // lead_agent/subagent kept for historical records
 
-export type AgentBudgets = Record<AgentUsageTool, number | null>;
+export type AgentBudgets = { claude_code: number | null; codex: number | null };
 export type AgentBudgetPeriod = 'monthly' | 'daily';
 
 export function getAgentBudgets(userId: string, period: AgentBudgetPeriod = 'monthly'): AgentBudgets {
@@ -1760,15 +1801,11 @@ export function getAgentBudgets(userId: string, period: AgentBudgetPeriod = 'mon
     return {
       claude_code: row?.claude_code_daily_budget_usd ?? null,
       codex: row?.codex_daily_budget_usd ?? null,
-      lead_agent: null,
-      subagent: null,
     };
   }
   return {
     claude_code: row?.claude_code_budget_usd ?? null,
     codex: row?.codex_budget_usd ?? null,
-    lead_agent: null,
-    subagent: null,
   };
 }
 

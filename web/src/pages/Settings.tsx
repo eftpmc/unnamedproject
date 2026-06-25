@@ -729,7 +729,7 @@ export default function Settings() {
       </div>
 
       <PageBody>
-        <ContentColumn className="mx-0 max-w-3xl">
+        <ContentColumn className="max-w-3xl">
 
           {/* ── Agents ─────────────────────────────────── */}
           {tab === 'agents' && (

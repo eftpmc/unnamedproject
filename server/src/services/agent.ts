@@ -1500,6 +1500,7 @@ export async function runAgentTurn(userId: string, sessionId: string, userMessag
   let currentMessages = [...messages];
 
   const replyId = newId();
+  const replyCreatedAt = Math.floor(Date.now() / 1000);
   let fullText = '';
   let started = false;
   let totalInputTokens = 0;
@@ -1528,9 +1529,9 @@ export async function runAgentTurn(userId: string, sessionId: string, userMessag
                 if (!started) {
                   started = true;
                   getDb()
-                    .prepare('INSERT INTO messages (id, session_id, role, content) VALUES (?,?,?,?)')
-                    .run(replyId, sessionId, 'assistant', '');
-                  broadcast(userId, { type: 'message_started', sessionId, message: { id: replyId, role: 'assistant', content: '' } });
+                    .prepare('INSERT INTO messages (id, session_id, role, content, created_at) VALUES (?,?,?,?,?)')
+                    .run(replyId, sessionId, 'assistant', '', replyCreatedAt);
+                  broadcast(userId, { type: 'message_started', sessionId, message: { id: replyId, role: 'assistant', content: '', created_at: replyCreatedAt } });
                 }
                 fullText += delta;
                 broadcast(userId, { type: 'message_delta', sessionId, messageId: replyId, delta });
@@ -1566,7 +1567,7 @@ export async function runAgentTurn(userId: string, sessionId: string, userMessag
       // assistant message in history (the API rejects empty assistant content).
       if (fullText) {
         getDb().prepare('UPDATE messages SET content = ? WHERE id = ?').run(fullText, replyId);
-        broadcast(userId, { type: 'message_created', sessionId, message: { id: replyId, role: 'assistant', content: fullText } });
+        broadcast(userId, { type: 'message_created', sessionId, message: { id: replyId, role: 'assistant', content: fullText, created_at: replyCreatedAt } });
       } else {
         getDb().prepare('DELETE FROM messages WHERE id = ?').run(replyId);
       }
@@ -1587,7 +1588,7 @@ export async function runAgentTurn(userId: string, sessionId: string, userMessag
     getDb()
       .prepare('UPDATE messages SET content = ? WHERE id = ?')
       .run(fullText, replyId);
-    broadcast(userId, { type: 'message_created', sessionId, message: { id: replyId, role: 'assistant', content: fullText } });
+    broadcast(userId, { type: 'message_created', sessionId, message: { id: replyId, role: 'assistant', content: fullText, created_at: replyCreatedAt } });
   }
 
   getDb()

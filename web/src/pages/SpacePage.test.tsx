@@ -102,6 +102,7 @@ describe('SpacePage', () => {
 
   it('does not show the space description anywhere', async () => {
     renderPage('/spaces/space-1');
+    expect(await screen.findByRole('heading', { name: 'Test Space' })).toBeInTheDocument();
     expect(screen.queryByText('A useful Space')).not.toBeInTheDocument();
     expect(screen.queryByText('Everything related to this work, in one place.')).not.toBeInTheDocument();
   });

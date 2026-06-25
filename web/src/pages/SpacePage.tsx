@@ -811,7 +811,7 @@ function SpaceTabs({ spaceId, section }: { spaceId: string; section: Section }) 
     { label: 'Settings', key: 'settings' },
   ];
   return (
-    <div className="px-6 py-3">
+    <div className="overflow-x-auto px-5 py-3 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
       <nav
         className="inline-flex h-9 w-fit items-center gap-1 rounded-lg bg-muted p-[3px]"
         aria-label="Space sections"

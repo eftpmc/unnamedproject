@@ -1,5 +1,5 @@
 import { getToken, setToken, clearToken } from './auth.js';
-import type { Session, Message, Space, SpaceItem, SpaceItemType, Connection, EffortLevel, ClaudeModelInfo, UserSettings, AgentBudgets, Memory, ScheduledTask, SessionWorktree, PermissionProfile, SessionEvent, SessionSpaceLink, Block, ItemTemplate } from '../types.js';
+import type { Session, Message, Space, SpaceItem, SpaceItemType, Connection, EffortLevel, UserSettings, AgentBudgets, Memory, ScheduledTask, SessionWorktree, PermissionProfile, SessionEvent, SessionSpaceLink, Block, ItemTemplate } from '../types.js';
 
 async function request<T>(path: string, init: RequestInit = {}): Promise<T> {
   const token = getToken();
@@ -96,9 +96,6 @@ export function getMe(): Promise<{ email: string }> {
   return request('/auth/me');
 }
 
-export function getModelsForEffort(effort: EffortLevel): Promise<ClaudeModelInfo[]> {
-  return request(`/sessions/models?effort=${effort}`);
-}
 
 export function getMessages(sessionId: string): Promise<Message[]> {
   return request(`/sessions/${sessionId}/messages`);

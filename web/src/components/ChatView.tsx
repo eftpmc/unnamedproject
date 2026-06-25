@@ -17,7 +17,7 @@ import WorktreeDiff from './WorktreeDiff.js';
 import ContextBar from './ContextBar.js';
 import EmptyChatState from './EmptyChatState.js';
 import ScopePopover from './ScopePopover.js';
-import { getMessages, sendMessage, getChats, updateChatConfig, getModelsForEffort, getSessionWorktree, mergeSessionBranch, getWorktreeDiff, getSpaces, truncateMessagesFrom, approveExecution, rejectExecution, getChatEvents, getChatStatus, stopChat } from '../lib/api.js';
+import { getMessages, sendMessage, getChats, updateChatConfig, getSessionWorktree, mergeSessionBranch, getWorktreeDiff, getSpaces, truncateMessagesFrom, approveExecution, rejectExecution, getChatEvents, getChatStatus, stopChat } from '../lib/api.js';
 import { subscribe } from '../lib/ws.js';
 import { cn } from '../lib/utils.js';
 import { usePageTitle } from '../lib/usePageTitle.js';
@@ -63,11 +63,6 @@ export default function ChatView({ chatId }: ChatViewProps) {
   const effort = chat?.effort ?? 'medium';
 
   usePageTitle(chat?.title);
-
-  const { data: models = [] } = useQuery({
-    queryKey: ['models', effort],
-    queryFn: () => getModelsForEffort(effort),
-  });
 
   const { data: projects = [] } = useQuery({
     queryKey: ['spaces'],
@@ -668,8 +663,6 @@ export default function ChatView({ chatId }: ChatViewProps) {
             pendingFiles={dropFiles}
             onPendingFilesConsumed={() => setDropFiles([])}
             effort={effort}
-            model={chat?.model ?? null}
-            models={models}
             onConfigChange={(config) => configMutation.mutate(config)}
           />
         </div>

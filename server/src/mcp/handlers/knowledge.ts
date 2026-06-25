@@ -1,7 +1,6 @@
 import { registerTool } from '../registry.js';
 import { runProjectQuery } from '../../tools/project_query.js';
 import { buildGraph } from '../../services/graphify.js';
-import { getAnthropicKey } from '../../services/anthropic.js';
 
 export function registerKnowledgeHandlers(): void {
   registerTool({
@@ -17,12 +16,10 @@ export function registerKnowledgeHandlers(): void {
       required: ['space_id', 'item_id', 'question'],
     },
     handler: async (args, userId) => {
-      let key: string | null = null;
-      try { key = getAnthropicKey(userId); } catch { /* none configured */ }
       return runProjectQuery(
         { space_id: args.space_id as string, item_id: args.item_id as string, question: args.question as string },
         userId,
-        key,
+        null,
       );
     },
   });
@@ -44,9 +41,7 @@ export function registerKnowledgeHandlers(): void {
       if (!item || item.space_id !== args.space_id || item.type !== 'repo') {
         return `Error: repo item ${args.item_id} not found in space ${args.space_id}`;
       }
-      let key: string | null = null;
-      try { key = getAnthropicKey(userId); } catch { /* none configured */ }
-      await buildGraph(item.repo_path, item.id, key);
+      await buildGraph(item.repo_path, item.id, null);
       return 'Knowledge graph rebuilt successfully.';
     },
   });

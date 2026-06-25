@@ -12,25 +12,16 @@ export function normalizePermissionProfile(value: unknown): PermissionProfile {
 }
 
 export function getDelegateEnv(
-  tool: DelegateTool,
-  apiKey: string | null,
+  _tool: DelegateTool,
   profile: PermissionProfile,
 ): NodeJS.ProcessEnv {
-  if (profile === 'trusted') {
-    return tool === 'claude_code' && apiKey
-      ? { ...process.env, ANTHROPIC_API_KEY: apiKey }
-      : tool === 'codex' && apiKey
-        ? { ...process.env, OPENAI_API_KEY: apiKey }
-        : process.env;
-  }
+  if (profile === 'trusted') return process.env;
 
   const env: NodeJS.ProcessEnv = {};
   for (const key of ['PATH', 'HOME', 'TMPDIR', 'TEMP', 'TMP', 'SHELL']) {
     if (process.env[key]) env[key] = process.env[key];
   }
   if (process.env.NODE_ENV) env.NODE_ENV = process.env.NODE_ENV;
-  if (tool === 'claude_code' && apiKey) env.ANTHROPIC_API_KEY = apiKey;
-  if (tool === 'codex' && apiKey) env.OPENAI_API_KEY = apiKey;
   return env;
 }
 

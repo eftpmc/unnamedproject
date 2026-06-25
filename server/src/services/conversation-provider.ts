@@ -27,18 +27,16 @@ export async function getConversationProvider(userId: string): Promise<Conversat
 
   if (conn) {
     const cfg = getDecryptedConfig(conn.id, userId);
-    const mode = (cfg.mode as 'local' | 'api') ?? 'local';
     const model = cfg.model as string | undefined;
     const permissionProfile = (cfg.permissionProfile as string) ?? 'default';
-    const apiKey = cfg.apiKey as string | undefined;
 
     if (conn.type === 'codex') {
       const { CodexProvider } = await import('./conversation/codex-provider.js');
-      return new CodexProvider({ mode, model: model ?? 'codex-mini-latest', permissionProfile, apiKey });
+      return new CodexProvider({ model: model ?? 'codex-mini-latest', permissionProfile });
     }
-    return new ClaudeCodeProvider({ mode, model: model ?? 'claude-sonnet-4-6', permissionProfile, apiKey });
+    return new ClaudeCodeProvider({ model: model ?? 'claude-sonnet-4-6', permissionProfile });
   }
 
   // Default: local Claude Code CLI
-  return new ClaudeCodeProvider({ mode: 'local', model: 'claude-sonnet-4-6', permissionProfile: 'default' });
+  return new ClaudeCodeProvider({ model: 'claude-sonnet-4-6', permissionProfile: 'default' });
 }

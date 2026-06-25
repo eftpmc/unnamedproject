@@ -4,10 +4,8 @@ import { newId } from '../../lib/ids.js';
 import type { ConversationProvider, InvokeParams } from '../conversation-provider.js';
 
 interface CodexConfig {
-  mode: 'local' | 'api';
   model: string;
   permissionProfile: string;
-  apiKey?: string;
 }
 
 export class CodexProvider implements ConversationProvider {
@@ -27,7 +25,6 @@ export class CodexProvider implements ConversationProvider {
         {
           userId,
           executionId,
-          apiKey: this.config.apiKey ?? null,
           resumeSessionId: params.resumeSessionId,
           mcpServers: params.mcpServers,
           permissionProfile: this.config.permissionProfile as 'default' | 'fast' | 'strict',

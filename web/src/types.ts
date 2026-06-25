@@ -8,13 +8,6 @@ export interface Session {
   updated_at: number;
 }
 
-export interface ClaudeModelInfo {
-  id: string;
-  display_name: string;
-  created_at: string;
-  supports_effort: boolean;
-}
-
 export type EffortLevel = 'low' | 'medium' | 'high';
 
 export interface MessageExecution {

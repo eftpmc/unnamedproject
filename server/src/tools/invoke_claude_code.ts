@@ -26,7 +26,6 @@ interface ToolContext {
   userId: string;
   executionId: string;
   repoPath?: string;   // optional — defaults to cwd for conversational sessions
-  apiKey: string | null;
   resumeSessionId?: string | null;
   mcpServers?: Record<string, McpServerConfig>;
   permissionProfile?: PermissionProfile;
@@ -85,7 +84,7 @@ export async function invokeClaudeCode(input: ClaudeCodeInput, ctx: ToolContext)
   return new Promise((resolve, reject) => {
     const proc = spawn('claude', args, {
       cwd: ctx.repoPath ?? process.cwd(),
-      env: getDelegateEnv('claude_code', ctx.apiKey, profile),
+      env: getDelegateEnv('claude_code', profile),
     });
 
     registerProcess(ctx.executionId, proc);

@@ -23,7 +23,6 @@ interface ToolContext {
   userId: string;
   executionId: string;
   repoPath?: string;
-  apiKey: string | null;
   resumeSessionId?: string | null;
   mcpServers?: Record<string, McpServerConfig>;
   permissionProfile?: PermissionProfile;
@@ -110,7 +109,7 @@ export async function invokeCodex(input: CodexInput, ctx: ToolContext): Promise<
     const proc = spawn('codex', args, {
       cwd: ctx.repoPath ?? process.cwd(),
       stdio: ['ignore', 'pipe', 'pipe'],
-      env: getDelegateEnv('codex', ctx.apiKey, profile),
+      env: getDelegateEnv('codex', profile),
     });
 
     registerProcess(ctx.executionId, proc);

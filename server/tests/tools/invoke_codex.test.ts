@@ -25,7 +25,7 @@ describe('invoke_codex', () => {
 
     const promise = invokeCodex(
       { prompt: 'fix the login bug' },
-      { userId: 'u1', executionId: 'e1', repoPath: '/tmp/repo', apiKey: 'sk-test' }
+      { userId: 'u1', executionId: 'e1', repoPath: '/tmp/repo' }
     );
     await new Promise(setImmediate);
 
@@ -43,7 +43,7 @@ describe('invoke_codex', () => {
 
     const promise = invokeCodex(
       { prompt: 'do the thing', model: 'gpt-5' },
-      { userId: 'u1', executionId: 'e1', repoPath: '/tmp/repo', apiKey: 'sk-test' }
+      { userId: 'u1', executionId: 'e1', repoPath: '/tmp/repo' }
     );
     await new Promise(setImmediate);
     proc.emit('close', 0);
@@ -55,21 +55,20 @@ describe('invoke_codex', () => {
     expect(args[idx + 1]).toBe('gpt-5');
   });
 
-  it('uses a minimal env by default while preserving the OpenAI key', async () => {
+  it('uses a minimal env by default and does not leak unrelated secrets', async () => {
     process.env.UNRELATED_SECRET = 'do-not-leak';
     const proc = makeProc();
     vi.mocked(spawn).mockReturnValue(proc as any);
 
     const promise = invokeCodex(
       { prompt: 'do the thing' },
-      { userId: 'u1', executionId: 'e1', repoPath: '/tmp/repo', apiKey: 'sk-test' }
+      { userId: 'u1', executionId: 'e1', repoPath: '/tmp/repo' }
     );
     await new Promise(setImmediate);
     proc.emit('close', 0);
     await promise;
 
     const options = vi.mocked(spawn).mock.calls[0][2] as { env: NodeJS.ProcessEnv };
-    expect(options.env.OPENAI_API_KEY).toBe('sk-test');
     expect(options.env.UNRELATED_SECRET).toBeUndefined();
     delete process.env.UNRELATED_SECRET;
   });
@@ -80,7 +79,7 @@ describe('invoke_codex', () => {
 
     const promise = invokeCodex(
       { prompt: 'do the thing' },
-      { userId: 'u1', executionId: 'e1', repoPath: '/tmp/repo', apiKey: 'sk-test', permissionProfile: 'strict' }
+      { userId: 'u1', executionId: 'e1', repoPath: '/tmp/repo', permissionProfile: 'strict' }
     );
     await new Promise(setImmediate);
     proc.emit('close', 0);
@@ -97,7 +96,7 @@ describe('invoke_codex', () => {
     const promise = invokeCodex(
       { prompt: 'do the thing' },
       {
-        userId: 'u1', executionId: 'e1', repoPath: '/tmp/repo', apiKey: 'sk-test',
+        userId: 'u1', executionId: 'e1', repoPath: '/tmp/repo',
         mcpServers: { myserver: { command: 'npx', args: ['-y', 'some-pkg'], env: { TOKEN: 'abc' } } },
       }
     );
@@ -118,7 +117,7 @@ describe('invoke_codex', () => {
 
     const promise = invokeCodex(
       { prompt: 'do the thing' },
-      { userId: 'u1', executionId: 'e1', repoPath: '/tmp/repo', apiKey: 'sk-test' }
+      { userId: 'u1', executionId: 'e1', repoPath: '/tmp/repo' }
     );
     await new Promise(setImmediate);
     proc.emit('close', 0);
@@ -136,7 +135,7 @@ describe('invoke_codex', () => {
 
     const promise = invokeCodex(
       { prompt: 'continue please' },
-      { userId: 'u1', executionId: 'e1', repoPath: '/tmp/repo', apiKey: 'sk-test', resumeSessionId: 'thread-123' }
+      { userId: 'u1', executionId: 'e1', repoPath: '/tmp/repo', resumeSessionId: 'thread-123' }
     );
     await new Promise(setImmediate);
     proc.emit('close', 0);
@@ -153,7 +152,7 @@ describe('invoke_codex', () => {
 
     const promise = invokeCodex(
       { prompt: 'do the thing' },
-      { userId: 'u1', executionId: 'e1', repoPath: '/tmp/repo', apiKey: 'sk-test' }
+      { userId: 'u1', executionId: 'e1', repoPath: '/tmp/repo' }
     );
     await new Promise(setImmediate);
     proc.stderr.emit('data', Buffer.from('boom: something went wrong'));
@@ -168,7 +167,7 @@ describe('invoke_codex', () => {
 
     const promise = invokeCodex(
       { prompt: 'do the thing' },
-      { userId: 'u1', executionId: 'e1', repoPath: '/tmp/repo', apiKey: 'sk-test' }
+      { userId: 'u1', executionId: 'e1', repoPath: '/tmp/repo' }
     );
     await new Promise(setImmediate);
     proc.emit('error', new Error('spawn codex ENOENT'));

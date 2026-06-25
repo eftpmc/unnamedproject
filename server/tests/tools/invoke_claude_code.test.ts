@@ -26,7 +26,7 @@ describe('invoke_claude_code', () => {
 
     const promise = invokeClaudeCode(
       { prompt: 'fix the login bug' },
-      { userId: 'u1', executionId: 'e1', repoPath: '/tmp/repo', apiKey: 'sk-test' }
+      { userId: 'u1', executionId: 'e1', repoPath: '/tmp/repo' }
     );
     await new Promise(setImmediate);
 
@@ -44,7 +44,7 @@ describe('invoke_claude_code', () => {
 
     const promise = invokeClaudeCode(
       { prompt: 'fix the login bug' },
-      { userId: 'u1', executionId: 'e1', repoPath: '/tmp/repo', apiKey: 'sk-test' }
+      { userId: 'u1', executionId: 'e1', repoPath: '/tmp/repo' }
     );
     await new Promise(setImmediate);
     proc.emit('close', 0);
@@ -62,7 +62,7 @@ describe('invoke_claude_code', () => {
 
     const promise = invokeClaudeCode(
       { prompt: 'fix the login bug', model: 'opus' },
-      { userId: 'u1', executionId: 'e1', repoPath: '/tmp/repo', apiKey: 'sk-test' }
+      { userId: 'u1', executionId: 'e1', repoPath: '/tmp/repo' }
     );
     await new Promise(setImmediate);
     proc.emit('close', 0);
@@ -74,21 +74,20 @@ describe('invoke_claude_code', () => {
     expect(args[idx + 1]).toBe('opus');
   });
 
-  it('uses a minimal env by default while preserving the Anthropic key', async () => {
+  it('uses a minimal env by default and does not leak unrelated secrets', async () => {
     process.env.UNRELATED_SECRET = 'do-not-leak';
     const proc = makeProc();
     vi.mocked(spawn).mockReturnValue(proc as any);
 
     const promise = invokeClaudeCode(
       { prompt: 'fix the login bug' },
-      { userId: 'u1', executionId: 'e1', repoPath: '/tmp/repo', apiKey: 'sk-test' }
+      { userId: 'u1', executionId: 'e1', repoPath: '/tmp/repo' }
     );
     await new Promise(setImmediate);
     proc.emit('close', 0);
     await promise;
 
     const options = vi.mocked(spawn).mock.calls[0][2] as { env: NodeJS.ProcessEnv };
-    expect(options.env.ANTHROPIC_API_KEY).toBe('sk-test');
     expect(options.env.UNRELATED_SECRET).toBeUndefined();
     delete process.env.UNRELATED_SECRET;
   });
@@ -99,7 +98,7 @@ describe('invoke_claude_code', () => {
 
     const promise = invokeClaudeCode(
       { prompt: 'fix the login bug' },
-      { userId: 'u1', executionId: 'e1', repoPath: '/tmp/repo', apiKey: 'sk-test', permissionProfile: 'strict' }
+      { userId: 'u1', executionId: 'e1', repoPath: '/tmp/repo', permissionProfile: 'strict' }
     );
     await new Promise(setImmediate);
     proc.emit('close', 0);
@@ -119,7 +118,6 @@ describe('invoke_claude_code', () => {
         userId: 'u1',
         executionId: 'e1',
         repoPath: '/tmp/repo',
-        apiKey: 'sk-test',
         mcpServers: { browser: { command: 'node', args: ['server.js'] } },
       }
     );
@@ -142,7 +140,7 @@ describe('invoke_claude_code', () => {
 
     const promise = invokeClaudeCode(
       { prompt: 'continue please' },
-      { userId: 'u1', executionId: 'e1', repoPath: '/tmp/repo', apiKey: 'sk-test', resumeSessionId: 'sess-123' }
+      { userId: 'u1', executionId: 'e1', repoPath: '/tmp/repo', resumeSessionId: 'sess-123' }
     );
     await new Promise(setImmediate);
     proc.emit('close', 0);
@@ -158,7 +156,7 @@ describe('invoke_claude_code', () => {
 
     const promise = invokeClaudeCode(
       { prompt: 'fix the login bug' },
-      { userId: 'u1', executionId: 'e1', repoPath: '/tmp/repo', apiKey: 'sk-test' }
+      { userId: 'u1', executionId: 'e1', repoPath: '/tmp/repo' }
     );
     await new Promise(setImmediate);
     proc.stderr.emit('data', Buffer.from('boom: auth error'));
@@ -173,7 +171,7 @@ describe('invoke_claude_code', () => {
 
     const promise = invokeClaudeCode(
       { prompt: 'fix the login bug' },
-      { userId: 'u1', executionId: 'e1', repoPath: '/tmp/repo', apiKey: 'sk-test' }
+      { userId: 'u1', executionId: 'e1', repoPath: '/tmp/repo' }
     );
     await new Promise(setImmediate);
     proc.emit('error', new Error('spawn claude ENOENT'));

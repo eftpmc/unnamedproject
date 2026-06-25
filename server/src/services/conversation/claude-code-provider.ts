@@ -6,10 +6,8 @@ import type { McpServerConfig } from '../../tools/invoke_claude_code.js';
 import type { ConversationProvider, InvokeParams } from '../conversation-provider.js';
 
 interface ClaudeCodeConfig {
-  mode: 'local' | 'api';
   model: string;
   permissionProfile: string;
-  apiKey?: string;
 }
 
 export class ClaudeCodeProvider implements ConversationProvider {
@@ -29,7 +27,6 @@ export class ClaudeCodeProvider implements ConversationProvider {
         {
           userId,
           executionId,
-          apiKey: this.config.apiKey ?? null,
           resumeSessionId: params.resumeSessionId,
           mcpServers: params.mcpServers as Record<string, McpServerConfig>,
           permissionProfile: normalizePermissionProfile(this.config.permissionProfile),

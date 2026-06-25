@@ -3,7 +3,7 @@ import { ArrowUp, FileText, Mic, MicOff, Paperclip, Pencil, Square, X } from 'lu
 import { Textarea } from '@/components/ui/textarea';
 import { cn } from '@/lib/utils';
 import ChatConfigPopover from './ChatConfigPopover.js';
-import type { ClaudeModelInfo, EffortLevel } from '../types.js';
+import type { EffortLevel } from '../types.js';
 
 interface SpeechRecognitionAlternative {
   transcript: string;
@@ -60,15 +60,13 @@ interface MessageInputProps {
   pendingFiles?: File[];
   onPendingFilesConsumed?: () => void;
   effort: EffortLevel;
-  model: string | null;
-  models: ClaudeModelInfo[];
-  onConfigChange: (config: { effort?: EffortLevel; model?: string | null }) => void;
+  onConfigChange: (config: { effort?: EffortLevel }) => void;
 }
 
 const MAX_ATTACHMENTS = 8;
 const MAX_ATTACHMENT_BYTES = 10 * 1024 * 1024;
 
-export default function MessageInput({ value, onChange, onSend, onStop, disabled, isEditing, onCancelEdit, pendingFiles, onPendingFilesConsumed, effort, model, models, onConfigChange }: MessageInputProps) {
+export default function MessageInput({ value, onChange, onSend, onStop, disabled, isEditing, onCancelEdit, pendingFiles, onPendingFilesConsumed, effort, onConfigChange }: MessageInputProps) {
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const recognitionRef = useRef<SpeechRecognition | null>(null);
@@ -257,8 +255,6 @@ export default function MessageInput({ value, onChange, onSend, onStop, disabled
             </button>
             <ChatConfigPopover
               effort={effort}
-              model={model}
-              models={models}
               onConfigChange={onConfigChange}
             />
           </div>

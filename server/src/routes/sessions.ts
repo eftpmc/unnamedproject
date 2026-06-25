@@ -3,7 +3,7 @@ import simpleGit from 'simple-git';
 import { createSessionEvent, getDb, getSpaceForUser, getSessionEvents, getSessionProjectLinks, linkSessionProject } from '../db/index.js';
 import { newId } from '../lib/ids.js';
 import { requireAuth, type AuthedRequest } from '../middleware/auth.js';
-import { DEFAULT_EFFORT, isEffortLevel, getModelsForEffort } from '../services/anthropic.js';
+import { DEFAULT_EFFORT, isEffortLevel } from '../services/anthropic.js';
 import { stopAgentTurn, getActiveSessionIds } from '../services/agent.js';
 
 const router = Router();
@@ -89,20 +89,6 @@ router.get('/search', (req, res) => {
   res.json(rows);
 });
 
-router.get('/models', async (req, res) => {
-  const { userId } = req as AuthedRequest;
-  const { effort } = req.query as { effort?: string };
-  if (!isEffortLevel(effort)) {
-    res.status(400).json({ error: 'effort must be one of: low, medium, high' });
-    return;
-  }
-  try {
-    const models = await getModelsForEffort(userId, effort);
-    res.json(models);
-  } catch (err) {
-    res.status(400).json({ error: err instanceof Error ? err.message : String(err) });
-  }
-});
 
 router.patch('/:id', (req, res) => {
   const { userId } = req as unknown as AuthedRequest;

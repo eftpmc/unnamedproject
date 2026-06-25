@@ -92,7 +92,6 @@ interface SetupFormState {
   mcpPreset: string;
   mcpExtraArg: string;
   mcpEnvValues: Record<string, string>;
-  providerMode: 'local' | 'api';
   providerModel: string;
   providerPermissionProfile: 'default' | 'fast' | 'strict';
 }
@@ -106,7 +105,6 @@ const INITIAL_SETUP_FORM: SetupFormState = {
   mcpPreset: 'custom',
   mcpExtraArg: '',
   mcpEnvValues: {},
-  providerMode: 'local',
   providerModel: '',
   providerPermissionProfile: 'default',
 };
@@ -350,7 +348,7 @@ function SetupModal({
   if (!activeSetup) return null;
   const meta = SETUP_META[activeSetup];
   const existing = connections.find(c => c.purpose === activeSetup);
-  const { setupName, secret, mcpCommand, mcpArgs, mcpEnv, mcpPreset, mcpExtraArg, mcpEnvValues, providerMode, providerModel, providerPermissionProfile } = form;
+  const { setupName, secret, mcpCommand, mcpArgs, mcpEnv, mcpPreset, mcpExtraArg, mcpEnvValues, providerModel, providerPermissionProfile } = form;
 
   const selectedPreset = activeSetup === 'mcp' && mcpPreset !== 'custom'
     ? MCP_PRESETS.find(p => p.id === mcpPreset)
@@ -423,26 +421,6 @@ function SetupModal({
             ) : (activeSetup === 'claude_code' || activeSetup === 'codex') ? (
               <>
                 <div>
-                  <Label>Mode</Label>
-                  <div className="mt-1 grid grid-cols-2 gap-2">
-                    {(['local', 'api'] as const).map(mode => (
-                      <button
-                        key={mode}
-                        type="button"
-                        onClick={() => updateForm({ providerMode: mode })}
-                        className={cn(
-                          'rounded-md border px-3 py-2 text-sm font-medium transition-colors',
-                          providerMode === mode
-                            ? 'border-primary bg-primary/10 text-foreground'
-                            : 'border-border-soft text-muted-foreground hover:bg-muted',
-                        )}
-                      >
-                        {mode === 'local' ? 'Local subscription' : 'API key'}
-                      </button>
-                    ))}
-                  </div>
-                </div>
-                <div>
                   <Label>Model</Label>
                   <Input
                     placeholder={activeSetup === 'claude_code' ? 'claude-sonnet-4-6' : 'codex-mini-latest'}
@@ -464,18 +442,6 @@ function SetupModal({
                     </SelectContent>
                   </Select>
                 </div>
-                {providerMode === 'api' && (
-                  <div>
-                    <Label>{activeSetup === 'claude_code' ? 'Anthropic API key' : 'OpenAI API key'}</Label>
-                    <Input
-                      type="password"
-                      placeholder={activeSetup === 'claude_code' ? 'sk-ant-...' : 'sk-...'}
-                      value={secret}
-                      onChange={e => updateForm({ secret: e.target.value })}
-                      className="text-sm"
-                    />
-                  </div>
-                )}
               </>
             ) : (
               <div>
@@ -544,7 +510,7 @@ export default function Settings() {
     mutationFn: () => {
       if (!activeSetup) throw new Error('Pick what you want to set up');
       const meta = SETUP_META[activeSetup];
-      const { setupName, secret, mcpCommand, mcpArgs, mcpEnv, mcpPreset, mcpExtraArg, mcpEnvValues, providerMode, providerModel, providerPermissionProfile } = form;
+      const { setupName, secret, mcpCommand, mcpArgs, mcpEnv, mcpPreset, mcpExtraArg, mcpEnvValues, providerModel, providerPermissionProfile } = form;
       let config: Record<string, unknown>;
 
       if (activeSetup === 'mcp') {
@@ -572,15 +538,10 @@ export default function Settings() {
           config = { command: mcpCommand.trim(), args: mcpArgs.trim() || '[]', env: mcpEnv.trim() || '{}' };
         }
       } else if (activeSetup === 'claude_code' || activeSetup === 'codex') {
-        if (providerMode === 'api' && !secret.trim()) {
-          throw new Error('API key is required for API key mode');
-        }
         const defaultModel = activeSetup === 'claude_code' ? 'claude-sonnet-4-6' : 'codex-mini-latest';
         config = {
-          mode: providerMode,
           model: providerModel.trim() || defaultModel,
           permissionProfile: providerPermissionProfile,
-          ...(providerMode === 'api' && secret.trim() ? { apiKey: secret.trim() } : {}),
         };
         return createConnection({ name: setupName.trim() || meta.title, type: meta.type, config });
       } else {

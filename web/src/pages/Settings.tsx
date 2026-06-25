@@ -615,6 +615,9 @@ export default function Settings() {
         }
         return createConnection({ name: setupName.trim() || meta.title, type: leadAgentProvider, purpose: activeSetup, config });
       } else if (activeSetup === 'claude_code' || activeSetup === 'codex') {
+        if (providerMode === 'api' && !secret.trim()) {
+          throw new Error('API key is required for API key mode');
+        }
         const defaultModel = activeSetup === 'claude_code' ? 'claude-sonnet-4-6' : 'codex-mini-latest';
         config = {
           mode: providerMode,

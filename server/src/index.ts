@@ -20,6 +20,7 @@ import memoryRoutes from './routes/memory.js';
 import scheduledTasksRoutes from './routes/scheduled_tasks.js';
 import plansRoutes from './routes/plans.js';
 import pipelinesRoutes from './routes/pipelines.js';
+import mcpRouter from './mcp/index.js';
 
 const PORT = process.env.PORT ?? '3000';
 const NODE_ENV = process.env.NODE_ENV;
@@ -98,6 +99,8 @@ app.use('/executions', wrapAsyncErrors(executionsRoutes));
 app.use('/memory', wrapAsyncErrors(memoryRoutes));
 app.use('/scheduled-tasks', wrapAsyncErrors(scheduledTasksRoutes));
 app.use('/plans', wrapAsyncErrors(plansRoutes));
+
+app.use('/mcp', mcpRouter);
 
 // Must be registered after all routes.
 app.use(notFoundHandler);

@@ -2,6 +2,7 @@ import fs from 'fs';
 import path from 'path';
 import { getDb, getDataDir, getPermissionProfile, type DbSpace } from '../db/index.js';
 import { getItemsForSpace } from './items.js';
+import { listItemTypes } from './templates.js';
 import { recallRelevant } from './memory.js';
 import { formatEntry } from '../tools/memory_tools.js';
 import type { Intent } from './intent.js';
@@ -155,7 +156,7 @@ For parallel workstreams: dispatch multiple invoke_claude_code calls as needed, 
   }
 }
 
-function projectContextBlock(space: DbSpace): string {
+function projectContextBlock(space: DbSpace, userId: string): string {
   const repoItems = getItemsForSpace(space.id)
     .filter(item => item.type === 'repo');
   const repoPath = repoItems.length === 1 ? repoItems[0].fields.repo_path as string : null;
@@ -184,7 +185,12 @@ function projectContextBlock(space: DbSpace): string {
       ? `\n\n_No workspace.md yet. Use write_file with item_id ${repoItems[0].id} to create workspace.md._`
       : '';
 
-  return header + guidance + workspaceSection;
+  const customTypes = listItemTypes(userId).filter(t => !t.is_builtin);
+  const typesSection = customTypes.length > 0
+    ? `\n\nCustom item types defined for this user: ${customTypes.map(t => `${t.id} (${t.name})${Object.keys(t.schema).length > 0 ? ' fields: ' + Object.keys(t.schema).join(', ') : ''}`).join('; ')}. Use these types with create_item instead of blank when they fit.`
+    : '';
+
+  return header + guidance + workspaceSection + typesSection;
 }
 
 async function memoryBlock(userId: string, queryText: string, pinnedProjectId?: string): Promise<string> {
@@ -247,7 +253,7 @@ export async function buildContext(userId: string, sessionId: string, intent: In
   const domain = domainBlock(intent);
   if (domain) blocks.push(domain);
 
-  if (pinnedProject) blocks.push(projectContextBlock(pinnedProject));
+  if (pinnedProject) blocks.push(projectContextBlock(pinnedProject, userId));
 
   blocks.push(await memoryBlock(userId, queryText, pinnedProjectId));
   blocks.push(projectsListBlock(userId));

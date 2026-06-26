@@ -252,11 +252,13 @@ export const toolDefinitions: Anthropic.Tool[] = [
   },
   {
     name: 'list_items',
-    description: 'List all items in a Space, including their type and page_blocks.',
+    description: 'List items in a Space. Optionally filter by type and/or exact field values.',
     input_schema: {
       type: 'object',
       properties: {
         space_id: { type: 'string', description: 'ID of the Space' },
+        type: { type: 'string', description: 'Return only items of this type (e.g. repo, experiment)' },
+        fields: { type: 'object', description: 'Return only items whose fields match these exact values (e.g. { status: "failed" })' },
       },
       required: ['space_id'],
     },

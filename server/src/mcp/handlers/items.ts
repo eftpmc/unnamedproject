@@ -11,13 +11,23 @@ import {
 export function registerItemHandlers(): void {
   registerTool({
     name: 'list_items',
-    description: 'List all items in a space',
+    description: 'List items in a space. Optionally filter by type and/or field values.',
     inputSchema: {
       type: 'object',
-      properties: { space_id: { type: 'string' } },
+      properties: {
+        space_id: { type: 'string' },
+        type: { type: 'string', description: 'Filter to items of this type (e.g. repo, experiment)' },
+        fields: { type: 'object', description: 'Filter by exact field values (e.g. { status: "failed" })' },
+      },
       required: ['space_id'],
     },
-    handler: async (args, _userId) => JSON.stringify(getItemsForSpace(args.space_id as string), null, 2),
+    handler: async (args, _userId) => JSON.stringify(
+      getItemsForSpace(
+        args.space_id as string,
+        (args.type || args.fields) ? { type: args.type as string | undefined, fields: args.fields as Record<string, unknown> | undefined } : undefined,
+      ),
+      null, 2,
+    ),
   });
 
   registerTool({

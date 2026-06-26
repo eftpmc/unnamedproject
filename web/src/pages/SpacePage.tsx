@@ -674,6 +674,8 @@ function TemplateItemDetail({ space, item }: { space: Space; item: SpaceItem }) 
   const draggingIdxRef = useRef<number | null>(null);
   const [dragOverIdx, setDragOverIdx] = useState<number | null>(null);
 
+  const fieldEntries = Object.entries(item.fields).filter(([, v]) => v !== null && v !== undefined && v !== '');
+
   return (
     <PageBody>
       <ContentColumn className="max-w-4xl py-6">
@@ -685,6 +687,16 @@ function TemplateItemDetail({ space, item }: { space: Space; item: SpaceItem }) 
             <span className="text-[11px] text-faint-fg">Saving…</span>
           )}
         </div>
+        {fieldEntries.length > 0 && (
+          <div className="mb-5 flex flex-wrap gap-x-5 gap-y-2 rounded-lg border border-border-soft bg-card px-4 py-3">
+            {fieldEntries.map(([key, value]) => (
+              <div key={key} className="flex min-w-0 items-baseline gap-1.5">
+                <span className="shrink-0 text-[11px] text-muted-foreground capitalize">{key.replace(/_/g, ' ')}</span>
+                <span className="min-w-0 truncate font-mono text-xs">{String(value)}</span>
+              </div>
+            ))}
+          </div>
+        )}
         {blocks.length === 0 ? (
           <div className="flex flex-col items-center gap-3 rounded-lg border border-dashed border-border bg-background/50 px-4 py-10 text-center">
             <p className="text-sm text-muted-foreground">No content yet. Ask the agent to fill this in, or add a block below.</p>

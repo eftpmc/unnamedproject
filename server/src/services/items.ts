@@ -87,10 +87,27 @@ function hydrate(row: SpaceItemRow): SpaceItemBase {
   };
 }
 
-export function getItemsForSpace(spaceId: string): SpaceItemBase[] {
-  const rows = getDb().prepare(
-    'SELECT * FROM space_items WHERE space_id = ? ORDER BY created_at DESC, id DESC',
-  ).all(spaceId) as SpaceItemRow[];
+export function getItemsForSpace(
+  spaceId: string,
+  filter?: { type?: string; fields?: Record<string, unknown> },
+): SpaceItemBase[] {
+  const params: unknown[] = [spaceId];
+  let sql = 'SELECT * FROM space_items WHERE space_id = ?';
+
+  if (filter?.type) {
+    sql += ' AND type = ?';
+    params.push(filter.type);
+  }
+
+  if (filter?.fields) {
+    for (const [key, value] of Object.entries(filter.fields)) {
+      sql += ` AND json_extract(fields, '$.${key}') = ?`;
+      params.push(value);
+    }
+  }
+
+  sql += ' ORDER BY created_at DESC, id DESC';
+  const rows = getDb().prepare(sql).all(...params) as SpaceItemRow[];
   return rows.map(hydrate);
 }
 

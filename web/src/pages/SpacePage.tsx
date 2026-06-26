@@ -238,9 +238,10 @@ function ItemsSection({ space, items }: { space: Space; items: SpaceItem[] }) {
             </SelectTrigger>
             <SelectContent>
               <SelectItem value="all">All</SelectItem>
-              {[...new Set(items.map(i => i.type))].map(t => (
-                <SelectItem key={t} value={t} className="capitalize">{t}</SelectItem>
-              ))}
+              {[...new Set(items.map(i => i.type))].map(t => {
+                const label = templates.find(tpl => tpl.id === t)?.name ?? t;
+                return <SelectItem key={t} value={t}>{label}</SelectItem>;
+              })}
             </SelectContent>
           </Select>
           <Button size="sm" className="h-8 gap-1.5 text-xs" onClick={() => setDialogOpen(true)}>
@@ -249,7 +250,7 @@ function ItemsSection({ space, items }: { space: Space; items: SpaceItem[] }) {
         </div>
 
         {visible.length === 0 ? (
-          <EmptyPanel title={items.length === 0 ? 'No Items yet' : `No ${filter} Items`} description="Add a repository, file reference, note, or document to this Space." />
+          <EmptyPanel title={items.length === 0 ? 'No Items yet' : `No ${filter} Items`} description="Add a repository, file, or templated item to this Space." />
         ) : (
           <div className="flex flex-col gap-2">
             {visible.map(item => (

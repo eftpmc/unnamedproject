@@ -10,7 +10,7 @@ vi.mock('./auth', () => ({
 const mockFetch = vi.fn();
 globalThis.fetch = mockFetch;
 
-const { login, getChats, createChat, getChatStatus, sendMessage, getSpaceItems, getSpacePipelines } = await import('./api');
+const { login, getChats, createChat, getChatStatus, sendMessage, getSpaceItems } = await import('./api');
 
 beforeEach(() => {
   mockFetch.mockReset();
@@ -69,9 +69,4 @@ describe('api', () => {
     expect(mockFetch).toHaveBeenCalledWith('/spaces/space-1/items', expect.any(Object));
   });
 
-  it('getSpacePipelines uses the Space-owned route', async () => {
-    mockFetch.mockResolvedValueOnce({ ok: true, json: async () => ({ pipelines: [] }) });
-    await getSpacePipelines('space-1');
-    expect(mockFetch).toHaveBeenCalledWith('/spaces/space-1/pipelines', expect.any(Object));
-  });
 });

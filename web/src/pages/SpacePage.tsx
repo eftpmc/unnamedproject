@@ -307,7 +307,7 @@ function ItemsSection({ space, items }: { space: Space; items: SpaceItem[] }) {
         </div>
 
         {visible.length === 0 ? (
-          <EmptyPanel title={items.length === 0 ? 'No Items yet' : `No ${filter} Items`} description="Add a repository, file, or templated item to this Space." />
+          <EmptyPanel title={items.length === 0 ? 'No items yet' : search.trim() ? 'No results' : `No ${templates.find(t => t.id === filter)?.name ?? filter} items`} description="Add a repository, file, or templated item to this Space." />
         ) : (
           <div className="flex flex-col gap-2">
             {visible.map(item => (

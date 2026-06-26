@@ -164,6 +164,29 @@ const BUILTIN_BLOCK_TEMPLATES: { id: string; name: string; blocks: unknown[] }[]
       { type: 'text', content: '' },
     ],
   },
+  {
+    id: 'tpl_runbook',
+    name: 'Runbook',
+    blocks: [
+      { type: 'heading', level: 1, text: 'Runbook' },
+      { type: 'callout', variant: 'info', content: 'Describe what this runbook does and when to use it.' },
+      { type: 'heading', level: 2, text: 'Parameters' },
+      { type: 'input', label: 'Environment', value: '', input_type: 'select', options: ['dev', 'staging', 'prod'] },
+      { type: 'input', label: 'Target', value: '', placeholder: 'e.g. service name or host', input_type: 'text' },
+      { type: 'heading', level: 2, text: 'Steps' },
+      { type: 'task-list', tasks: [] },
+      { type: 'heading', level: 2, text: 'Notes' },
+      { type: 'text', content: '' },
+    ],
+  },
+  {
+    id: 'tpl_config',
+    name: 'Config',
+    blocks: [
+      { type: 'heading', level: 1, text: 'Configuration' },
+      { type: 'callout', variant: 'info', content: 'Fill in these values. The agent reads them before acting.' },
+    ],
+  },
 ];
 
 const LEGACY_TEMPLATE_KEY_TO_ID: Record<string, string> = {
@@ -617,6 +640,14 @@ export const migrations: Migration[] = [
   { version: 20, name: 'add-scheduled-task-pinned-space', up: (db) => {
     const cols = (db.prepare("PRAGMA table_info(scheduled_tasks)").all() as { name: string }[]).map(c => c.name);
     if (!cols.includes('pinned_space_id')) db.exec('ALTER TABLE scheduled_tasks ADD COLUMN pinned_space_id TEXT REFERENCES spaces(id) ON DELETE SET NULL');
+  }},
+  { version: 21, name: 'seed-runbook-config-templates', up: (db) => {
+    const insert = db.prepare(`INSERT OR IGNORE INTO item_templates (id, user_id, kind, name, blocks, is_builtin, created_at) VALUES (?, NULL, 'blocks', ?, ?, 1, unixepoch())`);
+    const newTemplates = BUILTIN_BLOCK_TEMPLATES.filter(t => ['tpl_runbook', 'tpl_config'].includes(t.id));
+    for (const t of newTemplates) {
+      const id = t.id.replace('tpl_', '');
+      insert.run(id, t.name, JSON.stringify(t.blocks));
+    }
   }},
 ];
 

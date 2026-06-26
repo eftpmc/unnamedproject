@@ -281,9 +281,9 @@ function CopyButton({ text }: { text: string }) {
 const NEAR_BOTTOM_THRESHOLD = 120;
 
 const TEMPLATE_LABELS: Record<string, string> = {
-  blank: 'Doc', spec: 'Spec', kanban: 'Kanban', report: 'Report', repo: 'Repo', file: 'File',
+  blank: 'Item', spec: 'Spec', kanban: 'Kanban', report: 'Report', runbook: 'Runbook', config: 'Config', repo: 'Repo', file: 'File',
   // legacy IDs from before v18
-  document: 'Doc', note: 'Note', tpl_blank: 'Doc', tpl_document: 'Doc', tpl_spec: 'Spec', tpl_kanban: 'Kanban', tpl_report: 'Report', tpl_note: 'Note',
+  document: 'Item', note: 'Item', tpl_blank: 'Item', tpl_document: 'Item', tpl_spec: 'Spec', tpl_kanban: 'Kanban', tpl_report: 'Report', tpl_note: 'Item',
 };
 
 export default function MessageList({ messages, executions, streamingIds, sessionId, onEditMessage, canEdit, events = [], failedMessageId, onRetryFailedMessage }: MessageListProps) {

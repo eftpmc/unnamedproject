@@ -38,13 +38,13 @@ export function registerItemHandlers(): void {
 
   registerTool({
     name: 'create_item',
-    description: 'Create a new item in a space. Use list_item_templates to see available types (e.g. blank, spec, kanban, report, repo).',
+    description: 'Create a new item in a space. Use list_item_templates to see available types. Use "blank" when none of the existing templates fit — it creates an empty item you populate with whatever blocks make sense for this new kind of thing.',
     inputSchema: {
       type: 'object',
       properties: {
         space_id: { type: 'string' },
         name: { type: 'string' },
-        type: { type: 'string', description: 'Item type — a template ID (blank, spec, kanban, report) or repo' },
+        type: { type: 'string', description: 'Template ID from list_item_templates, or "repo". Use "blank" for a custom item type.' },
         repo_path: { type: 'string', description: 'Required when type is repo' },
         default_branch: { type: 'string' },
       },

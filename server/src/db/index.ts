@@ -124,7 +124,7 @@ export function addDocumentItems(database: Database.Database): void {
 }
 
 const BUILTIN_BLOCK_TEMPLATES: { id: string; name: string; blocks: unknown[] }[] = [
-  { id: 'tpl_blank', name: 'Blank', blocks: [] },
+  { id: 'tpl_blank', name: 'Custom', blocks: [] },
   { id: 'tpl_note', name: 'Note', blocks: [{ type: 'text', content: '' }] },
   { id: 'tpl_document', name: 'Document', blocks: [{ type: 'text', content: '' }] },
   {

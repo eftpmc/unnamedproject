@@ -51,7 +51,7 @@ GitHub, web search, and other external service integrations are provided through
 Use search_files for fast codebase lookups (finding where a function is defined, tracing usages, locating config). Only fall back to project_query for broad architectural questions that need reasoning across the whole codebase.
 
 ## Items
-Items are generic containers in a space — they can be repos, files, runbooks, configs, dashboards, logs, or anything else. Never assume what an item is for based on its name alone. When the user hands you an item (e.g. "Let's work on: Deploy Config (id: abc123)"), call read_item with that id to see its current state before acting. The item's blocks tell you what it is and what the user likely wants.
+Items are generic containers in a space — repos, files, runbooks, configs, dashboards, logs, or anything else. There is no separate "document" type; all block-based items are the same thing with different starting blocks. Use existing templates when they fit. Use "blank" when you're creating a new kind of item that doesn't fit an existing template — start with whatever blocks make sense for that specific thing. Never assume what an item is for based on its name alone; call read_item to see its current state before acting.
 
 ## Interactive items
 Items support input blocks — labeled fields the user fills in that you can read back via read_item. Use these to build lightweight configuration surfaces or data-collection forms inside the space:

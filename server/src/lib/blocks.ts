@@ -115,6 +115,16 @@ export function validateBlock(value: unknown, path = 'block'): string | null {
       if (b.label !== undefined && !isString(b.label)) return `${path}.label must be a string`;
       return null;
 
+    case 'input':
+      if (!isString(b.label)) return `${path}.label must be a string`;
+      if (!isString(b.value)) return `${path}.value must be a string`;
+      if (b.placeholder !== undefined && !isString(b.placeholder)) return `${path}.placeholder must be a string`;
+      if (b.input_type !== undefined && !['text', 'number', 'multiline', 'select'].includes(b.input_type as string)) {
+        return `${path}.input_type must be one of text, number, multiline, select`;
+      }
+      if (b.options !== undefined && !isStringArray(b.options)) return `${path}.options must be a string array`;
+      return null;
+
     default:
       return `${path}.type '${String(b.type)}' is not a recognized block type`;
   }

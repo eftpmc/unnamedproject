@@ -1,6 +1,6 @@
 import { Router } from 'express';
 import simpleGit from 'simple-git';
-import { createSessionEvent, getDb, getSpaceForUser, getSessionEvents, getSessionProjectLinks, linkSessionProject } from '../db/index.js';
+import { createSessionEvent, getDb, getSpaceForUser, getSessionEvents } from '../db/index.js';
 import { newId } from '../lib/ids.js';
 import { requireAuth, type AuthedRequest } from '../middleware/auth.js';
 import { DEFAULT_EFFORT, isEffortLevel } from '../services/anthropic.js';
@@ -12,7 +12,7 @@ router.use(requireAuth);
 router.get('/', (req, res) => {
   const { userId } = req as AuthedRequest;
   const rows = getDb()
-    .prepare('SELECT id, title, effort, model, pinned_space_id, created_at, updated_at FROM sessions WHERE user_id = ? ORDER BY updated_at DESC LIMIT 200')
+    .prepare('SELECT id, title, effort, pinned_space_id, created_at, updated_at FROM sessions WHERE user_id = ? ORDER BY updated_at DESC LIMIT 200')
     .all(userId);
   res.json(rows);
 });
@@ -28,10 +28,6 @@ router.get('/:id/events', (req, res) => {
     events: getSessionEvents(req.params.id).map(event => ({
       ...event,
       metadata: JSON.parse(event.metadata || '{}'),
-    })),
-    projects: getSessionProjectLinks(req.params.id).map(project => ({
-      ...project,
-      enabled_connection_ids: JSON.parse(project.enabled_connection_ids || '[]'),
     })),
   });
 });
@@ -78,7 +74,7 @@ router.get('/search', (req, res) => {
   const pattern = `%${q}%`;
   const rows = getDb()
     .prepare(`
-      SELECT DISTINCT s.id, s.title, s.effort, s.model, s.pinned_space_id, s.created_at, s.updated_at
+      SELECT DISTINCT s.id, s.title, s.effort, s.pinned_space_id, s.created_at, s.updated_at
       FROM sessions s
       LEFT JOIN messages m ON m.session_id = s.id
       WHERE s.user_id = ? AND (s.title LIKE ? OR m.content LIKE ?)
@@ -92,20 +88,16 @@ router.get('/search', (req, res) => {
 
 router.patch('/:id', (req, res) => {
   const { userId } = req as unknown as AuthedRequest;
-  const { effort, model, title, pinned_project_id, pinned_space_id: pinnedSpaceIdBody } = req.body as { effort?: string; model?: string | null; title?: string; pinned_project_id?: string | null; pinned_space_id?: string | null };
+  const { effort, title, pinned_project_id, pinned_space_id: pinnedSpaceIdBody } = req.body as { effort?: string; title?: string; pinned_project_id?: string | null; pinned_space_id?: string | null };
   // Accept pinned_space_id (new) or pinned_project_id (legacy alias)
   const pinnedSpaceUpdate = pinnedSpaceIdBody !== undefined ? pinnedSpaceIdBody : pinned_project_id;
 
-  if (effort === undefined && model === undefined && title === undefined && pinnedSpaceUpdate === undefined) {
-    res.status(400).json({ error: 'effort, model, title, or pinned_space_id required' });
+  if (effort === undefined && title === undefined && pinnedSpaceUpdate === undefined) {
+    res.status(400).json({ error: 'effort, title, or pinned_space_id required' });
     return;
   }
   if (effort !== undefined && !isEffortLevel(effort)) {
     res.status(400).json({ error: 'effort must be one of: low, medium, high' });
-    return;
-  }
-  if (model !== undefined && model !== null && typeof model !== 'string') {
-    res.status(400).json({ error: 'model must be a string or null' });
     return;
   }
 
@@ -116,9 +108,6 @@ router.patch('/:id', (req, res) => {
 
   if (effort !== undefined) {
     getDb().prepare('UPDATE sessions SET effort = ? WHERE id = ?').run(effort, req.params.id);
-  }
-  if (model !== undefined) {
-    getDb().prepare('UPDATE sessions SET model = ? WHERE id = ?').run(model, req.params.id);
   }
   if (title !== undefined) {
     getDb().prepare('UPDATE sessions SET title = ? WHERE id = ?').run(title, req.params.id);
@@ -131,25 +120,18 @@ router.patch('/:id', (req, res) => {
     }
     getDb().prepare('UPDATE sessions SET pinned_space_id = ? WHERE id = ?').run(pinnedSpaceUpdate, req.params.id);
     if (pinnedSpaceUpdate) {
-      linkSessionProject(req.params.id, space!.id, 'user');
       createSessionEvent({
         sessionId: req.params.id,
         type: 'scope_changed',
-        title: `Scoped to ${space!.name}`,
-        body: 'You pinned this chat to a space.',
+        title: `Pinned to ${space!.name}`,
         spaceId: space!.id,
         metadata: { source: 'user' },
       });
     } else {
-      if (session.pinned_space_id) {
-        const previousSpace = getSpaceForUser(session.pinned_space_id, userId);
-        if (previousSpace) linkSessionProject(req.params.id, previousSpace.id, 'user');
-      }
       createSessionEvent({
         sessionId: req.params.id,
         type: 'scope_changed',
-        title: 'Back to Auto',
-        body: 'The agent can route this chat or create space context as needed.',
+        title: 'Unpinned space',
         metadata: { source: 'user' },
       });
     }

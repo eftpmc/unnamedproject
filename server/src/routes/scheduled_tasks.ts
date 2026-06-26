@@ -13,12 +13,12 @@ router.get('/', (req, res) => {
 
 router.patch('/:id', (req, res) => {
   const { userId } = req as unknown as AuthedRequest;
-  const { enabled, interval_hours } = req.body as { enabled?: boolean; interval_hours?: number };
+  const { enabled, interval_hours, pinned_space_id } = req.body as { enabled?: boolean; interval_hours?: number; pinned_space_id?: string | null };
 
   const task = getScheduledTaskForUser(req.params.id, userId);
   if (!task) { res.status(404).json({ error: 'Scheduled task not found' }); return; }
 
-  updateScheduledTask(req.params.id, userId, { enabled, interval_hours });
+  updateScheduledTask(req.params.id, userId, { enabled, interval_hours, ...('pinned_space_id' in req.body ? { pinned_space_id } : {}) });
   res.json({ ok: true });
 });
 

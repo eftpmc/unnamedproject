@@ -21,7 +21,7 @@ import {
   type RepoItem,
   type FileItem,
 } from '../services/items.js';
-import { listItemTemplates, getItemTemplate, createItemTemplate, updateItemTemplate } from '../services/templates.js';
+import { listItemTemplates, getItemTemplate, createItemTemplate, updateItemTemplate, deleteItemTemplate } from '../services/templates.js';
 import { validateBlock, validateBlocks } from '../lib/blocks.js';
 import { detectCapabilities } from '../services/projectCapabilities.js';
 
@@ -199,6 +199,21 @@ router.patch('/item-templates/:templateId', (req, res) => {
   res.json(updated);
 });
 
+router.delete('/item-templates/:templateId', (req, res) => {
+  const { userId } = req as unknown as AuthedRequest;
+  const template = getItemTemplate(req.params.templateId);
+  if (!template || template.is_builtin) {
+    res.status(404).json({ error: 'Template not found or not deletable' });
+    return;
+  }
+  if (template.user_id !== userId) {
+    res.status(403).json({ error: 'Not allowed' });
+    return;
+  }
+  deleteItemTemplate(req.params.templateId);
+  res.status(204).end();
+});
+
 router.post('/:spaceId/items', (req, res) => {
   if (!requireSpace(req, res)) return;
   const { type, name } = req.body as { type?: string; name?: string };
@@ -355,10 +370,6 @@ router.get('/:spaceId/items/:itemId/content', async (req, res) => {
   }
   if (item.type === 'repo') {
     res.status(400).json({ error: "Operation not supported for item type 'repo'" });
-    return;
-  }
-  if (item.type === 'document') {
-    res.status(400).json({ error: 'Content endpoint not supported for document items. Use the blocks field from GET /spaces/:spaceId/items/:itemId instead.' });
     return;
   }
   try {

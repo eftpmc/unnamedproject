@@ -2,7 +2,6 @@ export interface Session {
   id: string;
   title: string | null;
   effort: EffortLevel;
-  model: string | null;
   pinned_space_id: string | null;
   created_at: number;
   updated_at: number;
@@ -51,16 +50,10 @@ export interface SessionEvent {
   title: string;
   body: string | null;
   space_id: string | null;
-  plan_id: string | null;
   item_id: string | null;
   execution_id: string | null;
   metadata: Record<string, unknown>;
   created_at: number;
-}
-
-export interface SessionSpaceLink extends Space {
-  source: 'agent' | 'user' | 'system';
-  linked_at: number;
 }
 
 export interface Message {
@@ -104,7 +97,8 @@ export type BlockContent =
   | { type: 'chart'; chartType: 'line' | 'bar' | 'pie'; title?: string; data: { label: string; value: number }[] }
   | { type: 'stat'; label: string; value: string; trend?: { direction: 'up' | 'down' | 'flat'; label?: string } }
   | { type: 'list'; ordered?: boolean; items: string[] }
-  | { type: 'progress'; label?: string; value: number; max?: number };
+  | { type: 'progress'; label?: string; value: number; max?: number }
+  | { type: 'input'; label: string; value: string; placeholder?: string; input_type?: 'text' | 'number' | 'multiline' | 'select'; options?: string[] };
 
 export type Block = BlockContent & { id?: string };
 
@@ -257,5 +251,6 @@ export interface ScheduledTask {
   enabled: number;
   next_run_at: number;
   last_run_at: number | null;
+  pinned_space_id: string | null;
 }
 

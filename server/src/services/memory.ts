@@ -1,6 +1,6 @@
 import { getDb, getSpaceForUser } from '../db/index.js';
 import { newId } from '../lib/ids.js';
-import type { Intent } from './intent.js';
+import { embed, cosineSimilarity, bufferToFloat32Array, float32ArrayToBuffer } from './embeddings.js';
 
 export type MemoryType = 'user' | 'feedback' | 'project' | 'reference';
 
@@ -19,9 +19,17 @@ export function rememberFact(userId: string, type: MemoryType, key: string, valu
       ON CONFLICT(user_id, type, key) DO UPDATE SET
         value = excluded.value,
         space_id = excluded.space_id,
+        embedding = NULL,
         updated_at = unixepoch()
     `)
     .run(newId(), userId, type, key, value, spaceId);
+
+  // Generate and store embedding async (fire-and-forget)
+  embed(`${key}: ${value}`).then(vec => {
+    getDb()
+      .prepare('UPDATE memories SET embedding = ? WHERE user_id = ? AND type = ? AND key = ?')
+      .run(float32ArrayToBuffer(vec), userId, type, key);
+  }).catch(() => { /* best-effort */ });
 }
 
 export function recallFact(userId: string, type: MemoryType, key: string): string | null {
@@ -53,38 +61,75 @@ export function spaceNameFor(userId: string, spaceId: string | null): string | n
 /** @deprecated Use spaceNameFor */
 export const projectNameFor = spaceNameFor;
 
-const MAX_USER_MEMORIES = 10;
-
-function scoreMemory(entry: MemoryEntry, intent: Intent): number {
-  const text = `${entry.key} ${entry.value}`.toLowerCase();
-  let score = 0;
-  if (text.includes(intent.domain)) score += 2;
-  for (const tool of intent.tools) {
-    const normalized = tool.toLowerCase().replace(/_/g, ' ');
-    if (text.includes(normalized) || text.includes(tool.toLowerCase())) score += 1;
-  }
-  return score;
+interface MemoryRow extends MemoryEntry {
+  embedding: Buffer | null;
 }
 
-export function recallRelevant(userId: string, intent: Intent, pinnedSpaceId?: string): MemoryEntry[] {
-  const all = recallAll(userId);
+const MAX_MEMORIES = 20;
 
-  const feedback = all.filter(e => e.type === 'feedback');
+export async function recallRelevant(userId: string, queryText: string, pinnedSpaceId?: string): Promise<MemoryEntry[]> {
+  const rows = getDb()
+    .prepare('SELECT type, key, value, space_id, embedding FROM memories WHERE user_id = ?')
+    .all(userId) as MemoryRow[];
 
-  const project = pinnedSpaceId
-    ? all.filter(e => e.type === 'project' && e.space_id === pinnedSpaceId)
-    : all.filter(e => e.type === 'project' && scoreMemory(e, intent) > 0);
+  if (rows.length === 0) return [];
 
-  const reference = intent.domain === 'general'
-    ? all.filter(e => e.type === 'reference')
-    : all.filter(e => e.type === 'reference' && scoreMemory(e, intent) > 0);
+  // Always include all feedback
+  const feedback = rows.filter(r => r.type === 'feedback');
 
-  const user = all
-    .filter(e => e.type === 'user')
-    .map(e => ({ entry: e, score: scoreMemory(e, intent) }))
-    .sort((a, b) => b.score - a.score)
-    .slice(0, MAX_USER_MEMORIES)
-    .map(s => s.entry);
+  // Always include project memories for the pinned space
+  const pinnedProject = pinnedSpaceId
+    ? rows.filter(r => r.type === 'project' && r.space_id === pinnedSpaceId)
+    : [];
 
-  return [...feedback, ...project, ...reference, ...user];
+  // Semantic scoring for the rest
+  const rest = rows.filter(r =>
+    r.type !== 'feedback' &&
+    !(pinnedSpaceId && r.type === 'project' && r.space_id === pinnedSpaceId)
+  );
+
+  if (rest.length === 0) {
+    return dedup([...feedback, ...pinnedProject]);
+  }
+
+  try {
+    const queryVec = await embed(queryText);
+
+    const scored = rest.map(entry => {
+      let score = 0;
+      if (entry.embedding) {
+        score = cosineSimilarity(queryVec, bufferToFloat32Array(entry.embedding));
+      } else {
+        // Keyword fallback for entries without embeddings yet
+        const text = `${entry.key} ${entry.value}`.toLowerCase();
+        const q = queryText.toLowerCase();
+        for (const word of q.split(/\s+/).filter(w => w.length > 3)) {
+          if (text.includes(word)) score += 0.1;
+        }
+      }
+      return { entry, score };
+    });
+
+    scored.sort((a, b) => b.score - a.score);
+
+    const top = scored
+      .filter(s => s.score > 0.15)
+      .slice(0, MAX_MEMORIES)
+      .map(s => s.entry);
+
+    return dedup([...feedback, ...pinnedProject, ...top]);
+  } catch {
+    // If embedding fails, return everything (old behavior)
+    return dedup([...feedback, ...pinnedProject, ...rest]);
+  }
+}
+
+function dedup(entries: MemoryEntry[]): MemoryEntry[] {
+  const seen = new Set<string>();
+  return entries.filter(e => {
+    const k = `${e.type}:${e.key}`;
+    if (seen.has(k)) return false;
+    seen.add(k);
+    return true;
+  });
 }

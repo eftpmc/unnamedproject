@@ -6,25 +6,23 @@ import {
   DropdownMenuSubTrigger,
 } from '@/components/ui/dropdown-menu';
 import { cn } from '../lib/utils.js';
-import type { Space, SessionSpaceLink } from '../types.js';
+import type { Space } from '../types.js';
 
 export default function ScopePopover({
   spaces,
   pinnedProject,
-  inferredProject,
   agentActive,
   onOpenSpace,
   onScopeChange,
 }: {
   spaces: Space[];
   pinnedProject: Space | null;
-  inferredProject: SessionSpaceLink | null;
   agentActive: boolean;
   onOpenSpace: (spaceId: string) => void;
   onScopeChange: (spaceId: string | null) => void;
 }) {
   const isAuto = !pinnedProject;
-  const triggerLabel = pinnedProject?.name ?? (inferredProject ? `Auto · ${inferredProject.name}` : 'Auto');
+  const triggerLabel = pinnedProject?.name ?? 'No space';
 
   return (
     <DropdownMenuSub>
@@ -34,17 +32,17 @@ export default function ScopePopover({
         ) : (
           <span className={cn('size-1.5 shrink-0 rounded-full', agentActive ? 'bg-success' : 'bg-muted-foreground/40')} />
         )}
-        <span className="truncate">Scope · {triggerLabel}</span>
+        <span className="truncate">Pinned · {triggerLabel}</span>
       </DropdownMenuSubTrigger>
       <DropdownMenuSubContent className="w-72 p-2">
         <div className="px-2 pb-1.5 pt-1 text-[11px] font-semibold text-faint-fg">
-          Scope of this chat
+          Pinned space
         </div>
         <ScopeOption
           selected={isAuto}
           icon={<Target size={14} />}
-          title="Auto"
-          description={inferredProject ? `Agent attached ${inferredProject.name}.` : 'Let the agent route this work or create a Space.'}
+          title="None"
+          description="Let the agent create or choose a space."
           onClick={() => onScopeChange(null)}
         />
         <div className="my-1 border-t border-border-soft" />

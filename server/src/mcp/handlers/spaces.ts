@@ -1,6 +1,7 @@
 import { registerTool } from '../registry.js';
 import { listProjects, createProject, updateProject, deleteProject } from '../../tools/project_ops.js';
-import { getDb } from '../../db/index.js';
+import { getDb, createSessionEvent } from '../../db/index.js';
+import { broadcast } from '../../services/socket.js';
 
 export function registerSpaceHandlers(): void {
   registerTool({
@@ -52,6 +53,41 @@ export function registerSpaceHandlers(): void {
         },
         userId,
       ),
+  });
+
+  registerTool({
+    name: 'pin_space',
+    description: 'Pin a space to the current session so it becomes the active context for this chat. Call this after creating or identifying the space the user wants to work in — it persists across turns. Pass null to unpin.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        space_id: { type: 'string', description: 'Space to pin, or null to unpin' },
+      },
+    },
+    handler: async (args, userId, sessionId) => {
+      if (!sessionId) return 'Error: no session context';
+      const spaceId = (args.space_id as string | null | undefined) ?? null;
+      getDb().prepare('UPDATE sessions SET pinned_space_id = ? WHERE id = ?').run(spaceId, sessionId);
+
+      const space = spaceId
+        ? getDb().prepare('SELECT id, name FROM spaces WHERE id = ?').get(spaceId) as { id: string; name: string } | undefined
+        : null;
+      const title = space ? `Pinned to ${space.name}` : 'Space unpinned';
+      const event = createSessionEvent({
+        sessionId,
+        type: 'scope_changed',
+        title,
+        spaceId: space?.id ?? null,
+        metadata: { source: 'agent' },
+      });
+      broadcast(userId, {
+        type: 'session_event_created',
+        sessionId,
+        event: { ...event, metadata: JSON.parse(event.metadata || '{}') },
+      });
+
+      return space ? `Pinned space ${space.id} (${space.name}) to this session` : 'Unpinned space from this session';
+    },
   });
 
   registerTool({

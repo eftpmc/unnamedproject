@@ -451,6 +451,18 @@ export default function MessageList({ messages, executions, streamingIds, sessio
                 </div>
               );
             }
+            if (item.event.type === 'scope_changed') {
+              return (
+                <div key={`event-${item.event.id}`} className="flex items-center gap-3 py-1">
+                  <div className="h-px flex-1 bg-border-soft" />
+                  <span className="flex shrink-0 items-center gap-1.5 rounded-full border border-border-soft bg-muted px-2.5 py-1 text-[11px] text-muted-foreground">
+                    <Target size={10} strokeWidth={1.85} />
+                    {item.event.title}
+                  </span>
+                  <div className="h-px flex-1 bg-border-soft" />
+                </div>
+              );
+            }
             const Icon = eventIcon(item.event.type);
             return (
               <div key={`event-${item.event.id}`} className="flex items-center gap-2 text-xs text-muted-foreground">

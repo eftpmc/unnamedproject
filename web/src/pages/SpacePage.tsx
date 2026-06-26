@@ -1,6 +1,7 @@
-import { useEffect, useState, type ReactNode } from 'react';
+import { useCallback, useEffect, useRef, useState, type ReactNode } from 'react';
 import { Link, useLocation, useNavigate, useParams } from 'react-router-dom';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { subscribe } from '../lib/ws.js';
 import {
   ArrowLeft,
   Check,
@@ -10,10 +11,14 @@ import {
   FileType,
   FolderGit2,
   GitBranch,
+  GripVertical,
+  LayoutDashboard,
   MessageSquare,
   MoreHorizontal,
   Plus,
+  Search,
   Trash2,
+  X,
 } from 'lucide-react';
 import {
   createChat,
@@ -28,6 +33,7 @@ import {
   listItemTemplates,
   updateChatConfig,
   updateSpace,
+  updateSpaceItem,
 } from '../lib/api.js';
 import { usePageTitle } from '../lib/usePageTitle.js';
 import { timeAgo, cn } from '../lib/utils.js';
@@ -44,9 +50,11 @@ import {
 } from '@/components/ui/dropdown-menu';
 import { ContentColumn, EmptyPanel, PageBody, PageHeader, PageLoading, PageShell, Surface } from '@/components/ui/app-layout';
 import { TabStrip } from '@/components/ui/tab-strip';
+import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import FileBrowser from '../components/FileBrowser.js';
 import BlockRenderer from '../components/BlockRenderer.js';
-import type { Block, Connection, RepoItem, FileItem, Session, Space, SpaceItem } from '../types.js';
+import EditableTitle from '../components/EditableTitle.js';
+import type { Block, Connection, RepoItem, FileItem, Session, Space, SpaceItem, WSEvent, WSSessionEventCreated } from '../types.js';
 
 type Section = 'overview' | 'chats' | 'items' | 'settings';
 
@@ -84,6 +92,21 @@ export default function SpacePage() {
     onSuccess: id => navigate(`/c/${id}`),
   });
 
+  // Invalidate space items in real-time when the agent creates or updates items
+  useEffect(() => {
+    return subscribe((event: WSEvent) => {
+      if (event.type === 'session_event_created') {
+        const ev = event as WSSessionEventCreated;
+        if (
+          (ev.event.type === 'item_created' || ev.event.type === 'item_updated') &&
+          ev.event.space_id === spaceId
+        ) {
+          queryClient.invalidateQueries({ queryKey: ['space-items', spaceId] });
+        }
+      }
+    });
+  }, [spaceId, queryClient]);
+
   if (isLoading) return <PageShell><PageLoading rows={4} /></PageShell>;
   if (!space) {
     return <PageShell><PageHeader title="Space not found" /></PageShell>;
@@ -109,7 +132,7 @@ export default function SpacePage() {
         ) : undefined}
       />
       <SpaceTabs spaceId={space.id} section={section} />
-      {section === 'overview' && <Overview space={space} items={items} chats={spaceChats} />}
+      {section === 'overview' && <Overview space={space} items={items} chats={spaceChats} onNewChat={() => startChat.mutate()} />}
       {section === 'chats' && <ChatsSection chats={spaceChats} onNewChat={() => startChat.mutate()} />}
       {section === 'items' && <ItemsSection space={space} items={items} />}
       {section === 'settings' && <SettingsSection space={space} />}
@@ -117,7 +140,7 @@ export default function SpacePage() {
   );
 }
 
-function Overview({ space, items, chats }: { space: Space; items: SpaceItem[]; chats: Session[] }) {
+function Overview({ space, items, chats, onNewChat }: { space: Space; items: SpaceItem[]; chats: Session[]; onNewChat: () => void }) {
   const navigate = useNavigate();
   const recent = [
     ...chats.map(chat => ({ key: chat.id, type: 'Chat' as const, title: chat.title ?? 'Untitled chat', time: chat.updated_at, href: `/c/${chat.id}` })),
@@ -128,7 +151,20 @@ function Overview({ space, items, chats }: { space: Space; items: SpaceItem[]; c
     <PageBody>
       <ContentColumn className="max-w-4xl">
         {recent.length === 0 ? (
-          <EmptyPanel title="Nothing here yet" description="Start a chat or add an item to this Space." />
+          <EmptyPanel
+            title="Nothing here yet"
+            description="Start a chat pinned to this space, or add an item to track your work."
+            action={(
+              <div className="flex gap-2">
+                <Button size="sm" className="gap-1.5" onClick={onNewChat}>
+                  <MessageSquare size={13} />Start chat
+                </Button>
+                <Button size="sm" variant="outline" className="gap-1.5" onClick={() => navigate(`/spaces/${space.id}/items`)}>
+                  <Plus size={13} />Add item
+                </Button>
+              </div>
+            )}
+          />
         ) : (
           <div className="flex flex-col gap-2">
             {recent.map(entry => (
@@ -182,16 +218,28 @@ function ChatsSection({ chats, onNewChat }: { chats: Session[]; onNewChat: () =>
   );
 }
 
+function itemPreview(item: SpaceItem): string | null {
+  if (item.type === 'repo') return (item as RepoItem).repo_path;
+  if (item.type === 'file') return (item as FileItem).file_path;
+  for (const block of item.page_blocks) {
+    if (block.type === 'text' && block.content.trim()) return block.content.trim();
+    if (block.type === 'heading' && block.text.trim()) return block.text.trim();
+  }
+  return null;
+}
+
 function ItemsSection({ space, items }: { space: Space; items: SpaceItem[] }) {
   const queryClient = useQueryClient();
   const navigate = useNavigate();
   const [filter, setFilter] = useState<string>('all');
+  const [search, setSearch] = useState('');
   const [dialogOpen, setDialogOpen] = useState(false);
   const [type, setType] = useState<string>('blank');
   const [name, setName] = useState('');
   const [value, setValue] = useState('');
   const [pendingDelete, setPendingDelete] = useState<SpaceItem | null>(null);
-  const visible = filter === 'all' ? items : items.filter(item => item.type === filter);
+  const filtered = filter === 'all' ? items : items.filter(item => item.type === filter);
+  const visible = search.trim() ? filtered.filter(item => item.name.toLowerCase().includes(search.trim().toLowerCase())) : filtered;
   const requiresValue = type === 'repo' || type === 'file';
 
   const { data: templates = [] } = useQuery({
@@ -231,7 +279,7 @@ function ItemsSection({ space, items }: { space: Space; items: SpaceItem[] }) {
   return (
     <PageBody>
       <ContentColumn className="max-w-4xl">
-        <div className="mb-5 flex flex-wrap items-center justify-between gap-3">
+        <div className="mb-5 flex flex-wrap items-center gap-3">
           <Select value={filter} onValueChange={setFilter}>
             <SelectTrigger size="sm" className="h-8 w-32 text-xs capitalize">
               <SelectValue />
@@ -244,6 +292,15 @@ function ItemsSection({ space, items }: { space: Space; items: SpaceItem[] }) {
               })}
             </SelectContent>
           </Select>
+          <div className="relative flex-1">
+            <Search size={13} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-faint-fg pointer-events-none" />
+            <Input
+              value={search}
+              onChange={e => setSearch(e.target.value)}
+              placeholder="Search items…"
+              className="h-8 pl-8 text-xs"
+            />
+          </div>
           <Button size="sm" className="h-8 gap-1.5 text-xs" onClick={() => setDialogOpen(true)}>
             <Plus size={14} />Add Item
           </Button>
@@ -260,9 +317,7 @@ function ItemsSection({ space, items }: { space: Space; items: SpaceItem[] }) {
                   <span className="min-w-0 flex-1">
                     <span className="block truncate text-sm font-medium">{item.name}</span>
                     <span className="mt-0.5 block truncate text-xs text-faint-fg">
-                      {item.type === 'repo' ? (item as RepoItem).repo_path
-                        : item.type === 'file' ? ((item as FileItem).mime_type || (item as FileItem).file_path)
-                        : (templates.find(t => t.id === item.type)?.name ?? item.type)}
+                      {itemPreview(item) ?? (templates.find(t => t.id === item.type)?.name ?? item.type)}
                     </span>
                   </span>
                   <span className="shrink-0 text-xs text-faint-fg">{timeAgo(item.created_at)}</span>
@@ -439,6 +494,11 @@ function ItemDetail({ space, item }: { space: Space; item: SpaceItem }) {
   const navigate = useNavigate();
   const queryClient = useQueryClient();
   const [confirmDelete, setConfirmDelete] = useState(false);
+
+  const renameMutation = useMutation({
+    mutationFn: (name: string) => updateSpaceItem(space.id, item.id, { name }),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['space-items', space.id] }),
+  });
   const deleteMutation = useMutation({
     mutationFn: () => deleteSpaceItem(space.id, item.id),
     onSuccess: () => {
@@ -450,7 +510,7 @@ function ItemDetail({ space, item }: { space: Space; item: SpaceItem }) {
   return (
     <PageShell>
       <PageHeader
-        title={item.name}
+        title={<EditableTitle title={item.name} onSave={(name) => renameMutation.mutate(name)} />}
         className="border-0 pb-0"
         contentClassName="max-w-4xl"
         breadcrumb={(
@@ -501,16 +561,70 @@ function RepoDetail({ space, item }: { space: Space; item: RepoItem }) {
   );
 }
 
-function isBlockEmpty(block: Block): boolean {
-  return block.type === 'text' && !block.content.trim();
-}
-
 function TemplateItemDetail({ space, item }: { space: Space; item: SpaceItem }) {
+  const queryClient = useQueryClient();
   const { data: templates = [] } = useQuery({
     queryKey: ['item-templates'],
     queryFn: listItemTemplates,
   });
   const typeName = templates.find(t => t.id === item.type)?.name ?? item.type;
+
+  const [blocks, setBlocks] = useState(item.page_blocks);
+  const saveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  useEffect(() => {
+    if (!saveTimerRef.current) setBlocks(item.page_blocks);
+  }, [item.id, item.page_blocks]);
+
+  const saveMutation = useMutation({
+    mutationFn: (updated: Block[]) => updateSpaceItem(space.id, item.id, { page_blocks: updated }),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['space-items', space.id] }),
+  });
+
+  const schedulesSave = useCallback((next: Block[]) => {
+    if (saveTimerRef.current) clearTimeout(saveTimerRef.current);
+    saveTimerRef.current = setTimeout(() => {
+      saveTimerRef.current = null;
+      saveMutation.mutate(next);
+    }, 800);
+  }, [saveMutation]);
+
+  const handleEdit = useCallback((index: number, updated: Block) => {
+    setBlocks(prev => {
+      const next = prev.map((b, i) => i === index ? updated : b);
+      schedulesSave(next);
+      return next;
+    });
+  }, [schedulesSave]);
+
+  const handleDelete = useCallback((index: number) => {
+    setBlocks(prev => {
+      const next = prev.filter((_, i) => i !== index);
+      schedulesSave(next);
+      return next;
+    });
+  }, [schedulesSave]);
+
+  const handleReorder = useCallback((fromIdx: number, toIdx: number) => {
+    setBlocks(prev => {
+      const next = [...prev];
+      const [moved] = next.splice(fromIdx, 1);
+      next.splice(toIdx, 0, moved);
+      schedulesSave(next);
+      return next;
+    });
+  }, [schedulesSave]);
+
+  const addBlock = useCallback((block: Block) => {
+    setBlocks(prev => {
+      const next = [...prev, block];
+      schedulesSave(next);
+      return next;
+    });
+  }, [schedulesSave]);
+
+  const draggingIdxRef = useRef<number | null>(null);
+  const [dragOverIdx, setDragOverIdx] = useState<number | null>(null);
+
   return (
     <PageBody>
       <ContentColumn className="max-w-4xl py-6">
@@ -518,16 +632,62 @@ function TemplateItemDetail({ space, item }: { space: Space; item: SpaceItem }) 
           <span className="rounded-md bg-muted px-2 py-0.5 text-[11px] font-medium text-muted-foreground capitalize">
             {typeName}
           </span>
+          {saveMutation.isPending && (
+            <span className="text-[11px] text-faint-fg">Saving…</span>
+          )}
         </div>
-        {item.page_blocks.every(isBlockEmpty) ? (
-          <div className="rounded-lg border border-dashed border-border bg-background/50 px-4 py-8 text-center text-sm text-muted-foreground">
-            This item has no content yet. Ask the agent to fill it in.
+        {blocks.length === 0 ? (
+          <div className="flex flex-col items-center gap-3 rounded-lg border border-dashed border-border bg-background/50 px-4 py-10 text-center">
+            <p className="text-sm text-muted-foreground">No content yet. Ask the agent to fill this in, or add a block below.</p>
+            <AddBlockButton onAdd={addBlock} />
           </div>
         ) : (
           <div className="flex flex-col gap-4">
-            {item.page_blocks.map((block, i) => (
-              <BlockRenderer key={i} block={block} spaceId={space.id} itemId={item.id} />
+            {blocks.map((block, i) => (
+              <div
+                key={i}
+                className={cn(
+                  'group relative flex items-start gap-2',
+                  dragOverIdx === i && draggingIdxRef.current !== i && 'rounded-lg ring-2 ring-primary/30',
+                )}
+                onDragOver={(e) => { e.preventDefault(); setDragOverIdx(i); }}
+                onDragLeave={() => setDragOverIdx(prev => prev === i ? null : prev)}
+                onDrop={(e) => {
+                  e.preventDefault();
+                  const from = draggingIdxRef.current;
+                  if (from !== null && from !== i) handleReorder(from, i);
+                  draggingIdxRef.current = null;
+                  setDragOverIdx(null);
+                }}
+              >
+                <div
+                  draggable
+                  onDragStart={() => { draggingIdxRef.current = i; }}
+                  onDragEnd={() => { draggingIdxRef.current = null; setDragOverIdx(null); }}
+                  className="mt-2.5 shrink-0 cursor-grab opacity-0 transition-opacity group-hover:opacity-100 active:cursor-grabbing"
+                  title="Drag to reorder"
+                >
+                  <GripVertical size={14} className="text-faint-fg" />
+                </div>
+                <div className="min-w-0 flex-1">
+                  <BlockRenderer
+                    block={block}
+                    spaceId={space.id}
+                    itemId={item.id}
+                    onEdit={(updated) => handleEdit(i, updated)}
+                  />
+                </div>
+                <button
+                  type="button"
+                  onClick={() => handleDelete(i)}
+                  title="Delete block"
+                  className="mt-1.5 shrink-0 rounded-md p-1 opacity-0 transition-[opacity,colors] hover:bg-muted hover:text-destructive group-hover:opacity-100 text-muted-foreground/40"
+                >
+                  <X size={12} />
+                </button>
+              </div>
             ))}
+            <AddBlockButton onAdd={addBlock} />
           </div>
         )}
       </ContentColumn>
@@ -577,11 +737,56 @@ function FileDetail({ space, item }: { space: Space; item: FileItem }) {
   );
 }
 
+const BLOCK_OPTIONS: { label: string; description: string; block: Block }[] = [
+  { label: 'Text', description: 'Plain paragraph', block: { type: 'text', content: '' } },
+  { label: 'Heading', description: 'Section title', block: { type: 'heading', level: 2, text: '' } },
+  { label: 'Code', description: 'Code snippet', block: { type: 'code', language: 'plaintext', content: '' } },
+  { label: 'Callout', description: 'Highlighted note', block: { type: 'callout', variant: 'info', content: '' } },
+  { label: 'Bullet list', description: 'Unordered list', block: { type: 'list', ordered: false, items: [''] } },
+  { label: 'Numbered list', description: 'Ordered list', block: { type: 'list', ordered: true, items: [''] } },
+  { label: 'Task list', description: 'Checkboxes', block: { type: 'task-list', tasks: [] } },
+  { label: 'Text input', description: 'Single-line field', block: { type: 'input', label: 'Label', value: '', input_type: 'text' } },
+  { label: 'Long input', description: 'Multi-line field', block: { type: 'input', label: 'Label', value: '', input_type: 'multiline' } },
+  { label: 'Number input', description: 'Numeric field', block: { type: 'input', label: 'Label', value: '', input_type: 'number' } },
+  { label: 'Dropdown', description: 'Pick from options', block: { type: 'input', label: 'Label', value: '', input_type: 'select', options: ['Option 1', 'Option 2'] } },
+];
+
+function AddBlockButton({ onAdd }: { onAdd: (block: Block) => void }) {
+  const [open, setOpen] = useState(false);
+  return (
+    <Popover open={open} onOpenChange={setOpen}>
+      <PopoverTrigger asChild>
+        <button
+          type="button"
+          className="flex items-center gap-1.5 self-start rounded-md px-2 py-1 text-[11px] text-faint-fg transition-colors hover:bg-muted hover:text-muted-foreground"
+        >
+          <Plus size={11} />Add block
+        </button>
+      </PopoverTrigger>
+      <PopoverContent align="start" className="w-52 p-1.5">
+        {BLOCK_OPTIONS.map(opt => (
+          <button
+            key={opt.label}
+            type="button"
+            onClick={() => { onAdd(opt.block); setOpen(false); }}
+            className="flex w-full flex-col rounded-md px-2.5 py-2 text-left transition-colors hover:bg-muted"
+          >
+            <span className="text-xs font-medium text-foreground">{opt.label}</span>
+            <span className="text-[11px] text-faint-fg">{opt.description}</span>
+          </button>
+        ))}
+      </PopoverContent>
+    </Popover>
+  );
+}
+
 function ItemIcon({ type }: { type: string }) {
   const icon: Record<string, ReactNode> = {
     repo: <FolderGit2 size={15} />,
     file: <FileText size={15} />,
     Chat: <MessageSquare size={15} />,
+    kanban: <LayoutDashboard size={15} />,
+    // all block-based doc types get FileType; custom template IDs fall through too
   };
   return <span className="grid size-8 shrink-0 place-items-center rounded-lg bg-muted text-muted-foreground">{icon[type] ?? <FileType size={15} />}</span>;
 }

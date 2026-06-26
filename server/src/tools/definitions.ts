@@ -472,7 +472,7 @@ export const toolDefinitions: Anthropic.Tool[] = [
   },
   {
     name: 'wait_for_execution',
-    description: 'Block until an execution reaches a terminal state (done or error), then return its result and output log. Use after generate_video (or any fire-and-forget tool) when downstream work depends on its completion. Times out after timeout_seconds (default 300, max 600) and returns an error string if still running.',
+    description: 'Block until an execution reaches a terminal state (done or error), then return its result and output log. Use after any fire-and-forget tool when downstream work depends on its completion. Times out after timeout_seconds (default 300, max 600) and returns an error string if still running.',
     input_schema: {
       type: 'object',
       properties: {
@@ -480,31 +480,6 @@ export const toolDefinitions: Anthropic.Tool[] = [
         timeout_seconds: { type: 'integer', description: 'Max seconds to wait before returning a timeout error (default 300, max 600)', minimum: 1, maximum: 600 },
       },
       required: ['execution_id'],
-    },
-  },
-  {
-    name: 'generate_video',
-    description: 'Render an MP4 video for a Space from structured scene data. Runs asynchronously; returns immediately with the execution id, and the finished video is registered as a file Item in the Space.',
-    input_schema: {
-      type: 'object',
-      properties: {
-        space_id: { type: 'string', description: 'ID of the Space to render video for' },
-        title: { type: 'string', description: 'Video title' },
-        scenes: {
-          type: 'array',
-          description: 'Ordered list of scenes to render',
-          items: {
-            type: 'object',
-            properties: {
-              text: { type: 'string', description: 'Text to display during this scene' },
-              durationInSeconds: { type: 'number', description: 'How long this scene lasts' },
-              imageUrl: { type: 'string', description: 'Optional background image URL for this scene' },
-            },
-            required: ['text', 'durationInSeconds'],
-          },
-        },
-      },
-      required: ['space_id', 'title', 'scenes'],
     },
   },
 ];

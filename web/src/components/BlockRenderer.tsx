@@ -1,4 +1,4 @@
-import { Component, type ReactNode } from 'react';
+import { Component, useRef, type ReactNode } from 'react';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
@@ -15,7 +15,7 @@ import {
   XAxis,
   YAxis,
 } from 'recharts';
-import { ArrowDown, ArrowRight, ArrowUp } from 'lucide-react';
+import { ArrowDown, ArrowRight, ArrowUp, Plus, X } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { updateItemTask } from '../lib/api.js';
 import FileBrowser from './FileBrowser.js';
@@ -25,6 +25,7 @@ interface BlockRendererProps {
   block: Block;
   spaceId: string;
   itemId: string;
+  onEdit?: (updated: Block) => void;
 }
 
 // A block render failure (malformed data slipping past server validation,
@@ -49,33 +50,57 @@ class BlockErrorBoundary extends Component<{ children: ReactNode }, { hasError: 
   }
 }
 
-export default function BlockRenderer({ block, spaceId, itemId }: BlockRendererProps) {
+export default function BlockRenderer({ block, spaceId, itemId, onEdit }: BlockRendererProps) {
   return (
     <BlockErrorBoundary key={JSON.stringify(block)}>
-      {renderBlock(block, spaceId, itemId)}
+      {renderBlock(block, spaceId, itemId, onEdit)}
     </BlockErrorBoundary>
   );
 }
 
-function renderBlock(block: Block, spaceId: string, itemId: string) {
+function renderBlock(block: Block, spaceId: string, itemId: string, onEdit?: (updated: Block) => void) {
   switch (block.type) {
-    case 'text':      return <TextBlock block={block} />;
-    case 'heading':   return <HeadingBlock block={block} />;
-    case 'code':      return <CodeBlock block={block} />;
+    case 'text':      return <TextBlock block={block} onEdit={onEdit} />;
+    case 'heading':   return <HeadingBlock block={block} onEdit={onEdit} />;
+    case 'code':      return <CodeBlock block={block} onEdit={onEdit} />;
     case 'table':     return <TableBlock block={block} />;
     case 'image':     return <ImageBlock block={block} />;
-    case 'task-list': return <TaskListBlock block={block} spaceId={spaceId} itemId={itemId} />;
-    case 'callout':   return <CalloutBlock block={block} />;
+    case 'task-list': return <TaskListBlock block={block} spaceId={spaceId} itemId={itemId} onEdit={onEdit} />;
+    case 'callout':   return <CalloutBlock block={block} onEdit={onEdit} />;
     case 'file-browser': return <FileBrowser spaceId={spaceId} itemId={itemId} />;
     case 'chart':     return <ChartBlock block={block} />;
     case 'stat':      return <StatBlock block={block} />;
-    case 'list':      return <ListBlock block={block} />;
+    case 'list':      return <ListBlock block={block} onEdit={onEdit} />;
     case 'progress':  return <ProgressBlock block={block} />;
+    case 'input':     return <InputBlock block={block} onEdit={onEdit} />;
     default:          return null;
   }
 }
 
-function TextBlock({ block }: { block: Extract<Block, { type: 'text' }> }) {
+function TextBlock({ block, onEdit }: { block: Extract<Block, { type: 'text' }>; onEdit?: (updated: Block) => void }) {
+  const ref = useRef<HTMLTextAreaElement>(null);
+
+  function autoResize() {
+    const el = ref.current;
+    if (!el) return;
+    el.style.height = '0';
+    el.style.height = `${el.scrollHeight}px`;
+  }
+
+  if (onEdit) {
+    return (
+      <textarea
+        ref={ref}
+        value={block.content}
+        placeholder="Write something…"
+        rows={1}
+        onChange={e => { onEdit({ ...block, content: e.target.value }); autoResize(); }}
+        onFocus={autoResize}
+        className="w-full resize-none overflow-hidden rounded bg-transparent px-1 -mx-1 text-[14px] leading-relaxed text-fg-soft outline-none placeholder:text-faint-fg focus:ring-1 focus:ring-ring/30"
+      />
+    );
+  }
+
   if (!block.content.trim()) return null;
   return (
     <div className="text-[14px] leading-relaxed text-fg-soft
@@ -90,24 +115,62 @@ function TextBlock({ block }: { block: Extract<Block, { type: 'text' }> }) {
   );
 }
 
-function HeadingBlock({ block }: { block: Extract<Block, { type: 'heading' }> }) {
+function HeadingBlock({ block, onEdit }: { block: Extract<Block, { type: 'heading' }>; onEdit?: (updated: Block) => void }) {
   const base = 'font-semibold text-foreground';
+  if (onEdit) {
+    const sizeClass = block.level === 1 ? 'text-xl mt-2 mb-1' : block.level === 2 ? 'text-base mt-4 mb-1' : 'text-sm mt-3 mb-0.5';
+    return (
+      <input
+        value={block.text}
+        onChange={e => onEdit({ ...block, text: e.target.value })}
+        className={cn(base, sizeClass, 'w-full rounded bg-transparent px-1 -mx-1 outline-none focus:ring-1 focus:ring-ring/30')}
+      />
+    );
+  }
   if (block.level === 1) return <h1 className={cn(base, 'text-xl mt-2 mb-1')}>{block.text}</h1>;
   if (block.level === 2) return <h2 className={cn(base, 'text-base mt-4 mb-1')}>{block.text}</h2>;
   return <h3 className={cn(base, 'text-sm mt-3 mb-0.5')}>{block.text}</h3>;
 }
 
-function CodeBlock({ block }: { block: Extract<Block, { type: 'code' }> }) {
+function CodeBlock({ block, onEdit }: { block: Extract<Block, { type: 'code' }>; onEdit?: (updated: Block) => void }) {
+  const ref = useRef<HTMLTextAreaElement>(null);
+  function autoResize() {
+    const el = ref.current;
+    if (!el) return;
+    el.style.height = '0';
+    el.style.height = `${el.scrollHeight}px`;
+  }
   return (
     <div className="overflow-hidden rounded-xl border border-border-soft bg-muted/30">
       <div className="flex items-center gap-2 border-b border-border-soft px-3 py-1.5">
-        <span className="font-mono text-[11px] text-faint-fg">{block.language}</span>
+        {onEdit ? (
+          <input
+            value={block.language}
+            onChange={e => onEdit({ ...block, language: e.target.value })}
+            placeholder="language"
+            className="font-mono text-[11px] text-faint-fg bg-transparent outline-none w-24"
+          />
+        ) : (
+          <span className="font-mono text-[11px] text-faint-fg">{block.language}</span>
+        )}
       </div>
-      <pre className="overflow-x-auto p-3">
-        <code className={`language-${block.language} font-mono text-[12px] leading-relaxed`}>
-          {block.content}
-        </code>
-      </pre>
+      {onEdit ? (
+        <textarea
+          ref={ref}
+          value={block.content}
+          onChange={e => { onEdit({ ...block, content: e.target.value }); autoResize(); }}
+          onFocus={autoResize}
+          rows={1}
+          spellCheck={false}
+          className="w-full resize-none overflow-hidden bg-transparent p-3 font-mono text-[12px] leading-relaxed outline-none"
+        />
+      ) : (
+        <pre className="overflow-x-auto p-3">
+          <code className={`language-${block.language} font-mono text-[12px] leading-relaxed`}>
+            {block.content}
+          </code>
+        </pre>
+      )}
     </div>
   );
 }
@@ -152,10 +215,12 @@ function TaskListBlock({
   block,
   spaceId,
   itemId,
+  onEdit,
 }: {
   block: Extract<Block, { type: 'task-list' }>;
   spaceId: string;
   itemId: string;
+  onEdit?: (updated: Block) => void;
 }) {
   const queryClient = useQueryClient();
   const toggle = useMutation({
@@ -166,6 +231,53 @@ function TaskListBlock({
       queryClient.invalidateQueries({ queryKey: ['space-item', spaceId, itemId] });
     },
   });
+
+  if (onEdit) {
+    const updateTask = (id: string, patch: Partial<{ text: string; done: boolean }>) =>
+      onEdit({ ...block, tasks: block.tasks.map(t => t.id === id ? { ...t, ...patch } : t) });
+    const addTask = () =>
+      onEdit({ ...block, tasks: [...block.tasks, { id: crypto.randomUUID(), text: '', done: false }] });
+    const removeTask = (id: string) =>
+      onEdit({ ...block, tasks: block.tasks.filter(t => t.id !== id) });
+    return (
+      <div className="flex flex-col gap-1.5">
+        {block.tasks.map(task => (
+          <div key={task.id} className="group/task flex items-center gap-2.5">
+            <input
+              type="checkbox"
+              checked={task.done}
+              onChange={e => updateTask(task.id, { done: e.target.checked })}
+              className="h-4 w-4 shrink-0 cursor-pointer rounded border-border accent-primary"
+            />
+            <input
+              value={task.text}
+              onChange={e => updateTask(task.id, { text: e.target.value })}
+              onKeyDown={e => {
+                if (e.key === 'Enter') { e.preventDefault(); addTask(); }
+                if (e.key === 'Backspace' && !task.text && block.tasks.length > 1) { e.preventDefault(); removeTask(task.id); }
+              }}
+              placeholder="Task…"
+              className={cn('flex-1 bg-transparent text-sm outline-none placeholder:text-faint-fg', task.done && 'text-faint-fg line-through')}
+            />
+            <button
+              type="button"
+              onClick={() => removeTask(task.id)}
+              className="rounded p-0.5 text-faint-fg opacity-0 transition-opacity hover:bg-muted hover:text-destructive group-hover/task:opacity-100"
+            >
+              <X size={11} />
+            </button>
+          </div>
+        ))}
+        <button
+          type="button"
+          onClick={addTask}
+          className="mt-0.5 flex items-center gap-1 text-xs text-faint-fg hover:text-muted-foreground"
+        >
+          <Plus size={11} /> Add task
+        </button>
+      </div>
+    );
+  }
 
   if (block.tasks.length === 0) {
     return (
@@ -200,7 +312,32 @@ const CALLOUT_STYLES = {
   error:   'border-red-200/60 bg-red-50/50 text-red-900 dark:border-red-800/40 dark:bg-red-950/30 dark:text-red-200',
 };
 
-function CalloutBlock({ block }: { block: Extract<Block, { type: 'callout' }> }) {
+function CalloutBlock({ block, onEdit }: { block: Extract<Block, { type: 'callout' }>; onEdit?: (updated: Block) => void }) {
+  if (onEdit) {
+    return (
+      <div className={cn('rounded-lg border-l-4 px-4 py-3', CALLOUT_STYLES[block.variant])}>
+        <div className="mb-2 flex gap-1.5">
+          {(['info', 'warning', 'success', 'error'] as const).map(v => (
+            <button
+              key={v}
+              type="button"
+              onClick={() => onEdit({ ...block, variant: v })}
+              className={cn('rounded px-1.5 py-0.5 text-[10px] font-medium capitalize transition-opacity', v === block.variant ? 'bg-black/10 dark:bg-white/10' : 'opacity-40 hover:opacity-70')}
+            >
+              {v}
+            </button>
+          ))}
+        </div>
+        <textarea
+          value={block.content}
+          onChange={e => onEdit({ ...block, content: e.target.value })}
+          rows={2}
+          placeholder="Callout text…"
+          className="w-full resize-none bg-transparent text-[13px] leading-relaxed outline-none placeholder:opacity-50"
+        />
+      </div>
+    );
+  }
   return (
     <div className={cn('rounded-lg border-l-4 px-4 py-3 text-[13px] leading-relaxed', CALLOUT_STYLES[block.variant])}>
       {block.content}
@@ -279,7 +416,48 @@ function StatBlock({ block }: { block: Extract<Block, { type: 'stat' }> }) {
   );
 }
 
-function ListBlock({ block }: { block: Extract<Block, { type: 'list' }> }) {
+function ListBlock({ block, onEdit }: { block: Extract<Block, { type: 'list' }>; onEdit?: (updated: Block) => void }) {
+  if (onEdit) {
+    const updateItem = (i: number, value: string) =>
+      onEdit({ ...block, items: block.items.map((item, idx) => idx === i ? value : item) });
+    const addItem = () => onEdit({ ...block, items: [...block.items, ''] });
+    const removeItem = (i: number) => onEdit({ ...block, items: block.items.filter((_, idx) => idx !== i) });
+    return (
+      <div className="flex flex-col gap-1">
+        {block.items.map((item, i) => (
+          <div key={i} className="group/li flex items-center gap-1.5">
+            <span className="w-4 shrink-0 select-none text-center text-xs text-faint-fg">
+              {block.ordered ? `${i + 1}.` : '•'}
+            </span>
+            <input
+              value={item}
+              onChange={e => updateItem(i, e.target.value)}
+              onKeyDown={e => {
+                if (e.key === 'Enter') { e.preventDefault(); addItem(); }
+                if (e.key === 'Backspace' && !item && block.items.length > 1) { e.preventDefault(); removeItem(i); }
+              }}
+              placeholder="List item…"
+              className="flex-1 bg-transparent text-sm text-fg-soft outline-none placeholder:text-faint-fg"
+            />
+            <button
+              type="button"
+              onClick={() => removeItem(i)}
+              className="rounded p-0.5 text-faint-fg opacity-0 transition-opacity hover:bg-muted hover:text-destructive group-hover/li:opacity-100"
+            >
+              <X size={11} />
+            </button>
+          </div>
+        ))}
+        <button
+          type="button"
+          onClick={addItem}
+          className="mt-0.5 flex items-center gap-1 text-xs text-faint-fg hover:text-muted-foreground"
+        >
+          <Plus size={11} /> Add item
+        </button>
+      </div>
+    );
+  }
   if (block.items.length === 0) {
     return (
       <div className="rounded-lg border border-dashed border-border bg-background/50 px-3 py-2 text-xs text-faint-fg">
@@ -292,6 +470,53 @@ function ListBlock({ block }: { block: Extract<Block, { type: 'list' }> }) {
     <Tag className={cn('flex flex-col gap-1 text-sm text-fg-soft', block.ordered ? 'ml-5 list-decimal' : 'ml-5 list-disc')}>
       {block.items.map((item, i) => <li key={i}>{item}</li>)}
     </Tag>
+  );
+}
+
+function InputBlock({ block, onEdit }: { block: Extract<Block, { type: 'input' }>; onEdit?: (updated: Block) => void }) {
+  const update = (value: string) => onEdit?.({ ...block, value });
+
+  const inputClass = 'w-full rounded-lg border border-input bg-card px-3 py-2 text-sm text-foreground outline-none transition-shadow focus:ring-2 focus:ring-ring/30 placeholder:text-faint-fg disabled:opacity-50';
+
+  return (
+    <div className="flex flex-col gap-1.5">
+      {onEdit ? (
+        <input
+          value={block.label}
+          onChange={e => onEdit({ ...block, label: e.target.value })}
+          placeholder="Label…"
+          className="bg-transparent text-xs font-medium text-muted-foreground outline-none placeholder:text-faint-fg"
+        />
+      ) : block.label && (
+        <label className="text-xs font-medium text-muted-foreground">{block.label}</label>
+      )}
+      {block.input_type === 'multiline' ? (
+        <textarea
+          value={block.value}
+          placeholder={block.placeholder}
+          onChange={e => update(e.target.value)}
+          rows={3}
+          className={cn(inputClass, 'resize-y')}
+        />
+      ) : block.input_type === 'select' ? (
+        <select
+          value={block.value}
+          onChange={e => update(e.target.value)}
+          className={inputClass}
+        >
+          {!block.value && <option value="" disabled>Select…</option>}
+          {block.options?.map(opt => <option key={opt} value={opt}>{opt}</option>)}
+        </select>
+      ) : (
+        <input
+          type={block.input_type === 'number' ? 'number' : 'text'}
+          value={block.value}
+          placeholder={block.placeholder}
+          onChange={e => update(e.target.value)}
+          className={inputClass}
+        />
+      )}
+    </div>
   );
 }
 

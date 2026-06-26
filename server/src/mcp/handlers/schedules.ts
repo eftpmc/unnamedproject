@@ -22,6 +22,7 @@ export function registerScheduleHandlers(): void {
           enabled: !!t.enabled,
           next_run_at: t.next_run_at,
           last_run_at: t.last_run_at,
+          pinned_space_id: t.pinned_space_id,
         })),
         null,
         2,
@@ -31,13 +32,14 @@ export function registerScheduleHandlers(): void {
 
   registerTool({
     name: 'create_scheduled_task',
-    description: 'Create a new scheduled task',
+    description: 'Create a new scheduled task. Set pinned_space_id so the task runs with full space context (items, workspace.md, capabilities).',
     inputSchema: {
       type: 'object',
       properties: {
         type: { type: 'string' },
         prompt: { type: 'string' },
         interval_hours: { type: 'number' },
+        pinned_space_id: { type: 'string', description: 'Space to pin so the task has full project context when it runs' },
       },
       required: ['type', 'interval_hours'],
     },
@@ -47,8 +49,9 @@ export function registerScheduleHandlers(): void {
         args.type as string,
         args.interval_hours as number,
         args.prompt as string | undefined,
+        args.pinned_space_id as string | undefined,
       );
-      return JSON.stringify({ id, type: args.type, interval_hours: args.interval_hours, enabled: true });
+      return JSON.stringify({ id, type: args.type, interval_hours: args.interval_hours, enabled: true, pinned_space_id: args.pinned_space_id ?? null });
     },
   });
 

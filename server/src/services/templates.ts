@@ -66,3 +66,10 @@ export function updateItemTemplate(id: string, blocks: Block[], name?: string): 
     .run(JSON.stringify(blocks), name ?? null, id);
   return getItemTemplate(id);
 }
+
+export function deleteItemTemplate(id: string): boolean {
+  const existing = getItemTemplate(id);
+  if (!existing || existing.is_builtin) return false;
+  getDb().prepare('DELETE FROM item_templates WHERE id = ? AND is_builtin = 0').run(id);
+  return true;
+}

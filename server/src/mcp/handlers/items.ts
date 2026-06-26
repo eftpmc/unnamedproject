@@ -67,13 +67,14 @@ export function registerItemHandlers(): void {
 
   registerTool({
     name: 'update_item',
-    description: "Update an item's page blocks",
+    description: "Update an item's page blocks. Use append_blocks to add new blocks without reading the item first — prefer this for work logs and research docs. Use page_blocks only for full rewrites. Use block_id+block to patch a single existing block.",
     inputSchema: {
       type: 'object',
       properties: {
         space_id: { type: 'string' },
         item_id: { type: 'string' },
-        page_blocks: { type: 'array', description: 'Full replacement of page blocks' },
+        page_blocks: { type: 'array', description: 'Full replacement of all page blocks' },
+        append_blocks: { type: 'array', description: 'Append these blocks after existing content — safe, no read required' },
         block_id: { type: 'string', description: 'Patch a single block by its id' },
         block: { type: 'object', description: 'Replacement block when block_id is set' },
       },
@@ -85,6 +86,7 @@ export function registerItemHandlers(): void {
           space_id: args.space_id as string,
           item_id: args.item_id as string,
           page_blocks: args.page_blocks as Block[] | undefined,
+          append_blocks: args.append_blocks as Block[] | undefined,
           block_id: args.block_id as string | undefined,
           block: args.block as Block | undefined,
         },

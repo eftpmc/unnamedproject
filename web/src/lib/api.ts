@@ -1,5 +1,5 @@
 import { getToken, setToken, clearToken } from './auth.js';
-import type { Session, Message, Space, SpaceItem, Connection, EffortLevel, UserSettings, Memory, ScheduledTask, SessionWorktree, PermissionProfile, SessionEvent, SessionSpaceLink, Block, ItemTemplate } from '../types.js';
+import type { Session, Message, Space, SpaceItem, Connection, EffortLevel, UserSettings, Memory, ScheduledTask, SessionWorktree, PermissionProfile, SessionEvent, Block, ItemTemplate } from '../types.js';
 
 async function request<T>(path: string, init: RequestInit = {}): Promise<T> {
   const token = getToken();
@@ -22,6 +22,7 @@ async function request<T>(path: string, init: RequestInit = {}): Promise<T> {
     const body = await res.json().catch(() => ({}));
     throw new Error((body as { error?: string }).error ?? `HTTP ${res.status}`);
   }
+  if (res.status === 204 || res.headers.get('content-length') === '0') return undefined as T;
   return res.json();
 }
 
@@ -42,7 +43,7 @@ export function searchChats(q: string): Promise<Session[]> {
   return request(`/sessions/search?q=${encodeURIComponent(q)}`);
 }
 
-export function getChatEvents(chatId: string): Promise<{ events: SessionEvent[]; projects: SessionSpaceLink[] }> {
+export function getChatEvents(chatId: string): Promise<{ events: SessionEvent[] }> {
   return request(`/sessions/${chatId}/events`);
 }
 
@@ -72,7 +73,7 @@ export function createChat(title?: string): Promise<{ id: string }> {
   return request('/sessions', { method: 'POST', body: JSON.stringify({ title }) });
 }
 
-export function updateChatConfig(chatId: string, config: { effort?: EffortLevel; model?: string | null; pinned_space_id?: string | null; pinned_project_id?: string | null; title?: string }): Promise<void> {
+export function updateChatConfig(chatId: string, config: { effort?: EffortLevel; pinned_space_id?: string | null; pinned_project_id?: string | null; title?: string }): Promise<void> {
   return request(`/sessions/${chatId}`, { method: 'PATCH', body: JSON.stringify(config) });
 }
 
@@ -186,12 +187,16 @@ export function getSpaceItem(spaceId: string, itemId: string): Promise<SpaceItem
 export function updateSpaceItem(
   spaceId: string,
   itemId: string,
-  input: { name?: string; content?: string; blocks?: Block[]; overview_blocks?: Block[] | null },
+  input: { name?: string; page_blocks?: Block[] },
 ): Promise<SpaceItem> {
   return request(`/spaces/${spaceId}/items/${itemId}`, {
     method: 'PATCH',
     body: JSON.stringify(input),
   });
+}
+
+export function deleteItemTemplate(templateId: string): Promise<void> {
+  return request(`/spaces/item-templates/${templateId}`, { method: 'DELETE' });
 }
 
 export function updateItemTask(
@@ -240,10 +245,7 @@ export function updateItemWorkspace(spaceId: string, itemId: string, content: st
 }
 
 export interface SpaceCapabilities {
-  has_remotion: boolean;
-  has_media: boolean;
   has_graph: boolean;
-  has_research: boolean;
 }
 
 export function getItemCapabilities(spaceId: string, itemId: string): Promise<SpaceCapabilities> {
@@ -282,7 +284,7 @@ export function getScheduledTasks(): Promise<ScheduledTask[]> {
   return request('/scheduled-tasks');
 }
 
-export function updateScheduledTask(id: string, body: { enabled?: boolean; interval_hours?: number }): Promise<void> {
+export function updateScheduledTask(id: string, body: { enabled?: boolean; interval_hours?: number; pinned_space_id?: string | null }): Promise<void> {
   return request(`/scheduled-tasks/${id}`, { method: 'PATCH', body: JSON.stringify(body) });
 }
 

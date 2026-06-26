@@ -5,6 +5,7 @@ import {
   createTemplateItem,
   updateItemPageBlocks,
   updateItemPageBlock,
+  appendItemPageBlocks,
   getItemById,
   readItemContent,
   type Block,
@@ -79,6 +80,7 @@ export async function runUpdateItem(
     space_id: string;
     item_id: string;
     page_blocks?: Block[];
+    append_blocks?: Block[];
     block_id?: string;
     block?: Block;
   },
@@ -96,6 +98,13 @@ export async function runUpdateItem(
     const blocksError = validateBlocks(input.page_blocks);
     if (blocksError) return `Error: ${blocksError}`;
     updateItemPageBlocks(item.id, input.page_blocks);
+  }
+
+  if (input.append_blocks !== undefined) {
+    if (!Array.isArray(input.append_blocks)) return 'Error: append_blocks must be an array';
+    const blocksError = validateBlocks(input.append_blocks);
+    if (blocksError) return `Error: ${blocksError}`;
+    appendItemPageBlocks(item.id, input.append_blocks);
   }
 
   if (input.block_id !== undefined) {

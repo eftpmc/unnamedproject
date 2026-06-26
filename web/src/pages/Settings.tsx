@@ -16,13 +16,16 @@ import { TabStrip } from '@/components/ui/tab-strip';
 import { cn } from '@/lib/utils';
 import {
   createConnection,
+  createItemTemplate,
   deleteConnection,
+  deleteItemTemplate,
   deleteScheduledTask,
   getConnections,
   getMemory,
   getSpaces,
   getScheduledTasks,
   getSettings,
+  listItemTemplates,
   runScheduledTask,
   testConnection,
   updateScheduledTask,
@@ -33,14 +36,15 @@ import { usePageTitle } from '../lib/usePageTitle.js';
 import { useTheme } from '../lib/useTheme.js';
 import { useAccent } from '../lib/useAccent.js';
 import { ACCENT_PRESETS, DEFAULT_ACCENT } from '../lib/accent.js';
-import type { Connection, Memory, PermissionProfile, Space, ScheduledTask, UserSettings } from '../types.js';
+import type { Connection, ItemTemplate, Memory, PermissionProfile, Space, ScheduledTask, UserSettings } from '../types.js';
 
-type Tab = 'tools' | 'mcp' | 'workspace' | 'memory' | 'account';
+type Tab = 'tools' | 'mcp' | 'workspace' | 'templates' | 'memory' | 'account';
 
 const TABS: { id: Tab; label: string }[] = [
   { id: 'tools', label: 'Tools' },
   { id: 'mcp', label: 'MCP' },
   { id: 'workspace', label: 'Workspace' },
+  { id: 'templates', label: 'Templates' },
   { id: 'memory', label: 'Memory' },
   { id: 'account', label: 'Account' },
 ];
@@ -451,6 +455,20 @@ export default function Settings() {
   const { data: memory = [] } = useQuery<Memory[]>({ queryKey: ['memory'], queryFn: getMemory });
   const { data: scheduledTasks = [] } = useQuery<ScheduledTask[]>({ queryKey: ['scheduledTasks'], queryFn: getScheduledTasks });
   const { data: settings } = useQuery<UserSettings>({ queryKey: ['settings'], queryFn: getSettings });
+  const { data: allTemplates = [] } = useQuery<ItemTemplate[]>({ queryKey: ['item-templates'], queryFn: listItemTemplates });
+
+  const userTemplates = allTemplates.filter(t => !t.is_builtin);
+  const [newTemplateName, setNewTemplateName] = useState('');
+  const [templateDialogOpen, setTemplateDialogOpen] = useState(false);
+
+  const createTemplateMutation = useMutation({
+    mutationFn: () => createItemTemplate({ name: newTemplateName.trim(), blocks: [] }),
+    onSuccess: () => { qc.invalidateQueries({ queryKey: ['item-templates'] }); setTemplateDialogOpen(false); setNewTemplateName(''); },
+  });
+  const deleteTemplateMutation = useMutation({
+    mutationFn: deleteItemTemplate,
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['item-templates'] }),
+  });
 
   const [activeSetup, setActiveSetup] = useState<SetupKind | null>(null);
   const [form, setForm] = useState<SetupFormState>(INITIAL_SETUP_FORM);
@@ -529,7 +547,7 @@ export default function Settings() {
   });
 
   const updateTaskMutation = useMutation({
-    mutationFn: ({ id, body }: { id: string; body: { enabled?: boolean; interval_hours?: number } }) => updateScheduledTask(id, body),
+    mutationFn: ({ id, body }: { id: string; body: { enabled?: boolean; interval_hours?: number; pinned_space_id?: string | null } }) => updateScheduledTask(id, body),
     onSuccess: () => qc.invalidateQueries({ queryKey: ['scheduledTasks'] }),
   });
 
@@ -737,6 +755,7 @@ export default function Settings() {
                       const intervalVal = taskIntervals[task.id] ?? String(task.interval_hours);
                       const intervalDirty = intervalVal !== String(task.interval_hours);
                       const nextRun = task.enabled ? new Date(task.next_run_at * 1000).toLocaleString() : null;
+                      const pinnedSpace = spaces.find(s => s.id === task.pinned_space_id) ?? null;
                       return (
                         <div key={task.id} className="rounded-lg border border-border-soft bg-card p-4 flex flex-col gap-3">
                           <div className="flex items-start gap-3">
@@ -773,30 +792,49 @@ export default function Settings() {
                               </Button>
                             </div>
                           </div>
-                          <div className="flex items-center gap-2">
-                            <span className="text-xs text-muted-foreground shrink-0">Every</span>
-                            <Input
-                              type="number"
-                              min="1"
-                              className="h-7 w-20 text-xs"
-                              value={intervalVal}
-                              onChange={e => setTaskIntervals(prev => ({ ...prev, [task.id]: e.target.value }))}
-                            />
-                            <span className="text-xs text-muted-foreground shrink-0">hours</span>
-                            {intervalDirty && (
-                              <Button
-                                size="sm"
-                                className="h-7 text-xs"
-                                onClick={() => {
-                                  const hours = Number(intervalVal);
-                                  if (!Number.isFinite(hours) || hours < 1) return;
-                                  updateTaskMutation.mutate({ id: task.id, body: { interval_hours: hours } });
-                                  setTaskIntervals(prev => { const n = { ...prev }; delete n[task.id]; return n; });
-                                }}
+                          <div className="flex flex-wrap items-center gap-3">
+                            <div className="flex items-center gap-2">
+                              <span className="text-xs text-muted-foreground shrink-0">Every</span>
+                              <Input
+                                type="number"
+                                min="1"
+                                className="h-7 w-20 text-xs"
+                                value={intervalVal}
+                                onChange={e => setTaskIntervals(prev => ({ ...prev, [task.id]: e.target.value }))}
+                              />
+                              <span className="text-xs text-muted-foreground shrink-0">hours</span>
+                              {intervalDirty && (
+                                <Button
+                                  size="sm"
+                                  className="h-7 text-xs"
+                                  onClick={() => {
+                                    const hours = Number(intervalVal);
+                                    if (!Number.isFinite(hours) || hours < 1) return;
+                                    updateTaskMutation.mutate({ id: task.id, body: { interval_hours: hours } });
+                                    setTaskIntervals(prev => { const n = { ...prev }; delete n[task.id]; return n; });
+                                  }}
+                                >
+                                  Save
+                                </Button>
+                              )}
+                            </div>
+                            <div className="flex items-center gap-2 ml-auto">
+                              <span className="text-xs text-muted-foreground shrink-0">Space</span>
+                              <Select
+                                value={task.pinned_space_id ?? 'none'}
+                                onValueChange={val => updateTaskMutation.mutate({ id: task.id, body: { pinned_space_id: val === 'none' ? null : val } })}
                               >
-                                Save
-                              </Button>
-                            )}
+                                <SelectTrigger size="sm" className="h-7 w-36 text-xs">
+                                  <SelectValue>{pinnedSpace?.name ?? 'None'}</SelectValue>
+                                </SelectTrigger>
+                                <SelectContent>
+                                  <SelectItem value="none">None</SelectItem>
+                                  {spaces.map(s => (
+                                    <SelectItem key={s.id} value={s.id}>{s.name}</SelectItem>
+                                  ))}
+                                </SelectContent>
+                              </Select>
+                            </div>
                           </div>
                         </div>
                       );
@@ -804,6 +842,66 @@ export default function Settings() {
                   </div>
                 )}
               </div>
+            </div>
+          )}
+
+          {/* ── Templates ──────────────────────────────── */}
+          {tab === 'templates' && (
+            <div className="flex flex-col gap-5">
+              <div className="flex items-center justify-between">
+                <SectionLabel>Custom templates</SectionLabel>
+                <Button size="sm" className="h-7 gap-1.5 text-xs" onClick={() => setTemplateDialogOpen(true)}>
+                  <Plus size={13} />New template
+                </Button>
+              </div>
+              {userTemplates.length === 0 ? (
+                <div className="rounded-lg border border-dashed border-border bg-muted/30 px-4 py-3 text-sm text-muted-foreground">
+                  No custom templates yet. Create one and ask the agent to fill it with blocks.
+                </div>
+              ) : (
+                <div className="flex flex-col gap-2">
+                  {userTemplates.map(t => (
+                    <SettingRow key={t.id}>
+                      <div className="min-w-0">
+                        <div className="text-sm font-medium text-foreground">{t.name}</div>
+                        <div className="mt-0.5 text-xs text-faint-fg">
+                          {t.blocks?.length ? `${t.blocks.length} block${t.blocks.length !== 1 ? 's' : ''}` : 'Empty'}
+                        </div>
+                      </div>
+                      <DeleteBtn onClick={() => deleteTemplateMutation.mutate(t.id)} />
+                    </SettingRow>
+                  ))}
+                </div>
+              )}
+              <div>
+                <SectionLabel>Built-in templates</SectionLabel>
+                <div className="flex flex-wrap gap-2">
+                  {allTemplates.filter(t => t.is_builtin && t.kind === 'blocks').map(t => (
+                    <span key={t.id} className="rounded-md border border-border-soft bg-card px-3 py-1.5 text-xs font-medium text-muted-foreground">
+                      {t.name}
+                    </span>
+                  ))}
+                </div>
+              </div>
+              <Dialog open={templateDialogOpen} onOpenChange={open => { if (!open) { setTemplateDialogOpen(false); setNewTemplateName(''); } }}>
+                <DialogContent>
+                  <DialogHeader>
+                    <DialogTitle>New template</DialogTitle>
+                    <DialogDescription>Give it a name. Ask the agent to populate its blocks after creation.</DialogDescription>
+                  </DialogHeader>
+                  <Input
+                    placeholder="Template name"
+                    value={newTemplateName}
+                    onChange={e => setNewTemplateName(e.target.value)}
+                    onKeyDown={e => { if (e.key === 'Enter' && newTemplateName.trim()) createTemplateMutation.mutate(); }}
+                    autoFocus
+                  />
+                  <DialogFooter>
+                    <Button variant="ghost" onClick={() => { setTemplateDialogOpen(false); setNewTemplateName(''); }}>Cancel</Button>
+                    <Button disabled={!newTemplateName.trim() || createTemplateMutation.isPending} onClick={() => createTemplateMutation.mutate()}>Create</Button>
+                  </DialogFooter>
+                </DialogContent>
+              </Dialog>
             </div>
           )}
 

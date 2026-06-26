@@ -1,9 +1,17 @@
 import { useQuery } from '@tanstack/react-query';
 import { useNavigate } from 'react-router-dom';
-import { X, GitMerge, Check, Bell, FileStack, ArrowRight, Target } from 'lucide-react';
+import { X, GitMerge, Check, Bell, FileStack, ArrowRight } from 'lucide-react';
 import { getSpaceItems } from '../lib/api.js';
 import { cn } from '@/lib/utils';
-import type { Space, SessionSpaceLink } from '../types.js';
+import type { Space, SpaceItem } from '../types.js';
+
+function itemSnippet(item: SpaceItem): string {
+  for (const block of item.page_blocks) {
+    if (block.type === 'text' && block.content.trim()) return block.content.trim();
+    if (block.type === 'heading' && block.text.trim()) return block.text.trim();
+  }
+  return item.type;
+}
 
 interface Approval {
   executionId: string;
@@ -15,7 +23,6 @@ interface ContextPanelProps {
   open: boolean;
   onClose: () => void;
   pinnedSpace: Space | null;
-  linkedSpaces: SessionSpaceLink[];
   worktree: { branch: string; commits_ahead: number } | null;
   pendingApproval: Approval | null;
   onApprove: (approvalId: string) => void;
@@ -28,7 +35,6 @@ export default function ContextPanel({
   open,
   onClose,
   pinnedSpace,
-  linkedSpaces,
   worktree,
   pendingApproval,
   onApprove,
@@ -49,7 +55,6 @@ export default function ContextPanel({
           <PanelContent
             onClose={onClose}
             pinnedSpace={pinnedSpace}
-            linkedSpaces={linkedSpaces}
             worktree={worktree}
             pendingApproval={pendingApproval}
             onApprove={onApprove}
@@ -72,7 +77,6 @@ export default function ContextPanel({
             <PanelContent
               onClose={onClose}
               pinnedSpace={pinnedSpace}
-              linkedSpaces={linkedSpaces}
               worktree={worktree}
               pendingApproval={pendingApproval}
               onApprove={onApprove}
@@ -90,7 +94,6 @@ export default function ContextPanel({
 function PanelContent({
   onClose,
   pinnedSpace,
-  linkedSpaces,
   worktree,
   pendingApproval,
   onApprove,
@@ -100,7 +103,7 @@ function PanelContent({
 }: Omit<ContextPanelProps, 'open'>) {
   const navigate = useNavigate();
 
-  const primarySpace = pinnedSpace ?? linkedSpaces[linkedSpaces.length - 1] ?? null;
+  const primarySpace = pinnedSpace;
 
   const { data: items = [] } = useQuery({
     queryKey: ['space-items', primarySpace?.id],
@@ -109,8 +112,6 @@ function PanelContent({
     staleTime: 20_000,
   });
   const recentItems = items.slice(0, 3);
-
-  const hasSpaces = pinnedSpace || linkedSpaces.length > 0;
 
   return (
     <div className="flex flex-col gap-5 p-4 pb-6">
@@ -126,26 +127,15 @@ function PanelContent({
       </div>
 
       {/* Spaces */}
-      {hasSpaces && (
+      {pinnedSpace && (
         <section className="flex flex-col gap-2">
-          <span className="text-[11px] font-medium text-muted-foreground">Spaces</span>
+          <span className="text-[11px] font-medium text-muted-foreground">Space</span>
           <div className="flex flex-col gap-1.5">
-            {pinnedSpace && (
-              <SpaceRow
-                space={pinnedSpace}
-                label="Pinned"
-                onClick={() => navigate(`/spaces/${pinnedSpace.id}`)}
-              />
-            )}
-            {linkedSpaces.map(space => (
-              <SpaceRow
-                key={space.id}
-                space={space}
-                label="Auto"
-                icon={<Target size={11} className="shrink-0" strokeWidth={1.85} />}
-                onClick={() => navigate(`/spaces/${space.id}`)}
-              />
-            ))}
+            <SpaceRow
+              space={pinnedSpace}
+              label="Pinned"
+              onClick={() => navigate(`/spaces/${pinnedSpace.id}`)}
+            />
           </div>
         </section>
       )}
@@ -220,7 +210,7 @@ function PanelContent({
                   </span>
                   <span className="min-w-0 flex-1">
                     <span className="block truncate text-xs font-medium text-foreground">{item.name}</span>
-                    <span className="block truncate text-[11px] capitalize text-faint-fg">{item.type}</span>
+                    <span className="block truncate text-[11px] text-faint-fg">{itemSnippet(item)}</span>
                   </span>
                   <ArrowRight size={11} className="text-faint-fg" />
                 </button>

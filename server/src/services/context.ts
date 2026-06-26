@@ -1,7 +1,7 @@
 import fs from 'fs';
 import path from 'path';
 import { getDb, getDataDir, getPermissionProfile, type DbSpace } from '../db/index.js';
-import { getItemsForSpace, type SpaceItem, type RepoItem } from './items.js';
+import { getItemsForSpace, type RepoItem } from './items.js';
 import { recallRelevant } from './memory.js';
 import { formatEntry } from '../tools/memory_tools.js';
 import type { Intent } from './intent.js';
@@ -26,8 +26,8 @@ function readWorkspaceMd(space: DbSpace, repoPath: string | null): string | null
 function baseBlock(intent: Intent): string {
   const isCode = intent.domain === 'code' || intent.domain === 'multi' || intent.domain === 'general';
   const autoApproved = isCode
-    ? 'invoke_claude_code, invoke_codex, generate_video, git_op add/commit, run_command, list_spaces, create_space, update_space, project_query, rebuild_graph, search_files, read_file, list_dir, recall, remember, forget, list_chats, read_chat, register_file_item, create_note, list_items, read_item, list_connections, test_connection, tool_search, get_execution_output, wait_for_execution, list_scheduled_tasks, create_scheduled_task, update_scheduled_task'
-    : 'list_spaces, create_space, search_files, read_file, list_dir, recall, remember, forget, write_file, run_command, list_chats, read_chat, create_note, list_items, read_item, list_connections, test_connection, tool_search';
+    ? 'invoke_claude_code, invoke_codex, git_op add/commit, run_command, list_spaces, create_space, update_space, pin_space, project_query, rebuild_graph, search_files, read_file, list_dir, recall, remember, forget, list_chats, read_chat, register_file_item, create_note, list_items, read_item, list_connections, test_connection, tool_search, get_execution_output, wait_for_execution, list_scheduled_tasks, create_scheduled_task, update_scheduled_task'
+    : 'list_spaces, create_space, pin_space, search_files, read_file, list_dir, recall, remember, forget, write_file, run_command, list_chats, read_chat, create_note, list_items, read_item, list_connections, test_connection, tool_search';
 
   return `You are a personal AI operator and orchestrator. You decide how work gets done — you never implement code, write files, or run git operations yourself when the task belongs to a coding agent.
 
@@ -42,13 +42,22 @@ function baseBlock(intent: Intent): string {
 Before starting work in the active Space, check what already exists there:
 - Call list_items with the active space_id — see what's already present before generating a new report or research output.
 Only check other Spaces when the user's request explicitly involves them.
-If no Space is active and you need a space_id, call list_spaces first — never guess one (e.g. "default"). If list_spaces comes back empty, call create_space rather than giving up or working around the lack of a Space.
+If no Space is active and you need a space_id, call list_spaces first — never guess one (e.g. "default"). If list_spaces comes back empty, call create_space to create one, then immediately call pin_space with the new space's id so it becomes the active context for this session. If spaces exist but none is pinned, pick the most relevant one and call pin_space.
 
 ## MCP connections
 GitHub, web search, and other external service integrations are provided through MCP servers configured in Settings → MCP. To use an MCP tool, first use tool_search to discover available tools by describing what you need, or use list_connections to see all configured servers and their tools. Never guess a connection_id or tool name. Use test_connection to verify an MCP server is reachable before dispatching dependent work. If the user asks you to do something that requires GitHub or web search and no suitable MCP is configured, tell them which type of MCP server to add (e.g. GitHub MCP for repo/PR/issue operations, a search MCP like Brave or Exa for web research).
 
 ## File search
-Use search_files for fast codebase lookups (finding where a function is defined, tracing usages, locating config). Only fall back to project_query for broad architectural questions that need reasoning across the whole codebase.`;
+Use search_files for fast codebase lookups (finding where a function is defined, tracing usages, locating config). Only fall back to project_query for broad architectural questions that need reasoning across the whole codebase.
+
+## Interactive items
+Items support input blocks — labeled fields the user fills in that you can read back via read_item. Use these to build lightweight configuration surfaces or data-collection forms inside the space:
+- \`{ type: 'input', label: 'API endpoint', value: '', placeholder: 'https://...', input_type: 'text' }\`
+- \`{ type: 'input', label: 'Environment', value: 'staging', input_type: 'select', options: ['dev', 'staging', 'prod'] }\`
+- \`{ type: 'input', label: 'Notes', value: '', input_type: 'multiline' }\`
+- \`{ type: 'input', label: 'Retries', value: '3', input_type: 'number' }\`
+
+Create an item with input blocks when the task needs persistent user-defined parameters. The user fills in the fields in the UI; call read_item to see current values before acting. Patch a single field after the user updates it using update_item with block_id + block (all blocks have a stable id once written).`;
 }
 
 function permissionBlock(userId: string): string {
@@ -92,7 +101,8 @@ After the agent returns, always follow this exact sequence — do not skip any s
 1. Read the result for failure signals (test failures, errors, "could not", partial completion). If present, send a targeted follow-up correction, then repeat from step 1.
 2. Run git_op with op=add (space_id = the same Space). No permission needed.
 3. Run git_op with op=commit, message describing what was done. No permission needed.
-4. Only after the commit is confirmed: report to the user and summarize what changed.
+4. Write a work log entry to the space: call list_items, find an existing report/log item (or create_item with type 'tpl_report' named "Work Log"), then update_item with append_blocks — a heading block for the task and a text block summarizing what changed and what to verify. Never use page_blocks here; append_blocks is safe and doesn't require reading first.
+5. Only after steps 3–4: reply to the user with a short summary.
 
 The user cannot see or access work that is not committed. Do not summarize or report as done before step 3 completes.
 
@@ -108,7 +118,9 @@ Do not invoke coding agents for writing, documentation, or note-taking tasks.`;
       return `## Research tasks
 Use tool_search to find the configured search MCP tool by describing what you need, then call it. Always fetch and read the full source page after getting results — snippets alone are insufficient.
 Cite sources in your response.
-Check recall first before any web search.`;
+Check recall first before any web search.
+
+After synthesizing findings: save them to the space. Call list_items — if a suitable research doc exists, use update_item with append_blocks; otherwise create_item with type 'tpl_report' and then append_blocks. Use text blocks for narrative, callout blocks (variant 'info') for key insights, a list block for sources. Don't just reply inline — structured output in the space is durable.`;
 
     case 'creative':
       return `## Creative tasks
@@ -130,17 +142,9 @@ function projectContextBlock(space: DbSpace): string {
     .filter((item): item is RepoItem => item.type === 'repo');
   const repoPath = repoItems.length === 1 ? repoItems[0].repo_path : null;
   const detected = repoItems.map(item => detectCapabilities(item.id, item.repo_path));
-  const caps = {
-    has_remotion: detected.some(value => value.has_remotion),
-    has_media: detected.some(value => value.has_media),
-    has_graph: detected.some(value => value.has_graph),
-    has_research: detected.some(value => value.has_research),
-  };
+  const has_graph = detected.some(value => value.has_graph);
   const capLabels: string[] = [];
-  if (caps.has_remotion) capLabels.push('remotion (can call generate_video)');
-  if (caps.has_media) capLabels.push('rendered media available in Items tab');
-  if (caps.has_graph) capLabels.push('code graph indexed — use project_query for broad codebase questions before reading individual files');
-  if (caps.has_research) capLabels.push(`research notes exist — read them with read_file/list_dir from ${path.join(getDataDir(), 'projects', space.id, 'research')} before starting new research`);
+  if (has_graph) capLabels.push('code graph indexed — use project_query for broad codebase questions before reading individual files');
 
   const header = `## Active space: **${space.name}** (id: ${space.id})${space.description ? ' — ' + space.description : ''}`;
 
@@ -149,11 +153,8 @@ function projectContextBlock(space: DbSpace): string {
     const capNote = capLabels.length > 0
       ? ` Detected capabilities: ${capLabels.join(', ')}.`
       : ' No special capabilities detected yet.';
-    const scaffoldNote = !caps.has_remotion
-      ? ' To add video generation: delegate to invoke_claude_code to scaffold a Remotion setup (create remotion/ directory with package.json, composition, and index).'
-      : '';
     const repoList = repoItems.map(item => `${item.name} (item_id: ${item.id}, path: ${item.repo_path})`).join('; ');
-    guidance = `\nCode space with repos: ${repoList}.${capNote}${scaffoldNote} Every repo-scoped tool call must include the selected item_id.`;
+    guidance = `\nCode space with repos: ${repoList}.${capNote} Every repo-scoped tool call must include the selected item_id.`;
   } else {
     guidance = `\nDoc/writing space (no git repo). Create and read note/file items directly.`;
   }
@@ -168,8 +169,8 @@ function projectContextBlock(space: DbSpace): string {
   return header + guidance + workspaceSection;
 }
 
-function memoryBlock(userId: string, intent: Intent, pinnedProjectId?: string): string {
-  const entries = recallRelevant(userId, intent, pinnedProjectId);
+async function memoryBlock(userId: string, queryText: string, pinnedProjectId?: string): Promise<string> {
+  const entries = await recallRelevant(userId, queryText, pinnedProjectId);
   if (entries.length === 0) return 'User memory:\nNo memories stored yet.';
   return `User memory:\n${entries.map(e => `- ${formatEntry(userId, e)}`).join('\n')}`;
 }
@@ -208,7 +209,7 @@ function sessionSummaryBlock(sessionId: string): string {
 
 // ─── Public API ────────────────────────────────────────────────────────────
 
-export function buildContext(userId: string, sessionId: string, intent: Intent): string {
+export async function buildContext(userId: string, sessionId: string, intent: Intent, queryText: string): Promise<string> {
   const session = getDb()
     .prepare('SELECT pinned_space_id FROM sessions WHERE id = ?')
     .get(sessionId) as { pinned_space_id: string | null } | undefined;
@@ -230,7 +231,7 @@ export function buildContext(userId: string, sessionId: string, intent: Intent):
 
   if (pinnedProject) blocks.push(projectContextBlock(pinnedProject));
 
-  blocks.push(memoryBlock(userId, intent, pinnedProjectId));
+  blocks.push(await memoryBlock(userId, queryText, pinnedProjectId));
   blocks.push(projectsListBlock(userId));
 
   const chats = recentChatsBlock(userId, sessionId);

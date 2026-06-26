@@ -22,7 +22,7 @@ import { subscribe } from '../lib/ws.js';
 import { cn } from '../lib/utils.js';
 import { usePageTitle } from '../lib/usePageTitle.js';
 import { getAgentStatusText } from '../lib/chatStatus.js';
-import type { EffortLevel, Message, MessageExecution, Session, SessionEvent, SessionSpaceLink, WSEvent, WSMessageCreated, WSMessageStarted, WSMessageDelta, WSExecutionUpdate, WSApprovalRequested, WSAutoApproved, WSSessionTitleUpdated, WSSessionEventCreated, WSAgentError, WSTurnComplete } from '../types.js';
+import type { EffortLevel, Message, MessageExecution, Session, SessionEvent, WSEvent, WSMessageCreated, WSMessageStarted, WSMessageDelta, WSExecutionUpdate, WSApprovalRequested, WSAutoApproved, WSSessionTitleUpdated, WSSessionEventCreated, WSAgentError, WSTurnComplete } from '../types.js';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Button } from '@/components/ui/button';
 import { PageHeader } from '@/components/ui/app-layout';
@@ -53,7 +53,6 @@ export default function ChatView({ chatId }: ChatViewProps) {
     queryFn: () => getChatEvents(chatId),
   });
   const chatEvents = chatEventsData?.events ?? [];
-  const linkedProjects = chatEventsData?.projects ?? [];
 
   const { data: chats = [] } = useQuery<Session[]>({
     queryKey: ['chats'],
@@ -69,11 +68,9 @@ export default function ChatView({ chatId }: ChatViewProps) {
     queryFn: getSpaces,
   });
   const pinnedProject = projects.find(p => p.id === chat?.pinned_space_id) ?? null;
-  const inferredProject = !pinnedProject ? linkedProjects[linkedProjects.length - 1] ?? null : null;
-  const contextProject = pinnedProject ?? inferredProject;
 
   const configMutation = useMutation({
-    mutationFn: (config: { effort?: EffortLevel; model?: string | null; pinned_space_id?: string | null; title?: string }) => updateChatConfig(chatId, config),
+    mutationFn: (config: { effort?: EffortLevel; pinned_space_id?: string | null; title?: string }) => updateChatConfig(chatId, config),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['chats'] });
       queryClient.invalidateQueries({ queryKey: ['chat-events', chatId] });
@@ -454,10 +451,10 @@ export default function ChatView({ chatId }: ChatViewProps) {
     if (event.type === 'session_event_created') {
       const ev = event as WSSessionEventCreated;
       if (ev.sessionId === chatId) {
-        queryClient.setQueryData<{ events: SessionEvent[]; projects: SessionSpaceLink[] }>(['chat-events', chatId], prev => {
-          if (!prev) return { events: [ev.event], projects: [] };
+        queryClient.setQueryData<{ events: SessionEvent[] }>(['chat-events', chatId], prev => {
+          if (!prev) return { events: [ev.event] };
           if (prev.events.some(e => e.id === ev.event.id)) return prev;
-          return { ...prev, events: [...prev.events, ev.event] };
+          return { events: [...prev.events, ev.event] };
         });
         queryClient.invalidateQueries({ queryKey: ['chat-events', chatId] });
         if (ev.event.type === 'item_created' || ev.event.type === 'item_updated') {
@@ -539,7 +536,6 @@ export default function ChatView({ chatId }: ChatViewProps) {
                 <ScopePopover
                   spaces={projects}
                   pinnedProject={pinnedProject}
-                  inferredProject={inferredProject}
                   agentActive={agentActive}
                   onOpenSpace={(spaceId) => navigate(`/spaces/${spaceId}`)}
                   onScopeChange={(spaceId) => configMutation.mutate({ pinned_space_id: spaceId })}
@@ -590,6 +586,8 @@ export default function ChatView({ chatId }: ChatViewProps) {
           onSendContent={(content) => sendPrompt(content)}
           disabled={agentActive}
           projectName={pinnedProject?.name}
+          spaces={pinnedProject ? [] : projects}
+          onPinSpace={(spaceId) => configMutation.mutate({ pinned_space_id: spaceId })}
         />
       ) : (
         <MessageList
@@ -699,7 +697,6 @@ export default function ChatView({ chatId }: ChatViewProps) {
         open={ctxOpen}
         onClose={() => { setCtxOpen(false); localStorage.setItem('ctx_panel', 'closed'); }}
         pinnedSpace={pinnedProject}
-        linkedSpaces={linkedProjects}
         worktree={worktree ? { branch: worktree.branch, commits_ahead: worktree.ahead } : null}
         pendingApproval={pendingApproval ? {
           executionId: pendingApproval.executionId,

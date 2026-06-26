@@ -610,6 +610,14 @@ export const migrations: Migration[] = [
   { version: 16, name: 'repair-space-item-child-fks', noTransaction: true, up: repairSpaceItemChildFks },
   { version: 17, name: 'collapse-notes-to-documents', up: collapseNotesToDocuments },
   { version: 18, name: 'flatten-item-types-to-templates', noTransaction: true, up: flattenItemTypesToTemplates },
+  { version: 19, name: 'add-memory-embeddings', up: (db) => {
+    const cols = (db.prepare("PRAGMA table_info(memories)").all() as { name: string }[]).map(c => c.name);
+    if (!cols.includes('embedding')) db.exec('ALTER TABLE memories ADD COLUMN embedding BLOB');
+  }},
+  { version: 20, name: 'add-scheduled-task-pinned-space', up: (db) => {
+    const cols = (db.prepare("PRAGMA table_info(scheduled_tasks)").all() as { name: string }[]).map(c => c.name);
+    if (!cols.includes('pinned_space_id')) db.exec('ALTER TABLE scheduled_tasks ADD COLUMN pinned_space_id TEXT REFERENCES spaces(id) ON DELETE SET NULL');
+  }},
 ];
 
 function tableSql(database: Database.Database, name: string): string | undefined {
@@ -2076,35 +2084,39 @@ export interface DbScheduledTask {
   enabled: number;
   next_run_at: number;
   last_run_at: number | null;
+  pinned_space_id: string | null;
 }
 
 export function getScheduledTasksForUser(userId: string): DbScheduledTask[] {
   return getDb()
-    .prepare('SELECT id, type, prompt, interval_hours, enabled, next_run_at, last_run_at FROM scheduled_tasks WHERE user_id = ?')
+    .prepare('SELECT id, type, prompt, interval_hours, enabled, next_run_at, last_run_at, pinned_space_id FROM scheduled_tasks WHERE user_id = ?')
     .all(userId) as DbScheduledTask[];
 }
 
 export function getScheduledTaskForUser(id: string, userId: string): DbScheduledTask | undefined {
   return getDb()
-    .prepare('SELECT id, type, prompt, interval_hours, enabled, next_run_at, last_run_at FROM scheduled_tasks WHERE id = ? AND user_id = ?')
+    .prepare('SELECT id, type, prompt, interval_hours, enabled, next_run_at, last_run_at, pinned_space_id FROM scheduled_tasks WHERE id = ? AND user_id = ?')
     .get(id, userId) as DbScheduledTask | undefined;
 }
 
-export function updateScheduledTask(id: string, userId: string, updates: { enabled?: boolean; interval_hours?: number }): void {
+export function updateScheduledTask(id: string, userId: string, updates: { enabled?: boolean; interval_hours?: number; pinned_space_id?: string | null }): void {
   if (updates.enabled !== undefined) {
     getDb().prepare('UPDATE scheduled_tasks SET enabled = ? WHERE id = ? AND user_id = ?').run(updates.enabled ? 1 : 0, id, userId);
   }
   if (updates.interval_hours !== undefined) {
     getDb().prepare('UPDATE scheduled_tasks SET interval_hours = ? WHERE id = ? AND user_id = ?').run(updates.interval_hours, id, userId);
   }
+  if ('pinned_space_id' in updates) {
+    getDb().prepare('UPDATE scheduled_tasks SET pinned_space_id = ? WHERE id = ? AND user_id = ?').run(updates.pinned_space_id ?? null, id, userId);
+  }
 }
 
-export function createScheduledTask(userId: string, type: string, intervalHours: number, prompt?: string): string {
+export function createScheduledTask(userId: string, type: string, intervalHours: number, prompt?: string, pinnedSpaceId?: string): string {
   const id = newId();
   const nextRunAt = Math.floor(Date.now() / 1000) + intervalHours * 3600;
   getDb()
-    .prepare('INSERT INTO scheduled_tasks (id, user_id, type, interval_hours, next_run_at, prompt) VALUES (?,?,?,?,?,?)')
-    .run(id, userId, type, intervalHours, nextRunAt, prompt ?? null);
+    .prepare('INSERT INTO scheduled_tasks (id, user_id, type, interval_hours, next_run_at, prompt, pinned_space_id) VALUES (?,?,?,?,?,?,?)')
+    .run(id, userId, type, intervalHours, nextRunAt, prompt ?? null, pinnedSpaceId ?? null);
   return id;
 }
 
@@ -2130,7 +2142,7 @@ export function resumePlan(planId: string): { plan: DbPlan; steps: DbPlanStep[] 
 
 export function getDueScheduledTasks(now: number): (DbScheduledTask & { user_id: string })[] {
   return getDb()
-    .prepare('SELECT id, user_id, type, interval_hours, enabled, next_run_at, last_run_at FROM scheduled_tasks WHERE enabled = 1 AND next_run_at <= ?')
+    .prepare('SELECT id, user_id, type, interval_hours, enabled, next_run_at, last_run_at, pinned_space_id FROM scheduled_tasks WHERE enabled = 1 AND next_run_at <= ?')
     .all(now) as (DbScheduledTask & { user_id: string })[];
 }
 

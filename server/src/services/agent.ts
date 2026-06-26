@@ -1,3 +1,5 @@
+import fs from 'fs';
+import path from 'path';
 import { getDb, recordAgentUsage, setSessionProviderInfo, type AgentUsageTool } from '../db/index.js';
 import { broadcast } from './socket.js';
 import { newId } from '../lib/ids.js';
@@ -5,6 +7,7 @@ import { classifyIntent } from './intent.js';
 import { buildContext } from './context.js';
 import { generateMcpToken } from '../mcp/auth.js';
 import { getConversationProvider } from './conversation-provider.js';
+import { getItemsForSpace, type RepoItem } from './items.js';
 
 const activeTurnControllers = new Map<string, AbortController>();
 
@@ -17,6 +20,74 @@ export function stopAgentTurn(sessionId: string): boolean {
 
 export function getActiveSessionIds(): string[] {
   return Array.from(activeTurnControllers.keys());
+}
+
+function checkpointWorkspaceMd(userId: string, sessionId: string, userPrompt: string, assistantReply: string): void {
+  const session = getDb()
+    .prepare('SELECT pinned_space_id, title FROM sessions WHERE id = ?')
+    .get(sessionId) as { pinned_space_id: string | null; title: string | null } | undefined;
+  if (!session?.pinned_space_id) return;
+
+  const repoItems = getItemsForSpace(session.pinned_space_id)
+    .filter((item): item is RepoItem => item.type === 'repo');
+  if (repoItems.length === 0) return;
+
+  const repoPath = repoItems[0].repo_path;
+  const workspacePath = path.join(repoPath, 'workspace.md');
+
+  const now = new Date();
+  const dateStr = now.toISOString().slice(0, 16).replace('T', ' ');
+
+  const promptSnippet = userPrompt.trim().slice(0, 200).replace(/\n+/g, ' ');
+  // Take the first non-empty paragraph of the reply as the summary
+  const replySnippet = assistantReply
+    .split(/\n{2,}/)
+    .map(p => p.trim())
+    .find(p => p.length > 20)
+    ?.slice(0, 400)
+    .replace(/\n/g, ' ') ?? '';
+
+  const entry = `\n\n---\n*${dateStr}*\n\n**${promptSnippet}${userPrompt.length > 200 ? '…' : ''}**\n${replySnippet}`;
+
+  try {
+    fs.appendFileSync(workspacePath, entry, 'utf8');
+  } catch {
+    // workspace.md may not exist yet — create it with a header
+    try {
+      fs.writeFileSync(workspacePath, `# Workspace Log${entry}`, 'utf8');
+    } catch { /* repo path may not be writable */ }
+  }
+}
+
+function updateSessionSummary(sessionId: string): void {
+  const messages = getDb()
+    .prepare("SELECT role, content FROM messages WHERE session_id = ? ORDER BY created_at DESC LIMIT 20")
+    .all(sessionId) as { role: string; content: string }[];
+
+  if (messages.length === 0) return;
+
+  // Build pairs from oldest to newest (messages are DESC, so reverse)
+  const ordered = [...messages].reverse();
+  const pairs: string[] = [];
+  for (let i = 0; i < ordered.length - 1; i++) {
+    const m = ordered[i];
+    const next = ordered[i + 1];
+    if (m.role === 'user' && next.role === 'assistant') {
+      const q = m.content.trim().slice(0, 200).replace(/\n+/g, ' ');
+      const a = next.content.trim().split(/\n{2,}/)[0]?.slice(0, 400).replace(/\n/g, ' ') ?? '';
+      pairs.push(`- User: ${q}\n  Agent: ${a}`);
+      i++; // skip the assistant message we just consumed
+    }
+  }
+
+  if (pairs.length === 0) return;
+
+  // Always keep the first pair (original goal) + the last 4 (recent context)
+  const kept = pairs.length <= 5
+    ? pairs
+    : [pairs[0], ...pairs.slice(-4)];
+  const summary = kept.join('\n');
+  getDb().prepare('UPDATE sessions SET summary = ? WHERE id = ?').run(summary, sessionId);
 }
 
 function maybeGenerateSessionTitle(userId: string, sessionId: string): void {
@@ -49,7 +120,7 @@ export async function runAgentTurn(userId: string, sessionId: string, userMessag
 
   const prompt = lastUserMsg?.content ?? '';
   const intent = classifyIntent(prompt);
-  const systemPromptSuffix = buildContext(userId, sessionId, intent);
+  const systemPromptSuffix = await buildContext(userId, sessionId, intent, prompt);
 
   const port = process.env.PORT ?? '3000';
   const mcpToken = generateMcpToken(userId, sessionId);
@@ -126,4 +197,6 @@ export async function runAgentTurn(userId: string, sessionId: string, userMessag
 
   recordAgentUsage(userId, provider.type as AgentUsageTool, invokeResult.costUsd ?? 0);
   maybeGenerateSessionTitle(userId, sessionId);
+  updateSessionSummary(sessionId);
+  checkpointWorkspaceMd(userId, sessionId, prompt, fullText);
 }

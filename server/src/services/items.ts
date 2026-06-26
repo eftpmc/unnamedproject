@@ -15,7 +15,8 @@ export type BlockContent =
   | { type: 'chart'; chartType: 'line' | 'bar' | 'pie'; title?: string; data: { label: string; value: number }[] }
   | { type: 'stat'; label: string; value: string; trend?: { direction: 'up' | 'down' | 'flat'; label?: string } }
   | { type: 'list'; ordered?: boolean; items: string[] }
-  | { type: 'progress'; label?: string; value: number; max?: number };
+  | { type: 'progress'; label?: string; value: number; max?: number }
+  | { type: 'input'; label: string; value: string; placeholder?: string; input_type?: 'text' | 'number' | 'multiline' | 'select'; options?: string[] };
 
 // `id` is optional because legacy blocks predate it, but any block the agent
 // wants to target later with a single-block patch needs a stable one.
@@ -115,12 +116,24 @@ export function createFileItem(
 export function createTemplateItem(
   input: CreateItemInput & { type: string; page_blocks: Block[] },
 ): SpaceItemBase {
-  const base = insertBaseRow(input, input.type, input.page_blocks);
-  return { ...base, page_blocks: input.page_blocks };
+  const withIds = ensureBlockIds(input.page_blocks);
+  const base = insertBaseRow(input, input.type, withIds);
+  return { ...base, page_blocks: withIds };
+}
+
+function ensureBlockIds(blocks: Block[]): Block[] {
+  return blocks.map(b => b.id ? b : { ...b, id: newId() });
 }
 
 export function updateItemPageBlocks(itemId: string, blocks: Block[]): void {
-  getDb().prepare('UPDATE space_items SET page_blocks = ? WHERE id = ?').run(JSON.stringify(blocks), itemId);
+  getDb().prepare('UPDATE space_items SET page_blocks = ? WHERE id = ?').run(JSON.stringify(ensureBlockIds(blocks)), itemId);
+}
+
+export function appendItemPageBlocks(itemId: string, blocks: Block[]): boolean {
+  const item = getItemById(itemId);
+  if (!item) return false;
+  updateItemPageBlocks(itemId, [...item.page_blocks, ...blocks]);
+  return true;
 }
 
 export function updateItemPageBlock(itemId: string, blockId: string, block: Block): boolean {

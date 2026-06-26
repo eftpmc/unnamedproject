@@ -8,6 +8,7 @@ import { buildContext, buildContextUpdate } from './context.js';
 import { generateMcpToken } from '../mcp/auth.js';
 import { getConversationProvider } from './conversation-provider.js';
 import { getItemsForSpace } from './items.js';
+import { getDecryptedConfig } from '../routes/connections.js';
 
 const activeTurnControllers = new Map<string, AbortController>();
 
@@ -107,6 +108,32 @@ function maybeGenerateSessionTitle(userId: string, sessionId: string): void {
   broadcast(userId, { type: 'session_title_updated', sessionId, title });
 }
 
+type McpServerEntry = { url?: string; headers?: Record<string, string>; command?: string; args?: string[]; env?: Record<string, string> };
+
+function getUserMcpServers(userId: string): Record<string, McpServerEntry> {
+  const conns = getDb()
+    .prepare("SELECT id, name FROM connections WHERE user_id = ? AND type = 'mcp' ORDER BY created_at")
+    .all(userId) as { id: string; name: string }[];
+
+  const servers: Record<string, McpServerEntry> = {};
+  for (const conn of conns) {
+    try {
+      const cfg = getDecryptedConfig(conn.id, userId);
+      const key = conn.name.toLowerCase().replace(/[^a-z0-9]+/g, '_').replace(/^_+|_+$/g, '') || conn.id;
+      if (cfg.url) {
+        servers[key] = { url: cfg.url, headers: cfg.headers ? JSON.parse(cfg.headers) : undefined };
+      } else if (cfg.command) {
+        servers[key] = {
+          command: cfg.command,
+          args: cfg.args ? JSON.parse(cfg.args) : undefined,
+          env: cfg.env ? JSON.parse(cfg.env) : undefined,
+        };
+      }
+    } catch { /* skip malformed connections */ }
+  }
+  return servers;
+}
+
 export async function runAgentTurn(userId: string, sessionId: string, userMessageId: string): Promise<void> {
   const provider = await getConversationProvider(userId);
 
@@ -129,6 +156,7 @@ export async function runAgentTurn(userId: string, sessionId: string, userMessag
   const mcpToken = generateMcpToken(userId, sessionId);
   const mcpServers = {
     app: { url: `http://localhost:${port}/mcp`, headers: { Authorization: `Bearer ${mcpToken}` } },
+    ...getUserMcpServers(userId),
   };
 
   const replyId = newId();

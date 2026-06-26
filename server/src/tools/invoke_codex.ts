@@ -39,18 +39,8 @@ export interface CodexResult {
   costUsd: number;
 }
 
-// Approximate $/1M token rates, used only to estimate spend for the usage budget display.
-// Update if OpenAI changes pricing or codex's default model.
-const CODEX_PRICING: Record<string, { input: number; output: number }> = {
-  'gpt-5-codex': { input: 1.25, output: 10 },
-  'gpt-5': { input: 1.25, output: 10 },
-  'gpt-5-mini': { input: 0.25, output: 2 },
-};
-const DEFAULT_CODEX_PRICING = CODEX_PRICING['gpt-5-codex'];
-
-function estimateCodexCost(model: string | undefined, inputTokens: number, outputTokens: number): number {
-  const pricing = (model ? CODEX_PRICING[model] : undefined) ?? DEFAULT_CODEX_PRICING;
-  return (inputTokens / 1_000_000) * pricing.input + (outputTokens / 1_000_000) * pricing.output;
+function estimateCodexCost(_model: string | undefined, _inputTokens: number, _outputTokens: number): number {
+  return 0;
 }
 
 // codex exec has no --mcp-config flag (that's a Claude Code option) — MCP

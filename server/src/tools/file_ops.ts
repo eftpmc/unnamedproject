@@ -71,7 +71,15 @@ export async function searchFiles(
     regex = new RegExp(input.pattern.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), flags);
   }
 
-  const fileGlob = input.file_glob;
+  const fileGlobRe = input.file_glob
+    ? new RegExp(
+        input.file_glob
+          .replace(/[.+^${}()|[\]\\]/g, '\\$&')
+          .replace(/\*/g, '.*')
+          .replace(/\?/g, '.'),
+        'i',
+      )
+    : null;
   const SKIP_DIRS = new Set(['node_modules', '.git', 'dist', 'build', '.next', 'coverage', '__pycache__']);
   const MAX_MATCHES = 50;
   const matches: string[] = [];
@@ -87,7 +95,7 @@ export async function searchFiles(
         continue;
       }
       if (!entry.isFile()) continue;
-      if (fileGlob && !entry.name.match(new RegExp(fileGlob.replace(/\*/g, '.*').replace(/\?/g, '.'), 'i'))) continue;
+      if (fileGlobRe && !fileGlobRe.test(entry.name)) continue;
       const filePath = path.join(dir, entry.name);
       let text: string;
       try { text = await fs.readFile(filePath, 'utf-8'); } catch { continue; }

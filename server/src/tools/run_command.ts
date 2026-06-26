@@ -3,6 +3,7 @@ import { promisify } from 'util';
 import { getSpaceForUser, getDataDir } from '../db/index.js';
 import { getItemById } from '../services/items.js';
 import { requestApproval } from '../services/executor.js';
+import { getDelegateEnv } from '../services/permissions.js';
 import type { PermissionProfile } from '../services/permissions.js';
 
 const execAsync = promisify(exec);
@@ -15,8 +16,10 @@ const MAX_TIMEOUT_MS = 60_000;
 // These target the specific risk of prompt injection: a manipulated LLM passing
 // a destructive or exfiltrating command that would otherwise be auto-approved.
 const BLOCKED_PATTERNS: RegExp[] = [
-  // Recursive deletion of system or home paths (literal ~, $HOME, ${HOME})
-  /rm\s+(-\S*r\S*|-\S*f\S*\s+-\S*r\S*)\s+(\/(?!tmp|var\/folders)[^\s]*|~|\$\{?HOME\}?)/i,
+  // Recursive deletion with short flags in any order (rm -r -f /path, rm -rf /path, etc.)
+  /\brm\b(?:\s+-[A-Za-z]*)*\s+-[A-Za-z]*[rR][A-Za-z]*(?:\s+-[A-Za-z]*)*\s+(\/(?!tmp|var\/folders)[^\s]*|~|\$\{?HOME\}?)/,
+  // Recursive deletion with GNU long flag (rm --recursive ...)
+  /\brm\b.*--recursive\b.*?(\/(?!tmp|var\/folders)[^\s]*|~|\$\{?HOME\}?)/s,
   // Piping content directly to a shell interpreter (| bash, | /usr/bin/bash, etc.)
   /\|\s*(\S*\/)?(bash|sh|zsh|python3?|ruby|node|perl)\b/i,
   // Subshell execution of downloaded content: $(curl ...) or `curl ...`
@@ -79,7 +82,7 @@ export async function runCommand(input: RunCommandInput, ctx: ToolContext): Prom
   const timeout = Math.min(input.timeout_ms ?? DEFAULT_TIMEOUT_MS, MAX_TIMEOUT_MS);
 
   try {
-    const { stdout, stderr } = await execAsync(input.command, { cwd, timeout });
+    const { stdout, stderr } = await execAsync(input.command, { cwd, timeout, env: getDelegateEnv('claude_code', ctx.permissionProfile) });
     const combined = [stdout, stderr].filter(Boolean).join('\n');
     const buf = Buffer.from(combined, 'utf8');
     if (buf.length > MAX_OUTPUT_BYTES) {

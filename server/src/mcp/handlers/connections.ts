@@ -5,7 +5,6 @@ import { createConnectionTool } from '../../tools/connection_ops.js';
 import { listMcpTools } from '../../lib/mcp-pool.js';
 import { ingestMcpTools } from '../../services/toolRegistry.js';
 import { createExecution, completeExecution } from '../../services/executor.js';
-import { newId } from '../../lib/ids.js';
 
 export function registerConnectionHandlers(): void {
   registerTool({
@@ -34,7 +33,7 @@ export function registerConnectionHandlers(): void {
       required: ['name', 'type', 'config'],
     },
     handler: async (args, userId) => {
-      const executionId = createExecution(userId, newId(), null, 'create_connection');
+      const executionId = createExecution(userId, null, null, 'create_connection');
       const result = await createConnectionTool(
         {
           name: args.name as string,

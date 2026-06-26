@@ -134,6 +134,7 @@ export async function runAgentTurn(userId: string, sessionId: string, userMessag
   let fullText = '';
 
   const abortController = new AbortController();
+  activeTurnControllers.get(sessionId)?.abort();
   activeTurnControllers.set(sessionId, abortController);
 
   let invokeResult: { costUsd?: number } = {};
@@ -195,8 +196,8 @@ export async function runAgentTurn(userId: string, sessionId: string, userMessag
   getDb().prepare('UPDATE sessions SET updated_at = unixepoch() WHERE id = ?').run(sessionId);
   broadcast(userId, { type: 'turn_complete', sessionId, status: 'done' });
 
-  recordAgentUsage(userId, provider.type as AgentUsageTool, invokeResult.costUsd ?? 0);
-  maybeGenerateSessionTitle(userId, sessionId);
-  updateSessionSummary(sessionId);
-  checkpointWorkspaceMd(userId, sessionId, prompt, fullText);
+  try { recordAgentUsage(userId, provider.type as AgentUsageTool, invokeResult.costUsd ?? 0); } catch (e) { console.error('[postTurn:recordUsage]', e); }
+  try { maybeGenerateSessionTitle(userId, sessionId); } catch (e) { console.error('[postTurn:title]', e); }
+  try { updateSessionSummary(sessionId); } catch (e) { console.error('[postTurn:summary]', e); }
+  try { checkpointWorkspaceMd(userId, sessionId, prompt, fullText); } catch (e) { console.error('[postTurn:workspace]', e); }
 }

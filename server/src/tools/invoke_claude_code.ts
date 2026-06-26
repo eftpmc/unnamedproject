@@ -92,6 +92,10 @@ export async function invokeClaudeCode(input: ClaudeCodeInput, ctx: ToolContext)
 
     registerProcess(ctx.executionId, proc);
 
+    ctx.signal?.addEventListener('abort', () => {
+      proc.kill('SIGTERM');
+    }, { once: true });
+
     let buffer = '';
     let sessionId: string | null = null;
     let sessionIdFired = false;

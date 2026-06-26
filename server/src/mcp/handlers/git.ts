@@ -20,13 +20,13 @@ export function registerGitHandlers(): void {
       },
       required: ['space_id', 'item_id', 'op'],
     },
-    handler: async (args, userId) => {
+    handler: async (args, userId, sessionId) => {
       const item = getItemById(args.item_id as string);
       if (!item || item.space_id !== args.space_id || item.type !== 'repo') {
         return `Error: repo item ${args.item_id} not found in space ${args.space_id}`;
       }
-      const executionId = createExecution(userId, newId(), args.space_id as string, 'git_op');
-      const worktree = await ensureWorktree(item, newId());
+      const executionId = createExecution(userId, null, args.space_id as string, 'git_op');
+      const worktree = await ensureWorktree(item, sessionId ?? newId());
       const result = await runGitOp(
         {
           op: args.op as 'log' | 'diff' | 'status' | 'commit' | 'push',

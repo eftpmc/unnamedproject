@@ -137,7 +137,7 @@ export async function queryGraph(question: string, repoPath: string, apiKey?: st
   }
 
   const msg = await client.messages.create({
-    model: 'claude-haiku-4-5-20251001',
+    model: 'claude-haiku-4-5',
     max_tokens: 1024,
     system: 'You are a code navigator. Answer questions about a codebase using the provided file index. Be specific: cite file paths and line numbers where relevant. If the answer is not in the index, say so.',
     messages: [{ role: 'user', content: `${context}\n\n---\n\nQuestion: ${question}` }],

@@ -19,7 +19,6 @@ export function registerKnowledgeHandlers(): void {
       return runProjectQuery(
         { space_id: args.space_id as string, item_id: args.item_id as string, question: args.question as string },
         userId,
-        null,
       );
     },
   });

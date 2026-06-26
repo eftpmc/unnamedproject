@@ -37,9 +37,7 @@ function initSecrets() {
   if (src.jwtSecret === 'ephemeral') {
     logger.warn('Could not persist generated secrets — tokens will not survive a restart. Set JWT_SECRET or make DATA_DIR writable.');
   }
-  if (!process.env.ANTHROPIC_API_KEY) {
-    logger.warn('ANTHROPIC_API_KEY is not set. Configure an Anthropic key in Settings → connections, or set it in the environment.');
-  }
+
 }
 
 if (NODE_ENV !== 'test') initSecrets();

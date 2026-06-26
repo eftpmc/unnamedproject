@@ -24,7 +24,7 @@ afterAll(() => closeDb());
 describe('CodexProvider', () => {
   it('invokes codex and fires onText callback', async () => {
     const { CodexProvider } = await import('../../src/services/conversation/codex-provider.js');
-    const provider = new CodexProvider({ mode: 'local', model: 'codex-mini-latest', permissionProfile: 'default' });
+    const provider = new CodexProvider({ model: 'codex-mini-latest', permissionProfile: 'default' });
 
     invokeCodexMock.mockImplementationOnce(async (_input, ctx) => {
       ctx.onText?.('codex says hi');

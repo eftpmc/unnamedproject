@@ -25,7 +25,7 @@ afterAll(() => closeDb());
 describe('ClaudeCodeProvider', () => {
   it('invokes claude code and fires onText + onSessionId callbacks', async () => {
     const { ClaudeCodeProvider } = await import('../../src/services/conversation/claude-code-provider.js');
-    const provider = new ClaudeCodeProvider({ mode: 'local', model: 'claude-sonnet-4-6', permissionProfile: 'default' });
+    const provider = new ClaudeCodeProvider({ model: 'claude-sonnet-4-6', permissionProfile: 'default' });
 
     invokeClaudeCodeMock.mockImplementationOnce(async (_input, ctx) => {
       ctx.onText?.('Hello ');
@@ -49,7 +49,7 @@ describe('ClaudeCodeProvider', () => {
 
   it('passes resumeSessionId when provided', async () => {
     const { ClaudeCodeProvider } = await import('../../src/services/conversation/claude-code-provider.js');
-    const provider = new ClaudeCodeProvider({ mode: 'local', model: 'claude-sonnet-4-6', permissionProfile: 'default' });
+    const provider = new ClaudeCodeProvider({ model: 'claude-sonnet-4-6', permissionProfile: 'default' });
 
     await provider.invoke({
       prompt: 'continue',

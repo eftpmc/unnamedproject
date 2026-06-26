@@ -44,7 +44,7 @@ describe('connections', () => {
       .send({
         name: 'My Claude Code',
         type: 'claude_code',
-        config: { mode: 'local', model: 'claude-sonnet-4-6', permissionProfile: 'default' },
+        config: { model: 'claude-sonnet-4-6', permissionProfile: 'default' },
       });
     expect(res.status).toBe(201);
     expect(res.body.id).toBeDefined();
@@ -112,7 +112,7 @@ describe('connections', () => {
       .send({
         name: 'My Codex',
         type: 'codex',
-        config: { mode: 'api', model: 'codex-mini-latest', permissionProfile: 'default', apiKey: 'sk-test' },
+        config: { model: 'codex-mini-latest', permissionProfile: 'default', apiKey: 'sk-test' },
       });
     expect(res.status).toBe(201);
     expect(res.body.type).toBe('codex');

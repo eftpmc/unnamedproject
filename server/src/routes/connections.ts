@@ -52,6 +52,13 @@ export function createConnectionRecord(
   let connectionPurpose: string;
   if (type === 'claude_code' || type === 'codex') {
     connectionPurpose = type;
+    const cfg = config as Record<string, unknown>;
+    if (cfg.mode !== undefined && cfg.mode !== 'local' && cfg.mode !== 'api') {
+      throw new ConnectionValidationError("mode must be 'local' or 'api'");
+    }
+    if (cfg.mode === 'api' && !cfg.apiKey) {
+      throw new ConnectionValidationError("apiKey is required when mode is 'api'");
+    }
   } else {
     connectionPurpose = purpose ?? 'tool';
     if (!VALID_PURPOSES.includes(connectionPurpose as (typeof VALID_PURPOSES)[number])) {

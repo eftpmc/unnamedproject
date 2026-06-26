@@ -40,7 +40,7 @@ describe('project_query', () => {
     const { getItemById } = await import('../../src/services/items.js');
     vi.mocked(getSpaceForUser).mockReturnValue({ id: 'p1', name: 'api', description: null, enabled_connection_ids: '[]' });
     vi.mocked(getItemById).mockReturnValue(
-      { id: 'item-1', space_id: 'p1', type: 'repo', name: 'api', repo_path: '/tmp/repo', default_branch: null, created_at: 0, source_session_id: null, source_plan_id: null, source_step_id: null },
+      { id: 'item-1', space_id: 'p1', type: 'repo', name: 'api', fields: { repo_path: '/tmp/repo' }, page_blocks: [], created_at: 0, source_session_id: null },
     );
 
     const result = await runProjectQuery({ space_id: 'p1', item_id: 'item-1', question: 'where is auth handled?' }, 'u1');
@@ -53,7 +53,7 @@ describe('project_query', () => {
     const { hasGraph, buildGraph } = await import('../../src/services/graphify.js');
     vi.mocked(getSpaceForUser).mockReturnValue({ id: 'p2', name: 'api', description: null, enabled_connection_ids: '[]' });
     vi.mocked(getItemById).mockReturnValue(
-      { id: 'item-2', space_id: 'p2', type: 'repo', name: 'api', repo_path: '/tmp/repo2', default_branch: null, created_at: 0, source_session_id: null, source_plan_id: null, source_step_id: null },
+      { id: 'item-2', space_id: 'p2', type: 'repo', name: 'api', fields: { repo_path: '/tmp/repo2' }, page_blocks: [], created_at: 0, source_session_id: null },
     );
     vi.mocked(hasGraph).mockResolvedValueOnce(false);
 

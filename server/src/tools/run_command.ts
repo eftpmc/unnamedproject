@@ -1,7 +1,7 @@
 import { exec } from 'child_process';
 import { promisify } from 'util';
 import { getSpaceForUser, getDataDir } from '../db/index.js';
-import { getItemById, type RepoItem } from '../services/items.js';
+import { getItemById } from '../services/items.js';
 import { requestApproval } from '../services/executor.js';
 import type { PermissionProfile } from '../services/permissions.js';
 
@@ -63,7 +63,7 @@ export async function runCommand(input: RunCommandInput, ctx: ToolContext): Prom
     const repoItem = getItemById(input.item_id);
     if (!repoItem || repoItem.space_id !== space.id) return `Error: item ${input.item_id} not found in space ${space.id}`;
     if (repoItem.type !== 'repo') return `Error: item ${input.item_id} is not a repo`;
-    cwd = (repoItem as RepoItem).repo_path;
+    cwd = repoItem.fields.repo_path as string;
   }
 
   const tier = ctx.permissionProfile === 'strict' ? 'user' : 'agent';

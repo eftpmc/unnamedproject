@@ -4,7 +4,7 @@ import path from 'path';
 import os from 'os';
 import simpleGit from 'simple-git';
 import { initDb, getDb } from '../../src/db/index.js';
-import { createRepoItem } from '../../src/services/items.js';
+import { createItem } from '../../src/services/items.js';
 import { ensureWorktree } from '../../src/lib/worktree.js';
 
 async function makeRepo(): Promise<string> {
@@ -24,8 +24,8 @@ beforeAll(() => {
 
 describe('ensureWorktree', () => {
   it('keys the worktree by (item_id, session_id), so two repo items in the same Space and session get distinct worktrees', async () => {
-    const repoA = createRepoItem({ space_id: 'sp1', name: 'repo-a', repo_path: await makeRepo() });
-    const repoB = createRepoItem({ space_id: 'sp1', name: 'repo-b', repo_path: await makeRepo() });
+    const repoA = createItem({ space_id: 'sp1', name: 'repo-a', type: 'repo', page_blocks: [], fields: { repo_path: await makeRepo() } });
+    const repoB = createItem({ space_id: 'sp1', name: 'repo-b', type: 'repo', page_blocks: [], fields: { repo_path: await makeRepo() } });
 
     const worktreeA = await ensureWorktree(repoA, 'sess1');
     const worktreeB = await ensureWorktree(repoB, 'sess1');
@@ -37,7 +37,7 @@ describe('ensureWorktree', () => {
   });
 
   it('reuses the same worktree for the same (item_id, session_id) pair', async () => {
-    const repo = createRepoItem({ space_id: 'sp1', name: 'repo-c', repo_path: await makeRepo() });
+    const repo = createItem({ space_id: 'sp1', name: 'repo-c', type: 'repo', page_blocks: [], fields: { repo_path: await makeRepo() } });
     const first = await ensureWorktree(repo, 'sess1');
     const second = await ensureWorktree(repo, 'sess1');
     expect(first.id).toBe(second.id);

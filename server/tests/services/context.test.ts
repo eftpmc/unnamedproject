@@ -116,8 +116,7 @@ describe('buildContext', () => {
       .prepare('INSERT INTO spaces (id, user_id, name, enabled_connection_ids) VALUES (?,?,?,?)')
       .run(spaceId, userId, 'ws-project', '[]');
     const itemId = newId();
-    getDb().prepare('INSERT INTO space_items (id, space_id, type, name) VALUES (?,?,?,?)').run(itemId, spaceId, 'repo', 'ws-project');
-    getDb().prepare('INSERT INTO space_repos (item_id, repo_path) VALUES (?,?)').run(itemId, tmpDir);
+    getDb().prepare('INSERT INTO space_items (id, space_id, type, name, fields) VALUES (?,?,?,?,?)').run(itemId, spaceId, 'repo', 'ws-project', JSON.stringify({ repo_path: tmpDir }));
     getDb().prepare('UPDATE sessions SET pinned_space_id = ? WHERE id = ?').run(spaceId, sessionId);
 
     const ctx = buildContext(userId, sessionId, DEFAULT_INTENT);

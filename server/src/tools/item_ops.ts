@@ -1,18 +1,24 @@
 import { getSpaceForUser, createSessionEvent } from '../db/index.js';
 import { broadcast } from '../services/socket.js';
 import {
-  createRepoItem,
-  createTemplateItem,
+  createItem,
+  updateItemFields,
   updateItemPageBlocks,
   updateItemPageBlock,
   appendItemPageBlocks,
   getItemById,
-  readItemContent,
   type Block,
-  type FileItem,
 } from '../services/items.js';
-import { listItemTemplates, getItemTemplate, createItemTemplate, updateItemTemplate } from '../services/templates.js';
+import { listItemTypes, getItemType, upsertItemType } from '../services/templates.js';
 import { validateBlock, validateBlocks } from '../lib/blocks.js';
+import { validateSchema, validateFields, type ItemSchema } from '../lib/item-schema.js';
+import {
+  validateCapabilities,
+  validateCapabilityFieldContracts,
+  onRead,
+  onCreate,
+  onUpdate,
+} from '../services/capabilities.js';
 
 function emitItemEvent(
   type: 'item_created' | 'item_updated',
@@ -43,8 +49,7 @@ export async function runCreateItem(
     space_id: string;
     name: string;
     type: string;
-    repo_path?: string;
-    default_branch?: string;
+    fields?: Record<string, unknown>;
     source_session_id?: string | null;
   },
   userId: string,
@@ -56,21 +61,26 @@ export async function runCreateItem(
   const name = input.name?.trim();
   if (!name) return 'Error: name is required';
 
-  const provenance = { source_session_id: input.source_session_id };
-
-  if (input.type === 'repo') {
-    if (!input.repo_path) return 'Error: repo_path required for type repo';
-    const item = createRepoItem({ space_id: input.space_id, name, repo_path: input.repo_path, default_branch: input.default_branch, ...provenance });
-    if (sessionId) emitItemEvent('item_created', userId, sessionId, input.space_id, item.id, item.name, item.type);
-    return JSON.stringify(item);
+  const itemType = getItemType(input.type);
+  if (!itemType) {
+    return `Error: unknown item type '${input.type}'. Use list_item_types to see available types.`;
   }
 
-  // All other types are template-based
-  const template = getItemTemplate(input.type);
-  if (!template || template.kind !== 'blocks') {
-    return `Error: unknown item type '${input.type}'. Use list_item_templates to see available types.`;
-  }
-  const item = createTemplateItem({ space_id: input.space_id, name, type: input.type, page_blocks: template.blocks ?? [], ...provenance });
+  const fields = input.fields ?? {};
+  const fieldsError = validateFields(fields, itemType.schema);
+  if (fieldsError) return `Error: ${fieldsError}`;
+
+  const item = createItem({
+    space_id: input.space_id,
+    name,
+    type: input.type,
+    page_blocks: itemType.blocks ?? [],
+    fields,
+    source_session_id: input.source_session_id,
+  });
+
+  await onCreate(item, itemType.capabilities);
+
   if (sessionId) emitItemEvent('item_created', userId, sessionId, input.space_id, item.id, item.name, item.type);
   return JSON.stringify(item);
 }
@@ -79,6 +89,7 @@ export async function runUpdateItem(
   input: {
     space_id: string;
     item_id: string;
+    fields?: Record<string, unknown>;
     page_blocks?: Block[];
     append_blocks?: Block[];
     block_id?: string;
@@ -92,6 +103,17 @@ export async function runUpdateItem(
 
   const item = getItemById(input.item_id);
   if (!item || item.space_id !== input.space_id) return `Error: item ${input.item_id} not found`;
+
+  if (input.fields !== undefined) {
+    if (typeof input.fields !== 'object' || input.fields === null) return 'Error: fields must be an object';
+    const itemType = getItemType(item.type);
+    if (itemType) {
+      const mergedFields = { ...item.fields, ...input.fields };
+      const fieldsError = validateFields(mergedFields, itemType.schema);
+      if (fieldsError) return `Error: ${fieldsError}`;
+    }
+    updateItemFields(item.id, input.fields);
+  }
 
   if (input.page_blocks !== undefined) {
     if (!Array.isArray(input.page_blocks)) return 'Error: page_blocks must be an array';
@@ -115,8 +137,11 @@ export async function runUpdateItem(
     if (!found) return `Error: no block with id '${input.block_id}' on item ${item.id} — it may predate having an id, use page_blocks (full replace) instead`;
   }
 
-  const updated = getItemById(item.id);
-  if (sessionId && updated) emitItemEvent('item_updated', userId, sessionId, input.space_id, updated.id, updated.name, updated.type);
+  const updated = getItemById(item.id)!;
+  const itemType = getItemType(updated.type);
+  if (itemType) await onUpdate(updated, itemType.capabilities);
+
+  if (sessionId) emitItemEvent('item_updated', userId, sessionId, input.space_id, updated.id, updated.name, updated.type);
   return JSON.stringify(updated);
 }
 
@@ -130,28 +155,67 @@ export async function runReadItem(
   const item = getItemById(input.item_id);
   if (!item || item.space_id !== input.space_id) return `Error: item ${input.item_id} not found`;
 
-  if (item.type === 'file') {
-    const content = await readItemContent(item);
-    return JSON.stringify({ ...item, content: Buffer.isBuffer(content) ? `[binary: ${content.length} bytes]` : content });
+  const itemType = getItemType(item.type);
+  const caps = itemType?.capabilities ?? [];
+  const extra = await onRead(item, caps);
+
+  return JSON.stringify({ ...item, ...extra });
+}
+
+export async function runListItemTypes(userId: string): Promise<string> {
+  return JSON.stringify(listItemTypes(userId));
+}
+
+export async function runDefineItemType(
+  input: {
+    name: string;
+    schema: unknown;
+    capabilities: unknown;
+    blocks: Block[];
+  },
+  userId: string,
+): Promise<string> {
+  const name = input.name?.trim();
+  if (!name) return 'Error: name is required';
+
+  const schemaError = validateSchema(input.schema);
+  if (schemaError) return `Error: ${schemaError}`;
+
+  const capsError = validateCapabilities(input.capabilities);
+  if (capsError) return `Error: ${capsError}`;
+
+  const contractError = validateCapabilityFieldContracts(
+    input.schema as ItemSchema,
+    input.capabilities as string[],
+  );
+  if (contractError) return `Error: ${contractError}`;
+
+  if (!Array.isArray(input.blocks)) return 'Error: blocks must be an array';
+  const blocksError = validateBlocks(input.blocks);
+  if (blocksError) return `Error: ${blocksError}`;
+
+  try {
+    const itemType = upsertItemType(
+      userId,
+      name,
+      input.schema as ItemSchema,
+      input.capabilities as string[],
+      input.blocks,
+    );
+    return JSON.stringify(itemType);
+  } catch (err) {
+    return `Error: ${(err as Error).message}`;
   }
-
-  return JSON.stringify(item);
 }
 
-export async function runListItemTemplates(userId: string): Promise<string> {
-  return JSON.stringify(listItemTemplates(userId));
-}
+// Backward-compat aliases
+export const runListItemTemplates = runListItemTypes;
 
 export async function runCreateItemTemplate(
   input: { name: string; blocks: Block[] },
   userId: string,
 ): Promise<string> {
-  const name = input.name?.trim();
-  if (!name) return 'Error: name is required';
-  if (!Array.isArray(input.blocks)) return 'Error: blocks must be an array';
-  const blocksError = validateBlocks(input.blocks);
-  if (blocksError) return `Error: ${blocksError}`;
-  return JSON.stringify(createItemTemplate(userId, name, input.blocks));
+  return runDefineItemType({ name: input.name, schema: {}, capabilities: [], blocks: input.blocks }, userId);
 }
 
 export async function runUpdateItemTemplate(
@@ -160,6 +224,7 @@ export async function runUpdateItemTemplate(
   if (!Array.isArray(input.blocks)) return 'Error: blocks must be an array';
   const blocksError = validateBlocks(input.blocks);
   if (blocksError) return `Error: ${blocksError}`;
+  const { updateItemTemplate } = await import('../services/templates.js');
   const updated = updateItemTemplate(input.template_id, input.blocks, input.name?.trim());
   if (!updated) return `Error: template '${input.template_id}' not found or not editable`;
   return JSON.stringify(updated);

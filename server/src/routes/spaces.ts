@@ -6,22 +6,17 @@ import { getDataDir, getDb, getSessionsForItem } from '../db/index.js';
 import { newId } from '../lib/ids.js';
 import { requireAuthHeaderOrQuery, type AuthedRequest } from '../middleware/auth.js';
 import {
-  createFileItem,
-  createRepoItem,
-  createTemplateItem,
+  createItem,
   deleteItem,
   getItemById,
   getItemsForSpace,
-  readItemContent,
   updateItemPageBlocks,
   updateItemPageBlock,
   updateTaskDone,
   type Block,
-  type SpaceItem,
-  type RepoItem,
-  type FileItem,
+  type SpaceItemBase,
 } from '../services/items.js';
-import { listItemTemplates, getItemTemplate, createItemTemplate, updateItemTemplate, deleteItemTemplate } from '../services/templates.js';
+import { listItemTypes, getItemType, createItemTemplate, updateItemTemplate, deleteItemTemplate } from '../services/templates.js';
 import { validateBlock, validateBlocks } from '../lib/blocks.js';
 import { detectCapabilities } from '../services/projectCapabilities.js';
 
@@ -56,7 +51,7 @@ function requireSpace(req: Request, res: Response): { id: string; name: string }
 function requireRepoItem(
   req: Request,
   res: Response,
-): RepoItem | undefined {
+): SpaceItemBase | undefined {
   if (!requireSpace(req, res)) return undefined;
   const item = getItemById(req.params.itemId);
   if (!item || item.space_id !== req.params.spaceId) {
@@ -67,7 +62,7 @@ function requireRepoItem(
     res.status(400).json({ error: `Operation not supported for item type '${item.type}'` });
     return undefined;
   }
-  return item as RepoItem;
+  return item;
 }
 
 function resolveInItem(base: string, relativePath: string): string {
@@ -162,7 +157,7 @@ router.get('/:spaceId/items', (req, res) => {
 
 router.get('/item-templates', (req, res) => {
   const { userId } = req as unknown as AuthedRequest;
-  res.json(listItemTemplates(userId));
+  res.json(listItemTypes(userId));
 });
 
 router.post('/item-templates', (req, res) => {
@@ -201,7 +196,7 @@ router.patch('/item-templates/:templateId', (req, res) => {
 
 router.delete('/item-templates/:templateId', (req, res) => {
   const { userId } = req as unknown as AuthedRequest;
-  const template = getItemTemplate(req.params.templateId);
+  const template = getItemType(req.params.templateId);
   if (!template || template.is_builtin) {
     res.status(404).json({ error: 'Template not found or not deletable' });
     return;
@@ -222,46 +217,32 @@ router.post('/:spaceId/items', (req, res) => {
     return;
   }
 
-  if (type === 'repo') {
-    if (!req.body.repo_path) {
-      res.status(400).json({ error: 'repo_path required' });
-      return;
-    }
-    res.status(201).json(createRepoItem({
-      space_id: req.params.spaceId,
-      name: name.trim(),
-      repo_path: req.body.repo_path,
-      default_branch: req.body.default_branch,
-    }));
-    return;
-  }
-
-  if (type === 'file') {
-    if (!req.body.file_path) {
-      res.status(400).json({ error: 'file_path required' });
-      return;
-    }
-    res.status(201).json(createFileItem({
-      space_id: req.params.spaceId,
-      name: name.trim(),
-      file_path: req.body.file_path,
-      size_bytes: req.body.size_bytes,
-      mime_type: req.body.mime_type,
-    }));
-    return;
-  }
-
-  // All other types are template-based
-  const template = getItemTemplate(type);
-  if (!template || template.kind !== 'blocks') {
+  const itemType = getItemType(type);
+  if (!itemType) {
     res.status(404).json({ error: `Unknown item type '${type}'` });
     return;
   }
-  res.status(201).json(createTemplateItem({
+  const fields: Record<string, unknown> = req.body.fields ?? {};
+  if (type === 'repo') {
+    if (!req.body.repo_path && !fields.repo_path) {
+      res.status(400).json({ error: 'repo_path required' });
+      return;
+    }
+    if (req.body.repo_path) { fields.repo_path = req.body.repo_path; fields.default_branch = req.body.default_branch ?? null; }
+  }
+  if (type === 'file') {
+    if (!req.body.file_path && !fields.file_path) {
+      res.status(400).json({ error: 'file_path required' });
+      return;
+    }
+    if (req.body.file_path) { fields.file_path = req.body.file_path; fields.size_bytes = req.body.size_bytes ?? null; fields.mime_type = req.body.mime_type ?? null; }
+  }
+  res.status(201).json(createItem({
     space_id: req.params.spaceId,
     name: name.trim(),
     type,
-    page_blocks: template.blocks ?? [],
+    page_blocks: itemType.blocks ?? [],
+    fields,
   }));
 });
 
@@ -381,8 +362,10 @@ router.get('/:spaceId/items/:itemId/content', async (req, res) => {
     return;
   }
   try {
-    const content = await readItemContent(item);
-    res.type(item.type === 'file' ? ((item as FileItem).mime_type ?? 'application/octet-stream') : 'application/octet-stream').send(content);
+    const filePath = item.fields.file_path as string | undefined;
+    if (!filePath) { res.status(400).json({ error: 'Item has no file content' }); return; }
+    const content = await fs.readFile(filePath);
+    res.type((item.fields.mime_type as string | undefined) ?? 'application/octet-stream').send(content);
   } catch {
     res.status(404).json({ error: 'Item content not found' });
   }
@@ -393,7 +376,7 @@ router.get('/:spaceId/items/:itemId/tree', async (req, res) => {
   const item = requireRepoItem(req, res);
   if (!item) return;
   try {
-    const target = resolveInItem(item.repo_path, (req.query.path as string) || '');
+    const target = resolveInItem(item.fields.repo_path as string, (req.query.path as string) || '');
     const entries = await fs.readdir(target, { withFileTypes: true });
     res.json({
       entries: entries
@@ -401,7 +384,7 @@ router.get('/:spaceId/items/:itemId/tree', async (req, res) => {
         .map(entry => ({
           name: entry.name,
           type: entry.isDirectory() ? 'dir' : 'file',
-          path: path.relative(item.repo_path, path.join(target, entry.name)),
+          path: path.relative(item.fields.repo_path as string, path.join(target, entry.name)),
         }))
         .sort((a, b) => a.type === b.type ? a.name.localeCompare(b.name) : a.type === 'dir' ? -1 : 1),
       base_is_repo: true,
@@ -420,7 +403,7 @@ router.get('/:spaceId/items/:itemId/file', async (req, res) => {
     return;
   }
   try {
-    res.json({ content: await fs.readFile(resolveInItem(item.repo_path, relativePath), 'utf-8'), path: relativePath });
+    res.json({ content: await fs.readFile(resolveInItem(item.fields.repo_path as string, relativePath), 'utf-8'), path: relativePath });
   } catch {
     res.status(404).json({ error: 'File not found' });
   }
@@ -429,14 +412,14 @@ router.get('/:spaceId/items/:itemId/file', async (req, res) => {
 router.get('/:spaceId/items/:itemId/capabilities', (req, res) => {
   const item = requireRepoItem(req, res);
   if (!item) return;
-  res.json(detectCapabilities(item.id, item.repo_path));
+  res.json(detectCapabilities(item.id, item.fields.repo_path as string));
 });
 
 router.get('/:spaceId/items/:itemId/workspace', async (req, res) => {
   const item = requireRepoItem(req, res);
   if (!item) return;
   try {
-    res.json({ content: await fs.readFile(path.join(item.repo_path, 'workspace.md'), 'utf-8') });
+    res.json({ content: await fs.readFile(path.join(item.fields.repo_path as string, 'workspace.md'), 'utf-8') });
   } catch {
     res.json({ content: '' });
   }
@@ -445,7 +428,7 @@ router.get('/:spaceId/items/:itemId/workspace', async (req, res) => {
 router.put('/:spaceId/items/:itemId/workspace', async (req, res) => {
   const item = requireRepoItem(req, res);
   if (!item) return;
-  await fs.writeFile(path.join(item.repo_path, 'workspace.md'), req.body.content ?? '', 'utf-8');
+  await fs.writeFile(path.join(item.fields.repo_path as string, 'workspace.md'), req.body.content ?? '', 'utf-8');
   res.json({ ok: true });
 });
 

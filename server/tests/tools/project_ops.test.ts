@@ -6,7 +6,7 @@ import { listProjects, createProject, updateProject, deleteProject } from '../..
 
 const dbState = {
   spaces: new Map<string, { id: string; user_id: string; name: string; description: string | null }>(),
-  items: new Map<string, { id: string; space_id: string; type: string; name: string; repo_path: string | null }>(),
+  items: new Map<string, { id: string; space_id: string; type: string; name: string; fields: Record<string, unknown>; page_blocks: [] }>(),
   projectsRoot: null as string | null,
 };
 
@@ -27,12 +27,8 @@ vi.mock('../../src/db/index.js', () => ({
           const s = dbState.spaces.get(id);
           if (s && s.user_id === user_id) s.description = description;
         } else if (sql.startsWith('INSERT INTO space_items')) {
-          const [id, space_id, type, name] = args as string[];
-          dbState.items.set(id, { id, space_id, type, name, repo_path: null });
-        } else if (sql.startsWith('INSERT INTO space_repos')) {
-          const [item_id, repo_path] = args as string[];
-          const item = dbState.items.get(item_id);
-          if (item) item.repo_path = repo_path;
+          const [id, space_id, type, name, , , fields] = args as string[];
+          dbState.items.set(id, { id, space_id, type, name, fields: fields ? JSON.parse(fields) : {}, page_blocks: [] });
         }
         return { changes: 1 };
       },
@@ -52,13 +48,13 @@ vi.mock('../../src/services/items.js', () => ({
   getItemsForSpace: (spaceId: string) => {
     return [...dbState.items.values()]
       .filter(i => i.space_id === spaceId)
-      .map(i => ({ ...i, default_branch: null, created_at: 0, source_session_id: null, source_plan_id: null, source_step_id: null }));
+      .map(i => ({ ...i, created_at: 0, source_session_id: null }));
   },
-  createRepoItem: (input: { space_id: string; name: string; repo_path: string }) => {
+  createItem: (input: { space_id: string; name: string; type: string; page_blocks: []; fields: Record<string, unknown> }) => {
     const id = 'item-' + input.space_id;
-    const item = { id, space_id: input.space_id, type: 'repo', name: input.name, repo_path: input.repo_path };
+    const item = { id, space_id: input.space_id, type: input.type, name: input.name, fields: input.fields, page_blocks: [] as [] };
     dbState.items.set(id, item);
-    return { ...item, default_branch: null, created_at: 0, source_session_id: null, source_plan_id: null, source_step_id: null };
+    return { ...item, created_at: 0, source_session_id: null };
   },
 }));
 
@@ -106,8 +102,9 @@ describe('create_space', () => {
     const result = await createProject({ name: 'My App', description: 'desc', with_repo: true }, userId, 'exec-1');
     expect(result).toContain('new-id');
     const repoItem = [...dbState.items.values()].find(i => i.space_id === 'new-id');
-    expect(repoItem?.repo_path).toBe(path.join(tmpRoot, 'my-app'));
-    expect(fs.existsSync(path.join(repoItem!.repo_path!, '.git'))).toBe(true);
+    const repoPath = repoItem?.fields.repo_path as string;
+    expect(repoPath).toBe(path.join(tmpRoot, 'my-app'));
+    expect(fs.existsSync(path.join(repoPath, '.git'))).toBe(true);
   });
 
   it('creates a project without a type field', async () => {
@@ -129,7 +126,7 @@ describe('delete_space', () => {
   it('removes the project record without deleting files when delete_files is false', async () => {
     const repoDir = fs.mkdtempSync(path.join(os.tmpdir(), 'proj-repo-'));
     dbState.spaces.set('p1', { id: 'p1', user_id: userId, name: 'api', description: null });
-    dbState.items.set('item-p1', { id: 'item-p1', space_id: 'p1', type: 'repo', name: 'api', repo_path: repoDir });
+    dbState.items.set('item-p1', { id: 'item-p1', space_id: 'p1', type: 'repo', name: 'api', fields: { repo_path: repoDir }, page_blocks: [] });
 
     const result = await deleteProject({ space_id: 'p1', delete_files: false }, userId, 'exec-1');
 
@@ -142,7 +139,7 @@ describe('delete_space', () => {
   it('removes the project record and deletes files when delete_files is true', async () => {
     const repoDir = fs.mkdtempSync(path.join(os.tmpdir(), 'proj-repo-'));
     dbState.spaces.set('p1', { id: 'p1', user_id: userId, name: 'api', description: null });
-    dbState.items.set('item-p1', { id: 'item-p1', space_id: 'p1', type: 'repo', name: 'api', repo_path: repoDir });
+    dbState.items.set('item-p1', { id: 'item-p1', space_id: 'p1', type: 'repo', name: 'api', fields: { repo_path: repoDir }, page_blocks: [] });
 
     const result = await deleteProject({ space_id: 'p1', delete_files: true }, userId, 'exec-1');
 

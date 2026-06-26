@@ -7,7 +7,7 @@ import { classifyIntent } from './intent.js';
 import { buildContext } from './context.js';
 import { generateMcpToken } from '../mcp/auth.js';
 import { getConversationProvider } from './conversation-provider.js';
-import { getItemsForSpace, type RepoItem } from './items.js';
+import { getItemsForSpace } from './items.js';
 
 const activeTurnControllers = new Map<string, AbortController>();
 
@@ -29,10 +29,10 @@ function checkpointWorkspaceMd(userId: string, sessionId: string, userPrompt: st
   if (!session?.pinned_space_id) return;
 
   const repoItems = getItemsForSpace(session.pinned_space_id)
-    .filter((item): item is RepoItem => item.type === 'repo');
+    .filter(item => item.type === 'repo');
   if (repoItems.length === 0) return;
 
-  const repoPath = repoItems[0].repo_path;
+  const repoPath = repoItems[0].fields.repo_path as string;
   const workspacePath = path.join(repoPath, 'workspace.md');
 
   const now = new Date();

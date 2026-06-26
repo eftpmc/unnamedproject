@@ -1,7 +1,7 @@
 import fs from 'fs';
 import path from 'path';
 import { getDb, getDataDir, getPermissionProfile, type DbSpace } from '../db/index.js';
-import { getItemsForSpace, type RepoItem } from './items.js';
+import { getItemsForSpace } from './items.js';
 import { recallRelevant } from './memory.js';
 import { formatEntry } from '../tools/memory_tools.js';
 import type { Intent } from './intent.js';
@@ -150,9 +150,9 @@ For parallel workstreams: dispatch multiple invoke_claude_code calls as needed, 
 
 function projectContextBlock(space: DbSpace): string {
   const repoItems = getItemsForSpace(space.id)
-    .filter((item): item is RepoItem => item.type === 'repo');
-  const repoPath = repoItems.length === 1 ? repoItems[0].repo_path : null;
-  const detected = repoItems.map(item => detectCapabilities(item.id, item.repo_path));
+    .filter(item => item.type === 'repo');
+  const repoPath = repoItems.length === 1 ? repoItems[0].fields.repo_path as string : null;
+  const detected = repoItems.map(item => detectCapabilities(item.id, item.fields.repo_path as string));
   const has_graph = detected.some(value => value.has_graph);
   const capLabels: string[] = [];
   if (has_graph) capLabels.push('code graph indexed — use project_query for broad codebase questions before reading individual files');
@@ -164,7 +164,7 @@ function projectContextBlock(space: DbSpace): string {
     const capNote = capLabels.length > 0
       ? ` Detected capabilities: ${capLabels.join(', ')}.`
       : ' No special capabilities detected yet.';
-    const repoList = repoItems.map(item => `${item.name} (item_id: ${item.id}, path: ${item.repo_path})`).join('; ');
+    const repoList = repoItems.map(item => `${item.name} (item_id: ${item.id}, path: ${item.fields.repo_path})`).join('; ');
     guidance = `\nCode space with repos: ${repoList}.${capNote} Every repo-scoped tool call must include the selected item_id.`;
   } else {
     guidance = `\nDoc/writing space (no git repo). Create and read note/file items directly.`;

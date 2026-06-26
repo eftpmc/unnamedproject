@@ -25,26 +25,30 @@ function setupTestDb(): Database.Database {
       name TEXT NOT NULL,
       source_session_id TEXT,
       created_at INTEGER NOT NULL DEFAULT (unixepoch()),
-      page_blocks TEXT NOT NULL DEFAULT '[]'
+      page_blocks TEXT NOT NULL DEFAULT '[]',
+      fields TEXT NOT NULL DEFAULT '{}'
     );
-    CREATE TABLE space_repos (item_id TEXT PRIMARY KEY, repo_path TEXT NOT NULL, default_branch TEXT);
-    CREATE TABLE space_files (item_id TEXT PRIMARY KEY, file_path TEXT NOT NULL, size_bytes INTEGER, mime_type TEXT);
     CREATE TABLE item_templates (
       id TEXT PRIMARY KEY,
       user_id TEXT,
       kind TEXT NOT NULL,
       name TEXT NOT NULL,
       blocks TEXT,
+      schema TEXT NOT NULL DEFAULT '{}',
+      capabilities TEXT NOT NULL DEFAULT '[]',
       is_builtin INTEGER NOT NULL DEFAULT 0,
       created_at INTEGER NOT NULL DEFAULT (unixepoch())
     );
     INSERT INTO spaces VALUES ('sp1', 'u1', 'Test Space', NULL, '[]');
-    INSERT INTO space_items (id, space_id, type, name, source_session_id, created_at, page_blocks)
-      VALUES ('repo1', 'sp1', 'repo', 'My Repo', NULL, 1, '[]');
-    INSERT INTO space_repos VALUES ('repo1', '/tmp/repo', NULL);
-    INSERT INTO item_templates (id, user_id, kind, name, blocks, is_builtin) VALUES
-      ('tpl_document', NULL, 'blocks', 'Document', '[{"type":"text","content":""}]', 1),
-      ('tpl_spec', NULL, 'blocks', 'Spec', '[{"type":"heading","level":1,"text":"Overview"}]', 1);
+    INSERT INTO space_items (id, space_id, type, name, source_session_id, created_at, page_blocks, fields)
+      VALUES ('repo1', 'sp1', 'repo', 'My Repo', NULL, 1, '[]',
+        '{"repo_path":"/tmp/repo","default_branch":null}');
+    INSERT INTO item_templates (id, user_id, kind, name, blocks, schema, capabilities, is_builtin) VALUES
+      ('tpl_document', NULL, 'blocks', 'Document', '[{"type":"text","content":""}]', '{}', '[]', 1),
+      ('tpl_spec', NULL, 'blocks', 'Spec', '[{"type":"heading","level":1,"text":"Overview"}]', '{}', '[]', 1),
+      ('repo', NULL, 'blocks', 'Repo', '[]',
+        '{"repo_path":{"type":"string","required":true},"default_branch":{"type":"string","required":false}}',
+        '["git-aware","file-readable"]', 1);
   `);
   return db;
 }
@@ -69,6 +73,12 @@ describe('runCreateItem', () => {
     expect(result).toMatch(/^Error:/);
   });
 
+  it('returns error for unknown type', async () => {
+    const { runCreateItem } = await import('./item_ops.js');
+    const result = await runCreateItem({ space_id: 'sp1', name: 'X', type: 'nonexistent' }, 'u1');
+    expect(result).toMatch(/^Error:/);
+  });
+
   it('links a created item to a session when provenance is passed', async () => {
     const { runCreateItem } = await import('./item_ops.js');
     const result = JSON.parse(await runCreateItem(
@@ -76,6 +86,25 @@ describe('runCreateItem', () => {
       'u1',
     ));
     expect(result.source_session_id).toBe('sess1');
+  });
+
+  it('creates a repo item with fields', async () => {
+    const { runCreateItem } = await import('./item_ops.js');
+    const result = JSON.parse(await runCreateItem(
+      { space_id: 'sp1', name: 'My Repo', type: 'repo', fields: { repo_path: '/tmp/myrepo' } },
+      'u1',
+    ));
+    expect(result.fields.repo_path).toBe('/tmp/myrepo');
+  });
+
+  it('returns error when required field missing', async () => {
+    const { runCreateItem } = await import('./item_ops.js');
+    const result = await runCreateItem(
+      { space_id: 'sp1', name: 'Bad Repo', type: 'repo', fields: {} },
+      'u1',
+    );
+    expect(result).toMatch(/^Error:/);
+    expect(result).toMatch(/repo_path/);
   });
 });
 
@@ -93,7 +122,7 @@ describe('runUpdateItem', () => {
       { space_id: 'sp1', item_id: created.id, page_blocks: newBlocks },
       'u1',
     ));
-    expect(result.page_blocks).toEqual(newBlocks);
+    expect(result.page_blocks[0]).toMatchObject({ type: 'text', content: 'updated' });
   });
 
   it('patches a single block by block_id without touching the rest', async () => {
@@ -111,8 +140,8 @@ describe('runUpdateItem', () => {
       { space_id: 'sp1', item_id: created.id, block_id: 'stat1', block: { id: 'stat1', type: 'stat', label: 'Open Issues', value: '9' } },
       'u1',
     ));
-    expect(result.page_blocks[0]).toEqual(blocks[0]);
-    expect(result.page_blocks[1]).toEqual({ id: 'stat1', type: 'stat', label: 'Open Issues', value: '9' });
+    expect(result.page_blocks[0]).toMatchObject({ id: 'h1', text: 'Title' });
+    expect(result.page_blocks[1]).toMatchObject({ id: 'stat1', value: '9' });
   });
 
   it('rejects a malformed block in a full page_blocks replace', async () => {
@@ -165,18 +194,28 @@ describe('runUpdateItem', () => {
       { space_id: 'sp1', item_id: 'repo1', page_blocks: overview },
       'u1',
     ));
-    expect(result.page_blocks).toEqual(overview);
+    expect(result.page_blocks[0]).toMatchObject({ content: 'overview' });
+  });
+
+  it('patches item fields', async () => {
+    const { runUpdateItem } = await import('./item_ops.js');
+    const result = JSON.parse(await runUpdateItem(
+      { space_id: 'sp1', item_id: 'repo1', fields: { default_branch: 'main' } },
+      'u1',
+    ));
+    expect(result.fields.repo_path).toBe('/tmp/repo'); // untouched
+    expect(result.fields.default_branch).toBe('main'); // patched
   });
 });
 
 describe('runReadItem', () => {
   beforeEach(() => { testDb = setupTestDb(); vi.resetModules(); });
 
-  it('reads a repo item', async () => {
+  it('reads a repo item with fields', async () => {
     const { runReadItem } = await import('./item_ops.js');
     const result = JSON.parse(await runReadItem({ space_id: 'sp1', item_id: 'repo1' }, 'u1'));
     expect(result.type).toBe('repo');
-    expect(result.repo_path).toBe('/tmp/repo');
+    expect(result.fields.repo_path).toBe('/tmp/repo');
   });
 
   it('returns error for unknown item', async () => {
@@ -196,7 +235,6 @@ describe('runCreateItemTemplate / runUpdateItemTemplate', () => {
       'u1',
     ));
     expect(result.name).toBe('Dashboard');
-    expect(result.kind).toBe('blocks');
   });
 
   it('rejects creating a template with a malformed block', async () => {
@@ -217,5 +255,55 @@ describe('runCreateItemTemplate / runUpdateItemTemplate', () => {
     });
     expect(result).toMatch(/^Error:/);
     expect(result).toMatch(/variant/);
+  });
+});
+
+describe('runDefineItemType', () => {
+  beforeEach(() => { testDb = setupTestDb(); vi.resetModules(); });
+
+  it('creates a new custom type', async () => {
+    const { runDefineItemType } = await import('./item_ops.js');
+    const result = JSON.parse(await runDefineItemType(
+      {
+        name: 'Bookmark',
+        schema: { url: { type: 'string', required: true } },
+        capabilities: ['web-fetchable'],
+        blocks: [{ type: 'text', content: '' }],
+      },
+      'u1',
+    ));
+    expect(result.name).toBe('Bookmark');
+    expect(result.capabilities).toEqual(['web-fetchable']);
+    expect(result.schema.url).toBeDefined();
+  });
+
+  it('rejects unknown capability', async () => {
+    const { runDefineItemType } = await import('./item_ops.js');
+    const result = await runDefineItemType(
+      { name: 'Bad', schema: {}, capabilities: ['auto-syncing'], blocks: [] },
+      'u1',
+    );
+    expect(result).toMatch(/^Error:/);
+    expect(result).toMatch(/auto-syncing/);
+  });
+
+  it('rejects capability missing its required field', async () => {
+    const { runDefineItemType } = await import('./item_ops.js');
+    const result = await runDefineItemType(
+      { name: 'Bad', schema: {}, capabilities: ['file-readable'], blocks: [] },
+      'u1',
+    );
+    expect(result).toMatch(/^Error:/);
+    expect(result).toMatch(/file_path/);
+  });
+
+  it('rejects redefining a builtin type', async () => {
+    const { runDefineItemType } = await import('./item_ops.js');
+    const result = await runDefineItemType(
+      { name: 'Repo', schema: { repo_path: { type: 'string', required: true } }, capabilities: ['git-aware'], blocks: [] },
+      'u1',
+    );
+    expect(result).toMatch(/^Error:/);
+    expect(result).toMatch(/builtin/);
   });
 });

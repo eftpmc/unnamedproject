@@ -8,7 +8,7 @@ import {
   updateAgentWorktreePath,
   type DbAgentWorktree,
 } from '../db/index.js';
-import type { RepoItem } from '../services/items.js';
+import type { SpaceItemBase } from '../services/items.js';
 
 /**
  * Returns an isolated git worktree for a (repo item, session) pair, on its own
@@ -17,7 +17,8 @@ import type { RepoItem } from '../services/items.js';
  * collide, and the repo's main checkout stays untouched until the
  * session's branch is reviewed and pushed/merged.
  */
-export async function ensureWorktree(repoItem: RepoItem, sessionId: string): Promise<DbAgentWorktree> {
+export async function ensureWorktree(repoItem: SpaceItemBase, sessionId: string): Promise<DbAgentWorktree> {
+  const repoPath = repoItem.fields.repo_path as string;
   const existing = getAgentWorktree(repoItem.id, sessionId);
   if (existing) {
     try {
@@ -28,7 +29,7 @@ export async function ensureWorktree(repoItem: RepoItem, sessionId: string): Pro
     }
   }
 
-  const git = simpleGit(repoItem.repo_path);
+  const git = simpleGit(repoPath);
   await ensureInitialCommit(git);
 
   const branch = existing?.branch ?? `agent/${sessionId}`;

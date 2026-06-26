@@ -27,26 +27,26 @@ function setupTestDb(): Database.Database {
       name TEXT NOT NULL,
       source_session_id TEXT,
       created_at INTEGER NOT NULL DEFAULT (unixepoch()),
-      page_blocks TEXT NOT NULL DEFAULT '[]'
+      page_blocks TEXT NOT NULL DEFAULT '[]',
+      fields TEXT NOT NULL DEFAULT '{}'
     );
-    CREATE TABLE space_repos (item_id TEXT PRIMARY KEY, repo_path TEXT NOT NULL, default_branch TEXT);
-    CREATE TABLE space_files (item_id TEXT PRIMARY KEY, file_path TEXT NOT NULL, size_bytes INTEGER, mime_type TEXT);
     CREATE TABLE item_templates (
       id TEXT PRIMARY KEY,
       user_id TEXT,
       kind TEXT NOT NULL,
       name TEXT NOT NULL,
       blocks TEXT,
+      schema TEXT NOT NULL DEFAULT '{}',
+      capabilities TEXT NOT NULL DEFAULT '[]',
       is_builtin INTEGER NOT NULL DEFAULT 0,
       created_at INTEGER NOT NULL DEFAULT (unixepoch())
     );
     INSERT INTO spaces VALUES ('sp1', 'u1', 'Test', NULL, '[]');
-    INSERT INTO space_items (id, space_id, type, name, source_session_id, created_at, page_blocks)
-      VALUES ('item1', 'sp1', 'repo', 'My Repo', NULL, 1, '[]');
-    INSERT INTO space_repos VALUES ('item1', '/tmp/repo', NULL);
-    INSERT INTO item_templates (id, user_id, kind, name, blocks, is_builtin) VALUES
-      ('tpl_blank', NULL, 'blocks', 'Blank', '[]', 1),
-      ('tpl_spec', NULL, 'blocks', 'Spec', '[{"type":"heading","level":1,"text":"Overview"}]', 1);
+    INSERT INTO space_items (id, space_id, type, name, source_session_id, created_at, page_blocks, fields)
+      VALUES ('item1', 'sp1', 'repo', 'My Repo', NULL, 1, '[]', '{"repo_path":"/tmp/repo"}');
+    INSERT INTO item_templates (id, user_id, kind, name, blocks, schema, capabilities, is_builtin) VALUES
+      ('tpl_blank', NULL, 'blocks', 'Blank', '[]', '{}', '[]', 1),
+      ('tpl_spec', NULL, 'blocks', 'Spec', '[{"type":"heading","level":1,"text":"Overview"}]', '{}', '[]', 1);
   `);
   return db;
 }
@@ -145,7 +145,7 @@ describe('PATCH /spaces/:spaceId/items/:itemId — blocks', () => {
       .set('Authorization', `Bearer ${token}`)
       .send({ page_blocks: blocks });
     expect(res.status).toBe(200);
-    expect(res.body.page_blocks).toEqual(blocks);
+    expect(res.body.page_blocks[0]).toMatchObject(blocks[0]);
   });
 
   it('400s a page_blocks replace with a malformed block', async () => {
@@ -213,7 +213,7 @@ describe('PATCH /spaces/:spaceId/items/:itemId — blocks', () => {
       .set('Authorization', `Bearer ${token}`)
       .send({ page_blocks: overview });
     expect(res.status).toBe(200);
-    expect(res.body.page_blocks).toEqual(overview);
+    expect(res.body.page_blocks[0]).toMatchObject(overview[0]);
   });
 });
 

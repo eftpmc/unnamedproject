@@ -4,9 +4,8 @@ import {
   runCreateItem,
   runUpdateItem,
   runReadItem,
-  runListItemTemplates,
-  runCreateItemTemplate,
-  runUpdateItemTemplate,
+  runListItemTypes,
+  runDefineItemType,
 } from '../../tools/item_ops.js';
 
 export function registerItemHandlers(): void {
@@ -23,7 +22,7 @@ export function registerItemHandlers(): void {
 
   registerTool({
     name: 'read_item',
-    description: 'Read the content of a space item',
+    description: 'Read the content of a space item. For file-readable items, includes file content.',
     inputSchema: {
       type: 'object',
       properties: {
@@ -38,15 +37,14 @@ export function registerItemHandlers(): void {
 
   registerTool({
     name: 'create_item',
-    description: 'Create a new item in a space. Use list_item_templates to see available types. Use "blank" when none of the existing templates fit — it creates an empty item you populate with whatever blocks make sense for this new kind of thing.',
+    description: 'Create a new item in a space. Use list_item_types to see available types and their required fields.',
     inputSchema: {
       type: 'object',
       properties: {
         space_id: { type: 'string' },
         name: { type: 'string' },
-        type: { type: 'string', description: 'Template ID from list_item_templates, or "repo". Use "blank" for a custom item type.' },
-        repo_path: { type: 'string', description: 'Required when type is repo' },
-        default_branch: { type: 'string' },
+        type: { type: 'string', description: 'Type ID from list_item_types (e.g. blank, spec, repo)' },
+        fields: { type: 'object', description: 'Typed field values — validated against the type schema' },
       },
       required: ['space_id', 'name', 'type'],
     },
@@ -56,8 +54,7 @@ export function registerItemHandlers(): void {
           space_id: args.space_id as string,
           name: args.name as string,
           type: args.type as string,
-          repo_path: args.repo_path as string | undefined,
-          default_branch: args.default_branch as string | undefined,
+          fields: args.fields as Record<string, unknown> | undefined,
           source_session_id: sessionId,
         },
         userId,
@@ -67,14 +64,15 @@ export function registerItemHandlers(): void {
 
   registerTool({
     name: 'update_item',
-    description: "Update an item's page blocks. Use append_blocks to add new blocks without reading the item first — prefer this for work logs and research docs. Use page_blocks only for full rewrites. Use block_id+block to patch a single existing block.",
+    description: "Update an item's fields and/or page blocks. fields uses patch semantics (merged). Use append_blocks to add blocks without a full read.",
     inputSchema: {
       type: 'object',
       properties: {
         space_id: { type: 'string' },
         item_id: { type: 'string' },
+        fields: { type: 'object', description: 'Patch typed fields — merged into existing values' },
         page_blocks: { type: 'array', description: 'Full replacement of all page blocks' },
-        append_blocks: { type: 'array', description: 'Append these blocks after existing content — safe, no read required' },
+        append_blocks: { type: 'array', description: 'Append blocks after existing content' },
         block_id: { type: 'string', description: 'Patch a single block by its id' },
         block: { type: 'object', description: 'Replacement block when block_id is set' },
       },
@@ -85,6 +83,7 @@ export function registerItemHandlers(): void {
         {
           space_id: args.space_id as string,
           item_id: args.item_id as string,
+          fields: args.fields as Record<string, unknown> | undefined,
           page_blocks: args.page_blocks as Block[] | undefined,
           append_blocks: args.append_blocks as Block[] | undefined,
           block_id: args.block_id as string | undefined,
@@ -96,44 +95,44 @@ export function registerItemHandlers(): void {
   });
 
   registerTool({
-    name: 'list_item_templates',
-    description: 'List available item templates',
+    name: 'list_item_types',
+    description: 'List all available item types with their schema, capabilities, and default block layout',
     inputSchema: { type: 'object', properties: {} },
-    handler: async (_args, userId) => runListItemTemplates(userId),
+    handler: async (_args, userId) => runListItemTypes(userId),
   });
 
   registerTool({
-    name: 'create_item_template',
-    description: 'Create a new item template',
+    name: 'define_item_type',
+    description: 'Define a new item type with a backend schema (typed fields), capability primitives, and default frontend blocks. Call again with the same name to update an existing custom type.',
     inputSchema: {
       type: 'object',
       properties: {
-        name: { type: 'string' },
-        blocks: { type: 'array' },
+        name: { type: 'string', description: 'Display name for the type' },
+        schema: {
+          type: 'object',
+          description: 'Field definitions: { fieldName: { type: "string"|"number"|"boolean"|"enum", required?: boolean, options?: string[] } }',
+        },
+        capabilities: {
+          type: 'array',
+          items: { type: 'string' },
+          description: 'Platform capability primitives: git-aware, file-readable, web-fetchable, embeddable, schedulable',
+        },
+        blocks: {
+          type: 'array',
+          description: 'Default page block layout for new items of this type',
+        },
       },
-      required: ['name', 'blocks'],
+      required: ['name', 'schema', 'capabilities', 'blocks'],
     },
     handler: async (args, userId) =>
-      runCreateItemTemplate({ name: args.name as string, blocks: args.blocks as Block[] }, userId),
-  });
-
-  registerTool({
-    name: 'update_item_template',
-    description: 'Update an item template',
-    inputSchema: {
-      type: 'object',
-      properties: {
-        template_id: { type: 'string' },
-        name: { type: 'string' },
-        blocks: { type: 'array' },
-      },
-      required: ['template_id', 'blocks'],
-    },
-    handler: async (args, _userId) =>
-      runUpdateItemTemplate({
-        template_id: args.template_id as string,
-        name: args.name as string | undefined,
-        blocks: args.blocks as Block[],
-      }),
+      runDefineItemType(
+        {
+          name: args.name as string,
+          schema: args.schema,
+          capabilities: args.capabilities,
+          blocks: args.blocks as Block[],
+        },
+        userId,
+      ),
   });
 }

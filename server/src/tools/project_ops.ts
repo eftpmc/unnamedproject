@@ -2,7 +2,7 @@ import fs from 'fs/promises';
 import path from 'path';
 import simpleGit from 'simple-git';
 import { getDb, getSpaceForUser, getSpacesForUser, getProjectsRoot } from '../db/index.js';
-import { getItemsForSpace, createRepoItem, type SpaceItem, type RepoItem } from '../services/items.js';
+import { getItemsForSpace, createItem } from '../services/items.js';
 import { newId } from '../lib/ids.js';
 import { requestApproval } from '../services/executor.js';
 
@@ -40,7 +40,7 @@ export async function createProject(
     }
     await fs.mkdir(repoPath, { recursive: true });
     await simpleGit().cwd(repoPath).init();
-    createRepoItem({ space_id: id, name: input.name, repo_path: repoPath });
+    createItem({ space_id: id, name: input.name, type: 'repo', page_blocks: [], fields: { repo_path: repoPath } });
     return `Created space '${input.name}' (id: ${id}) with repo at ${repoPath}`;
   }
 
@@ -77,8 +77,8 @@ export async function deleteProject(
   if (!space) return `Error: space ${input.space_id} not found`;
 
   const repoPaths = getItemsForSpace(space.id)
-    .filter((item): item is RepoItem => item.type === 'repo')
-    .map(item => item.repo_path);
+    .filter(item => item.type === 'repo')
+    .map(item => item.fields.repo_path as string);
 
   const decision = await requestApproval(
     executionId,

@@ -146,8 +146,7 @@ describe('GET /sessions/:id/worktree', () => {
     const db = getDb();
     const wtId = newId();
     const itemId = `item_${projectId}_repo`;
-    db.prepare("INSERT INTO space_items (id, space_id, type, name) VALUES (?,?,?,?)").run(itemId, projectId, 'repo', 'myproj');
-    db.prepare("INSERT INTO space_repos (item_id, repo_path) VALUES (?,?)").run(itemId, '/fake/repo');
+    db.prepare("INSERT INTO space_items (id, space_id, type, name, fields) VALUES (?,?,?,?,?)").run(itemId, projectId, 'repo', 'myproj', JSON.stringify({ repo_path: '/fake/repo' }));
     db.prepare("INSERT INTO agent_worktrees (id, item_id, session_id, branch, worktree_path) VALUES (?,?,?,?,?)")
       .run(wtId, itemId, sessionId, `agent/${sessionId}`, '/fake/worktree');
 

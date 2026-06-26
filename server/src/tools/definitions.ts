@@ -251,32 +251,6 @@ export const toolDefinitions: Anthropic.Tool[] = [
     },
   },
   {
-    name: 'register_file_item',
-    description: 'Copy an existing file into managed storage and register it as a file item in a Space.',
-    input_schema: {
-      type: 'object',
-      properties: {
-        space_id: { type: 'string', description: 'Space that owns the file item' },
-        file_path: { type: 'string', description: 'Absolute path to the file to register' },
-        name: { type: 'string', description: 'Human-readable name (defaults to filename)' },
-      },
-      required: ['space_id', 'file_path'],
-    },
-  },
-  {
-    name: 'create_note',
-    description: 'Create a durable note item in a Space for research, reports, summaries, drafts, test results, or other text output.',
-    input_schema: {
-      type: 'object',
-      properties: {
-        space_id: { type: 'string', description: 'Space that owns the note' },
-        name: { type: 'string', description: 'Human-readable note name' },
-        content: { type: 'string', description: 'Markdown or plain-text note content' },
-      },
-      required: ['space_id', 'name', 'content'],
-    },
-  },
-  {
     name: 'list_items',
     description: 'List all items in a Space, including their type and page_blocks.',
     input_schema: {

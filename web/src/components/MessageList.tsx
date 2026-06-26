@@ -15,7 +15,7 @@ import type { Message, MessageAttachment, SessionEvent } from '../types.js';
 // decision, and tool calls that render as a richer preview card.
 function isGroupExempt(exec: InlineExecution): boolean {
   if (exec.status === 'error' || exec.status === 'awaiting_approval') return true;
-  if ((exec.tool === 'create_note' || exec.tool === 'register_file_item') && exec.status === 'done' && exec.result) {
+  if (exec.tool === 'create_item' && exec.status === 'done' && exec.result) {
     try {
       const parsed = JSON.parse(exec.result) as Record<string, unknown>;
       if (parsed.id && parsed.space_id) return true;
@@ -214,7 +214,7 @@ function renderExecutionCard(exec: InlineExecution) {
   if (exec.status === 'done' && exec.result) {
     try {
       const parsed = JSON.parse(exec.result) as Record<string, unknown>;
-      if ((exec.tool === 'create_note' || exec.tool === 'register_file_item') && parsed.id && parsed.space_id) {
+      if (exec.tool === 'create_item' && parsed.id && parsed.space_id) {
         return (
           <Link
             key={exec.executionId}

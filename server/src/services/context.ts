@@ -26,8 +26,8 @@ function readWorkspaceMd(space: DbSpace, repoPath: string | null): string | null
 function baseBlock(intent: Intent): string {
   const isCode = intent.domain === 'code' || intent.domain === 'multi' || intent.domain === 'general';
   const autoApproved = isCode
-    ? 'invoke_claude_code, invoke_codex, git_op add/commit, run_command, list_spaces, create_space, update_space, pin_space, project_query, rebuild_graph, search_files, read_file, list_dir, recall, remember, forget, list_chats, read_chat, register_file_item, create_note, list_items, read_item, list_connections, test_connection, tool_search, get_execution_output, wait_for_execution, list_scheduled_tasks, create_scheduled_task, update_scheduled_task'
-    : 'list_spaces, create_space, pin_space, search_files, read_file, list_dir, recall, remember, forget, write_file, run_command, list_chats, read_chat, create_note, list_items, read_item, list_connections, test_connection, tool_search';
+    ? 'invoke_claude_code, invoke_codex, git_op add/commit, run_command, list_spaces, create_space, update_space, pin_space, project_query, rebuild_graph, search_files, read_file, list_dir, recall, remember, forget, list_chats, read_chat, list_items, create_item, read_item, update_item, list_connections, test_connection, tool_search, get_execution_output, wait_for_execution, list_scheduled_tasks, create_scheduled_task, update_scheduled_task'
+    : 'list_spaces, create_space, pin_space, search_files, read_file, list_dir, recall, remember, forget, write_file, run_command, list_chats, read_chat, list_items, create_item, read_item, update_item, list_connections, test_connection, tool_search';
 
   return `You are a personal AI operator and orchestrator. You decide how work gets done — you never implement code, write files, or run git operations yourself when the task belongs to a coding agent.
 

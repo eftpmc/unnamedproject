@@ -19,6 +19,7 @@ import {
   createItemTemplate,
   deleteConnection,
   deleteItemTemplate,
+  createScheduledTask,
   deleteScheduledTask,
   getConnections,
   getMemory,
@@ -561,6 +562,29 @@ export default function Settings() {
     onSuccess: () => qc.invalidateQueries({ queryKey: ['scheduledTasks'] }),
   });
 
+  const [newTaskOpen, setNewTaskOpen] = useState(false);
+  const [newTaskType, setNewTaskType] = useState('custom_prompt');
+  const [newTaskPrompt, setNewTaskPrompt] = useState('');
+  const [newTaskInterval, setNewTaskInterval] = useState('24');
+  const [newTaskSpaceId, setNewTaskSpaceId] = useState<string>('none');
+
+  const createTaskMutation = useMutation({
+    mutationFn: () => createScheduledTask({
+      type: newTaskType,
+      interval_hours: Number(newTaskInterval),
+      ...(newTaskType === 'custom_prompt' ? { prompt: newTaskPrompt } : {}),
+      ...(newTaskSpaceId !== 'none' ? { pinned_space_id: newTaskSpaceId } : {}),
+    }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['scheduledTasks'] });
+      setNewTaskOpen(false);
+      setNewTaskPrompt('');
+      setNewTaskType('custom_prompt');
+      setNewTaskInterval('24');
+      setNewTaskSpaceId('none');
+    },
+  });
+
   function openSetupModal(kind: SetupKind) {
     setActiveSetup(kind);
     setForm({ ...INITIAL_SETUP_FORM, setupName: SETUP_META[kind].title });
@@ -744,7 +768,12 @@ export default function Settings() {
               </div>
 
               <div>
-                <SectionLabel>Scheduled tasks</SectionLabel>
+                <div className="flex items-center justify-between mb-3">
+                  <SectionLabel>Scheduled tasks</SectionLabel>
+                  <Button size="sm" className="h-7 gap-1.5 text-xs" onClick={() => setNewTaskOpen(true)}>
+                    <Plus size={13} />New task
+                  </Button>
+                </div>
                 {scheduledTasks.length === 0 ? (
                   <div className="rounded-lg border border-dashed border-border bg-muted/30 px-4 py-3 text-sm text-muted-foreground">
                     No scheduled tasks.
@@ -883,6 +912,62 @@ export default function Settings() {
                   ))}
                 </div>
               </div>
+              <Dialog open={newTaskOpen} onOpenChange={open => { if (!open) setNewTaskOpen(false); }}>
+                <DialogContent>
+                  <DialogHeader>
+                    <DialogTitle>New scheduled task</DialogTitle>
+                    <DialogDescription>Runs on a schedule in a background chat session.</DialogDescription>
+                  </DialogHeader>
+                  <div className="flex flex-col gap-4">
+                    <div className="flex flex-col gap-1.5">
+                      <Label>Type</Label>
+                      <Select value={newTaskType} onValueChange={setNewTaskType}>
+                        <SelectTrigger><SelectValue /></SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="custom_prompt">Custom prompt</SelectItem>
+                          <SelectItem value="reorganize_memory">Memory reorganization</SelectItem>
+                        </SelectContent>
+                      </Select>
+                    </div>
+                    {newTaskType === 'custom_prompt' && (
+                      <div className="flex flex-col gap-1.5">
+                        <Label>Prompt</Label>
+                        <Textarea
+                          placeholder="What should the agent do each run?"
+                          value={newTaskPrompt}
+                          onChange={e => setNewTaskPrompt(e.target.value)}
+                          rows={3}
+                          autoFocus
+                        />
+                      </div>
+                    )}
+                    <div className="flex items-center gap-3">
+                      <div className="flex flex-col gap-1.5 flex-1">
+                        <Label>Interval (hours)</Label>
+                        <Input type="number" min="1" value={newTaskInterval} onChange={e => setNewTaskInterval(e.target.value)} />
+                      </div>
+                      <div className="flex flex-col gap-1.5 flex-1">
+                        <Label>Space (optional)</Label>
+                        <Select value={newTaskSpaceId} onValueChange={setNewTaskSpaceId}>
+                          <SelectTrigger><SelectValue>{spaces.find(s => s.id === newTaskSpaceId)?.name ?? 'None'}</SelectValue></SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="none">None</SelectItem>
+                            {spaces.map(s => <SelectItem key={s.id} value={s.id}>{s.name}</SelectItem>)}
+                          </SelectContent>
+                        </Select>
+                      </div>
+                    </div>
+                  </div>
+                  <DialogFooter>
+                    <Button variant="ghost" onClick={() => setNewTaskOpen(false)}>Cancel</Button>
+                    <Button
+                      disabled={!newTaskType || !newTaskInterval || Number(newTaskInterval) < 1 || (newTaskType === 'custom_prompt' && !newTaskPrompt.trim()) || createTaskMutation.isPending}
+                      onClick={() => createTaskMutation.mutate()}
+                    >Create</Button>
+                  </DialogFooter>
+                </DialogContent>
+              </Dialog>
+
               <Dialog open={templateDialogOpen} onOpenChange={open => { if (!open) { setTemplateDialogOpen(false); setNewTemplateName(''); } }}>
                 <DialogContent>
                   <DialogHeader>

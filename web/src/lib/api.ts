@@ -284,6 +284,10 @@ export function getScheduledTasks(): Promise<ScheduledTask[]> {
   return request('/scheduled-tasks');
 }
 
+export function createScheduledTask(body: { type: string; interval_hours: number; prompt?: string; pinned_space_id?: string }): Promise<{ id: string }> {
+  return request('/scheduled-tasks', { method: 'POST', body: JSON.stringify(body) });
+}
+
 export function updateScheduledTask(id: string, body: { enabled?: boolean; interval_hours?: number; pinned_space_id?: string | null }): Promise<void> {
   return request(`/scheduled-tasks/${id}`, { method: 'PATCH', body: JSON.stringify(body) });
 }

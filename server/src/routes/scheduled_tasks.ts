@@ -1,5 +1,5 @@
 import { Router } from 'express';
-import { getScheduledTasksForUser, getScheduledTaskForUser, updateScheduledTask, deleteScheduledTask } from '../db/index.js';
+import { getScheduledTasksForUser, getScheduledTaskForUser, updateScheduledTask, deleteScheduledTask, createScheduledTask } from '../db/index.js';
 import { runScheduledTask } from '../services/scheduled_tasks.js';
 import { requireAuth, type AuthedRequest } from '../middleware/auth.js';
 
@@ -9,6 +9,19 @@ router.use(requireAuth);
 router.get('/', (req, res) => {
   const { userId } = req as AuthedRequest;
   res.json(getScheduledTasksForUser(userId));
+});
+
+router.post('/', (req, res) => {
+  const { userId } = req as unknown as AuthedRequest;
+  const { type, interval_hours, prompt, pinned_space_id } = req.body as { type: string; interval_hours: number; prompt?: string; pinned_space_id?: string };
+  if (!type || !interval_hours || interval_hours < 1) {
+    res.status(400).json({ error: 'type and interval_hours (≥1) are required' }); return;
+  }
+  if (type === 'custom_prompt' && !prompt) {
+    res.status(400).json({ error: 'prompt is required for custom_prompt tasks' }); return;
+  }
+  const id = createScheduledTask(userId, type, interval_hours, prompt, pinned_space_id);
+  res.status(201).json({ id });
 });
 
 router.patch('/:id', (req, res) => {

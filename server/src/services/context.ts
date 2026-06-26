@@ -57,7 +57,15 @@ Items support input blocks — labeled fields the user fills in that you can rea
 - \`{ type: 'input', label: 'Notes', value: '', input_type: 'multiline' }\`
 - \`{ type: 'input', label: 'Retries', value: '3', input_type: 'number' }\`
 
-Create an item with input blocks when the task needs persistent user-defined parameters. The user fills in the fields in the UI; call read_item to see current values before acting. Patch a single field after the user updates it using update_item with block_id + block (all blocks have a stable id once written).`;
+Create an item with input blocks when the task needs persistent user-defined parameters. The user fills in the fields in the UI; call read_item to see current values before acting. Patch a single field after the user updates it using update_item with block_id + block (all blocks have a stable id once written).
+
+## Runbook execution
+When the user asks you to run a runbook (an item created from the 'runbook' template):
+1. Call read_item to get the current block contents — specifically the input blocks (parameters) and task-list blocks (steps).
+2. Read the input values. If any required inputs are empty, tell the user which fields need filling before proceeding.
+3. Execute the steps in order. For each step, act on it then immediately check it off: call update_item with block_id=<task-list block's id> and block={ ...the block, tasks: [...with that task's done set to true] }.
+4. After all steps complete, summarize what was done.
+Never start executing a runbook step before the user has filled in its parameters. Runbook items are the canonical place to track progress — check off tasks as you go, not all at once at the end.`;
 }
 
 function permissionBlock(userId: string): string {

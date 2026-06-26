@@ -1,6 +1,6 @@
 import { Router } from 'express';
 import simpleGit from 'simple-git';
-import { createSessionEvent, getDb, getSpaceForUser, getSessionEvents } from '../db/index.js';
+import { createSessionEvent, getDb, getSpaceForUser, getSessionEvents, linkSessionProject, getSessionProjectLinks } from '../db/index.js';
 import { newId } from '../lib/ids.js';
 import { requireAuth, type AuthedRequest } from '../middleware/auth.js';
 import { DEFAULT_EFFORT, isEffortLevel } from '../services/anthropic.js';
@@ -24,11 +24,17 @@ router.get('/:id/events', (req, res) => {
     .get(req.params.id, userId);
   if (!session) { res.status(404).json({ error: 'Session not found' }); return; }
 
+  const projects = getSessionProjectLinks(req.params.id).map(p => ({
+    id: p.id,
+    name: p.name,
+    source: p.source,
+  }));
   res.json({
     events: getSessionEvents(req.params.id).map(event => ({
       ...event,
       metadata: JSON.parse(event.metadata || '{}'),
     })),
+    projects,
   });
 });
 
@@ -118,12 +124,17 @@ router.patch('/:id', (req, res) => {
       res.status(404).json({ error: 'Space not found' });
       return;
     }
+    // When unpinning, backfill the previously-pinned space into project links so history is preserved
+    if (!pinnedSpaceUpdate && session.pinned_space_id) {
+      linkSessionProject(req.params.id, session.pinned_space_id, 'user');
+    }
     getDb().prepare('UPDATE sessions SET pinned_space_id = ? WHERE id = ?').run(pinnedSpaceUpdate, req.params.id);
     if (pinnedSpaceUpdate) {
+      linkSessionProject(req.params.id, space!.id, 'user');
       createSessionEvent({
         sessionId: req.params.id,
         type: 'scope_changed',
-        title: `Pinned to ${space!.name}`,
+        title: `Scoped to ${space!.name}`,
         spaceId: space!.id,
         metadata: { source: 'user' },
       });
@@ -131,7 +142,7 @@ router.patch('/:id', (req, res) => {
       createSessionEvent({
         sessionId: req.params.id,
         type: 'scope_changed',
-        title: 'Unpinned space',
+        title: 'Back to Auto',
         metadata: { source: 'user' },
       });
     }

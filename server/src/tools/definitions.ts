@@ -274,62 +274,52 @@ export const toolDefinitions: Anthropic.Tool[] = [
     },
   },
   {
-    name: 'list_item_templates',
-    description: 'Lists available item types. Each template\'s id is the type string to pass to create_item. Builtin types: blank, spec, kanban, report, repo. Custom templates can also be created with create_item_template.',
+    name: 'list_item_types',
+    description: 'Lists all available item types with their schema, capabilities, and default block layout. Use the returned id as the type param in create_item. Builtin types: blank, spec, kanban, report, repo. Custom types can be created with define_item_type.',
     input_schema: {
       type: 'object',
       properties: {},
     },
   },
   {
-    name: 'create_item_template',
-    description: `Designs a new reusable block template (a named block layout/screen). Use this when no existing template fits what you want to build for the user — e.g. a custom dashboard, tracker, or report layout.\n\n${BLOCK_CATALOG}`,
+    name: 'define_item_type',
+    description: `Defines a new item type (or updates an existing custom one) with a typed field schema, platform capability primitives, and a default block layout. Call again with the same name to update. Capabilities: git-aware, file-readable, web-fetchable, embeddable, schedulable.\n\n${BLOCK_CATALOG}`,
     input_schema: {
       type: 'object',
       properties: {
-        name: { type: 'string', description: 'Display name for the template' },
-        blocks: { type: 'array', description: 'Block array defining the template\'s starter layout' },
+        name: { type: 'string', description: 'Display name for the type (also its ID, kebab-cased)' },
+        schema: { type: 'object', description: 'Field definitions: { fieldName: { type: "string"|"number"|"boolean"|"enum", required?: boolean, options?: string[] } }' },
+        capabilities: { type: 'array', items: { type: 'string' }, description: 'Platform capability primitives the type opts into' },
+        blocks: { type: 'array', description: 'Default page block layout for new items of this type' },
       },
-      required: ['name', 'blocks'],
-    },
-  },
-  {
-    name: 'update_item_template',
-    description: 'Redesigns an existing block template\'s blocks (including builtin templates). Only affects items created after this change — items already created from the template keep their own content.',
-    input_schema: {
-      type: 'object',
-      properties: {
-        template_id: { type: 'string', description: 'ID of the template to update' },
-        blocks: { type: 'array', description: 'Full replacement block array for the template' },
-        name: { type: 'string', description: 'New display name (optional)' },
-      },
-      required: ['template_id', 'blocks'],
+      required: ['name', 'schema', 'capabilities', 'blocks'],
     },
   },
   {
     name: 'create_item',
-    description: 'Creates an item in a space. type is the item type/template ID — use list_item_templates to see options (e.g. blank, spec, kanban, report, repo). For repo, provide repo_path. File items are not supported (files are upload-only).',
+    description: 'Creates an item in a space. type is the item type ID — use list_item_types to see options. Pass typed field values in fields (e.g. { repo_path: "/path" } for type=repo). File items are not supported (files are upload-only).',
     input_schema: {
       type: 'object',
       properties: {
         space_id: { type: 'string', description: 'ID of the Space to create the item in' },
         name: { type: 'string', description: 'Display name for the item' },
-        type: { type: 'string', description: 'Item type — a template ID (blank, spec, kanban, report, or custom) or repo' },
-        repo_path: { type: 'string', description: 'Absolute filesystem path to the repository (required for type=repo)' },
-        default_branch: { type: 'string', description: 'Default branch name (optional, repo only)' },
+        type: { type: 'string', description: 'Item type ID from list_item_types (e.g. blank, spec, repo, or a custom type)' },
+        fields: { type: 'object', description: 'Typed field values validated against the type schema (e.g. { repo_path, default_branch } for repo)' },
       },
       required: ['space_id', 'name', 'type'],
     },
   },
   {
     name: 'update_item',
-    description: `Updates an item's page blocks. Pass page_blocks to replace the entire block array, or — much cheaper for items with many blocks — pass block_id + block to replace just one block. block_id only works if the block has a stable 'id'; blocks without one require a full page_blocks replace.\n\n${BLOCK_CATALOG}`,
+    description: `Updates an item's fields and/or page blocks. fields uses patch semantics (merged into existing). Pass page_blocks to replace all blocks, or block_id + block to replace a single block (requires the block to have an 'id'). Use append_blocks to add blocks without reading first.\n\n${BLOCK_CATALOG}`,
     input_schema: {
       type: 'object',
       properties: {
         space_id: { type: 'string', description: 'ID of the Space containing the item' },
         item_id: { type: 'string', description: 'ID of the item to update' },
+        fields: { type: 'object', description: 'Partial field values to merge into existing fields' },
         page_blocks: { type: 'array', description: 'Full replacement page blocks array' },
+        append_blocks: { type: 'array', description: 'Append blocks after existing content' },
         block_id: { type: 'string', description: 'id of a single existing block to replace (use with block, not page_blocks)' },
         block: { type: 'object', description: 'Replacement block content for block_id' },
       },

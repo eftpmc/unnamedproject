@@ -7,9 +7,9 @@ import SpacePage from './SpacePage.js';
 vi.mock('../lib/api.js', () => ({
   getSpaces: vi.fn().mockResolvedValue([{ id: 'space-1', name: 'Test Space', description: 'A useful Space', enabled_connection_ids: [] }]),
   getSpaceItems: vi.fn().mockResolvedValue([
-    { id: 'repo-1', space_id: 'space-1', type: 'repo', name: 'Web repo', repo_path: '/tmp/web', default_branch: 'main', source_session_id: null, source_plan_id: null, source_step_id: null, created_at: 10 },
-    { id: 'note-1', space_id: 'space-1', type: 'note', name: 'Release notes', content: '# Ready', source_session_id: null, source_plan_id: null, source_step_id: null, created_at: 9 },
-    { id: 'doc-1', space_id: 'space-1', type: 'document', name: 'Empty Doc', template_id: 'tpl_document', blocks: [{ type: 'text', content: '' }], source_session_id: null, source_plan_id: null, source_step_id: null, created_at: 8 },
+    { id: 'repo-1', space_id: 'space-1', type: 'repo', name: 'Web repo', fields: { repo_path: '/tmp/web', default_branch: 'main' }, page_blocks: [], source_session_id: null, created_at: 10 },
+    { id: 'note-1', space_id: 'space-1', type: 'note', name: 'Release notes', fields: {}, page_blocks: [{ type: 'text', content: '# Ready' }], source_session_id: null, created_at: 9 },
+    { id: 'doc-1', space_id: 'space-1', type: 'document', name: 'Empty Doc', fields: {}, page_blocks: [], source_session_id: null, created_at: 8 },
   ]),
   listItemTemplates: vi.fn().mockResolvedValue([
     { id: 'tpl_document', user_id: null, kind: 'blocks', name: 'Document', blocks: [{ type: 'text', content: '' }], item_type: 'document', is_builtin: true, created_at: 1 },
@@ -106,8 +106,8 @@ describe('SpacePage', () => {
     expect(screen.queryByText('Everything related to this work, in one place.')).not.toBeInTheDocument();
   });
 
-  it('shows the empty-state message for a document whose only block is blank', async () => {
+  it('shows the empty-state message for a document with no blocks', async () => {
     renderPage('/spaces/space-1/items/doc-1');
-    expect(await screen.findByText('This document has no content yet. Ask the agent to fill it in.')).toBeInTheDocument();
+    expect(await screen.findByText('No content yet. Ask the agent to fill this in, or add a block below.')).toBeInTheDocument();
   });
 });

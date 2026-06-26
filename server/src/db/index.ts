@@ -433,6 +433,10 @@ function repairSpaceItemChildFks(database: Database.Database): void {
 }
 
 function collapseNotesToDocuments(database: Database.Database): void {
+  const hasItemTemplates = (database.prepare("SELECT name FROM sqlite_master WHERE type='table' AND name='item_templates'").get() as { name: string } | undefined)?.name;
+  const hasSpaceItems = (database.prepare("SELECT name FROM sqlite_master WHERE type='table' AND name='space_items'").get() as { name: string } | undefined)?.name;
+  if (!hasItemTemplates || !hasSpaceItems) return;
+
   // Seed new builtin templates (tpl_blank, tpl_note) — idempotent via INSERT OR IGNORE
   const insertTemplate = database.prepare(`
     INSERT OR IGNORE INTO item_templates (id, user_id, kind, name, blocks, item_type, is_builtin)
@@ -446,7 +450,10 @@ function collapseNotesToDocuments(database: Database.Database): void {
     .run(JSON.stringify([{ type: 'text', content: '' }]));
 
   // Convert each note item → document item
-  const notes = database.prepare("SELECT si.id AS item_id, sn.content FROM space_items si JOIN space_notes sn ON sn.item_id = si.id WHERE si.type = 'note'").all() as { item_id: string; content: string }[];
+  const hasSpaceNotes = (database.prepare("SELECT name FROM sqlite_master WHERE type='table' AND name='space_notes'").get() as { name: string } | undefined)?.name;
+  const notes: { item_id: string; content: string }[] = hasSpaceNotes
+    ? database.prepare("SELECT si.id AS item_id, sn.content FROM space_items si JOIN space_notes sn ON sn.item_id = si.id WHERE si.type = 'note'").all() as { item_id: string; content: string }[]
+    : [];
   const insertDoc = database.prepare("INSERT OR IGNORE INTO space_documents (item_id, template, blocks) VALUES (?, 'tpl_note', ?)");
   const updateType = database.prepare("UPDATE space_items SET type = 'document' WHERE id = ?");
   for (const note of notes) {
@@ -488,6 +495,9 @@ function repairSessionEventsItemFk(database: Database.Database): void {
 }
 
 function flattenItemTypesToTemplates(database: Database.Database): void {
+  const hasSpaceItems = (database.prepare("SELECT name FROM sqlite_master WHERE type='table' AND name='space_items'").get() as { name: string } | undefined)?.name;
+  if (!hasSpaceItems) return;
+
   database.pragma('foreign_keys = OFF');
 
   // 1. Recreate space_items: drop CHECK on type, add page_blocks
@@ -634,14 +644,20 @@ export const migrations: Migration[] = [
   { version: 17, name: 'collapse-notes-to-documents', up: collapseNotesToDocuments },
   { version: 18, name: 'flatten-item-types-to-templates', noTransaction: true, up: flattenItemTypesToTemplates },
   { version: 19, name: 'add-memory-embeddings', up: (db) => {
+    const tableExists = (db.prepare("SELECT name FROM sqlite_master WHERE type='table' AND name='memories'").get() as { name: string } | undefined)?.name;
+    if (!tableExists) return;
     const cols = (db.prepare("PRAGMA table_info(memories)").all() as { name: string }[]).map(c => c.name);
     if (!cols.includes('embedding')) db.exec('ALTER TABLE memories ADD COLUMN embedding BLOB');
   }},
   { version: 20, name: 'add-scheduled-task-pinned-space', up: (db) => {
+    const tableExists = (db.prepare("SELECT name FROM sqlite_master WHERE type='table' AND name='scheduled_tasks'").get() as { name: string } | undefined)?.name;
+    if (!tableExists) return;
     const cols = (db.prepare("PRAGMA table_info(scheduled_tasks)").all() as { name: string }[]).map(c => c.name);
     if (!cols.includes('pinned_space_id')) db.exec('ALTER TABLE scheduled_tasks ADD COLUMN pinned_space_id TEXT REFERENCES spaces(id) ON DELETE SET NULL');
   }},
   { version: 21, name: 'seed-runbook-config-templates', up: (db) => {
+    const tableExists = (db.prepare("SELECT name FROM sqlite_master WHERE type='table' AND name='item_templates'").get() as { name: string } | undefined)?.name;
+    if (!tableExists) return;
     const insert = db.prepare(`INSERT OR IGNORE INTO item_templates (id, user_id, kind, name, blocks, is_builtin, created_at) VALUES (?, NULL, 'blocks', ?, ?, 1, unixepoch())`);
     const newTemplates = BUILTIN_BLOCK_TEMPLATES.filter(t => ['tpl_runbook', 'tpl_config'].includes(t.id));
     for (const t of newTemplates) {
@@ -721,6 +737,8 @@ export const migrations: Migration[] = [
       },
     ];
     for (const { name, create, cols } of fixes) {
+      const exists = (db.prepare(`SELECT name FROM sqlite_master WHERE type='table' AND name='${name}'`).get() as { name: string } | undefined)?.name;
+      if (!exists) continue;
       const tmp = `_${name}_fk22_tmp`;
       db.exec(`ALTER TABLE "${name}" RENAME TO "${tmp}"`);
       db.exec(create);
@@ -731,40 +749,70 @@ export const migrations: Migration[] = [
   }},
   { version: 23, name: 'unified-item-types', up: (db) => {
     // 1. Add fields column to space_items
-    const itemCols = (db.prepare("PRAGMA table_info(space_items)").all() as { name: string }[]).map(c => c.name);
-    if (!itemCols.includes('fields')) {
-      db.exec("ALTER TABLE space_items ADD COLUMN fields TEXT NOT NULL DEFAULT '{}'");
+    const spaceItemsExists = (db.prepare("SELECT name FROM sqlite_master WHERE type='table' AND name='space_items'").get() as { name: string } | undefined)?.name;
+    if (spaceItemsExists) {
+      const itemCols = (db.prepare("PRAGMA table_info(space_items)").all() as { name: string }[]).map(c => c.name);
+      if (!itemCols.includes('fields')) {
+        db.exec("ALTER TABLE space_items ADD COLUMN fields TEXT NOT NULL DEFAULT '{}'");
+      }
     }
 
     // 2. Add schema + capabilities columns to item_templates
-    const tplCols = (db.prepare("PRAGMA table_info(item_templates)").all() as { name: string }[]).map(c => c.name);
-    if (!tplCols.includes('schema')) {
-      db.exec("ALTER TABLE item_templates ADD COLUMN schema TEXT NOT NULL DEFAULT '{}'");
-    }
-    if (!tplCols.includes('capabilities')) {
-      db.exec("ALTER TABLE item_templates ADD COLUMN capabilities TEXT NOT NULL DEFAULT '[]'");
+    const itemTemplatesExists = (db.prepare("SELECT name FROM sqlite_master WHERE type='table' AND name='item_templates'").get() as { name: string } | undefined)?.name;
+    if (itemTemplatesExists) {
+      const tplCols = (db.prepare("PRAGMA table_info(item_templates)").all() as { name: string }[]).map(c => c.name);
+      if (!tplCols.includes('schema')) {
+        db.exec("ALTER TABLE item_templates ADD COLUMN schema TEXT NOT NULL DEFAULT '{}'");
+      }
+      if (!tplCols.includes('capabilities')) {
+        db.exec("ALTER TABLE item_templates ADD COLUMN capabilities TEXT NOT NULL DEFAULT '[]'");
+      }
     }
 
-    // 3. Drop space_repos and space_files — data now lives in space_items.fields
+    // 3. Migrate data from space_repos/space_files into space_items.fields, then drop them
     db.pragma('foreign_keys = OFF');
-    db.exec('DROP TABLE IF EXISTS space_repos');
-    db.exec('DROP TABLE IF EXISTS space_files');
+    const reposTableExists = (db.prepare("SELECT name FROM sqlite_master WHERE type='table' AND name='space_repos'").get() as { name: string } | undefined)?.name;
+    if (reposTableExists) {
+      if (spaceItemsExists) {
+        db.exec(`
+          UPDATE space_items SET fields = (
+            SELECT json_object('repo_path', sr.repo_path, 'default_branch', sr.default_branch)
+            FROM space_repos sr WHERE sr.item_id = space_items.id
+          ) WHERE id IN (SELECT item_id FROM space_repos)
+        `);
+      }
+      db.exec('DROP TABLE space_repos');
+    }
+    const filesTableExists = (db.prepare("SELECT name FROM sqlite_master WHERE type='table' AND name='space_files'").get() as { name: string } | undefined)?.name;
+    if (filesTableExists) {
+      if (spaceItemsExists) {
+        db.exec(`
+          UPDATE space_items SET fields = (
+            SELECT json_object('file_path', sf.file_path, 'size_bytes', sf.size_bytes, 'mime_type', sf.mime_type)
+            FROM space_files sf WHERE sf.item_id = space_items.id
+          ) WHERE id IN (SELECT item_id FROM space_files)
+        `);
+      }
+      db.exec('DROP TABLE space_files');
+    }
     db.pragma('foreign_keys = ON');
 
     // 4. Update builtin type definitions with schema + capabilities
-    const repoSchema = JSON.stringify({
-      repo_path: { type: 'string', required: true },
-      default_branch: { type: 'string', required: false },
-    });
-    const fileSchema = JSON.stringify({
-      file_path: { type: 'string', required: true },
-      size_bytes: { type: 'number', required: false },
-      mime_type: { type: 'string', required: false },
-    });
-    db.prepare("UPDATE item_templates SET schema = ?, capabilities = ? WHERE id = 'repo'")
-      .run(repoSchema, JSON.stringify(['git-aware', 'file-readable']));
-    db.prepare("UPDATE item_templates SET schema = ?, capabilities = ? WHERE id = 'file'")
-      .run(fileSchema, JSON.stringify(['file-readable']));
+    if (itemTemplatesExists) {
+      const repoSchema = JSON.stringify({
+        repo_path: { type: 'string', required: true },
+        default_branch: { type: 'string', required: false },
+      });
+      const fileSchema = JSON.stringify({
+        file_path: { type: 'string', required: true },
+        size_bytes: { type: 'number', required: false },
+        mime_type: { type: 'string', required: false },
+      });
+      db.prepare("UPDATE item_templates SET schema = ?, capabilities = ? WHERE id = 'repo'")
+        .run(repoSchema, JSON.stringify(['git-aware', 'file-readable']));
+      db.prepare("UPDATE item_templates SET schema = ?, capabilities = ? WHERE id = 'file'")
+        .run(fileSchema, JSON.stringify(['file-readable']));
+    }
   }},
 ];
 

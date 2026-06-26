@@ -110,12 +110,12 @@ export interface SpaceItemBase {
   source_session_id: string | null;
   created_at: number;
   page_blocks: Block[];
+  fields: Record<string, unknown>;
 }
 
-export type RepoItem = SpaceItemBase & { type: 'repo'; repo_path: string; default_branch: string | null };
-export type FileItem = SpaceItemBase & { type: 'file'; file_path: string; size_bytes: number | null; mime_type: string | null };
+export type RepoItem = SpaceItemBase & { type: 'repo'; fields: { repo_path: string; default_branch?: string | null } };
+export type FileItem = SpaceItemBase & { type: 'file'; fields: { file_path: string; size_bytes?: number | null; mime_type?: string | null } };
 
-// repo and file have extra structured fields; all other types are base + page_blocks
 export type SpaceItem = RepoItem | FileItem | SpaceItemBase;
 
 export interface ItemTemplate {

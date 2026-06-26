@@ -131,13 +131,14 @@ describe('migration v5: spaces rename and item model', () => {
     const artifactSql = db.prepare("SELECT sql FROM sqlite_master WHERE name = 'artifacts'").get() as { sql: string } | undefined;
     expect(artifactSql).toBeUndefined();
 
-    const repoItem = db.prepare("SELECT id FROM space_items WHERE space_id = 'p1' AND type = 'repo'").get() as { id: string };
-    const repo = db.prepare('SELECT repo_path FROM space_repos WHERE item_id = ?').get(repoItem.id) as { repo_path: string };
-    expect(repo.repo_path).toBe('/repos/p1');
+    // After v23+, space_repos/space_files are dropped — check fields JSON blob instead
+    const repoItem = db.prepare("SELECT id, fields FROM space_items WHERE space_id = 'p1' AND type = 'repo'").get() as { id: string; fields: string };
+    const repoFields = JSON.parse(repoItem.fields || '{}');
+    expect(repoFields.repo_path).toBe('/repos/p1');
 
-    const fileItem = db.prepare("SELECT id FROM space_items WHERE space_id = 'p1' AND type = 'file'").get() as { id: string };
-    const file = db.prepare('SELECT file_path FROM space_files WHERE item_id = ?').get(fileItem.id) as { file_path: string };
-    expect(file.file_path).toBe('artifacts/art1.md');
+    const fileItem = db.prepare("SELECT id, fields FROM space_items WHERE space_id = 'p1' AND type = 'file'").get() as { id: string; fields: string };
+    const fileFields = JSON.parse(fileItem.fields || '{}');
+    expect(fileFields.file_path).toBe('artifacts/art1.md');
     const event = db.prepare("SELECT item_id FROM session_events WHERE id = 'ev1'").get() as { item_id: string };
     expect(event.item_id).toBe(fileItem.id);
   });
@@ -232,7 +233,9 @@ describe('migration v7: finalize an already-migrated v6 database', () => {
 
     expect(repairDb.prepare("SELECT 1 FROM sqlite_master WHERE name = 'artifacts'").get()).toBeUndefined();
     expect(repairDb.prepare("SELECT name FROM space_items WHERE id = 'item_a1'").get()).toEqual({ name: 'Report' });
-    expect(repairDb.prepare("SELECT file_path FROM space_files WHERE item_id = 'item_a1'").get()).toEqual({ file_path: 'artifacts/a1.md' });
+    // space_files is dropped in v23; check fields JSON blob instead
+    const fileFields = JSON.parse((repairDb.prepare("SELECT fields FROM space_items WHERE id = 'item_a1'").get() as { fields: string }).fields || '{}');
+    expect(fileFields.file_path).toBe('artifacts/a1.md');
     expect(repairDb.prepare("SELECT item_id FROM session_events WHERE id = 'e1'").get()).toEqual({ item_id: 'item_a1' });
 
     repairDb.close();

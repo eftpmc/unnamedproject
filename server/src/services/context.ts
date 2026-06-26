@@ -26,8 +26,8 @@ function readWorkspaceMd(space: DbSpace, repoPath: string | null): string | null
 function baseBlock(intent: Intent): string {
   const isCode = intent.domain === 'code' || intent.domain === 'multi' || intent.domain === 'general';
   const autoApproved = isCode
-    ? 'invoke_claude_code, invoke_codex, git_op add/commit, run_command, list_spaces, create_space, update_space, pin_space, project_query, rebuild_graph, search_files, read_file, list_dir, recall, remember, forget, list_chats, read_chat, list_items, create_item, read_item, update_item, list_connections, test_connection, tool_search, get_execution_output, wait_for_execution, list_scheduled_tasks, create_scheduled_task, update_scheduled_task'
-    : 'list_spaces, create_space, pin_space, search_files, read_file, list_dir, recall, remember, forget, write_file, run_command, list_chats, read_chat, list_items, create_item, read_item, update_item, list_connections, test_connection, tool_search';
+    ? 'invoke_claude_code, invoke_codex, git_op add/commit, run_command, list_spaces, create_space, update_space, pin_space, project_query, rebuild_graph, search_files, read_file, list_dir, recall, remember, forget, list_chats, read_chat, list_items, create_item, read_item, update_item, list_item_types, define_item_type, list_connections, test_connection, tool_search, get_execution_output, wait_for_execution, list_scheduled_tasks, create_scheduled_task, update_scheduled_task'
+    : 'list_spaces, create_space, pin_space, search_files, read_file, list_dir, recall, remember, forget, write_file, run_command, list_chats, read_chat, list_items, create_item, read_item, update_item, list_item_types, define_item_type, list_connections, test_connection, tool_search';
 
   return `You are a personal AI operator and orchestrator. You decide how work gets done — you never implement code, write files, or run git operations yourself when the task belongs to a coding agent.
 
@@ -52,6 +52,13 @@ Use search_files for fast codebase lookups (finding where a function is defined,
 
 ## Items
 Items are generic containers in a space — repos, files, runbooks, configs, dashboards, logs, or anything else. There is no separate "document" type; all block-based items are the same thing with different starting blocks. Use existing templates when they fit. Use "blank" when you're creating a new kind of item that doesn't fit an existing template — start with whatever blocks make sense for that specific thing. Never assume what an item is for based on its name alone; call read_item to see its current state before acting.
+
+## Item types
+Every item has a type (string) and a fields blob (structured data for that type). Built-in types include 'repo' (fields: repo_path, default_branch) and 'file' (fields: file_path, mime_type, size_bytes). You can define new types at any time:
+- Call list_item_types to see all available types (built-in and custom).
+- Call define_item_type to register a new type: provide a name, a JSON schema for the fields, a list of capability strings ('git-aware', 'file-readable', 'embeddable', etc.), and optional default page_blocks. This is idempotent — re-calling with the same name updates the definition.
+- After defining a type, use create_item with type=<your-type-name> and fields matching your schema.
+Types you define are immediately available across all spaces for that user. Define types when the user's data has repeating structure that doesn't fit existing templates — e.g. 'customer', 'experiment', 'bug-report'.
 
 ## Interactive items
 Items support input blocks — labeled fields the user fills in that you can read back via read_item. Use these to build lightweight configuration surfaces or data-collection forms inside the space:

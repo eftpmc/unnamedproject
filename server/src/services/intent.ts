@@ -11,6 +11,8 @@ const WRITING_RE = /\b(write|draft|email|document|spec|essay|blog|article|propos
 const CREATIVE_RE = /\b(story|poem|creative|brainstorm|idea|fiction|imagine|design|concept|name|slogan|tagline)\b/i;
 const IMAGE_RE = /\b(generate.{0,10}image|draw|illustrate|render.{0,10}image|dalle|midjourney)\b/i;
 
+export const DEFAULT_INTENT: Intent = { domain: 'general' };
+
 export function classifyIntent(userMessage: string): Intent {
   const isCode = CODE_RE.test(userMessage);
   const isResearch = RESEARCH_RE.test(userMessage);

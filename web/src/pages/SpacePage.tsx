@@ -220,8 +220,8 @@ function ChatsSection({ chats, onNewChat }: { chats: Session[]; onNewChat: () =>
 }
 
 function itemPreview(item: SpaceItem): string | null {
-  if (item.type === 'repo') return (item as RepoItem).repo_path;
-  if (item.type === 'file') return (item as FileItem).file_path;
+  if (item.type === 'repo') return (item.fields.repo_path as string | undefined) ?? null;
+  if (item.type === 'file') return (item.fields.file_path as string | undefined) ?? null;
   for (const block of item.page_blocks) {
     if (block.type === 'text' && block.content.trim()) return block.content.trim();
     if (block.type === 'heading' && block.text.trim()) return block.text.trim();
@@ -602,8 +602,8 @@ function RepoDetail({ space, item }: { space: Space; item: RepoItem }) {
       )}
       <div className="mb-4 flex items-center gap-3 rounded-lg border border-border-soft bg-card px-4 py-3">
         <GitBranch size={15} className="text-muted-foreground" />
-        <span className="min-w-0 flex-1 truncate font-mono text-xs text-muted-foreground">{item.repo_path}</span>
-        {item.default_branch && <span className="rounded-md bg-muted px-2 py-1 font-mono text-[11px]">{item.default_branch}</span>}
+        <span className="min-w-0 flex-1 truncate font-mono text-xs text-muted-foreground">{item.fields.repo_path as string}</span>
+        {item.fields.default_branch && <span className="rounded-md bg-muted px-2 py-1 font-mono text-[11px]">{item.fields.default_branch as string}</span>}
       </div>
       <FileBrowser spaceId={space.id} itemId={item.id} itemName={item.name} />
     </PageBody>
@@ -753,29 +753,30 @@ function FileDetail({ space, item }: { space: Space; item: FileItem }) {
   });
   useEffect(() => {
     if (!blob) return;
-    if (item.mime_type?.startsWith('text/') || item.mime_type === 'application/json') {
+    const mimeType = item.fields.mime_type as string | null | undefined;
+    if (mimeType?.startsWith('text/') || mimeType === 'application/json') {
       blob.text().then(setText);
       return;
     }
     const url = URL.createObjectURL(blob);
     setObjectUrl(url);
     return () => URL.revokeObjectURL(url);
-  }, [blob, item.mime_type]);
+  }, [blob, item.fields.mime_type]);
 
   return (
     <PageBody>
       <div className="mx-auto max-w-5xl">
         <div className="mb-4 flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
-          <span className="rounded-md bg-muted px-2 py-1">{item.mime_type || 'Unknown type'}</span>
-          {item.size_bytes != null && <span>{formatBytes(item.size_bytes)}</span>}
+          <span className="rounded-md bg-muted px-2 py-1">{(item.fields.mime_type as string | null) || 'Unknown type'}</span>
+          {item.fields.size_bytes != null && <span>{formatBytes(item.fields.size_bytes as number)}</span>}
         </div>
         <Surface className="min-h-96 overflow-hidden">
           {isLoading && <div className="grid min-h-96 place-items-center text-sm text-muted-foreground">Loading file…</div>}
           {isError && <div className="grid min-h-96 place-items-center text-sm text-destructive">File content is unavailable.</div>}
           {text != null && <pre className="overflow-auto whitespace-pre-wrap p-5 font-mono text-xs leading-relaxed">{text}</pre>}
-          {objectUrl && item.mime_type?.startsWith('image/') && <img src={objectUrl} alt={item.name} className="mx-auto max-h-[70vh] object-contain p-4" />}
-          {objectUrl && item.mime_type?.startsWith('video/') && <video src={objectUrl} controls className="max-h-[70vh] w-full bg-black" />}
-          {objectUrl && !item.mime_type?.startsWith('image/') && !item.mime_type?.startsWith('video/') && (
+          {objectUrl && (item.fields.mime_type as string | undefined)?.startsWith('image/') && <img src={objectUrl} alt={item.name} className="mx-auto max-h-[70vh] object-contain p-4" />}
+          {objectUrl && (item.fields.mime_type as string | undefined)?.startsWith('video/') && <video src={objectUrl} controls className="max-h-[70vh] w-full bg-black" />}
+          {objectUrl && !(item.fields.mime_type as string | undefined)?.startsWith('image/') && !(item.fields.mime_type as string | undefined)?.startsWith('video/') && (
             <div className="grid min-h-96 place-items-center p-6 text-center">
               <div><File size={28} className="mx-auto text-muted-foreground" /><p className="mt-3 text-sm font-medium">{item.name}</p><a href={objectUrl} download={item.name} className="mt-3 inline-block text-sm text-on-accent-soft hover:underline">Download file</a></div>
             </div>

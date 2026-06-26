@@ -1,9 +1,19 @@
-import { describe, it, expect, beforeAll } from 'vitest';
+import { describe, it, expect, beforeAll, vi } from 'vitest';
 import fs from 'fs';
 import { initDb, getDb } from '../../src/db/index.js';
 import { rememberFact, recallFact, forgetFact, recallAll, spaceNameFor, recallRelevant } from '../../src/services/memory.js';
 import { newId } from '../../src/lib/ids.js';
-import type { Intent } from '../../src/services/intent.js';
+
+vi.mock('../../src/services/embeddings.js', () => ({
+  embed: vi.fn().mockResolvedValue(new Float32Array(384)),
+  cosineSimilarity: (a: Float32Array, b: Float32Array) => {
+    let dot = 0;
+    for (let i = 0; i < a.length; i++) dot += a[i] * b[i];
+    return dot;
+  },
+  bufferToFloat32Array: (buf: Buffer) => new Float32Array(buf.buffer, buf.byteOffset, buf.byteLength / 4),
+  float32ArrayToBuffer: (arr: Float32Array) => Buffer.from(arr.buffer, arr.byteOffset, arr.byteLength),
+}));
 
 const userId = newId();
 
@@ -71,17 +81,6 @@ describe('memory', () => {
   });
 });
 
-const codeIntent: Intent = {
-  domain: 'code', complexity: 'medium', model: 'sonnet',
-  tools: ['invoke_claude_code', 'git_op'], scope: 'delegate',
-  needs_research: false, ambiguous: false,
-};
-const researchIntent: Intent = {
-  domain: 'research', complexity: 'low', model: 'haiku',
-  tools: ['web_search'], scope: 'inline',
-  needs_research: false, ambiguous: false,
-};
-
 describe('recallRelevant', () => {
   const relUserId = newId();
 
@@ -94,35 +93,30 @@ describe('recallRelevant', () => {
     rememberFact(relUserId, 'reference', 'design_system', 'Figma link for UI components');
   });
 
-  it('always includes all feedback entries', () => {
-    const result = recallRelevant(relUserId, researchIntent);
+  it('always includes all feedback entries', async () => {
+    const result = await recallRelevant(relUserId, 'explain research');
     expect(result.some(e => e.type === 'feedback' && e.key === 'always_commit')).toBe(true);
   });
 
-  it('scores user memories by domain relevance', () => {
-    const result = recallRelevant(relUserId, codeIntent);
-    const keys = result.map(e => e.key);
-    expect(keys).toContain('preferred_language');
-  });
-
-  it('filters project memories to pinned project when provided', () => {
+  it('filters project memories to pinned project when provided', async () => {
     const projectId = newId();
     getDb().prepare('INSERT INTO spaces (id, user_id, name, enabled_connection_ids) VALUES (?,?,?,?)').run(projectId, relUserId, `proj-${relUserId}`, '[]');
     rememberFact(relUserId, 'project', 'auth_decision', 'using JWT with RS256', projectId);
     rememberFact(relUserId, 'project', 'other_note', 'unrelated project fact');
 
-    const withPin = recallRelevant(relUserId, codeIntent, projectId);
+    const withPin = await recallRelevant(relUserId, 'fix code', projectId);
     expect(withPin.some(e => e.type === 'project' && e.key === 'auth_decision')).toBe(true);
+    // other_note has null space_id and scores 0 against 'fix code' → excluded
     expect(withPin.some(e => e.type === 'project' && e.key === 'other_note')).toBe(false);
   });
 
-  it('caps user memories at 10 entries', () => {
+  it('caps user memories at 10 entries', async () => {
     const bigUserId = newId();
     getDb().prepare('INSERT INTO users (id, email, hashed_password) VALUES (?,?,?)').run(bigUserId, `big-${bigUserId}@test.com`, 'x');
     for (let i = 0; i < 15; i++) {
       rememberFact(bigUserId, 'user', `key_${i}`, `value ${i}`);
     }
-    const result = recallRelevant(bigUserId, codeIntent);
+    const result = await recallRelevant(bigUserId, 'fix code');
     expect(result.filter(e => e.type === 'user').length).toBeLessThanOrEqual(10);
   });
 });

@@ -2701,3 +2701,21 @@ export function setSessionProviderInfo(sessionId: string, providerType: string, 
     .prepare('UPDATE sessions SET provider_type = ?, provider_session_id = ? WHERE id = ?')
     .run(providerType, providerSessionId, sessionId);
 }
+
+export interface ItemSession {
+  id: string;
+  title: string | null;
+  last_event_at: number;
+}
+
+export function getSessionsForItem(itemId: string, userId: string, limit = 10): ItemSession[] {
+  return getDb().prepare(`
+    SELECT s.id, s.title, MAX(e.created_at) as last_event_at
+    FROM session_events e
+    JOIN sessions s ON s.id = e.session_id
+    WHERE e.item_id = ? AND s.user_id = ?
+    GROUP BY s.id
+    ORDER BY last_event_at DESC
+    LIMIT ?
+  `).all(itemId, userId, limit) as ItemSession[];
+}

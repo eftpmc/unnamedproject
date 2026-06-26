@@ -2,7 +2,7 @@ import { Router, type Request, type Response } from 'express';
 import fs from 'fs/promises';
 import fsSync from 'fs';
 import path from 'path';
-import { getDataDir, getDb } from '../db/index.js';
+import { getDataDir, getDb, getSessionsForItem } from '../db/index.js';
 import { newId } from '../lib/ids.js';
 import { requireAuthHeaderOrQuery, type AuthedRequest } from '../middleware/auth.js';
 import {
@@ -284,6 +284,14 @@ router.get('/:spaceId/items/:itemId', (req, res) => {
     return;
   }
   res.json(item);
+});
+
+router.get('/:spaceId/items/:itemId/sessions', (req, res) => {
+  const { userId } = req as unknown as AuthedRequest;
+  if (!requireSpace(req, res)) return;
+  const item = getItemById(req.params.itemId);
+  if (!item || item.space_id !== req.params.spaceId) { res.status(404).json({ error: 'Item not found' }); return; }
+  res.json(getSessionsForItem(item.id, userId));
 });
 
 router.patch('/:spaceId/items/:itemId', (req, res) => {

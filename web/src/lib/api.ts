@@ -184,6 +184,10 @@ export function getSpaceItem(spaceId: string, itemId: string): Promise<SpaceItem
   return request(`/spaces/${spaceId}/items/${itemId}`);
 }
 
+export function getItemSessions(spaceId: string, itemId: string): Promise<{ id: string; title: string | null; last_event_at: number }[]> {
+  return request(`/spaces/${spaceId}/items/${itemId}/sessions`);
+}
+
 export function updateSpaceItem(
   spaceId: string,
   itemId: string,

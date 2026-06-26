@@ -28,6 +28,7 @@ import {
   getChats,
   getConnections,
   getItemContent,
+  getItemSessions,
   getSpaceItems,
   getSpaces,
   listItemTemplates,
@@ -490,6 +491,51 @@ function SettingsSection({ space }: { space: Space }) {
   );
 }
 
+function ItemSessionsChip({ spaceId, itemId }: { spaceId: string; itemId: string }) {
+  const navigate = useNavigate();
+  const { data: sessions = [] } = useQuery({
+    queryKey: ['item-sessions', spaceId, itemId],
+    queryFn: () => getItemSessions(spaceId, itemId),
+    staleTime: 30_000,
+  });
+
+  if (sessions.length === 0) return null;
+
+  return (
+    <>
+      <span className="text-muted-foreground/40">·</span>
+      <Popover>
+        <PopoverTrigger asChild>
+          <Button variant="ghost" size="sm" className="h-7 gap-1.5 px-1.5 text-xs text-muted-foreground hover:text-foreground">
+            <MessageSquare size={12} />
+            {sessions.length === 1 ? '1 chat' : `${sessions.length} chats`}
+          </Button>
+        </PopoverTrigger>
+        <PopoverContent align="start" className="w-64 p-1.5">
+          <div className="flex flex-col gap-0.5">
+            {sessions.map(s => (
+              <button
+                key={s.id}
+                type="button"
+                onClick={() => navigate(`/c/${s.id}`)}
+                className="flex items-center gap-2 rounded-lg px-2.5 py-2 text-left transition-colors hover:bg-muted"
+              >
+                <MessageSquare size={12} className="shrink-0 text-muted-foreground" />
+                <span className="min-w-0 flex-1 truncate text-xs text-foreground">
+                  {s.title ?? 'Untitled chat'}
+                </span>
+                <span className="shrink-0 text-[11px] text-faint-fg">
+                  {timeAgo(s.last_event_at)}
+                </span>
+              </button>
+            ))}
+          </div>
+        </PopoverContent>
+      </Popover>
+    </>
+  );
+}
+
 function ItemDetail({ space, item }: { space: Space; item: SpaceItem }) {
   const navigate = useNavigate();
   const queryClient = useQueryClient();
@@ -517,14 +563,7 @@ function ItemDetail({ space, item }: { space: Space; item: SpaceItem }) {
             <Button variant="ghost" size="sm" className="h-7 gap-1.5 px-1.5 text-xs text-muted-foreground hover:text-foreground" onClick={() => navigate(`/spaces/${space.id}/items`)}>
               <ArrowLeft size={13} />Items
             </Button>
-            {item.source_session_id && (
-              <>
-                <span className="text-muted-foreground/40">·</span>
-                <Button variant="ghost" size="sm" className="h-7 gap-1.5 px-1.5 text-xs text-muted-foreground hover:text-foreground" onClick={() => navigate(`/c/${item.source_session_id}`)}>
-                  <MessageSquare size={12} />Chat
-                </Button>
-              </>
-            )}
+            <ItemSessionsChip spaceId={space.id} itemId={item.id} />
           </div>
         )}
         actions={(

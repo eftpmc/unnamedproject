@@ -31,7 +31,6 @@ import {
   getSpaceItems,
   getSpaces,
   listItemTemplates,
-  sendMessage,
   updateChatConfig,
   updateSpace,
   updateSpaceItem,
@@ -495,9 +494,6 @@ function ItemDetail({ space, item }: { space: Space; item: SpaceItem }) {
   const navigate = useNavigate();
   const queryClient = useQueryClient();
   const [confirmDelete, setConfirmDelete] = useState(false);
-  const [note, setNote] = useState('');
-  const [sending, setSending] = useState(false);
-
   const renameMutation = useMutation({
     mutationFn: (name: string) => updateSpaceItem(space.id, item.id, { name }),
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ['space-items', space.id] }),
@@ -509,22 +505,6 @@ function ItemDetail({ space, item }: { space: Space; item: SpaceItem }) {
       navigate(`/spaces/${space.id}/items`);
     },
   });
-
-  async function openInChat() {
-    if (sending) return;
-    setSending(true);
-    try {
-      const { id: chatId } = await createChat();
-      await updateChatConfig(chatId, { pinned_space_id: space.id });
-      const text = note.trim()
-        ? `${note.trim()}\n\nItem: ${item.name} (id: ${item.id})`
-        : `Let's work on: ${item.name} (id: ${item.id})`;
-      await sendMessage(chatId, text);
-      navigate(`/c/${chatId}`);
-    } finally {
-      setSending(false);
-    }
-  }
 
   return (
     <PageShell>
@@ -547,29 +527,6 @@ function ItemDetail({ space, item }: { space: Space; item: SpaceItem }) {
       {item.type === 'repo' && <RepoDetail space={space} item={item as RepoItem} />}
       {item.type === 'file' && <FileDetail space={space} item={item as FileItem} />}
       {item.type !== 'repo' && item.type !== 'file' && <TemplateItemDetail space={space} item={item} />}
-
-      {/* Agent handoff bar — works for any item type */}
-      <div className="sticky bottom-0 border-t border-border-soft bg-background/90 backdrop-blur-sm">
-        <div className="mx-auto flex max-w-4xl items-center gap-2 px-4 py-3">
-          <input
-            type="text"
-            value={note}
-            onChange={e => setNote(e.target.value)}
-            onKeyDown={e => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); openInChat(); } }}
-            placeholder="Ask agent about this…"
-            className="flex-1 rounded-lg border border-border-soft bg-muted/50 px-3 py-2 text-sm text-foreground placeholder:text-muted-foreground outline-none focus:border-border focus:bg-background transition-colors"
-          />
-          <Button
-            size="sm"
-            variant="ghost"
-            disabled={sending}
-            onClick={openInChat}
-            className="h-9 w-9 shrink-0 p-0"
-          >
-            <MessageSquare size={15} />
-          </Button>
-        </div>
-      </div>
 
       {confirmDelete && (
         <ConfirmDialog

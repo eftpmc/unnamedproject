@@ -29,7 +29,8 @@ interface SpaceItemRow {
   name: string;
   source_session_id: string | null;
   created_at: number;
-  page_blocks: string; // raw JSON
+  page_blocks: string;
+  fields: string;
 }
 
 export interface SpaceItemBase {
@@ -40,89 +41,66 @@ export interface SpaceItemBase {
   source_session_id: string | null;
   created_at: number;
   page_blocks: Block[];
+  fields: Record<string, unknown>;
 }
 
-export type RepoItem = SpaceItemBase & { type: 'repo'; repo_path: string; default_branch: string | null };
-export type FileItem = SpaceItemBase & { type: 'file'; file_path: string; size_bytes: number | null; mime_type: string | null };
-
-// repo and file have extra structured fields; all other types are base + page_blocks
-export type SpaceItem = RepoItem | FileItem | SpaceItemBase;
-
-export function isRepoItem(item: SpaceItem): item is RepoItem { return item.type === 'repo'; }
-export function isFileItem(item: SpaceItem): item is FileItem { return item.type === 'file'; }
+export type SpaceItem = SpaceItemBase;
 
 export interface CreateItemInput {
   space_id: string;
   name: string;
+  type: string;
+  page_blocks?: Block[];
+  fields?: Record<string, unknown>;
   source_session_id?: string | null;
-}
-
-function insertBaseRow(input: CreateItemInput, type: string, pageBlocks: Block[] = []): SpaceItemRow & { page_blocks: string } {
-  const row = {
-    id: newId(),
-    space_id: input.space_id,
-    type,
-    name: input.name,
-    source_session_id: input.source_session_id ?? null,
-    created_at: Math.floor(Date.now() / 1000),
-    page_blocks: JSON.stringify(pageBlocks),
-  };
-  getDb().prepare(`
-    INSERT INTO space_items (id, space_id, type, name, source_session_id, created_at, page_blocks)
-    VALUES (?, ?, ?, ?, ?, ?, ?)
-  `).run(row.id, row.space_id, row.type, row.name, row.source_session_id, row.created_at, row.page_blocks);
-  return row;
-}
-
-export function createRepoItem(
-  input: CreateItemInput & { repo_path: string; default_branch?: string },
-): RepoItem {
-  return getDb().transaction((): RepoItem => {
-    const base = insertBaseRow(input, 'repo');
-    getDb().prepare(
-      'INSERT INTO space_repos (item_id, repo_path, default_branch) VALUES (?, ?, ?)',
-    ).run(base.id, input.repo_path, input.default_branch ?? null);
-    return {
-      ...base,
-      type: 'repo',
-      page_blocks: [],
-      repo_path: input.repo_path,
-      default_branch: input.default_branch ?? null,
-    };
-  })();
-}
-
-export function createFileItem(
-  input: CreateItemInput & { file_path: string; size_bytes?: number; mime_type?: string },
-): FileItem {
-  return getDb().transaction((): FileItem => {
-    const base = insertBaseRow(input, 'file');
-    getDb().prepare(
-      'INSERT INTO space_files (item_id, file_path, size_bytes, mime_type) VALUES (?, ?, ?, ?)',
-    ).run(base.id, input.file_path, input.size_bytes ?? null, input.mime_type ?? null);
-    return {
-      ...base,
-      type: 'file',
-      page_blocks: [],
-      file_path: input.file_path,
-      size_bytes: input.size_bytes ?? null,
-      mime_type: input.mime_type ?? null,
-    };
-  })();
-}
-
-// Creates any template-based item (blank, spec, kanban, report, custom, …).
-// `type` is the template ID / item type name stored on the item.
-export function createTemplateItem(
-  input: CreateItemInput & { type: string; page_blocks: Block[] },
-): SpaceItemBase {
-  const withIds = ensureBlockIds(input.page_blocks);
-  const base = insertBaseRow(input, input.type, withIds);
-  return { ...base, page_blocks: withIds };
 }
 
 function ensureBlockIds(blocks: Block[]): Block[] {
   return blocks.map(b => b.id ? b : { ...b, id: newId() });
+}
+
+export function createItem(input: CreateItemInput): SpaceItemBase {
+  const blocks = ensureBlockIds(input.page_blocks ?? []);
+  const fields = input.fields ?? {};
+  const row = {
+    id: newId(),
+    space_id: input.space_id,
+    type: input.type,
+    name: input.name,
+    source_session_id: input.source_session_id ?? null,
+    created_at: Math.floor(Date.now() / 1000),
+    page_blocks: JSON.stringify(blocks),
+    fields: JSON.stringify(fields),
+  };
+  getDb().prepare(`
+    INSERT INTO space_items (id, space_id, type, name, source_session_id, created_at, page_blocks, fields)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+  `).run(row.id, row.space_id, row.type, row.name, row.source_session_id, row.created_at, row.page_blocks, row.fields);
+  return { ...row, page_blocks: blocks, fields };
+}
+
+function hydrate(row: SpaceItemRow): SpaceItemBase {
+  return {
+    ...row,
+    page_blocks: row.page_blocks ? JSON.parse(row.page_blocks) as Block[] : [],
+    fields: row.fields ? JSON.parse(row.fields) as Record<string, unknown> : {},
+  };
+}
+
+export function getItemsForSpace(spaceId: string): SpaceItemBase[] {
+  const rows = getDb().prepare(
+    'SELECT * FROM space_items WHERE space_id = ? ORDER BY created_at DESC, id DESC',
+  ).all(spaceId) as SpaceItemRow[];
+  return rows.map(hydrate);
+}
+
+export function getItemById(itemId: string): SpaceItemBase | undefined {
+  const row = getDb().prepare('SELECT * FROM space_items WHERE id = ?').get(itemId) as SpaceItemRow | undefined;
+  return row ? hydrate(row) : undefined;
+}
+
+export function deleteItem(itemId: string): void {
+  getDb().prepare('DELETE FROM space_items WHERE id = ?').run(itemId);
 }
 
 export function updateItemPageBlocks(itemId: string, blocks: Block[]): void {
@@ -147,6 +125,14 @@ export function updateItemPageBlock(itemId: string, blockId: string, block: Bloc
   return true;
 }
 
+export function updateItemFields(itemId: string, fields: Record<string, unknown>): boolean {
+  const item = getItemById(itemId);
+  if (!item) return false;
+  const merged = { ...item.fields, ...fields };
+  getDb().prepare('UPDATE space_items SET fields = ? WHERE id = ?').run(JSON.stringify(merged), itemId);
+  return true;
+}
+
 export function updateTaskDone(itemId: string, taskId: string, done: boolean): boolean {
   const item = getItemById(itemId);
   if (!item) return false;
@@ -163,47 +149,6 @@ export function updateTaskDone(itemId: string, taskId: string, done: boolean): b
   if (!found) return false;
   updateItemPageBlocks(itemId, updated);
   return true;
-}
-
-function hydrate(row: SpaceItemRow): SpaceItem {
-  const db = getDb();
-  const page_blocks: Block[] = row.page_blocks ? JSON.parse(row.page_blocks) as Block[] : [];
-  const base: SpaceItemBase = { ...row, page_blocks };
-
-  if (row.type === 'repo') {
-    const subtype = db.prepare(
-      'SELECT repo_path, default_branch FROM space_repos WHERE item_id = ?',
-    ).get(row.id) as { repo_path: string; default_branch: string | null } | undefined;
-    if (!subtype) throw new Error(`Repo item ${row.id} is missing its subtype row`);
-    return { ...base, type: 'repo', repo_path: subtype.repo_path, default_branch: subtype.default_branch };
-  }
-
-  if (row.type === 'file') {
-    const subtype = db.prepare(
-      'SELECT file_path, size_bytes, mime_type FROM space_files WHERE item_id = ?',
-    ).get(row.id) as { file_path: string; size_bytes: number | null; mime_type: string | null } | undefined;
-    if (!subtype) throw new Error(`File item ${row.id} is missing its subtype row`);
-    return { ...base, type: 'file', ...subtype };
-  }
-
-  // All template-based types (blank, spec, kanban, custom, …) — just base + page_blocks
-  return base;
-}
-
-export function getItemsForSpace(spaceId: string): SpaceItem[] {
-  const rows = getDb().prepare(
-    'SELECT * FROM space_items WHERE space_id = ? ORDER BY created_at DESC, id DESC',
-  ).all(spaceId) as SpaceItemRow[];
-  return rows.map(hydrate);
-}
-
-export function getItemById(itemId: string): SpaceItem | undefined {
-  const row = getDb().prepare('SELECT * FROM space_items WHERE id = ?').get(itemId) as SpaceItemRow | undefined;
-  return row ? hydrate(row) : undefined;
-}
-
-export function deleteItem(itemId: string): void {
-  getDb().prepare('DELETE FROM space_items WHERE id = ?').run(itemId);
 }
 
 const MIME_BY_EXT: Record<string, string> = {
@@ -228,27 +173,20 @@ export function mimeForPath(filePath: string): string {
 export async function registerFileItem(input: CreateItemInput & {
   source_path: string;
   mime_type?: string;
-}): Promise<FileItem> {
+}): Promise<SpaceItemBase> {
   const fileName = path.basename(input.source_path);
   const destinationDir = path.join(getDataDir(), 'spaces', input.space_id, 'files');
   await fs.mkdir(destinationDir, { recursive: true });
   const destination = path.join(destinationDir, `${Date.now()}-${fileName}`);
   await fs.copyFile(input.source_path, destination);
   const stat = await fs.stat(destination);
-  return createFileItem({
+  return createItem({
     ...input,
-    file_path: destination,
-    size_bytes: stat.size,
-    mime_type: input.mime_type ?? mimeForPath(fileName),
+    type: 'file',
+    fields: {
+      file_path: destination,
+      size_bytes: stat.size,
+      mime_type: input.mime_type ?? mimeForPath(fileName),
+    },
   });
-}
-
-export function resolveFileItemPath(item: FileItem): string {
-  if (path.isAbsolute(item.file_path)) return item.file_path;
-  return path.resolve(getDataDir(), 'projects', item.space_id, item.file_path);
-}
-
-export async function readItemContent(item: SpaceItem): Promise<string | Buffer> {
-  if (item.type === 'file') return fs.readFile(resolveFileItemPath(item as FileItem));
-  throw new Error(`readItemContent is not supported for item type '${item.type}'`);
 }

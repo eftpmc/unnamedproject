@@ -32,7 +32,7 @@ export async function runProjectQuery(input: ProjectQueryInput, userId: string):
   const apiKey = getAnthropicApiKey(userId);
   const repoPath = repoItem.fields.repo_path as string;
   if (!await hasGraph(repoPath)) {
-    await buildGraph(repoPath, input.item_id, apiKey);
+    await buildGraph(repoPath, input.item_id);
   }
 
   return await queryGraph(input.question, repoPath, apiKey);

@@ -64,10 +64,12 @@ export async function onRead(
 
 export async function onCreate(item: SpaceItemForCapability, caps: string[]): Promise<void> {
   await triggerEmbedding(item, caps);
+  triggerGraphIndex(item, caps);
 }
 
 export async function onUpdate(item: SpaceItemForCapability, caps: string[]): Promise<void> {
   await triggerEmbedding(item, caps);
+  triggerGraphIndex(item, caps);
 }
 
 async function triggerEmbedding(item: SpaceItemForCapability, caps: string[]): Promise<void> {
@@ -79,6 +81,17 @@ async function triggerEmbedding(item: SpaceItemForCapability, caps: string[]): P
   embed(text).catch((err: unknown) => {
     console.error(`[embeddable] Failed to embed item ${item.id}:`, err);
   });
+}
+
+function triggerGraphIndex(item: SpaceItemForCapability, caps: string[]): void {
+  if (!caps.includes('git-aware')) return;
+  const repoPath = item.fields.repo_path;
+  if (typeof repoPath !== 'string') return;
+  import('./graphify.js').then(({ buildGraph }) => {
+    buildGraph(repoPath, item.id).catch((err: unknown) => {
+      console.error(`[graph-index] Failed to index ${repoPath}:`, err);
+    });
+  }).catch(() => {});
 }
 
 function buildEmbeddableText(item: SpaceItemForCapability): string {

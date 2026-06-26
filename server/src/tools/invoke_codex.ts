@@ -26,6 +26,8 @@ interface ToolContext {
   resumeSessionId?: string | null;
   mcpServers?: Record<string, McpServerConfig>;
   permissionProfile?: PermissionProfile;
+  /** System prompt to inject on first turn. Defaults to DELEGATE_FRAMING when absent. */
+  systemPromptSuffix?: string;
   signal?: AbortSignal;
   onSessionId?: (id: string) => void;
   onText?: (delta: string) => void;
@@ -102,7 +104,7 @@ export async function invokeCodex(input: CodexInput, ctx: ToolContext): Promise<
     args.push(...mcpServerConfigOverrides(ctx.mcpServers));
   }
   // codex has no append-system-prompt equivalent — fold the framing into the prompt itself.
-  const prompt = ctx.resumeSessionId ? input.prompt : `${DELEGATE_FRAMING}\n\n${input.prompt}`;
+  const prompt = ctx.resumeSessionId ? input.prompt : `${ctx.systemPromptSuffix ?? DELEGATE_FRAMING}\n\n${input.prompt}`;
   args.push(prompt);
 
   return new Promise((resolve, reject) => {

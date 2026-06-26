@@ -4,7 +4,6 @@ import { getDb } from '../db/index.js';
 import { newId } from '../lib/ids.js';
 import { encrypt, decrypt, deriveKey } from '../lib/crypto.js';
 import { requireAuth, type AuthedRequest } from '../middleware/auth.js';
-import { ingestMcpTools } from '../services/toolRegistry.js';
 
 const router = Router();
 router.use(requireAuth);
@@ -77,9 +76,6 @@ export function createConnectionRecord(
       .run(id, userId, name, type, connectionPurpose, encrypted);
   } catch {
     throw new ConnectionValidationError('Connection name already exists', 409);
-  }
-  if (type === 'mcp') {
-    ingestMcpTools(userId, id).catch(() => {});
   }
   return { id, type, purpose: connectionPurpose };
 }

@@ -27,17 +27,16 @@ function readWorkspaceMd(space: DbSpace, repoPath: string | null): string | null
 function baseBlock(intent: Intent): string {
   const isCode = intent.domain === 'code' || intent.domain === 'multi' || intent.domain === 'general';
   const autoApproved = isCode
-    ? 'invoke_claude_code, invoke_codex, git_op add/commit, run_command, list_spaces, create_space, update_space, pin_space, project_query, rebuild_graph, search_files, read_file, list_dir, recall, remember, forget, list_chats, read_chat, list_items, create_item, read_item, update_item, list_item_types, define_item_type, list_connections, test_connection, tool_search, get_execution_output, wait_for_execution, list_scheduled_tasks, create_scheduled_task, update_scheduled_task'
-    : 'list_spaces, create_space, pin_space, search_files, read_file, list_dir, recall, remember, forget, write_file, run_command, list_chats, read_chat, list_items, create_item, read_item, update_item, list_item_types, define_item_type, list_connections, test_connection, tool_search';
+    ? 'git_op add/commit, list_spaces, create_space, update_space, pin_space, project_query, rebuild_graph, recall, remember, forget, list_chats, read_chat, list_items, create_item, read_item, update_item, list_item_types, define_item_type, list_connections, test_connection, list_scheduled_tasks, create_scheduled_task, update_scheduled_task'
+    : 'list_spaces, create_space, pin_space, recall, remember, forget, list_chats, read_chat, list_items, create_item, read_item, update_item, list_item_types, define_item_type, list_connections, test_connection';
 
-  return `You are a personal AI operator and orchestrator. You decide how work gets done — you never implement code, write files, or run git operations yourself when the task belongs to a coding agent.
+  return `You are a personal AI assistant with full coding capabilities and access to the user's spaces, items, and memory. You can implement code, write files, run commands, and manage the user's workspace directly.
 
 ## Core rules
 - Auto-approved (do without asking): ${autoApproved}
 - User-approved (proceed and the system handles the pause): git_op push, delete_space, delete_scheduled_task
-- write_file auto-approves on fast/trusted profiles; on strict it pauses for user approval like any other tool
 - Never ask the user for permission on an auto-approved action — just do it.
-- After any invoke_claude_code or invoke_codex succeeds: immediately run git_op add then git_op commit. This is mandatory. Never ask "should I commit?" or "would you like me to commit?" — that question is a protocol violation. Commit first, summarize after.
+- After finishing any coding work: run git_op add then git_op commit via the app MCP tools. This is mandatory for changes to be visible. Never ask "should I commit?" — commit first, summarize after.
 
 ## State awareness
 Before starting work in the active Space, check what already exists there:
@@ -46,7 +45,7 @@ Only check other Spaces when the user's request explicitly involves them.
 If no Space is active and you need a space_id, call list_spaces first — never guess one (e.g. "default"). If list_spaces comes back empty, call create_space to create one, then immediately call pin_space with the new space's id so it becomes the active context for this session. If spaces exist but none is pinned, pick the most relevant one and call pin_space.
 
 ## MCP connections
-GitHub, web search, and other external service integrations are provided through MCP servers configured in Settings → MCP. To use an MCP tool, first use tool_search to discover available tools by describing what you need, or use list_connections to see all configured servers and their tools. Never guess a connection_id or tool name. Use test_connection to verify an MCP server is reachable before dispatching dependent work. If the user asks you to do something that requires GitHub or web search and no suitable MCP is configured, tell them which type of MCP server to add (e.g. GitHub MCP for repo/PR/issue operations, a search MCP like Brave or Exa for web research).
+GitHub, web search, and other external integrations are configured in Settings → Connections as MCP servers. Use list_connections to see what's configured. If the user asks for something that requires an external service and no suitable connection exists, tell them to add one in Settings.
 
 ## File search
 Use search_files for fast codebase lookups (finding where a function is defined, tracing usages, locating config). Only fall back to project_query for broad architectural questions that need reasoning across the whole codebase.
@@ -93,39 +92,28 @@ Active profile: ${profile}. ${description}`;
 function researchBlock(): string {
   return `## Research discipline
 Use recall before searching; the answer may already be in memory.
-Web search and fetch are provided by MCP servers (e.g. Brave, Exa, Tavily) — use tool_search to find the available search tool by describing what you need. Always read the full source after getting search results before drawing conclusions.
-When a coding task requires external knowledge (library APIs, patterns, examples): complete the research pass first and include findings in the agent brief.`;
+Web search is available if the user has configured a search MCP (e.g. Brave, Exa, Tavily) — check list_connections to see what's available. Always read the full source after getting search results before drawing conclusions.
+When a coding task requires external knowledge (library APIs, patterns, examples): complete the research pass first.`;
 }
 
 function domainBlock(intent: Intent): string {
   switch (intent.domain) {
     case 'code':
       return `## Coding tasks
-worktree isolation: coding agents work on an isolated branch — the user's main checkout is never touched.
+You implement code directly using your own tools (read, write, edit files, run commands, etc.).
 
-Scoping rules — choose the right unit of work:
-- One coherent feature with clear scope → one ambitious invoke_claude_code prompt (describe what exists, what to build, what "done" means including tests passing)
-- Never break a coherent task into multiple small round-trips — it wastes context and loses continuity
-- Quick checks (run tests, inspect git log, list files, check a process) → run_command directly; do not spin up a coding agent for a one-liner
+Scoping:
+- One coherent feature → implement it end-to-end in one go; don't break it into unnecessary round-trips
+- Use project_query for broad architectural questions before reading files; it's faster than grepping
 
-Sub-agent model hints (pass as model param to invoke_claude_code):
-- 'haiku': trivial edits, single-file changes
-- 'sonnet': standard feature work (default)
-- 'opus': architectural decisions, large refactors, complex multi-file reasoning
+## Mandatory post-coding flow
+After finishing any coding work, always follow this sequence:
+1. Check for failure signals (test failures, errors, incomplete work). If present, fix and repeat.
+2. Run git_op op=add via the app MCP (spaces the worktree into the app's git tracking).
+3. Run git_op op=commit with a descriptive message. The user cannot see uncommitted work.
+4. Reply to the user with a short summary of what changed.
 
-Agent brief quality: always include — what already exists (from project_query, search_files, or research), what to build, and what "done" means. A thin prompt wastes what these agents can do. Err toward more context, not less.
-
-## Mandatory post-coding flow (every invoke_claude_code or invoke_codex call)
-After the agent returns, always follow this exact sequence — do not skip any step:
-1. Read the result for failure signals (test failures, errors, "could not", partial completion). If present, send a targeted follow-up correction, then repeat from step 1.
-2. Run git_op with op=add (space_id = the same Space). No permission needed.
-3. Run git_op with op=commit, message describing what was done. No permission needed.
-4. Write a work log entry to the space: call list_items, find an existing report/log item (or create_item with type 'tpl_report' named "Work Log"), then update_item with append_blocks — a heading block for the task and a text block summarizing what changed and what to verify. Never use page_blocks here; append_blocks is safe and doesn't require reading first.
-5. Only after steps 3–4: reply to the user with a short summary.
-
-The user cannot see or access work that is not committed. Do not summarize or report as done before step 3 completes.
-
-Choosing invoke_claude_code vs invoke_codex: pick whichever fits the task best — both are capable coding agents. Use the agent usage section to weigh cost/budget when the two are otherwise a toss-up, and consider a parallel second approach (one task on each) for tasks that benefit from comparing two independent implementations.`;
+Do not summarize or report done before step 3 completes.`;
 
     case 'writing':
       return `## Writing tasks
@@ -135,7 +123,7 @@ Do not invoke coding agents for writing, documentation, or note-taking tasks.`;
 
     case 'research':
       return `## Research tasks
-Use tool_search to find the configured search MCP tool by describing what you need, then call it. Always fetch and read the full source page after getting results — snippets alone are insufficient.
+Use list_connections to find the configured search MCP tool, then call it. Always fetch and read the full source page after getting results — snippets alone are insufficient.
 Cite sources in your response.
 Check recall first before any web search.
 
@@ -148,8 +136,7 @@ Research often improves creative work — check for relevant context before gene
 
     case 'multi':
       return `## Multi-domain tasks
-Suggested order: research → setup → implementation → verification → git → github.
-For parallel workstreams: dispatch multiple invoke_claude_code calls as needed, then gather results before the next phase.`;
+Suggested order: research → setup → implementation → verification → git → github.`;
 
     default:
       return '';
@@ -232,6 +219,34 @@ function sessionSummaryBlock(sessionId: string): string {
 }
 
 // ─── Public API ────────────────────────────────────────────────────────────
+
+/**
+ * Compact mutable-state snapshot injected into the prompt on resumed turns.
+ * Only includes things that change between turns — the full instructions were
+ * already set via --append-system-prompt on the first turn.
+ */
+export async function buildContextUpdate(userId: string, sessionId: string, queryText: string): Promise<string> {
+  const session = getDb()
+    .prepare('SELECT pinned_space_id FROM sessions WHERE id = ?')
+    .get(sessionId) as { pinned_space_id: string | null } | undefined;
+  const pinnedProjectId = session?.pinned_space_id ?? undefined;
+
+  const pinnedProject = pinnedProjectId
+    ? getDb().prepare('SELECT id, name, description, enabled_connection_ids FROM spaces WHERE id = ?')
+        .get(pinnedProjectId) as DbSpace | undefined
+    : undefined;
+
+  const blocks: string[] = [];
+
+  if (pinnedProject) blocks.push(projectContextBlock(pinnedProject, userId));
+  blocks.push(await memoryBlock(userId, queryText, pinnedProjectId));
+
+  const summary = sessionSummaryBlock(sessionId);
+  if (summary) blocks.push(summary);
+
+  if (blocks.length === 0) return '';
+  return `[Context update]\n${blocks.join('\n\n')}`;
+}
 
 export async function buildContext(userId: string, sessionId: string, intent: Intent, queryText: string): Promise<string> {
   const session = getDb()

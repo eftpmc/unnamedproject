@@ -30,6 +30,8 @@ interface ToolContext {
   mcpServers?: Record<string, McpServerConfig>;
   permissionProfile?: PermissionProfile;
   effort?: string;
+  /** System prompt to inject on first turn. Defaults to DELEGATE_FRAMING when absent. */
+  systemPromptSuffix?: string;
   signal?: AbortSignal;
   onText?: (delta: string) => void;      // for streaming chat
   onSessionId?: (id: string) => void;
@@ -63,7 +65,7 @@ export async function invokeClaudeCode(input: ClaudeCodeInput, ctx: ToolContext)
   const args = ['--print', ...claudePermissionArgs(profile), '--output-format', 'stream-json', '--verbose'];
   let mcpConfigDir: string | null = null;
   if (input.model) args.push('--model', input.model);
-  if (!ctx.resumeSessionId) args.push('--append-system-prompt', DELEGATE_FRAMING);
+  if (!ctx.resumeSessionId) args.push('--append-system-prompt', ctx.systemPromptSuffix ?? DELEGATE_FRAMING);
   if (ctx.resumeSessionId) args.push('--resume', ctx.resumeSessionId);
   if (ctx.mcpServers && Object.keys(ctx.mcpServers).length > 0) {
     mcpConfigDir = await fs.mkdtemp(path.join(os.tmpdir(), 'unnamed-claude-mcp-'));

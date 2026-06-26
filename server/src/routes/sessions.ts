@@ -3,7 +3,7 @@ import simpleGit from 'simple-git';
 import { createSessionEvent, getDb, getSpaceForUser, getSessionEvents, linkSessionProject, getSessionProjectLinks } from '../db/index.js';
 import { newId } from '../lib/ids.js';
 import { requireAuth, type AuthedRequest } from '../middleware/auth.js';
-import { DEFAULT_EFFORT, isEffortLevel } from '../services/anthropic.js';
+import { DEFAULT_EFFORT, isEffortLevel } from '../services/effort.js';
 import { stopAgentTurn, getActiveSessionIds } from '../services/agent.js';
 
 const router = Router();

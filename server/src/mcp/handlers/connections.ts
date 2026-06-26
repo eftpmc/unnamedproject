@@ -3,7 +3,6 @@ import { getDb } from '../../db/index.js';
 import { getDecryptedConfig } from '../../routes/connections.js';
 import { createConnectionTool } from '../../tools/connection_ops.js';
 import { listMcpTools } from '../../lib/mcp-pool.js';
-import { ingestMcpTools } from '../../services/toolRegistry.js';
 import { createExecution, completeExecution } from '../../services/executor.js';
 
 export function registerConnectionHandlers(): void {
@@ -71,7 +70,6 @@ export function registerConnectionHandlers(): void {
         const mcpArgs = cfg.args ? (JSON.parse(cfg.args) as string[]) : [];
         const mcpEnv = cfg.env ? (JSON.parse(cfg.env) as Record<string, string>) : {};
         const tools = await listMcpTools(connRow.id, cfg.command, mcpArgs, mcpEnv);
-        await ingestMcpTools(userId, connRow.id);
         return JSON.stringify({
           id: connRow.id,
           name: connRow.name,

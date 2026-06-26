@@ -4,7 +4,7 @@ import { getDb, recordAgentUsage, setSessionProviderInfo, type AgentUsageTool } 
 import { broadcast } from './socket.js';
 import { newId } from '../lib/ids.js';
 import { classifyIntent } from './intent.js';
-import { buildContext } from './context.js';
+import { buildContext, buildContextUpdate } from './context.js';
 import { generateMcpToken } from '../mcp/auth.js';
 import { getConversationProvider } from './conversation-provider.js';
 import { getItemsForSpace } from './items.js';
@@ -120,7 +120,10 @@ export async function runAgentTurn(userId: string, sessionId: string, userMessag
 
   const prompt = lastUserMsg?.content ?? '';
   const intent = classifyIntent(prompt);
-  const systemPromptSuffix = await buildContext(userId, sessionId, intent, prompt);
+  const isResume = !!session?.provider_session_id;
+  const systemPromptSuffix = isResume ? undefined : await buildContext(userId, sessionId, intent, prompt);
+  const contextUpdate = isResume ? await buildContextUpdate(userId, sessionId, prompt) : undefined;
+  const effectivePrompt = contextUpdate ? `${contextUpdate}\n\n${prompt}` : prompt;
 
   const port = process.env.PORT ?? '3000';
   const mcpToken = generateMcpToken(userId, sessionId);
@@ -141,7 +144,7 @@ export async function runAgentTurn(userId: string, sessionId: string, userMessag
   try {
     invokeResult = await provider.invoke({
       userId,
-      prompt,
+      prompt: effectivePrompt,
       resumeSessionId: session?.provider_session_id,
       systemPromptSuffix,
       mcpServers,

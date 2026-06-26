@@ -14,7 +14,7 @@ export function registerGitHandlers(): void {
       properties: {
         space_id: { type: 'string' },
         item_id: { type: 'string' },
-        op: { type: 'string', enum: ['log', 'diff', 'status', 'commit', 'push'] },
+        op: { type: 'string', enum: ['log', 'diff', 'status', 'add', 'commit', 'push'] },
         message: { type: 'string' },
         branch: { type: 'string' },
       },

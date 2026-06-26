@@ -34,19 +34,22 @@ function isRateLimitError(err: unknown): boolean {
 }
 
 class FallbackProvider implements ConversationProvider {
-  readonly type: 'claude_code' | 'codex';
+  private _type: 'claude_code' | 'codex';
+  get type(): 'claude_code' | 'codex' { return this._type; }
   private providers: ConversationProvider[];
 
   constructor(providers: ConversationProvider[]) {
     this.providers = providers;
-    this.type = providers[0].type;
+    this._type = providers[0].type;
   }
 
   async invoke(params: InvokeParams): Promise<{ costUsd?: number }> {
     let lastError: Error | undefined;
     for (const provider of this.providers) {
       try {
-        return await provider.invoke(params);
+        const result = await provider.invoke(params);
+        this._type = provider.type;
+        return result;
       } catch (err) {
         if (isRateLimitError(err)) {
           lastError = err instanceof Error ? err : new Error(String(err));

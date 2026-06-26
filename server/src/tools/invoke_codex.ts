@@ -9,7 +9,7 @@ interface CodexInput {
   model?: string;
 }
 
-interface McpServerConfig {
+export interface McpServerConfig {
   // stdio transport
   command?: string;
   args?: string[];
@@ -26,6 +26,7 @@ interface ToolContext {
   resumeSessionId?: string | null;
   mcpServers?: Record<string, McpServerConfig>;
   permissionProfile?: PermissionProfile;
+  effort?: string;
   /** System prompt to inject on first turn. Defaults to DELEGATE_FRAMING when absent. */
   systemPromptSuffix?: string;
   signal?: AbortSignal;
@@ -90,6 +91,7 @@ export async function invokeCodex(input: CodexInput, ctx: ToolContext): Promise<
   args.push(...codexPermissionArgs(profile), '--json');
   if (!ctx.resumeSessionId) args.push('--skip-git-repo-check');
   if (input.model) args.push('-m', input.model);
+  if (ctx.effort) args.push('-c', `reasoning_effort=${tomlString(ctx.effort)}`);
   if (ctx.mcpServers && Object.keys(ctx.mcpServers).length > 0) {
     args.push(...mcpServerConfigOverrides(ctx.mcpServers));
   }
@@ -146,11 +148,15 @@ export async function invokeCodex(input: CodexInput, ctx: ToolContext): Promise<
           }
         }
         if (event.type === 'item.completed') {
-          const item = event.item as { type?: string; text?: string } | undefined;
+          const item = event.item as { type?: string; text?: string; call_id?: string; name?: string; output?: string } | undefined;
           if (item?.type === 'agent_message' && item.text) {
             resultText = item.text;
             appendOutput(ctx.executionId, ctx.userId, item.text + '\n');
             ctx.onText?.(item.text);
+          } else if (item?.type === 'function_call' && item.name) {
+            appendOutput(ctx.executionId, ctx.userId, `→ ${item.name}\n`);
+          } else if (item?.type === 'local_shell_call' && item.output) {
+            appendOutput(ctx.executionId, ctx.userId, `→ shell\n`);
           }
         }
         if (event.type === 'turn.completed') {

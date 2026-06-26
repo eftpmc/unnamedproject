@@ -28,6 +28,7 @@ export class CodexProvider implements ConversationProvider {
           resumeSessionId: params.resumeSessionId,
           mcpServers: params.mcpServers,
           permissionProfile: normalizePermissionProfile(this.config.permissionProfile),
+          effort: params.effort,
           systemPromptSuffix: params.systemPromptSuffix,
           signal: params.signal,
           onText: params.onText,

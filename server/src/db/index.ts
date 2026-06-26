@@ -649,6 +649,86 @@ export const migrations: Migration[] = [
       insert.run(id, t.name, JSON.stringify(t.blocks));
     }
   }},
+  // Migration 18 (flatten-item-types-to-templates) rebuilt child tables with FK references to
+  // "_space_items_v18_tmp" (the temp name used during the space_items table rebuild) instead of
+  // pointing to the final "space_items" table. SQLite validates referenced tables when FK
+  // enforcement is on, so any query that touches these tables (even via cascade) throws
+  // "no such table: main._space_items_v18_tmp". This migration rebuilds them with the correct FK.
+  { version: 22, name: 'fix-space-items-fk-references', noTransaction: true, up: (db) => {
+    db.pragma('foreign_keys = OFF');
+    const fixes: { name: string; create: string; cols: string }[] = [
+      {
+        name: 'session_events',
+        create: `CREATE TABLE session_events (
+          id TEXT PRIMARY KEY,
+          session_id TEXT NOT NULL REFERENCES sessions(id) ON DELETE CASCADE,
+          type TEXT NOT NULL CHECK(type IN (
+            'scope_changed','project_linked','project_created','plan_created',
+            'artifact_created','item_created','item_updated','approval_requested','approval_resolved',
+            'mcp_required','subagent_started','subagent_completed','connection_created'
+          )),
+          title TEXT NOT NULL,
+          body TEXT,
+          space_id TEXT REFERENCES spaces(id) ON DELETE SET NULL,
+          item_id TEXT REFERENCES space_items(id) ON DELETE SET NULL,
+          execution_id TEXT REFERENCES executions(id) ON DELETE SET NULL,
+          metadata TEXT NOT NULL DEFAULT '{}',
+          created_at INTEGER NOT NULL DEFAULT (unixepoch())
+        )`,
+        cols: 'id, session_id, type, title, body, space_id, item_id, execution_id, metadata, created_at',
+      },
+      {
+        name: 'space_files',
+        create: `CREATE TABLE space_files (
+          item_id TEXT PRIMARY KEY REFERENCES space_items(id) ON DELETE CASCADE,
+          file_path TEXT NOT NULL,
+          size_bytes INTEGER,
+          mime_type TEXT
+        )`,
+        cols: 'item_id, file_path, size_bytes, mime_type',
+      },
+      {
+        name: 'space_notes',
+        create: `CREATE TABLE space_notes (
+          item_id TEXT PRIMARY KEY REFERENCES space_items(id) ON DELETE CASCADE,
+          content TEXT NOT NULL
+        )`,
+        cols: 'item_id, content',
+      },
+      {
+        name: 'agent_worktrees',
+        create: `CREATE TABLE agent_worktrees (
+          id TEXT PRIMARY KEY,
+          item_id TEXT NOT NULL REFERENCES space_items(id) ON DELETE CASCADE,
+          session_id TEXT NOT NULL REFERENCES sessions(id) ON DELETE CASCADE,
+          branch TEXT NOT NULL,
+          worktree_path TEXT NOT NULL,
+          claude_session_id TEXT,
+          codex_session_id TEXT,
+          created_at INTEGER NOT NULL DEFAULT (unixepoch()),
+          UNIQUE(item_id, session_id)
+        )`,
+        cols: 'id, item_id, session_id, branch, worktree_path, claude_session_id, codex_session_id, created_at',
+      },
+      {
+        name: 'space_repos',
+        create: `CREATE TABLE space_repos (
+          item_id TEXT PRIMARY KEY REFERENCES space_items(id) ON DELETE CASCADE,
+          repo_path TEXT NOT NULL,
+          default_branch TEXT
+        )`,
+        cols: 'item_id, repo_path, default_branch',
+      },
+    ];
+    for (const { name, create, cols } of fixes) {
+      const tmp = `_${name}_fk22_tmp`;
+      db.exec(`ALTER TABLE "${name}" RENAME TO "${tmp}"`);
+      db.exec(create);
+      db.exec(`INSERT INTO "${name}" (${cols}) SELECT ${cols} FROM "${tmp}"`);
+      db.exec(`DROP TABLE "${tmp}"`);
+    }
+    db.pragma('foreign_keys = ON');
+  }},
 ];
 
 function tableSql(database: Database.Database, name: string): string | undefined {

@@ -729,6 +729,43 @@ export const migrations: Migration[] = [
     }
     db.pragma('foreign_keys = ON');
   }},
+  { version: 23, name: 'unified-item-types', up: (db) => {
+    // 1. Add fields column to space_items
+    const itemCols = (db.prepare("PRAGMA table_info(space_items)").all() as { name: string }[]).map(c => c.name);
+    if (!itemCols.includes('fields')) {
+      db.exec("ALTER TABLE space_items ADD COLUMN fields TEXT NOT NULL DEFAULT '{}'");
+    }
+
+    // 2. Add schema + capabilities columns to item_templates
+    const tplCols = (db.prepare("PRAGMA table_info(item_templates)").all() as { name: string }[]).map(c => c.name);
+    if (!tplCols.includes('schema')) {
+      db.exec("ALTER TABLE item_templates ADD COLUMN schema TEXT NOT NULL DEFAULT '{}'");
+    }
+    if (!tplCols.includes('capabilities')) {
+      db.exec("ALTER TABLE item_templates ADD COLUMN capabilities TEXT NOT NULL DEFAULT '[]'");
+    }
+
+    // 3. Drop space_repos and space_files — data now lives in space_items.fields
+    db.pragma('foreign_keys = OFF');
+    db.exec('DROP TABLE IF EXISTS space_repos');
+    db.exec('DROP TABLE IF EXISTS space_files');
+    db.pragma('foreign_keys = ON');
+
+    // 4. Update builtin type definitions with schema + capabilities
+    const repoSchema = JSON.stringify({
+      repo_path: { type: 'string', required: true },
+      default_branch: { type: 'string', required: false },
+    });
+    const fileSchema = JSON.stringify({
+      file_path: { type: 'string', required: true },
+      size_bytes: { type: 'number', required: false },
+      mime_type: { type: 'string', required: false },
+    });
+    db.prepare("UPDATE item_templates SET schema = ?, capabilities = ? WHERE id = 'repo'")
+      .run(repoSchema, JSON.stringify(['git-aware', 'file-readable']));
+    db.prepare("UPDATE item_templates SET schema = ?, capabilities = ? WHERE id = 'file'")
+      .run(fileSchema, JSON.stringify(['file-readable']));
+  }},
 ];
 
 function tableSql(database: Database.Database, name: string): string | undefined {

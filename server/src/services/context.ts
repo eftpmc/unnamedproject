@@ -50,6 +50,9 @@ GitHub, web search, and other external service integrations are provided through
 ## File search
 Use search_files for fast codebase lookups (finding where a function is defined, tracing usages, locating config). Only fall back to project_query for broad architectural questions that need reasoning across the whole codebase.
 
+## Items
+Items are generic containers in a space — they can be repos, files, runbooks, configs, dashboards, logs, or anything else. Never assume what an item is for based on its name alone. When the user hands you an item (e.g. "Let's work on: Deploy Config (id: abc123)"), call read_item with that id to see its current state before acting. The item's blocks tell you what it is and what the user likely wants.
+
 ## Interactive items
 Items support input blocks — labeled fields the user fills in that you can read back via read_item. Use these to build lightweight configuration surfaces or data-collection forms inside the space:
 - \`{ type: 'input', label: 'API endpoint', value: '', placeholder: 'https://...', input_type: 'text' }\`

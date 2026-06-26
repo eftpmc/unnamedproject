@@ -1,5 +1,5 @@
 import { getToken, setToken, clearToken } from './auth.js';
-import type { Session, Message, Space, SpaceItem, SpaceItemType, Connection, EffortLevel, UserSettings, AgentBudgets, Memory, ScheduledTask, SessionWorktree, PermissionProfile, SessionEvent, SessionSpaceLink, Block, ItemTemplate } from '../types.js';
+import type { Session, Message, Space, SpaceItem, SpaceItemType, Connection, EffortLevel, UserSettings, Memory, ScheduledTask, SessionWorktree, PermissionProfile, SessionEvent, SessionSpaceLink, Block, ItemTemplate } from '../types.js';
 
 async function request<T>(path: string, init: RequestInit = {}): Promise<T> {
   const token = getToken();
@@ -256,10 +256,6 @@ export function getSettings(): Promise<UserSettings> {
 
 export function updateSettings(body: { projects_root: string; permission_profile?: PermissionProfile }): Promise<UserSettings> {
   return request('/settings', { method: 'PUT', body: JSON.stringify(body) });
-}
-
-export function updateAgentBudgets(body: { claude_code?: number | null; codex?: number | null; claude_code_daily?: number | null; codex_daily?: number | null }): Promise<{ agent_budgets: AgentBudgets; agent_daily_budgets: AgentBudgets; permission_profile: PermissionProfile }> {
-  return request('/settings/agent-budgets', { method: 'PUT', body: JSON.stringify(body) });
 }
 
 export function getConnections(): Promise<Connection[]> {

@@ -23,31 +23,30 @@ function setupTestDb(): Database.Database {
     CREATE TABLE space_items (
       id TEXT PRIMARY KEY,
       space_id TEXT NOT NULL REFERENCES spaces(id) ON DELETE CASCADE,
-      type TEXT NOT NULL CHECK(type IN ('repo','file','note','document')),
+      type TEXT NOT NULL,
       name TEXT NOT NULL,
-      source_session_id TEXT, source_plan_id TEXT, source_step_id TEXT,
-      created_at INTEGER NOT NULL DEFAULT (unixepoch())
+      source_session_id TEXT,
+      created_at INTEGER NOT NULL DEFAULT (unixepoch()),
+      page_blocks TEXT NOT NULL DEFAULT '[]'
     );
-    CREATE TABLE space_repos (item_id TEXT PRIMARY KEY, repo_path TEXT NOT NULL, default_branch TEXT, overview_blocks TEXT);
+    CREATE TABLE space_repos (item_id TEXT PRIMARY KEY, repo_path TEXT NOT NULL, default_branch TEXT);
     CREATE TABLE space_files (item_id TEXT PRIMARY KEY, file_path TEXT NOT NULL, size_bytes INTEGER, mime_type TEXT);
-    CREATE TABLE space_notes (item_id TEXT PRIMARY KEY, content TEXT NOT NULL);
-    CREATE TABLE space_documents (item_id TEXT PRIMARY KEY, template TEXT NOT NULL DEFAULT 'document', blocks TEXT NOT NULL DEFAULT '[]');
     CREATE TABLE item_templates (
       id TEXT PRIMARY KEY,
       user_id TEXT,
       kind TEXT NOT NULL,
       name TEXT NOT NULL,
       blocks TEXT,
-      item_type TEXT NOT NULL,
       is_builtin INTEGER NOT NULL DEFAULT 0,
       created_at INTEGER NOT NULL DEFAULT (unixepoch())
     );
     INSERT INTO spaces VALUES ('sp1', 'u1', 'Test', NULL, '[]');
-    INSERT INTO space_items VALUES ('item1', 'sp1', 'repo', 'My Repo', NULL, NULL, NULL, 1);
-    INSERT INTO space_repos VALUES ('item1', '/tmp/repo', NULL, NULL);
-    INSERT INTO item_templates (id, user_id, kind, name, blocks, item_type, is_builtin) VALUES
-      ('tpl_document', NULL, 'blocks', 'Document', '[{"type":"text","content":""}]', 'document', 1),
-      ('tpl_spec', NULL, 'blocks', 'Spec', '[{"type":"heading","level":1,"text":"Overview"}]', 'document', 1);
+    INSERT INTO space_items (id, space_id, type, name, source_session_id, created_at, page_blocks)
+      VALUES ('item1', 'sp1', 'repo', 'My Repo', NULL, 1, '[]');
+    INSERT INTO space_repos VALUES ('item1', '/tmp/repo', NULL);
+    INSERT INTO item_templates (id, user_id, kind, name, blocks, is_builtin) VALUES
+      ('tpl_blank', NULL, 'blocks', 'Blank', '[]', 1),
+      ('tpl_spec', NULL, 'blocks', 'Spec', '[{"type":"heading","level":1,"text":"Overview"}]', 1);
   `);
   return db;
 }
@@ -79,7 +78,7 @@ describe('POST/PATCH /spaces/item-templates', () => {
   it('400s updating a template with a malformed block', async () => {
     const { app, token } = await buildApp();
     const res = await request(app)
-      .patch('/item-templates/tpl_document')
+      .patch('/item-templates/tpl_blank')
       .set('Authorization', `Bearer ${token}`)
       .send({ blocks: [{ type: 'list', items: 'not-an-array' }] });
     expect(res.status).toBe(400);
@@ -87,47 +86,47 @@ describe('POST/PATCH /spaces/item-templates', () => {
   });
 });
 
-describe('POST /spaces/:spaceId/items — document type', () => {
+describe('POST /spaces/:spaceId/items — template type', () => {
   beforeEach(() => { testDb = setupTestDb(); });
 
-  it('creates a document item from a template', async () => {
+  it('creates an item from a template', async () => {
     const { app, token } = await buildApp();
     const res = await request(app)
       .post('/sp1/items')
       .set('Authorization', `Bearer ${token}`)
-      .send({ type: 'document', name: 'My Doc', template_id: 'tpl_spec' });
+      .send({ type: 'tpl_spec', name: 'My Doc' });
     expect(res.status).toBe(201);
-    expect(res.body.type).toBe('document');
-    expect(res.body.template_id).toBe('tpl_spec');
-    expect(res.body.blocks.length).toBeGreaterThan(0);
-    expect(res.body.blocks[0].type).toBe('heading');
+    expect(res.body.type).toBe('tpl_spec');
+    expect(res.body.page_blocks.length).toBeGreaterThan(0);
+    expect(res.body.page_blocks[0].type).toBe('heading');
   });
 
-  it('uses the plain Document template when template_id omitted', async () => {
+  it('creates an item with blank template', async () => {
     const { app, token } = await buildApp();
     const res = await request(app)
       .post('/sp1/items')
       .set('Authorization', `Bearer ${token}`)
-      .send({ type: 'document', name: 'Plain Doc' });
+      .send({ type: 'tpl_blank', name: 'Plain Doc' });
     expect(res.status).toBe(201);
-    expect(res.body.template_id).toBe('tpl_document');
+    expect(res.body.type).toBe('tpl_blank');
+    expect(res.body.page_blocks).toEqual([]);
   });
 
-  it('404s for an unknown template_id', async () => {
+  it('404s for an unknown type', async () => {
     const { app, token } = await buildApp();
     const res = await request(app)
       .post('/sp1/items')
       .set('Authorization', `Bearer ${token}`)
-      .send({ type: 'document', name: 'Doc', template_id: 'tpl_nope' });
+      .send({ type: 'tpl_nope', name: 'Doc' });
     expect(res.status).toBe(404);
   });
 
-  it('rejects document without name', async () => {
+  it('rejects item without name', async () => {
     const { app, token } = await buildApp();
     const res = await request(app)
       .post('/sp1/items')
       .set('Authorization', `Bearer ${token}`)
-      .send({ type: 'document', template_id: 'tpl_document' });
+      .send({ type: 'tpl_blank' });
     expect(res.status).toBe(400);
   });
 });
@@ -135,32 +134,29 @@ describe('POST /spaces/:spaceId/items — document type', () => {
 describe('PATCH /spaces/:spaceId/items/:itemId — blocks', () => {
   beforeEach(() => { testDb = setupTestDb(); });
 
-  it('updates blocks on a document item', async () => {
-    // first create a document
+  it('updates page_blocks on a template item', async () => {
     const db = testDb;
-    db.prepare("INSERT INTO space_items VALUES ('doc1','sp1','document','D',NULL,NULL,NULL,1)").run();
-    db.prepare("INSERT INTO space_documents VALUES ('doc1','document','[]')").run();
+    db.prepare("INSERT INTO space_items (id, space_id, type, name, page_blocks) VALUES ('doc1','sp1','tpl_blank','D','[]')").run();
 
     const { app, token } = await buildApp();
     const blocks = [{ type: 'heading', level: 1, text: 'Hi' }];
     const res = await request(app)
       .patch('/sp1/items/doc1')
       .set('Authorization', `Bearer ${token}`)
-      .send({ blocks });
+      .send({ page_blocks: blocks });
     expect(res.status).toBe(200);
-    expect(res.body.blocks).toEqual(blocks);
+    expect(res.body.page_blocks).toEqual(blocks);
   });
 
-  it('400s a blocks replace with a malformed block', async () => {
+  it('400s a page_blocks replace with a malformed block', async () => {
     const db = testDb;
-    db.prepare("INSERT INTO space_items VALUES ('doc6','sp1','document','D',NULL,NULL,NULL,1)").run();
-    db.prepare("INSERT INTO space_documents VALUES ('doc6','document','[]')").run();
+    db.prepare("INSERT INTO space_items (id, space_id, type, name, page_blocks) VALUES ('doc6','sp1','tpl_blank','D','[]')").run();
 
     const { app, token } = await buildApp();
     const res = await request(app)
       .patch('/sp1/items/doc6')
       .set('Authorization', `Bearer ${token}`)
-      .send({ blocks: [{ type: 'heading', level: 9, text: 'bad' }] });
+      .send({ page_blocks: [{ type: 'heading', level: 9, text: 'bad' }] });
     expect(res.status).toBe(400);
     expect(res.body.error).toMatch(/level/);
   });
@@ -168,8 +164,7 @@ describe('PATCH /spaces/:spaceId/items/:itemId — blocks', () => {
   it('400s a block_id patch with a malformed block', async () => {
     const db = testDb;
     const blocks = JSON.stringify([{ id: 'stat1', type: 'stat', label: 'Open Issues', value: '14' }]);
-    db.prepare("INSERT INTO space_items VALUES ('doc7','sp1','document','D',NULL,NULL,NULL,1)").run();
-    db.prepare("INSERT INTO space_documents VALUES ('doc7','document',?)").run(blocks);
+    db.prepare("INSERT INTO space_items (id, space_id, type, name, page_blocks) VALUES ('doc7','sp1','tpl_blank','D',?)").run(blocks);
 
     const { app, token } = await buildApp();
     const res = await request(app)
@@ -186,8 +181,7 @@ describe('PATCH /spaces/:spaceId/items/:itemId — blocks', () => {
       { id: 'h1', type: 'heading', level: 1, text: 'Title' },
       { id: 'stat1', type: 'stat', label: 'Open Issues', value: '14' },
     ]);
-    db.prepare("INSERT INTO space_items VALUES ('doc4','sp1','document','D',NULL,NULL,NULL,1)").run();
-    db.prepare("INSERT INTO space_documents VALUES ('doc4','document',?)").run(blocks);
+    db.prepare("INSERT INTO space_items (id, space_id, type, name, page_blocks) VALUES ('doc4','sp1','tpl_blank','D',?)").run(blocks);
 
     const { app, token } = await buildApp();
     const res = await request(app)
@@ -195,14 +189,13 @@ describe('PATCH /spaces/:spaceId/items/:itemId — blocks', () => {
       .set('Authorization', `Bearer ${token}`)
       .send({ block_id: 'stat1', block: { id: 'stat1', type: 'stat', label: 'Open Issues', value: '9' } });
     expect(res.status).toBe(200);
-    expect(res.body.blocks[0]).toEqual({ id: 'h1', type: 'heading', level: 1, text: 'Title' });
-    expect(res.body.blocks[1]).toEqual({ id: 'stat1', type: 'stat', label: 'Open Issues', value: '9' });
+    expect(res.body.page_blocks[0]).toEqual({ id: 'h1', type: 'heading', level: 1, text: 'Title' });
+    expect(res.body.page_blocks[1]).toEqual({ id: 'stat1', type: 'stat', label: 'Open Issues', value: '9' });
   });
 
   it('404s patching an unknown block_id', async () => {
     const db = testDb;
-    db.prepare("INSERT INTO space_items VALUES ('doc5','sp1','document','D',NULL,NULL,NULL,1)").run();
-    db.prepare("INSERT INTO space_documents VALUES ('doc5','document','[]')").run();
+    db.prepare("INSERT INTO space_items (id, space_id, type, name, page_blocks) VALUES ('doc5','sp1','tpl_blank','D','[]')").run();
 
     const { app, token } = await buildApp();
     const res = await request(app)
@@ -212,15 +205,15 @@ describe('PATCH /spaces/:spaceId/items/:itemId — blocks', () => {
     expect(res.status).toBe(404);
   });
 
-  it('updates overview_blocks on a repo item', async () => {
+  it('updates page_blocks on a repo item', async () => {
     const { app, token } = await buildApp();
     const overview = [{ type: 'text', content: 'Overview' }];
     const res = await request(app)
       .patch('/sp1/items/item1')
       .set('Authorization', `Bearer ${token}`)
-      .send({ overview_blocks: overview });
+      .send({ page_blocks: overview });
     expect(res.status).toBe(200);
-    expect(res.body.overview_blocks).toEqual(overview);
+    expect(res.body.page_blocks).toEqual(overview);
   });
 });
 
@@ -230,8 +223,7 @@ describe('PATCH /spaces/:spaceId/items/:itemId/tasks/:taskId', () => {
   it('marks a task done', async () => {
     const db = testDb;
     const blocks = JSON.stringify([{ type: 'task-list', tasks: [{ id: 't1', text: 'Do it', done: false }] }]);
-    db.prepare("INSERT INTO space_items VALUES ('doc2','sp1','document','K',NULL,NULL,NULL,1)").run();
-    db.prepare("INSERT INTO space_documents VALUES ('doc2','kanban',?)").run(blocks);
+    db.prepare("INSERT INTO space_items (id, space_id, type, name, page_blocks) VALUES ('doc2','sp1','tpl_blank','K',?)").run(blocks);
 
     const { app, token } = await buildApp();
     const res = await request(app)
@@ -239,13 +231,12 @@ describe('PATCH /spaces/:spaceId/items/:itemId/tasks/:taskId', () => {
       .set('Authorization', `Bearer ${token}`)
       .send({ done: true });
     expect(res.status).toBe(200);
-    expect(res.body.blocks[0].tasks[0].done).toBe(true);
+    expect(res.body.page_blocks[0].tasks[0].done).toBe(true);
   });
 
   it('returns 404 for unknown taskId', async () => {
     const db = testDb;
-    db.prepare("INSERT INTO space_items VALUES ('doc3','sp1','document','K',NULL,NULL,NULL,1)").run();
-    db.prepare("INSERT INTO space_documents VALUES ('doc3','kanban','[]')").run();
+    db.prepare("INSERT INTO space_items (id, space_id, type, name, page_blocks) VALUES ('doc3','sp1','tpl_blank','K','[]')").run();
 
     const { app, token } = await buildApp();
     const res = await request(app)

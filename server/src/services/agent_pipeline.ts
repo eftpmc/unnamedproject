@@ -1,4 +1,4 @@
-import { getAgentBudgets, getMonthlyUsage, getDailyUsage, recordAgentUsage, type AgentUsageTool } from '../db/index.js';
+import { recordAgentUsage, type AgentUsageTool } from '../db/index.js';
 import { buildGraph } from './graphify.js';
 
 export interface AgentPipelineCtx {
@@ -28,32 +28,6 @@ function compose(middleware: AgentMiddleware[]): (ctx: AgentPipelineCtx) => Prom
   };
 }
 
-const TOOL_LABELS: Partial<Record<AgentUsageTool, string>> = {
-  claude_code: 'Claude Code',
-  codex: 'Codex',
-};
-
-/** Hard-stops the run before it starts if the daily or monthly budget for this tool is already used up. */
-export const budgetGate: AgentMiddleware = async (ctx, next) => {
-  const dailyBudget = getAgentBudgets(ctx.userId, 'daily')[ctx.tool];
-  if (dailyBudget !== null) {
-    const spentToday = getDailyUsage(ctx.userId, ctx.tool);
-    if (spentToday >= dailyBudget) {
-      ctx.result = `Error: daily budget for ${TOOL_LABELS[ctx.tool]} ($${dailyBudget.toFixed(2)}) has been reached ($${spentToday.toFixed(2)} spent today). Use the other coding agent instead, or raise the daily budget in Settings.`;
-      return;
-    }
-  }
-  const budget = getAgentBudgets(ctx.userId)[ctx.tool];
-  if (budget !== null) {
-    const spent = getMonthlyUsage(ctx.userId, ctx.tool);
-    if (spent >= budget) {
-      ctx.result = `Error: monthly budget for ${TOOL_LABELS[ctx.tool]} ($${budget.toFixed(2)}) has been reached ($${spent.toFixed(2)} spent this month). Use the other coding agent instead, or raise the budget in Settings.`;
-      return;
-    }
-  }
-  await next();
-};
-
 /** Records actual spend after a successful run. */
 export const recordUsage: AgentMiddleware = async (ctx, next) => {
   await next();
@@ -76,5 +50,5 @@ export const rebuildGraphAfter: AgentMiddleware = async (ctx, next) => {
  * agent invocation and must set ctx.result (and ctx.costUsd on success).
  */
 export function runAgentPipeline(ctx: AgentPipelineCtx, runCore: () => Promise<void>): Promise<void> {
-  return compose([budgetGate, recordUsage, rebuildGraphAfter, (c, _next) => runCore()])(ctx);
+  return compose([recordUsage, rebuildGraphAfter, (c, _next) => runCore()])(ctx);
 }

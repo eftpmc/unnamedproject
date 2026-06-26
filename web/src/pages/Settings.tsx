@@ -25,7 +25,6 @@ import {
   getSettings,
   runScheduledTask,
   testConnection,
-  updateAgentBudgets,
   updateScheduledTask,
   updateSettings,
 } from '../lib/api.js';
@@ -36,10 +35,9 @@ import { useAccent } from '../lib/useAccent.js';
 import { ACCENT_PRESETS, DEFAULT_ACCENT } from '../lib/accent.js';
 import type { Connection, Memory, PermissionProfile, Space, ScheduledTask, UserSettings } from '../types.js';
 
-type Tab = 'agents' | 'tools' | 'mcp' | 'workspace' | 'memory' | 'account';
+type Tab = 'tools' | 'mcp' | 'workspace' | 'memory' | 'account';
 
 const TABS: { id: Tab; label: string }[] = [
-  { id: 'agents', label: 'Agents' },
   { id: 'tools', label: 'Tools' },
   { id: 'mcp', label: 'MCP' },
   { id: 'workspace', label: 'Workspace' },
@@ -53,39 +51,26 @@ const SETUP_META: Record<SetupKind, {
   title: string;
   description: string;
   type: Connection['type'];
-  placeholder: string;
-  secretLabel: string;
-  secretOptional?: boolean;
-  secretOptionalHint?: string;
 }> = {
   claude_code: {
     title: 'Claude Code',
     description: 'Powers your conversations. Handles all tasks — coding, research, orchestration.',
     type: 'claude_code',
-    placeholder: 'sk-ant-...',
-    secretLabel: 'Anthropic API key',
-    secretOptional: true,
   },
   codex: {
     title: 'Codex',
     description: 'Powers your conversations using the OpenAI Codex CLI.',
     type: 'codex',
-    placeholder: 'sk-...',
-    secretLabel: 'OpenAI API key',
-    secretOptional: true,
   },
   mcp: {
     title: 'MCP Server',
     description: 'Adds extra tools that can be attached to workspaces.',
     type: 'mcp',
-    placeholder: '',
-    secretLabel: '',
   },
 };
 
 interface SetupFormState {
   setupName: string;
-  secret: string;
   mcpCommand: string;
   mcpArgs: string;
   mcpEnv: string;
@@ -98,7 +83,6 @@ interface SetupFormState {
 
 const INITIAL_SETUP_FORM: SetupFormState = {
   setupName: '',
-  secret: '',
   mcpCommand: '',
   mcpArgs: '',
   mcpEnv: '{}',
@@ -348,7 +332,7 @@ function SetupModal({
   if (!activeSetup) return null;
   const meta = SETUP_META[activeSetup];
   const existing = connections.find(c => c.purpose === activeSetup);
-  const { setupName, secret, mcpCommand, mcpArgs, mcpEnv, mcpPreset, mcpExtraArg, mcpEnvValues, providerModel, providerPermissionProfile } = form;
+  const { setupName, mcpCommand, mcpArgs, mcpEnv, mcpPreset, mcpExtraArg, mcpEnvValues, providerModel, providerPermissionProfile } = form;
 
   const selectedPreset = activeSetup === 'mcp' && mcpPreset !== 'custom'
     ? MCP_PRESETS.find(p => p.id === mcpPreset)
@@ -418,7 +402,7 @@ function SetupModal({
                   <div><Label>Env JSON</Label><Textarea rows={2} placeholder='{"TOKEN":"..."}' value={mcpEnv} onChange={e => updateForm({ mcpEnv: e.target.value })} className="text-sm font-mono resize-y" /></div>
                 </>
               )
-            ) : (activeSetup === 'claude_code' || activeSetup === 'codex') ? (
+            ) : (
               <>
                 <div>
                   <Label>Model</Label>
@@ -443,12 +427,6 @@ function SetupModal({
                   </Select>
                 </div>
               </>
-            ) : (
-              <div>
-                <Label>{meta.secretLabel}{meta.secretOptional ? ' (optional)' : ''}</Label>
-                <Input type="password" placeholder={meta.placeholder} value={secret} onChange={e => updateForm({ secret: e.target.value })} className="text-sm" />
-                {meta.secretOptionalHint && <p className="mt-1 text-xs text-muted-foreground">{meta.secretOptionalHint}</p>}
-              </div>
             )}
             {setupError && <div className="text-sm text-destructive">{setupError}</div>}
             <DialogFooter>
@@ -466,7 +444,7 @@ export default function Settings() {
   usePageTitle('Settings');
   const navigate = useNavigate();
   const qc = useQueryClient();
-  const [tab, setTab] = useState<Tab>('agents');
+  const [tab, setTab] = useState<Tab>('tools');
 
   const { data: connections = [] } = useQuery<Connection[]>({ queryKey: ['connections'], queryFn: getConnections });
   const { data: spaces = [] } = useQuery<Space[]>({ queryKey: ['spaces'], queryFn: getSpaces });
@@ -484,11 +462,6 @@ export default function Settings() {
   const [pendingDelete, setPendingDelete] = useState<{ id: string } | null>(null);
   const [projectsRootError, setProjectsRootError] = useState('');
 
-  const [claudeCodeBudget, setClaudeCodeBudget] = useState('');
-  const [codexBudget, setCodexBudget] = useState('');
-  const [claudeCodeDailyBudget, setClaudeCodeDailyBudget] = useState('');
-  const [codexDailyBudget, setCodexDailyBudget] = useState('');
-  const [agentBudgetsError, setAgentBudgetsError] = useState('');
   const [taskIntervals, setTaskIntervals] = useState<Record<string, string>>({});
 
   const mcpConnections = connections.filter(c => c.purpose === 'mcp');
@@ -498,19 +471,11 @@ export default function Settings() {
     if (settings?.permission_profile) setPermissionProfile(settings.permission_profile);
   }, [settings]);
 
-  useEffect(() => {
-    if (!settings) return;
-    setClaudeCodeBudget(settings.agent_budgets.claude_code !== null ? String(settings.agent_budgets.claude_code) : '');
-    setCodexBudget(settings.agent_budgets.codex !== null ? String(settings.agent_budgets.codex) : '');
-    setClaudeCodeDailyBudget(settings.agent_daily_budgets.claude_code !== null ? String(settings.agent_daily_budgets.claude_code) : '');
-    setCodexDailyBudget(settings.agent_daily_budgets.codex !== null ? String(settings.agent_daily_budgets.codex) : '');
-  }, [settings]);
-
   const createConnMutation = useMutation({
     mutationFn: () => {
       if (!activeSetup) throw new Error('Pick what you want to set up');
       const meta = SETUP_META[activeSetup];
-      const { setupName, secret, mcpCommand, mcpArgs, mcpEnv, mcpPreset, mcpExtraArg, mcpEnvValues, providerModel, providerPermissionProfile } = form;
+      const { setupName, mcpCommand, mcpArgs, mcpEnv, mcpPreset, mcpExtraArg, mcpEnvValues, providerModel, providerPermissionProfile } = form;
       let config: Record<string, unknown>;
 
       if (activeSetup === 'mcp') {
@@ -537,16 +502,13 @@ export default function Settings() {
           }
           config = { command: mcpCommand.trim(), args: mcpArgs.trim() || '[]', env: mcpEnv.trim() || '{}' };
         }
-      } else if (activeSetup === 'claude_code' || activeSetup === 'codex') {
+      } else {
         const defaultModel = activeSetup === 'claude_code' ? 'claude-sonnet-4-6' : 'codex-mini-latest';
         config = {
           model: providerModel.trim() || defaultModel,
           permissionProfile: providerPermissionProfile,
         };
         return createConnection({ name: setupName.trim() || meta.title, type: meta.type, config });
-      } else {
-        if (!secret.trim() && !meta.secretOptional) throw new Error(`${meta.secretLabel} required`);
-        config = { apiKey: secret.trim() };
       }
 
       return createConnection({ name: setupName.trim() || meta.title, type: meta.type, purpose: activeSetup, config });
@@ -565,32 +527,6 @@ export default function Settings() {
     onSuccess: () => qc.invalidateQueries({ queryKey: ['settings'] }),
     onError: (e: Error) => setProjectsRootError(e.message),
   });
-
-  const updateAgentBudgetsMutation = useMutation({
-    mutationFn: (body: { claude_code?: number | null; codex?: number | null; claude_code_daily?: number | null; codex_daily?: number | null }) => updateAgentBudgets(body),
-    onSuccess: () => qc.invalidateQueries({ queryKey: ['settings'] }),
-    onError: (e: Error) => setAgentBudgetsError(e.message),
-  });
-
-  function saveAgentBudgets() {
-    setAgentBudgetsError('');
-    const parseBudget = (v: string): number | null => {
-      if (!v.trim()) return null;
-      const n = Number(v);
-      if (!Number.isFinite(n) || n < 0) throw new Error('Budgets must be non-negative numbers');
-      return n;
-    };
-    try {
-      updateAgentBudgetsMutation.mutate({
-        claude_code: parseBudget(claudeCodeBudget),
-        codex: parseBudget(codexBudget),
-        claude_code_daily: parseBudget(claudeCodeDailyBudget),
-        codex_daily: parseBudget(codexDailyBudget),
-      });
-    } catch (e) {
-      setAgentBudgetsError((e as Error).message);
-    }
-  }
 
   const updateTaskMutation = useMutation({
     mutationFn: ({ id, body }: { id: string; body: { enabled?: boolean; interval_hours?: number } }) => updateScheduledTask(id, body),
@@ -669,9 +605,16 @@ export default function Settings() {
       <PageBody>
         <ContentColumn className="max-w-4xl">
 
-          {/* ── Agents ─────────────────────────────────── */}
-          {tab === 'agents' && (
+          {/* ── Tools ──────────────────────────────────── */}
+          {tab === 'tools' && (
             <div className="flex flex-col gap-7">
+              <div>
+                <SectionLabel>Coding tools</SectionLabel>
+                <div className="flex flex-col gap-3">
+                  <ConnectionRow kind="claude_code" connections={connections} onOpenSetup={openSetupModal} onRequestDelete={id => setPendingDelete({ id })} />
+                  <ConnectionRow kind="codex" connections={connections} onOpenSetup={openSetupModal} onRequestDelete={id => setPendingDelete({ id })} />
+                </div>
+              </div>
               <div>
                 <SectionLabel>Permissions</SectionLabel>
                 <div className="rounded-lg border border-border-soft bg-card p-4 flex flex-col gap-4">
@@ -704,49 +647,6 @@ export default function Settings() {
                   </p>
                 </div>
               </div>
-
-              <div>
-                <SectionLabel>Agent budgets</SectionLabel>
-                <div className="rounded-lg border border-border-soft bg-card p-4 flex flex-col gap-4">
-                  <div className="flex gap-3 items-end">
-                    <div className="flex-1">
-                      <Label className="text-xs">Claude Code monthly (USD)</Label>
-                      <Input type="number" min="0" step="0.01" placeholder="No limit" value={claudeCodeBudget} onChange={e => setClaudeCodeBudget(e.target.value)} className="mt-1 text-sm" />
-                    </div>
-                    <div className="flex-1">
-                      <Label className="text-xs">Codex monthly (USD)</Label>
-                      <Input type="number" min="0" step="0.01" placeholder="No limit" value={codexBudget} onChange={e => setCodexBudget(e.target.value)} className="mt-1 text-sm" />
-                    </div>
-                  </div>
-                  <div className="flex gap-3 items-end">
-                    <div className="flex-1">
-                      <Label className="text-xs">Claude Code daily (USD)</Label>
-                      <Input type="number" min="0" step="0.01" placeholder="No limit" value={claudeCodeDailyBudget} onChange={e => setClaudeCodeDailyBudget(e.target.value)} className="mt-1 text-sm" />
-                    </div>
-                    <div className="flex-1">
-                      <Label className="text-xs">Codex daily (USD)</Label>
-                      <Input type="number" min="0" step="0.01" placeholder="No limit" value={codexDailyBudget} onChange={e => setCodexDailyBudget(e.target.value)} className="mt-1 text-sm" />
-                    </div>
-                    <Button size="sm" className="h-9 gap-1.5 text-xs" onClick={saveAgentBudgets}>
-                      <Check size={13} strokeWidth={2.2} />
-                      Save
-                    </Button>
-                  </div>
-                  {agentBudgetsError && <div className="text-sm text-destructive">{agentBudgetsError}</div>}
-                  <p className="text-xs leading-relaxed text-muted-foreground/70">
-                    Set monthly and/or daily spend caps for each coding agent. Daily caps reset at UTC midnight; monthly caps reset on the 1st. Leave blank for no limit.
-                  </p>
-                </div>
-              </div>
-            </div>
-          )}
-
-          {/* ── Tools ──────────────────────────────────── */}
-          {tab === 'tools' && (
-            <div className="flex flex-col gap-3">
-              <SectionLabel>Coding tools</SectionLabel>
-              <ConnectionRow kind="claude_code" connections={connections} onOpenSetup={openSetupModal} onRequestDelete={id => setPendingDelete({ id })} />
-              <ConnectionRow kind="codex" connections={connections} onOpenSetup={openSetupModal} onRequestDelete={id => setPendingDelete({ id })} />
             </div>
           )}
 

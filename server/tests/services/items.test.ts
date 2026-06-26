@@ -2,8 +2,8 @@ import { beforeAll, describe, expect, it } from 'vitest';
 import fs from 'fs';
 import { getDb, initDb } from '../../src/db/index.js';
 import {
+  createDocumentItem,
   createFileItem,
-  createNoteItem,
   createRepoItem,
   deleteItem,
   getItemById,
@@ -35,25 +35,26 @@ describe('items service', () => {
       size_bytes: 42,
       mime_type: 'text/plain',
     });
-    const note = createNoteItem({ space_id: 'sp1', name: 'Note', content: 'hello' });
+    const doc = createDocumentItem({ space_id: 'sp1', name: 'My Doc', template_id: 'tpl_blank', blocks: [] });
 
     expect(getItemById(repo.id)).toMatchObject({ type: 'repo', repo_path: '/repos/my-repo', default_branch: 'main' });
     expect(getItemById(file.id)).toMatchObject({ type: 'file', file_path: '/files/notes.txt', size_bytes: 42 });
-    expect(getItemById(note.id)).toMatchObject({ type: 'note', content: 'hello' });
+    expect(getItemById(doc.id)).toMatchObject({ type: 'document', template_id: 'tpl_blank', blocks: [] });
   });
 
   it('sets provenance fields and lists mixed items', () => {
-    const generated = createNoteItem({
+    const generated = createDocumentItem({
       space_id: 'sp1',
       name: 'Generated Report',
-      content: '# Report',
+      template_id: 'tpl_blank',
+      blocks: [],
       source_session_id: null,
     });
     expect(generated).toMatchObject({
       source_session_id: null,
     });
     expect(getItemsForSpace('sp1').map(item => item.type)).toEqual(
-      expect.arrayContaining(['repo', 'file', 'note']),
+      expect.arrayContaining(['repo', 'file', 'document']),
     );
   });
 

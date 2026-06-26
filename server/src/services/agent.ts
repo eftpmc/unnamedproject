@@ -40,8 +40,8 @@ export async function runAgentTurn(userId: string, sessionId: string, userMessag
   const provider = await getConversationProvider(userId);
 
   const session = getDb()
-    .prepare('SELECT model, provider_session_id FROM sessions WHERE id = ?')
-    .get(sessionId) as { model: string | null; provider_session_id: string | null } | undefined;
+    .prepare('SELECT model, effort, provider_session_id FROM sessions WHERE id = ?')
+    .get(sessionId) as { model: string | null; effort: string | null; provider_session_id: string | null } | undefined;
 
   const lastUserMsg = getDb()
     .prepare("SELECT content FROM messages WHERE session_id = ? AND role = 'user' ORDER BY created_at DESC LIMIT 1")
@@ -52,7 +52,7 @@ export async function runAgentTurn(userId: string, sessionId: string, userMessag
   const systemPromptSuffix = buildContext(userId, sessionId, intent);
 
   const port = process.env.PORT ?? '3000';
-  const mcpToken = generateMcpToken(userId);
+  const mcpToken = generateMcpToken(userId, sessionId);
   const mcpServers = {
     app: { url: `http://localhost:${port}/mcp`, headers: { Authorization: `Bearer ${mcpToken}` } },
   };
@@ -74,6 +74,7 @@ export async function runAgentTurn(userId: string, sessionId: string, userMessag
       systemPromptSuffix,
       mcpServers,
       model: session?.model ?? undefined,
+      effort: session?.effort ?? undefined,
       signal: abortController.signal,
       onText: (delta) => {
         if (!started) {

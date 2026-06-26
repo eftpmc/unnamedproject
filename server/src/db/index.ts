@@ -124,6 +124,8 @@ export function addDocumentItems(database: Database.Database): void {
 }
 
 const BUILTIN_BLOCK_TEMPLATES: { id: string; name: string; blocks: unknown[] }[] = [
+  { id: 'tpl_blank', name: 'Blank', blocks: [] },
+  { id: 'tpl_note', name: 'Note', blocks: [{ type: 'text', content: '' }] },
   { id: 'tpl_document', name: 'Document', blocks: [{ type: 'text', content: '' }] },
   {
     id: 'tpl_spec',
@@ -191,7 +193,6 @@ export function addItemTemplates(database: Database.Database): void {
   `);
   insertTemplate.run('tpl_repo', 'system', 'Repo', null, 'repo');
   insertTemplate.run('tpl_file', 'system', 'File', null, 'file');
-  insertTemplate.run('tpl_note', 'system', 'Note', null, 'note');
   for (const t of BUILTIN_BLOCK_TEMPLATES) {
     insertTemplate.run(t.id, 'blocks', t.name, JSON.stringify(t.blocks), 'document');
   }
@@ -408,6 +409,32 @@ function repairSpaceItemChildFks(database: Database.Database): void {
   database.pragma('foreign_keys = ON');
 }
 
+function collapseNotesToDocuments(database: Database.Database): void {
+  // Seed new builtin templates (tpl_blank, tpl_note) — idempotent via INSERT OR IGNORE
+  const insertTemplate = database.prepare(`
+    INSERT OR IGNORE INTO item_templates (id, user_id, kind, name, blocks, item_type, is_builtin)
+    VALUES (?, NULL, 'blocks', ?, ?, 'document', 1)
+  `);
+  insertTemplate.run('tpl_blank', 'Blank', JSON.stringify([]));
+  insertTemplate.run('tpl_note', 'Note', JSON.stringify([{ type: 'text', content: '' }]));
+
+  // Update tpl_note from kind='system' to kind='blocks' if it was seeded as system
+  database.prepare(`UPDATE item_templates SET kind='blocks', blocks=?, item_type='document' WHERE id='tpl_note' AND kind='system'`)
+    .run(JSON.stringify([{ type: 'text', content: '' }]));
+
+  // Convert each note item → document item
+  const notes = database.prepare("SELECT si.id AS item_id, sn.content FROM space_items si JOIN space_notes sn ON sn.item_id = si.id WHERE si.type = 'note'").all() as { item_id: string; content: string }[];
+  const insertDoc = database.prepare("INSERT OR IGNORE INTO space_documents (item_id, template, blocks) VALUES (?, 'tpl_note', ?)");
+  const updateType = database.prepare("UPDATE space_items SET type = 'document' WHERE id = ?");
+  for (const note of notes) {
+    const blocks = note.content.trim()
+      ? [{ type: 'text', content: note.content }]
+      : [{ type: 'text', content: '' }];
+    insertDoc.run(note.item_id, JSON.stringify(blocks));
+    updateType.run(note.item_id);
+  }
+}
+
 function repairSessionEventsItemFk(database: Database.Database): void {
   const sql = tableSql(database, 'session_events');
   if (!sql || (sql.includes('REFERENCES space_items') && !sql.includes('_drop_plans_tmp'))) return;
@@ -434,6 +461,119 @@ function repairSessionEventsItemFk(database: Database.Database): void {
   );`);
   database.exec(`INSERT INTO session_events (${keepCols}) SELECT ${keepCols} FROM ${tmp};`);
   database.exec(`DROP TABLE ${tmp};`);
+  database.pragma('foreign_keys = ON');
+}
+
+function flattenItemTypesToTemplates(database: Database.Database): void {
+  database.pragma('foreign_keys = OFF');
+
+  // 1. Recreate space_items: drop CHECK on type, add page_blocks
+  const tmp = '_space_items_v18_tmp';
+  database.exec(`ALTER TABLE space_items RENAME TO ${tmp}`);
+  database.exec(`
+    CREATE TABLE space_items (
+      id TEXT PRIMARY KEY,
+      space_id TEXT NOT NULL REFERENCES spaces(id) ON DELETE CASCADE,
+      type TEXT NOT NULL,
+      name TEXT NOT NULL,
+      source_session_id TEXT REFERENCES sessions(id) ON DELETE SET NULL,
+      created_at INTEGER NOT NULL DEFAULT (unixepoch()),
+      page_blocks TEXT NOT NULL DEFAULT '[]'
+    )
+  `);
+
+  // Copy rows, pulling page_blocks from space_documents.blocks or space_repos.overview_blocks
+  const docExists = database.prepare("SELECT 1 FROM sqlite_master WHERE type='table' AND name='space_documents'").get();
+  const repoOverviewExists = (database.prepare("SELECT name FROM pragma_table_info('space_repos')").all() as { name: string }[]).some(c => c.name === 'overview_blocks');
+  if (docExists && repoOverviewExists) {
+    database.exec(`
+      INSERT INTO space_items (id, space_id, type, name, source_session_id, created_at, page_blocks)
+      SELECT si.id, si.space_id, si.type, si.name, si.source_session_id, si.created_at,
+        COALESCE(sd.blocks, sr.overview_blocks, '[]')
+      FROM ${tmp} si
+      LEFT JOIN space_documents sd ON sd.item_id = si.id
+      LEFT JOIN space_repos sr ON sr.item_id = si.id
+    `);
+  } else if (docExists) {
+    database.exec(`
+      INSERT INTO space_items (id, space_id, type, name, source_session_id, created_at, page_blocks)
+      SELECT si.id, si.space_id, si.type, si.name, si.source_session_id, si.created_at, COALESCE(sd.blocks, '[]')
+      FROM ${tmp} si LEFT JOIN space_documents sd ON sd.item_id = si.id
+    `);
+  } else {
+    database.exec(`INSERT INTO space_items (id, space_id, type, name, source_session_id, created_at) SELECT id, space_id, type, name, source_session_id, created_at FROM ${tmp}`);
+  }
+
+  // 2. Set type for document items to their template ID (from space_documents)
+  if (docExists) {
+    database.exec(`
+      UPDATE space_items
+      SET type = (SELECT template FROM space_documents WHERE item_id = space_items.id)
+      WHERE type = 'document' AND EXISTS (SELECT 1 FROM space_documents WHERE item_id = space_items.id)
+    `);
+    // Safety: any remaining 'document' rows with no template row become 'blank'
+    database.exec(`UPDATE space_items SET type = 'blank' WHERE type = 'document'`);
+  }
+
+  // 3. Remap tpl_ prefixed type values to clean names
+  const typeRemap: Record<string, string> = {
+    tpl_blank: 'blank', tpl_document: 'blank', tpl_note: 'blank',
+    tpl_spec: 'spec', tpl_kanban: 'kanban', tpl_report: 'report',
+  };
+  for (const [old, clean] of Object.entries(typeRemap)) {
+    database.prepare(`UPDATE space_items SET type = ? WHERE type = ?`).run(clean, old);
+  }
+
+  database.exec(`DROP TABLE ${tmp}`);
+
+  // 4. Drop space_documents
+  if (docExists) database.exec(`DROP TABLE space_documents`);
+
+  // 5. Recreate space_repos without overview_blocks
+  if (repoOverviewExists) {
+    const repoTmp = '_space_repos_v18_tmp';
+    database.exec(`ALTER TABLE space_repos RENAME TO ${repoTmp}`);
+    database.exec(`
+      CREATE TABLE space_repos (
+        item_id TEXT PRIMARY KEY REFERENCES space_items(id) ON DELETE CASCADE,
+        repo_path TEXT NOT NULL,
+        default_branch TEXT
+      )
+    `);
+    database.exec(`INSERT INTO space_repos SELECT item_id, repo_path, default_branch FROM ${repoTmp}`);
+    database.exec(`DROP TABLE ${repoTmp}`);
+  }
+
+  // 6. Recreate item_templates without item_type constraint
+  const tmplCols = (database.prepare("SELECT name FROM pragma_table_info('item_templates')").all() as { name: string }[]).map(c => c.name);
+  if (tmplCols.includes('item_type')) {
+    const tmplTmp = '_item_templates_v18_tmp';
+    database.exec(`ALTER TABLE item_templates RENAME TO ${tmplTmp}`);
+    database.exec(`
+      CREATE TABLE item_templates (
+        id TEXT PRIMARY KEY,
+        user_id TEXT,
+        kind TEXT NOT NULL,
+        name TEXT NOT NULL,
+        blocks TEXT,
+        is_builtin INTEGER NOT NULL DEFAULT 0,
+        created_at INTEGER NOT NULL DEFAULT (unixepoch())
+      )
+    `);
+    database.exec(`INSERT INTO item_templates (id, user_id, kind, name, blocks, is_builtin, created_at) SELECT id, user_id, kind, name, blocks, is_builtin, created_at FROM ${tmplTmp}`);
+    database.exec(`DROP TABLE ${tmplTmp}`);
+  }
+
+  // 7. Clean up redundant templates and rename IDs to drop tpl_ prefix
+  database.exec(`DELETE FROM item_templates WHERE id IN ('tpl_note', 'tpl_document')`);
+  const idRemap: Record<string, string> = {
+    tpl_blank: 'blank', tpl_spec: 'spec', tpl_kanban: 'kanban', tpl_report: 'report',
+    tpl_repo: 'repo', tpl_file: 'file',
+  };
+  for (const [old, clean] of Object.entries(idRemap)) {
+    database.prepare(`UPDATE item_templates SET id = ? WHERE id = ?`).run(clean, old);
+  }
+
   database.pragma('foreign_keys = ON');
 }
 
@@ -468,6 +608,8 @@ export const migrations: Migration[] = [
   { version: 14, name: 'drop-plan-system', noTransaction: true, up: dropPlanSystem },
   { version: 15, name: 'repair-session-events-item-fk', noTransaction: true, up: repairSessionEventsItemFk },
   { version: 16, name: 'repair-space-item-child-fks', noTransaction: true, up: repairSpaceItemChildFks },
+  { version: 17, name: 'collapse-notes-to-documents', up: collapseNotesToDocuments },
+  { version: 18, name: 'flatten-item-types-to-templates', noTransaction: true, up: flattenItemTypesToTemplates },
 ];
 
 function tableSql(database: Database.Database, name: string): string | undefined {
@@ -1883,42 +2025,6 @@ export function setProjectsRoot(userId: string, projectsRoot: string): void {
 }
 
 export type AgentUsageTool = 'claude_code' | 'codex' | 'lead_agent' | 'subagent'; // lead_agent/subagent kept for historical records
-
-export type AgentBudgets = { claude_code: number | null; codex: number | null };
-export type AgentBudgetPeriod = 'monthly' | 'daily';
-
-export function getAgentBudgets(userId: string, period: AgentBudgetPeriod = 'monthly'): AgentBudgets {
-  const row = getDb()
-    .prepare('SELECT claude_code_budget_usd, codex_budget_usd, claude_code_daily_budget_usd, codex_daily_budget_usd FROM user_settings WHERE user_id = ?')
-    .get(userId) as {
-      claude_code_budget_usd: number | null;
-      codex_budget_usd: number | null;
-      claude_code_daily_budget_usd: number | null;
-      codex_daily_budget_usd: number | null;
-    } | undefined;
-  if (period === 'daily') {
-    return {
-      claude_code: row?.claude_code_daily_budget_usd ?? null,
-      codex: row?.codex_daily_budget_usd ?? null,
-    };
-  }
-  return {
-    claude_code: row?.claude_code_budget_usd ?? null,
-    codex: row?.codex_budget_usd ?? null,
-  };
-}
-
-export function setAgentBudget(userId: string, tool: AgentUsageTool, budgetUsd: number | null, period: AgentBudgetPeriod = 'monthly'): void {
-  const column = period === 'daily'
-    ? (tool === 'claude_code' ? 'claude_code_daily_budget_usd' : 'codex_daily_budget_usd')
-    : (tool === 'claude_code' ? 'claude_code_budget_usd' : 'codex_budget_usd');
-  getDb()
-    .prepare(`
-      INSERT INTO user_settings (user_id, ${column}) VALUES (?, ?)
-      ON CONFLICT(user_id) DO UPDATE SET ${column} = excluded.${column}
-    `)
-    .run(userId, budgetUsd);
-}
 
 export type PermissionProfile = 'fast' | 'trusted' | 'strict';
 

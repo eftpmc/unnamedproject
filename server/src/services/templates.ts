@@ -8,7 +8,6 @@ export interface ItemTemplate {
   kind: 'system' | 'blocks';
   name: string;
   blocks: Block[] | null;
-  item_type: 'repo' | 'file' | 'note' | 'document';
   is_builtin: boolean;
   created_at: number;
 }
@@ -19,7 +18,6 @@ interface ItemTemplateRow {
   kind: 'system' | 'blocks';
   name: string;
   blocks: string | null;
-  item_type: 'repo' | 'file' | 'note' | 'document';
   is_builtin: number;
   created_at: number;
 }
@@ -51,14 +49,13 @@ export function createItemTemplate(userId: string, name: string, blocks: Block[]
     kind: 'blocks',
     name,
     blocks: JSON.stringify(blocks),
-    item_type: 'document',
     is_builtin: 0,
     created_at: Math.floor(Date.now() / 1000),
   };
   getDb().prepare(`
-    INSERT INTO item_templates (id, user_id, kind, name, blocks, item_type, is_builtin, created_at)
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-  `).run(row.id, row.user_id, row.kind, row.name, row.blocks, row.item_type, row.is_builtin, row.created_at);
+    INSERT INTO item_templates (id, user_id, kind, name, blocks, is_builtin, created_at)
+    VALUES (?, ?, ?, ?, ?, ?, ?)
+  `).run(row.id, row.user_id, row.kind, row.name, row.blocks, row.is_builtin, row.created_at);
   return hydrate(row);
 }
 

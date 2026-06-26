@@ -2,7 +2,7 @@ import fs from 'fs/promises';
 import fsSync from 'fs';
 import path from 'path';
 import { getSpaceForUser } from '../db/index.js';
-import { getItemById } from '../services/items.js';
+import { getItemById, type RepoItem } from '../services/items.js';
 import { requestApproval } from '../services/executor.js';
 import { ensureWorktree } from '../lib/worktree.js';
 import type { PermissionProfile } from '../services/permissions.js';
@@ -29,7 +29,7 @@ async function getWorkspacePath(spaceId: string, itemId: string, userId: string,
   const repoItem = getItemById(itemId);
   if (!repoItem || repoItem.space_id !== spaceId) throw new Error('Repo item not found in this Space');
   if (repoItem.type !== 'repo') throw new Error(`Item ${itemId} is not a repo`);
-  return (await ensureWorktree(repoItem, sessionId)).worktree_path;
+  return (await ensureWorktree(repoItem as RepoItem, sessionId)).worktree_path;
 }
 
 const FILE_LINE_CAP = 500;

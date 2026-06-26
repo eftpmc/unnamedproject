@@ -267,7 +267,9 @@ function CopyButton({ text }: { text: string }) {
 const NEAR_BOTTOM_THRESHOLD = 120;
 
 const TEMPLATE_LABELS: Record<string, string> = {
-  document: 'Doc', spec: 'Spec', kanban: 'Kanban', report: 'Report', repo: 'Repo', note: 'Note',
+  blank: 'Doc', spec: 'Spec', kanban: 'Kanban', report: 'Report', repo: 'Repo', file: 'File',
+  // legacy IDs from before v18
+  document: 'Doc', note: 'Note', tpl_blank: 'Doc', tpl_document: 'Doc', tpl_spec: 'Spec', tpl_kanban: 'Kanban', tpl_report: 'Report', tpl_note: 'Note',
 };
 
 export default function MessageList({ messages, executions, streamingIds, sessionId, onEditMessage, canEdit, events = [], failedMessageId, onRetryFailedMessage }: MessageListProps) {
@@ -394,7 +396,7 @@ export default function MessageList({ messages, executions, streamingIds, sessio
           )}
         </button>
       )}
-      <div role="log" aria-live="polite" aria-relevant="additions text" className="mx-auto flex w-full max-w-[46rem] flex-col gap-6 px-4 pb-6 pt-7 sm:px-6 sm:pb-8 sm:pt-8">
+      <div role="log" aria-live="polite" aria-relevant="additions text" className="mx-auto flex w-full max-w-[46rem] flex-col gap-6 px-4 pb-48 pt-7 sm:px-6 sm:pb-52 sm:pt-8">
         {renderItems.map(item => {
           if (item.type === 'execution-group') {
             const firstId = item.executions[0].executionId;

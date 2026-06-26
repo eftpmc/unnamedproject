@@ -1,5 +1,6 @@
 import { invokeCodex } from '../../tools/invoke_codex.js';
 import { createExecution, completeExecution } from '../executor.js';
+import { normalizePermissionProfile } from '../permissions.js';
 import type { ConversationProvider, InvokeParams } from '../conversation-provider.js';
 
 interface CodexConfig {
@@ -26,7 +27,7 @@ export class CodexProvider implements ConversationProvider {
           executionId,
           resumeSessionId: params.resumeSessionId,
           mcpServers: params.mcpServers,
-          permissionProfile: this.config.permissionProfile as 'default' | 'fast' | 'strict',
+          permissionProfile: normalizePermissionProfile(this.config.permissionProfile),
           signal: params.signal,
           onText: params.onText,
           onSessionId: params.onSessionId,

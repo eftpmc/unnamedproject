@@ -108,24 +108,21 @@ export type BlockContent =
 
 export type Block = BlockContent & { id?: string };
 
-export type SpaceItemType = 'repo' | 'file' | 'note' | 'document';
-
-interface SpaceItemBase {
+export interface SpaceItemBase {
   id: string;
   space_id: string;
-  type: SpaceItemType;
+  type: string;
   name: string;
   source_session_id: string | null;
-  source_plan_id: string | null;
-  source_step_id: string | null;
   created_at: number;
+  page_blocks: Block[];
 }
 
-export type SpaceItem =
-  | (SpaceItemBase & { type: 'repo'; repo_path: string; default_branch: string | null; overview_blocks: Block[] | null })
-  | (SpaceItemBase & { type: 'file'; file_path: string; size_bytes: number | null; mime_type: string | null })
-  | (SpaceItemBase & { type: 'note'; content: string })
-  | (SpaceItemBase & { type: 'document'; template_id: string; blocks: Block[] });
+export type RepoItem = SpaceItemBase & { type: 'repo'; repo_path: string; default_branch: string | null };
+export type FileItem = SpaceItemBase & { type: 'file'; file_path: string; size_bytes: number | null; mime_type: string | null };
+
+// repo and file have extra structured fields; all other types are base + page_blocks
+export type SpaceItem = RepoItem | FileItem | SpaceItemBase;
 
 export interface ItemTemplate {
   id: string;
@@ -133,7 +130,6 @@ export interface ItemTemplate {
   kind: 'system' | 'blocks';
   name: string;
   blocks: Block[] | null;
-  item_type: SpaceItemType;
   is_builtin: boolean;
   created_at: number;
 }
@@ -144,17 +140,10 @@ export interface FileEntry {
   path: string;
 }
 
-export interface AgentBudgets {
-  claude_code: number | null;
-  codex: number | null;
-}
-
 export type PermissionProfile = 'fast' | 'trusted' | 'strict';
 
 export interface UserSettings {
   projects_root: string;
-  agent_budgets: AgentBudgets;
-  agent_daily_budgets: AgentBudgets;
   permission_profile: PermissionProfile;
 }
 

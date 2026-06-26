@@ -3,8 +3,6 @@ import path from 'path';
 import { getDataDir, getDb } from '../db/index.js';
 import { newId } from '../lib/ids.js';
 
-export type SpaceItemType = 'repo' | 'file' | 'note' | 'document';
-
 export type BlockContent =
   | { type: 'text'; content: string }
   | { type: 'heading'; level: 1 | 2 | 3; text: string }
@@ -20,27 +18,37 @@ export type BlockContent =
   | { type: 'progress'; label?: string; value: number; max?: number };
 
 // `id` is optional because legacy blocks predate it, but any block the agent
-// wants to target later with a single-block patch (see updateDocumentBlock)
-// needs a stable one — full-array replacement is the only way to touch a
-// block with no id.
+// wants to target later with a single-block patch needs a stable one.
 export type Block = BlockContent & { id?: string };
 
 interface SpaceItemRow {
   id: string;
   space_id: string;
-  type: SpaceItemType;
+  type: string;
   name: string;
   source_session_id: string | null;
   created_at: number;
+  page_blocks: string; // raw JSON
 }
 
-export interface SpaceItemBase extends SpaceItemRow {}
+export interface SpaceItemBase {
+  id: string;
+  space_id: string;
+  type: string;
+  name: string;
+  source_session_id: string | null;
+  created_at: number;
+  page_blocks: Block[];
+}
 
-export type SpaceItem =
-  | (SpaceItemBase & { type: 'repo'; repo_path: string; default_branch: string | null; overview_blocks: Block[] | null })
-  | (SpaceItemBase & { type: 'file'; file_path: string; size_bytes: number | null; mime_type: string | null })
-  | (SpaceItemBase & { type: 'note'; content: string })
-  | (SpaceItemBase & { type: 'document'; template_id: string; blocks: Block[] });
+export type RepoItem = SpaceItemBase & { type: 'repo'; repo_path: string; default_branch: string | null };
+export type FileItem = SpaceItemBase & { type: 'file'; file_path: string; size_bytes: number | null; mime_type: string | null };
+
+// repo and file have extra structured fields; all other types are base + page_blocks
+export type SpaceItem = RepoItem | FileItem | SpaceItemBase;
+
+export function isRepoItem(item: SpaceItem): item is RepoItem { return item.type === 'repo'; }
+export function isFileItem(item: SpaceItem): item is FileItem { return item.type === 'file'; }
 
 export interface CreateItemInput {
   space_id: string;
@@ -48,35 +56,27 @@ export interface CreateItemInput {
   source_session_id?: string | null;
 }
 
-function insertBaseRow(input: CreateItemInput, type: SpaceItemType): SpaceItemRow {
-  const row: SpaceItemRow = {
+function insertBaseRow(input: CreateItemInput, type: string, pageBlocks: Block[] = []): SpaceItemRow & { page_blocks: string } {
+  const row = {
     id: newId(),
     space_id: input.space_id,
     type,
     name: input.name,
     source_session_id: input.source_session_id ?? null,
     created_at: Math.floor(Date.now() / 1000),
+    page_blocks: JSON.stringify(pageBlocks),
   };
   getDb().prepare(`
-    INSERT INTO space_items (
-      id, space_id, type, name,
-      source_session_id, created_at
-    ) VALUES (?, ?, ?, ?, ?, ?)
-  `).run(
-    row.id,
-    row.space_id,
-    row.type,
-    row.name,
-    row.source_session_id,
-    row.created_at,
-  );
+    INSERT INTO space_items (id, space_id, type, name, source_session_id, created_at, page_blocks)
+    VALUES (?, ?, ?, ?, ?, ?, ?)
+  `).run(row.id, row.space_id, row.type, row.name, row.source_session_id, row.created_at, row.page_blocks);
   return row;
 }
 
 export function createRepoItem(
   input: CreateItemInput & { repo_path: string; default_branch?: string },
-): SpaceItem {
-  return getDb().transaction((): SpaceItem => {
+): RepoItem {
+  return getDb().transaction((): RepoItem => {
     const base = insertBaseRow(input, 'repo');
     getDb().prepare(
       'INSERT INTO space_repos (item_id, repo_path, default_branch) VALUES (?, ?, ?)',
@@ -84,17 +84,17 @@ export function createRepoItem(
     return {
       ...base,
       type: 'repo',
+      page_blocks: [],
       repo_path: input.repo_path,
       default_branch: input.default_branch ?? null,
-      overview_blocks: null,
     };
   })();
 }
 
 export function createFileItem(
   input: CreateItemInput & { file_path: string; size_bytes?: number; mime_type?: string },
-): SpaceItem {
-  return getDb().transaction((): SpaceItem => {
+): FileItem {
+  return getDb().transaction((): FileItem => {
     const base = insertBaseRow(input, 'file');
     getDb().prepare(
       'INSERT INTO space_files (item_id, file_path, size_bytes, mime_type) VALUES (?, ?, ?, ?)',
@@ -102,6 +102,7 @@ export function createFileItem(
     return {
       ...base,
       type: 'file',
+      page_blocks: [],
       file_path: input.file_path,
       size_bytes: input.size_bytes ?? null,
       mime_type: input.mime_type ?? null,
@@ -109,61 +110,35 @@ export function createFileItem(
   })();
 }
 
-export function createNoteItem(input: CreateItemInput & { content: string }): SpaceItem {
-  return getDb().transaction((): SpaceItem => {
-    const base = insertBaseRow(input, 'note');
-    getDb().prepare('INSERT INTO space_notes (item_id, content) VALUES (?, ?)').run(base.id, input.content);
-    return { ...base, type: 'note', content: input.content };
-  })();
+// Creates any template-based item (blank, spec, kanban, report, custom, …).
+// `type` is the template ID / item type name stored on the item.
+export function createTemplateItem(
+  input: CreateItemInput & { type: string; page_blocks: Block[] },
+): SpaceItemBase {
+  const base = insertBaseRow(input, input.type, input.page_blocks);
+  return { ...base, page_blocks: input.page_blocks };
 }
 
-export function createDocumentItem(
-  input: CreateItemInput & { template_id: string; blocks: Block[] },
-): SpaceItem {
-  return getDb().transaction((): SpaceItem => {
-    const base = insertBaseRow(input, 'document');
-    getDb().prepare(
-      'INSERT INTO space_documents (item_id, template, blocks) VALUES (?, ?, ?)',
-    ).run(base.id, input.template_id, JSON.stringify(input.blocks));
-    return { ...base, type: 'document', template_id: input.template_id, blocks: input.blocks };
-  })();
+export function updateItemPageBlocks(itemId: string, blocks: Block[]): void {
+  getDb().prepare('UPDATE space_items SET page_blocks = ? WHERE id = ?').run(JSON.stringify(blocks), itemId);
 }
 
-export function updateDocumentBlocks(itemId: string, blocks: Block[]): void {
-  getDb().prepare('UPDATE space_documents SET blocks = ? WHERE item_id = ?').run(JSON.stringify(blocks), itemId);
-}
-
-// Replaces a single block in place, found by its `id`. Returns false if the
-// item isn't a document or no block with that id exists — callers should
-// fall back to updateDocumentBlocks (full replace) for blocks that predate
-// having an id.
-export function updateDocumentBlock(itemId: string, blockId: string, block: Block): boolean {
+export function updateItemPageBlock(itemId: string, blockId: string, block: Block): boolean {
   const item = getItemById(itemId);
-  if (!item || item.type !== 'document') return false;
-  const index = item.blocks.findIndex(b => b.id === blockId);
+  if (!item) return false;
+  const index = item.page_blocks.findIndex(b => b.id === blockId);
   if (index === -1) return false;
-  const updated = [...item.blocks];
+  const updated = [...item.page_blocks];
   updated[index] = { ...block, id: blockId };
-  updateDocumentBlocks(itemId, updated);
+  updateItemPageBlocks(itemId, updated);
   return true;
-}
-
-export function updateNoteContent(itemId: string, content: string): void {
-  getDb().prepare('UPDATE space_notes SET content = ? WHERE item_id = ?').run(content, itemId);
-}
-
-export function updateRepoOverviewBlocks(itemId: string, blocks: Block[] | null): void {
-  getDb().prepare('UPDATE space_repos SET overview_blocks = ? WHERE item_id = ?').run(
-    blocks ? JSON.stringify(blocks) : null,
-    itemId,
-  );
 }
 
 export function updateTaskDone(itemId: string, taskId: string, done: boolean): boolean {
   const item = getItemById(itemId);
-  if (!item || item.type !== 'document') return false;
+  if (!item) return false;
   let found = false;
-  const updated = item.blocks.map(block => {
+  const updated = item.page_blocks.map(block => {
     if (block.type !== 'task-list') return block;
     const tasks = block.tasks.map(task => {
       if (task.id !== taskId) return task;
@@ -173,49 +148,33 @@ export function updateTaskDone(itemId: string, taskId: string, done: boolean): b
     return { ...block, tasks };
   });
   if (!found) return false;
-  updateDocumentBlocks(itemId, updated);
+  updateItemPageBlocks(itemId, updated);
   return true;
 }
 
 function hydrate(row: SpaceItemRow): SpaceItem {
   const db = getDb();
+  const page_blocks: Block[] = row.page_blocks ? JSON.parse(row.page_blocks) as Block[] : [];
+  const base: SpaceItemBase = { ...row, page_blocks };
+
   if (row.type === 'repo') {
     const subtype = db.prepare(
-      'SELECT repo_path, default_branch, overview_blocks FROM space_repos WHERE item_id = ?',
-    ).get(row.id) as { repo_path: string; default_branch: string | null; overview_blocks: string | null } | undefined;
+      'SELECT repo_path, default_branch FROM space_repos WHERE item_id = ?',
+    ).get(row.id) as { repo_path: string; default_branch: string | null } | undefined;
     if (!subtype) throw new Error(`Repo item ${row.id} is missing its subtype row`);
-    return {
-      ...row,
-      type: 'repo',
-      repo_path: subtype.repo_path,
-      default_branch: subtype.default_branch,
-      overview_blocks: subtype.overview_blocks ? JSON.parse(subtype.overview_blocks) as Block[] : null,
-    };
+    return { ...base, type: 'repo', repo_path: subtype.repo_path, default_branch: subtype.default_branch };
   }
-  if (row.type === 'document') {
-    const subtype = db.prepare(
-      'SELECT template, blocks FROM space_documents WHERE item_id = ?',
-    ).get(row.id) as { template: string; blocks: string } | undefined;
-    if (!subtype) throw new Error(`Document item ${row.id} is missing its subtype row`);
-    return {
-      ...row,
-      type: 'document',
-      template_id: subtype.template,
-      blocks: JSON.parse(subtype.blocks) as Block[],
-    };
-  }
+
   if (row.type === 'file') {
     const subtype = db.prepare(
       'SELECT file_path, size_bytes, mime_type FROM space_files WHERE item_id = ?',
     ).get(row.id) as { file_path: string; size_bytes: number | null; mime_type: string | null } | undefined;
     if (!subtype) throw new Error(`File item ${row.id} is missing its subtype row`);
-    return { ...row, type: 'file', ...subtype };
+    return { ...base, type: 'file', ...subtype };
   }
-  const subtype = db.prepare(
-    'SELECT content FROM space_notes WHERE item_id = ?',
-  ).get(row.id) as { content: string } | undefined;
-  if (!subtype) throw new Error(`Note item ${row.id} is missing its subtype row`);
-  return { ...row, type: 'note', content: subtype.content };
+
+  // All template-based types (blank, spec, kanban, custom, …) — just base + page_blocks
+  return base;
 }
 
 export function getItemsForSpace(spaceId: string): SpaceItem[] {
@@ -256,7 +215,7 @@ export function mimeForPath(filePath: string): string {
 export async function registerFileItem(input: CreateItemInput & {
   source_path: string;
   mime_type?: string;
-}): Promise<SpaceItem & { type: 'file' }> {
+}): Promise<FileItem> {
   const fileName = path.basename(input.source_path);
   const destinationDir = path.join(getDataDir(), 'spaces', input.space_id, 'files');
   await fs.mkdir(destinationDir, { recursive: true });
@@ -268,19 +227,15 @@ export async function registerFileItem(input: CreateItemInput & {
     file_path: destination,
     size_bytes: stat.size,
     mime_type: input.mime_type ?? mimeForPath(fileName),
-  }) as SpaceItem & { type: 'file' };
+  });
 }
 
-export function resolveFileItemPath(item: SpaceItem & { type: 'file' }): string {
+export function resolveFileItemPath(item: FileItem): string {
   if (path.isAbsolute(item.file_path)) return item.file_path;
   return path.resolve(getDataDir(), 'projects', item.space_id, item.file_path);
 }
 
 export async function readItemContent(item: SpaceItem): Promise<string | Buffer> {
-  if (item.type === 'note') return item.content;
-  if (item.type === 'file') return fs.readFile(resolveFileItemPath(item));
-  if (item.type === 'document') {
-    throw new Error("readItemContent is not supported for document items");
-  }
-  throw new Error("Operation not supported for item type 'repo'");
+  if (item.type === 'file') return fs.readFile(resolveFileItemPath(item as FileItem));
+  throw new Error(`readItemContent is not supported for item type '${item.type}'`);
 }

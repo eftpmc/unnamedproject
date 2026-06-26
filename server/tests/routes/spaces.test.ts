@@ -43,10 +43,10 @@ describe('spaces routes', () => {
       .post(`/spaces/${spaceA.body.id}/items`)
       .set('Authorization', authorization)
       .send({ type: 'repo', name: 'repo-a', repo_path: '/repos/a' });
-    const note = await request(app)
+    const doc = await request(app)
       .post(`/spaces/${spaceA.body.id}/items`)
       .set('Authorization', authorization)
-      .send({ type: 'note', name: 'note-a', content: 'hello' });
+      .send({ type: 'blank', name: 'doc-a' });
 
     const crossSpace = await request(app)
       .get(`/spaces/${spaceB.body.id}/items/${repo.body.id}/tree`)
@@ -54,38 +54,37 @@ describe('spaces routes', () => {
     expect(crossSpace.status).toBe(404);
 
     const unsupported = await request(app)
-      .get(`/spaces/${spaceA.body.id}/items/${note.body.id}/tree`)
+      .get(`/spaces/${spaceA.body.id}/items/${doc.body.id}/tree`)
       .set('Authorization', authorization);
     expect(unsupported.status).toBe(400);
   });
 
-  it('serves note item content through the item endpoint', async () => {
-    const space = await request(app).post('/spaces').set('Authorization', authorization).send({ name: 'Notes Space' });
-    const note = await request(app)
+  it('rejects content update for non-note items', async () => {
+    const space = await request(app).post('/spaces').set('Authorization', authorization).send({ name: 'No Content' });
+    const doc = await request(app)
       .post(`/spaces/${space.body.id}/items`)
       .set('Authorization', authorization)
-      .send({ type: 'note', name: 'Summary', content: '# Summary' });
-
-    const content = await request(app)
-      .get(`/spaces/${space.body.id}/items/${note.body.id}/content`)
-      .set('Authorization', authorization);
-    expect(content.status).toBe(200);
-    expect(content.text).toBe('# Summary');
-    expect(content.headers['content-type']).toContain('text/markdown');
-  });
-
-  it('updates note name and content', async () => {
-    const space = await request(app).post('/spaces').set('Authorization', authorization).send({ name: 'Editable Notes' });
-    const note = await request(app)
-      .post(`/spaces/${space.body.id}/items`)
-      .set('Authorization', authorization)
-      .send({ type: 'note', name: 'Draft', content: 'old' });
+      .send({ type: 'blank', name: 'Doc' });
 
     const updated = await request(app)
-      .patch(`/spaces/${space.body.id}/items/${note.body.id}`)
+      .patch(`/spaces/${space.body.id}/items/${doc.body.id}`)
       .set('Authorization', authorization)
-      .send({ name: 'Final', content: 'new' });
+      .send({ content: 'should fail' });
+    expect(updated.status).toBe(400);
+  });
+
+  it('updates item name', async () => {
+    const space = await request(app).post('/spaces').set('Authorization', authorization).send({ name: 'Rename Test' });
+    const doc = await request(app)
+      .post(`/spaces/${space.body.id}/items`)
+      .set('Authorization', authorization)
+      .send({ type: 'blank', name: 'Draft' });
+
+    const updated = await request(app)
+      .patch(`/spaces/${space.body.id}/items/${doc.body.id}`)
+      .set('Authorization', authorization)
+      .send({ name: 'Final' });
     expect(updated.status).toBe(200);
-    expect(updated.body).toMatchObject({ name: 'Final', content: 'new', type: 'note' });
+    expect(updated.body).toMatchObject({ name: 'Final', type: 'blank' });
   });
 });

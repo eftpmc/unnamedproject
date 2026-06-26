@@ -460,6 +460,9 @@ export default function ChatView({ chatId }: ChatViewProps) {
           return { ...prev, events: [...prev.events, ev.event] };
         });
         queryClient.invalidateQueries({ queryKey: ['chat-events', chatId] });
+        if (ev.event.type === 'item_created' || ev.event.type === 'item_updated') {
+          if (ev.event.space_id) queryClient.invalidateQueries({ queryKey: ['space-items', ev.event.space_id] });
+        }
       }
     }
 
@@ -607,7 +610,6 @@ export default function ChatView({ chatId }: ChatViewProps) {
 
       {messages.length > 0 && <div className="pointer-events-none absolute inset-x-0 bottom-0 z-10">
         <div className="pointer-events-auto relative flex flex-col">
-          <div className="pointer-events-none absolute bottom-full left-1/2 h-20 w-full max-w-3xl -translate-x-1/2 bg-gradient-to-t from-background via-background/90 to-transparent sm:h-24" />
 
           {agentError && (() => {
             const lastUserContent = [...messages].reverse().find(m => m.role === 'user')?.content ?? null;

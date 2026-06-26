@@ -25,7 +25,7 @@ function getSessionIdForExecution(executionId: string): string | null {
 
 export function createExecution(
   userId: string,
-  messageId: string,
+  messageId: string | null,
   spaceId: string | null,
   tool: string
 ): string {
@@ -33,7 +33,7 @@ export function createExecution(
   getDb()
     .prepare('INSERT INTO executions (id, message_id, space_id, tool, status) VALUES (?,?,?,?,?)')
     .run(id, messageId, spaceId, tool, 'running');
-  broadcast(userId, { type: 'execution_update', sessionId: getSessionIdForMessage(messageId), executionId: id, status: 'running', tool, messageId });
+  broadcast(userId, { type: 'execution_update', sessionId: messageId ? getSessionIdForMessage(messageId) : null, executionId: id, status: 'running', tool, messageId });
   return id;
 }
 

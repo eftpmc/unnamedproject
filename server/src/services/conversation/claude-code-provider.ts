@@ -29,6 +29,7 @@ export class ClaudeCodeProvider implements ConversationProvider {
           resumeSessionId: params.resumeSessionId,
           mcpServers: params.mcpServers as Record<string, McpServerConfig>,
           permissionProfile: normalizePermissionProfile(this.config.permissionProfile),
+          effort: params.effort,
           signal: params.signal,
           onText: params.onText,
           onSessionId: params.onSessionId,

@@ -41,7 +41,7 @@ export function registerKnowledgeHandlers(): void {
       if (!item || item.space_id !== args.space_id || item.type !== 'repo') {
         return `Error: repo item ${args.item_id} not found in space ${args.space_id}`;
       }
-      await buildGraph(item.repo_path, item.id, null);
+      await buildGraph((item as import('../../services/items.js').RepoItem).repo_path, item.id, null);
       return 'Knowledge graph rebuilt successfully.';
     },
   });

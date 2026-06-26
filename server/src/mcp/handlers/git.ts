@@ -26,7 +26,7 @@ export function registerGitHandlers(): void {
         return `Error: repo item ${args.item_id} not found in space ${args.space_id}`;
       }
       const executionId = createExecution(userId, newId(), args.space_id as string, 'git_op');
-      const worktree = await ensureWorktree(item, newId());
+      const worktree = await ensureWorktree(item as import('../../services/items.js').RepoItem, newId());
       const result = await runGitOp(
         {
           op: args.op as 'log' | 'diff' | 'status' | 'commit' | 'push',

@@ -1,5 +1,5 @@
 import { getSpaceForUser } from '../db/index.js';
-import { getItemById } from '../services/items.js';
+import { getItemById, type RepoItem } from '../services/items.js';
 import { hasGraph, buildGraph, queryGraph } from '../services/graphify.js';
 
 interface ProjectQueryInput {
@@ -15,7 +15,7 @@ export async function runProjectQuery(input: ProjectQueryInput, userId: string, 
   if (!repoItem || repoItem.space_id !== space.id) return 'Repo item not found in this Space.';
   if (repoItem.type !== 'repo') return 'Selected item is not a repo.';
 
-  const repoPath = repoItem.repo_path;
+  const repoPath = (repoItem as RepoItem).repo_path;
   if (!await hasGraph(repoPath)) {
     await buildGraph(repoPath, input.item_id, apiKey);
   }

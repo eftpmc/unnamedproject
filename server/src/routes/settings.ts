@@ -1,5 +1,5 @@
 import { Router } from 'express';
-import { getProjectsRoot, setProjectsRoot, getAgentBudgets, setAgentBudget, getPermissionProfile, setPermissionProfile, getExpoPushToken, setExpoPushToken, getApnsDeviceToken, setApnsDeviceToken } from '../db/index.js';
+import { getProjectsRoot, setProjectsRoot, getPermissionProfile, setPermissionProfile, getExpoPushToken, setExpoPushToken, getApnsDeviceToken, setApnsDeviceToken } from '../db/index.js';
 import { requireAuth, type AuthedRequest } from '../middleware/auth.js';
 import { isPermissionProfile } from '../services/permissions.js';
 
@@ -10,8 +10,6 @@ router.get('/', (req, res) => {
   const { userId } = req as AuthedRequest;
   res.json({
     projects_root: getProjectsRoot(userId),
-    agent_budgets: getAgentBudgets(userId),
-    agent_daily_budgets: getAgentBudgets(userId, 'daily'),
     permission_profile: getPermissionProfile(userId),
   });
 });
@@ -46,27 +44,6 @@ router.put('/', (req, res) => {
   if (apnsDeviceToken !== undefined) setApnsDeviceToken(userId, apnsDeviceToken ?? null);
   res.json({
     projects_root: getProjectsRoot(userId),
-    agent_budgets: getAgentBudgets(userId),
-    agent_daily_budgets: getAgentBudgets(userId, 'daily'),
-    permission_profile: getPermissionProfile(userId),
-  });
-});
-
-router.put('/agent-budgets', (req, res) => {
-  const { userId } = req as AuthedRequest;
-  const { claude_code, codex, claude_code_daily, codex_daily } = req.body as {
-    claude_code?: number | null;
-    codex?: number | null;
-    claude_code_daily?: number | null;
-    codex_daily?: number | null;
-  };
-  if (claude_code !== undefined) setAgentBudget(userId, 'claude_code', claude_code);
-  if (codex !== undefined) setAgentBudget(userId, 'codex', codex);
-  if (claude_code_daily !== undefined) setAgentBudget(userId, 'claude_code', claude_code_daily, 'daily');
-  if (codex_daily !== undefined) setAgentBudget(userId, 'codex', codex_daily, 'daily');
-  res.json({
-    agent_budgets: getAgentBudgets(userId),
-    agent_daily_budgets: getAgentBudgets(userId, 'daily'),
     permission_profile: getPermissionProfile(userId),
   });
 });

@@ -1,7 +1,7 @@
 import fs from 'fs';
 import path from 'path';
-import { getDb, getAgentBudgets, getMonthlyUsage, getDailyUsage, getDataDir, getPermissionProfile, type DbSpace } from '../db/index.js';
-import { getItemsForSpace, type SpaceItem } from './items.js';
+import { getDb, getDataDir, getPermissionProfile, type DbSpace } from '../db/index.js';
+import { getItemsForSpace, type SpaceItem, type RepoItem } from './items.js';
 import { recallRelevant } from './memory.js';
 import { formatEntry } from '../tools/memory_tools.js';
 import type { Intent } from './intent.js';
@@ -127,7 +127,7 @@ For parallel workstreams: dispatch multiple invoke_claude_code calls as needed, 
 
 function projectContextBlock(space: DbSpace): string {
   const repoItems = getItemsForSpace(space.id)
-    .filter((item): item is SpaceItem & { type: 'repo' } => item.type === 'repo');
+    .filter((item): item is RepoItem => item.type === 'repo');
   const repoPath = repoItems.length === 1 ? repoItems[0].repo_path : null;
   const detected = repoItems.map(item => detectCapabilities(item.id, item.repo_path));
   const caps = {
@@ -198,29 +198,6 @@ function projectsListBlock(userId: string): string {
   return `Available Spaces:\n${spaces.map(p => `- ${p.name} (id: ${p.id})${p.description ? ': ' + p.description : ''}`).join('\n')}`;
 }
 
-function formatUsageLine(label: string, spent: number, budget: number | null, dailySpent: number, dailyBudget: number | null): string {
-  const monthly = budget === null
-    ? `$${spent.toFixed(2)} spent (no monthly budget)`
-    : `$${spent.toFixed(2)} / $${budget.toFixed(2)} used this month (${budget > 0 ? Math.round((spent / budget) * 100) : 100}%)`;
-  const daily = dailyBudget === null
-    ? `$${dailySpent.toFixed(2)} spent today (no daily budget)`
-    : `$${dailySpent.toFixed(2)} / $${dailyBudget.toFixed(2)} used today (${dailyBudget > 0 ? Math.round((dailySpent / dailyBudget) * 100) : 100}%)`;
-  return `- ${label}: ${monthly}; ${daily}`;
-}
-
-function usageBlock(userId: string): string {
-  const budgets = getAgentBudgets(userId);
-  const dailyBudgets = getAgentBudgets(userId, 'daily');
-  const claudeSpent = getMonthlyUsage(userId, 'claude_code');
-  const codexSpent = getMonthlyUsage(userId, 'codex');
-  const claudeSpentToday = getDailyUsage(userId, 'claude_code');
-  const codexSpentToday = getDailyUsage(userId, 'codex');
-  return `## Agent usage
-${formatUsageLine('Claude Code (invoke_claude_code)', claudeSpent, budgets.claude_code, claudeSpentToday, dailyBudgets.claude_code)}
-${formatUsageLine('Codex (invoke_codex)', codexSpent, budgets.codex, codexSpentToday, dailyBudgets.codex)}
-When a budget is set and nearly exhausted, route routine work to the other agent and reserve the constrained one for tasks where it's clearly the better fit. Once a budget is fully used, that agent's tool will return an error instead of running until the budget resets (daily budgets reset at UTC midnight, monthly budgets reset on the 1st) or until the budget is raised in Settings.`;
-}
-
 function sessionSummaryBlock(sessionId: string): string {
   const row = getDb()
     .prepare('SELECT summary FROM sessions WHERE id = ?')
@@ -252,8 +229,6 @@ export function buildContext(userId: string, sessionId: string, intent: Intent):
   if (domain) blocks.push(domain);
 
   if (pinnedProject) blocks.push(projectContextBlock(pinnedProject));
-
-  if (intent.domain === 'code' || intent.domain === 'multi') blocks.push(usageBlock(userId));
 
   blocks.push(memoryBlock(userId, intent, pinnedProjectId));
   blocks.push(projectsListBlock(userId));

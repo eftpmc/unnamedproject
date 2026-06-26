@@ -18,7 +18,7 @@ export function getDelegateEnv(
   if (profile === 'trusted') return process.env;
 
   const env: NodeJS.ProcessEnv = {};
-  for (const key of ['PATH', 'HOME', 'TMPDIR', 'TEMP', 'TMP', 'SHELL']) {
+  for (const key of ['PATH', 'HOME', 'USER', 'LOGNAME', 'TMPDIR', 'TEMP', 'TMP', 'SHELL']) {
     if (process.env[key]) env[key] = process.env[key];
   }
   if (process.env.NODE_ENV) env.NODE_ENV = process.env.NODE_ENV;

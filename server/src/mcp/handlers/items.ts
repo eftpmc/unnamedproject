@@ -1,5 +1,5 @@
 import { registerTool } from '../registry.js';
-import { getItemsForSpace, createNoteItem, type Block } from '../../services/items.js';
+import { getItemsForSpace, type Block } from '../../services/items.js';
 import {
   runCreateItem,
   runUpdateItem,
@@ -38,88 +38,59 @@ export function registerItemHandlers(): void {
 
   registerTool({
     name: 'create_item',
-    description: 'Create a new item in a space (repo, file, note, or document)',
+    description: 'Create a new item in a space. Use list_item_templates to see available types (e.g. blank, spec, kanban, report, repo).',
     inputSchema: {
       type: 'object',
       properties: {
         space_id: { type: 'string' },
         name: { type: 'string' },
-        type: { type: 'string', enum: ['repo', 'file', 'note', 'document'] },
-        template_id: { type: 'string' },
-        repo_path: { type: 'string' },
+        type: { type: 'string', description: 'Item type — a template ID (blank, spec, kanban, report) or repo' },
+        repo_path: { type: 'string', description: 'Required when type is repo' },
         default_branch: { type: 'string' },
-        content: { type: 'string' },
       },
       required: ['space_id', 'name', 'type'],
     },
-    handler: async (args, userId) =>
+    handler: async (args, userId, sessionId) =>
       runCreateItem(
         {
           space_id: args.space_id as string,
           name: args.name as string,
           type: args.type as string,
-          template_id: args.template_id as string | undefined,
           repo_path: args.repo_path as string | undefined,
           default_branch: args.default_branch as string | undefined,
-          content: args.content as string | undefined,
-          source_session_id: null,
+          source_session_id: sessionId,
         },
         userId,
+        sessionId,
       ),
   });
 
   registerTool({
     name: 'update_item',
-    description: "Update an item's content or blocks",
+    description: "Update an item's page blocks",
     inputSchema: {
       type: 'object',
       properties: {
         space_id: { type: 'string' },
         item_id: { type: 'string' },
-        content: { type: 'string' },
-        blocks: { type: 'array' },
-        block_id: { type: 'string' },
-        block: { type: 'object' },
-        overview_blocks: { type: 'array' },
+        page_blocks: { type: 'array', description: 'Full replacement of page blocks' },
+        block_id: { type: 'string', description: 'Patch a single block by its id' },
+        block: { type: 'object', description: 'Replacement block when block_id is set' },
       },
       required: ['space_id', 'item_id'],
     },
-    handler: async (args, userId) =>
+    handler: async (args, userId, sessionId) =>
       runUpdateItem(
         {
           space_id: args.space_id as string,
           item_id: args.item_id as string,
-          content: args.content as string | undefined,
-          blocks: args.blocks as Block[] | undefined,
+          page_blocks: args.page_blocks as Block[] | undefined,
           block_id: args.block_id as string | undefined,
           block: args.block as Block | undefined,
-          overview_blocks: args.overview_blocks as Block[] | null | undefined,
         },
         userId,
+        sessionId,
       ),
-  });
-
-  registerTool({
-    name: 'create_note',
-    description: 'Create a note item in a space',
-    inputSchema: {
-      type: 'object',
-      properties: {
-        space_id: { type: 'string' },
-        name: { type: 'string' },
-        content: { type: 'string' },
-      },
-      required: ['space_id', 'name', 'content'],
-    },
-    handler: async (args, _userId) => {
-      const item = createNoteItem({
-        space_id: args.space_id as string,
-        name: args.name as string,
-        content: args.content as string,
-        source_session_id: null,
-      });
-      return JSON.stringify(item);
-    },
   });
 
   registerTool({

@@ -9,6 +9,7 @@ export interface InvokeParams {
   systemPromptSuffix?: string;
   mcpServers: Record<string, { url?: string; headers?: Record<string, string>; command?: string; args?: string[]; env?: Record<string, string> }>;
   model?: string;
+  effort?: string;
   signal?: AbortSignal;
   onText: (delta: string) => void;
   onSessionId: (id: string) => void;
@@ -20,23 +21,71 @@ export interface ConversationProvider {
   resolveModel(): Promise<string>;
 }
 
-export async function getConversationProvider(userId: string): Promise<ConversationProvider> {
-  const conn = getDb()
-    .prepare("SELECT id, type FROM connections WHERE user_id = ? AND type IN ('claude_code','codex') ORDER BY created_at LIMIT 1")
-    .get(userId) as { id: string; type: string } | undefined;
+function isRateLimitError(err: unknown): boolean {
+  const msg = (err instanceof Error ? err.message : String(err)).toLowerCase();
+  return (
+    msg.includes('rate limit') ||
+    msg.includes('usage limit') ||
+    msg.includes('quota') ||
+    msg.includes('limit exceeded') ||
+    msg.includes('too many requests') ||
+    msg.includes('429')
+  );
+}
 
-  if (conn) {
+class FallbackProvider implements ConversationProvider {
+  readonly type: 'claude_code' | 'codex';
+  private providers: ConversationProvider[];
+
+  constructor(providers: ConversationProvider[]) {
+    this.providers = providers;
+    this.type = providers[0].type;
+  }
+
+  async invoke(params: InvokeParams): Promise<{ costUsd?: number }> {
+    let lastError: Error | undefined;
+    for (const provider of this.providers) {
+      try {
+        return await provider.invoke(params);
+      } catch (err) {
+        if (isRateLimitError(err)) {
+          lastError = err instanceof Error ? err : new Error(String(err));
+          continue;
+        }
+        throw err;
+      }
+    }
+    throw lastError!;
+  }
+
+  async resolveModel(): Promise<string> {
+    return this.providers[0].resolveModel();
+  }
+}
+
+export async function getConversationProvider(userId: string): Promise<ConversationProvider> {
+  const conns = getDb()
+    .prepare("SELECT id, type FROM connections WHERE user_id = ? AND type IN ('claude_code','codex') ORDER BY created_at")
+    .all(userId) as { id: string; type: string }[];
+
+  const providers: ConversationProvider[] = [];
+  for (const conn of conns) {
     const cfg = getDecryptedConfig(conn.id, userId);
     const model = cfg.model as string | undefined;
     const permissionProfile = (cfg.permissionProfile as string) ?? 'default';
 
     if (conn.type === 'codex') {
       const { CodexProvider } = await import('./conversation/codex-provider.js');
-      return new CodexProvider({ model: model ?? 'codex-mini-latest', permissionProfile });
+      providers.push(new CodexProvider({ model: model ?? 'codex-mini-latest', permissionProfile }));
+    } else {
+      providers.push(new ClaudeCodeProvider({ model: model ?? 'claude-sonnet-4-6', permissionProfile }));
     }
-    return new ClaudeCodeProvider({ model: model ?? 'claude-sonnet-4-6', permissionProfile });
   }
 
-  // Default: local Claude Code CLI
-  return new ClaudeCodeProvider({ model: 'claude-sonnet-4-6', permissionProfile: 'default' });
+  if (providers.length === 0) {
+    return new ClaudeCodeProvider({ model: 'claude-sonnet-4-6', permissionProfile: 'default' });
+  }
+
+  if (providers.length === 1) return providers[0];
+  return new FallbackProvider(providers);
 }

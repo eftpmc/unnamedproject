@@ -29,6 +29,7 @@ interface ToolContext {
   resumeSessionId?: string | null;
   mcpServers?: Record<string, McpServerConfig>;
   permissionProfile?: PermissionProfile;
+  effort?: string;
   signal?: AbortSignal;
   onText?: (delta: string) => void;      // for streaming chat
   onSessionId?: (id: string) => void;
@@ -82,9 +83,11 @@ export async function invokeClaudeCode(input: ClaudeCodeInput, ctx: ToolContext)
   args.push(input.prompt);
 
   return new Promise((resolve, reject) => {
+    const spawnEnv = getDelegateEnv('claude_code', profile);
+    if (ctx.effort) spawnEnv.CLAUDE_EFFORT = ctx.effort;
     const proc = spawn('claude', args, {
       cwd: ctx.repoPath ?? process.cwd(),
-      env: getDelegateEnv('claude_code', profile),
+      env: spawnEnv,
     });
 
     registerProcess(ctx.executionId, proc);

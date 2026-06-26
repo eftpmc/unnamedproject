@@ -2,7 +2,7 @@ export interface McpToolDef {
   name: string;
   description: string;
   inputSchema: Record<string, unknown>;
-  handler: (args: Record<string, unknown>, userId: string) => Promise<string>;
+  handler: (args: Record<string, unknown>, userId: string, sessionId: string | null) => Promise<string>;
 }
 
 const tools = new Map<string, McpToolDef>();

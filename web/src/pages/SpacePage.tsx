@@ -1,8 +1,6 @@
 import { useEffect, useState, type ReactNode } from 'react';
 import { Link, useLocation, useNavigate, useParams } from 'react-router-dom';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import ReactMarkdown from 'react-markdown';
-import remarkGfm from 'remark-gfm';
 import {
   ArrowLeft,
   Check,
@@ -14,7 +12,6 @@ import {
   GitBranch,
   MessageSquare,
   MoreHorizontal,
-  NotebookPen,
   Plus,
   Trash2,
 } from 'lucide-react';
@@ -31,7 +28,6 @@ import {
   listItemTemplates,
   updateChatConfig,
   updateSpace,
-  updateSpaceItem,
 } from '../lib/api.js';
 import { usePageTitle } from '../lib/usePageTitle.js';
 import { timeAgo, cn } from '../lib/utils.js';
@@ -50,7 +46,7 @@ import { ContentColumn, EmptyPanel, PageBody, PageHeader, PageLoading, PageShell
 import { TabStrip } from '@/components/ui/tab-strip';
 import FileBrowser from '../components/FileBrowser.js';
 import BlockRenderer from '../components/BlockRenderer.js';
-import type { Block, Connection, Session, Space, SpaceItem, SpaceItemType } from '../types.js';
+import type { Block, Connection, RepoItem, FileItem, Session, Space, SpaceItem } from '../types.js';
 
 type Section = 'overview' | 'chats' | 'items' | 'settings';
 
@@ -142,7 +138,7 @@ function Overview({ space, items, chats }: { space: Space; items: SpaceItem[]; c
                 onClick={() => navigate(entry.href)}
                 className="flex w-full items-center gap-3 rounded-lg border border-border-soft bg-card px-4 py-3.5 text-left transition-[transform,box-shadow,border-color] hover:-translate-y-px hover:border-border hover:shadow-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/30"
               >
-                <ItemIcon type={entry.type === 'Chat' ? entry.type : entry.type as SpaceItemType} />
+                <ItemIcon type={entry.type} />
                 <span className="min-w-0 flex-1">
                   <span className="block truncate text-sm font-medium text-foreground">{entry.title}</span>
                   <span className="block text-xs capitalize text-faint-fg">{entry.type} · {timeAgo(entry.time)}</span>
@@ -186,26 +182,28 @@ function ChatsSection({ chats, onNewChat }: { chats: Session[]; onNewChat: () =>
   );
 }
 
-const ITEM_TYPES: SpaceItemType[] = ['repo', 'file', 'note', 'document'];
-
 function ItemsSection({ space, items }: { space: Space; items: SpaceItem[] }) {
   const queryClient = useQueryClient();
   const navigate = useNavigate();
-  const [filter, setFilter] = useState<'all' | SpaceItemType>('all');
+  const [filter, setFilter] = useState<string>('all');
   const [dialogOpen, setDialogOpen] = useState(false);
-  const [type, setType] = useState<SpaceItemType>('repo');
+  const [type, setType] = useState<string>('blank');
   const [name, setName] = useState('');
   const [value, setValue] = useState('');
-  const [templateId, setTemplateId] = useState('tpl_document');
   const [pendingDelete, setPendingDelete] = useState<SpaceItem | null>(null);
   const visible = filter === 'all' ? items : items.filter(item => item.type === filter);
-  const requiresValue = type === 'repo' || type === 'file' || type === 'note';
+  const requiresValue = type === 'repo' || type === 'file';
 
   const { data: templates = [] } = useQuery({
     queryKey: ['item-templates'],
     queryFn: listItemTemplates,
   });
   const blockTemplates = templates.filter(t => t.kind === 'blocks');
+  const dialogTypes = [
+    ...blockTemplates.map(t => ({ id: t.id, label: t.name })),
+    { id: 'repo', label: 'Repo' },
+    { id: 'file', label: 'File' },
+  ];
 
   const createMutation = useMutation({
     mutationFn: () => createSpaceItem(space.id, {
@@ -213,15 +211,12 @@ function ItemsSection({ space, items }: { space: Space; items: SpaceItem[] }) {
       name: name.trim(),
       ...(type === 'repo' ? { repo_path: value.trim() } : {}),
       ...(type === 'file' ? { file_path: value.trim() } : {}),
-      ...(type === 'note' ? { content: value } : {}),
-      ...(type === 'document' ? { template_id: templateId } : {}),
     }),
     onSuccess: item => {
       queryClient.invalidateQueries({ queryKey: ['space-items', space.id] });
       setDialogOpen(false);
       setName('');
       setValue('');
-      setTemplateId('tpl_document');
       navigate(`/spaces/${space.id}/items/${item.id}`);
     },
   });
@@ -237,14 +232,14 @@ function ItemsSection({ space, items }: { space: Space; items: SpaceItem[] }) {
     <PageBody>
       <ContentColumn className="max-w-4xl">
         <div className="mb-5 flex flex-wrap items-center justify-between gap-3">
-          <Select value={filter} onValueChange={value => setFilter(value as 'all' | SpaceItemType)}>
+          <Select value={filter} onValueChange={setFilter}>
             <SelectTrigger size="sm" className="h-8 w-32 text-xs capitalize">
               <SelectValue />
             </SelectTrigger>
             <SelectContent>
               <SelectItem value="all">All</SelectItem>
-              {ITEM_TYPES.map(candidate => (
-                <SelectItem key={candidate} value={candidate} className="capitalize">{candidate}</SelectItem>
+              {[...new Set(items.map(i => i.type))].map(t => (
+                <SelectItem key={t} value={t} className="capitalize">{t}</SelectItem>
               ))}
             </SelectContent>
           </Select>
@@ -264,10 +259,9 @@ function ItemsSection({ space, items }: { space: Space; items: SpaceItem[] }) {
                   <span className="min-w-0 flex-1">
                     <span className="block truncate text-sm font-medium">{item.name}</span>
                     <span className="mt-0.5 block truncate text-xs text-faint-fg">
-                      {item.type === 'repo' ? item.repo_path
-                        : item.type === 'file' ? item.mime_type || item.file_path
-                        : item.type === 'document' ? (blockTemplates.find(t => t.id === item.template_id)?.name ?? item.template_id)
-                        : 'Note'}
+                      {item.type === 'repo' ? (item as RepoItem).repo_path
+                        : item.type === 'file' ? ((item as FileItem).mime_type || (item as FileItem).file_path)
+                        : (templates.find(t => t.id === item.type)?.name ?? item.type)}
                     </span>
                   </span>
                   <span className="shrink-0 text-xs text-faint-fg">{timeAgo(item.created_at)}</span>
@@ -295,39 +289,20 @@ function ItemsSection({ space, items }: { space: Space; items: SpaceItem[] }) {
             <DialogTitle>Add Item</DialogTitle>
             <DialogDescription>Items are the durable contents of this Space.</DialogDescription>
           </DialogHeader>
-          <div className="flex gap-1 rounded-lg bg-muted p-1">
-            {ITEM_TYPES.map(candidate => (
+          <div className="flex flex-wrap gap-1 rounded-lg bg-muted p-1">
+            {dialogTypes.map(candidate => (
               <button
-                key={candidate}
+                key={candidate.id}
                 type="button"
-                onClick={() => { setType(candidate); setValue(''); }}
-                className={cn('flex-1 rounded-md px-2 py-1.5 text-xs font-medium capitalize', type === candidate ? 'bg-card shadow-xs' : 'text-muted-foreground')}
+                onClick={() => { setType(candidate.id); setValue(''); }}
+                className={cn('rounded-md px-2 py-1.5 text-xs font-medium capitalize', type === candidate.id ? 'bg-card shadow-xs' : 'text-muted-foreground')}
               >
-                {candidate}
+                {candidate.label}
               </button>
             ))}
           </div>
           <Input placeholder="Item name" value={name} onChange={event => setName(event.target.value)} />
-          {type === 'note' ? (
-            <textarea
-              value={value}
-              onChange={event => setValue(event.target.value)}
-              rows={8}
-              placeholder="Write a note…"
-              className="w-full resize-y rounded-lg border border-input bg-transparent px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-ring"
-            />
-          ) : type === 'document' ? (
-            <Select value={templateId} onValueChange={setTemplateId}>
-              <SelectTrigger className="w-full">
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                {blockTemplates.map(candidate => (
-                  <SelectItem key={candidate.id} value={candidate.id}>{candidate.name}</SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          ) : (
+          {requiresValue && (
             <Input
               value={value}
               onChange={event => setValue(event.target.value)}
@@ -489,10 +464,9 @@ function ItemDetail({ space, item }: { space: Space; item: SpaceItem }) {
           </DropdownMenu>
         )}
       />
-      {item.type === 'repo' && <RepoDetail space={space} item={item} />}
-      {item.type === 'note' && <NoteDetail space={space} item={item} />}
-      {item.type === 'file' && <FileDetail space={space} item={item} />}
-      {item.type === 'document' && <DocumentDetail space={space} item={item} />}
+      {item.type === 'repo' && <RepoDetail space={space} item={item as RepoItem} />}
+      {item.type === 'file' && <FileDetail space={space} item={item as FileItem} />}
+      {item.type !== 'repo' && item.type !== 'file' && <TemplateItemDetail space={space} item={item} />}
       {confirmDelete && (
         <ConfirmDialog
           title={`Delete ${item.name}?`}
@@ -506,12 +480,12 @@ function ItemDetail({ space, item }: { space: Space; item: SpaceItem }) {
   );
 }
 
-function RepoDetail({ space, item }: { space: Space; item: SpaceItem & { type: 'repo' } }) {
+function RepoDetail({ space, item }: { space: Space; item: RepoItem }) {
   return (
     <PageBody className="p-4 sm:p-5">
-      {item.overview_blocks && item.overview_blocks.length > 0 && (
+      {item.page_blocks.length > 0 && (
         <div className="mb-6 flex flex-col gap-4">
-          {item.overview_blocks.map((block, i) => (
+          {item.page_blocks.map((block, i) => (
             <BlockRenderer key={i} block={block} spaceId={space.id} itemId={item.id} />
           ))}
         </div>
@@ -530,27 +504,27 @@ function isBlockEmpty(block: Block): boolean {
   return block.type === 'text' && !block.content.trim();
 }
 
-function DocumentDetail({ space, item }: { space: Space; item: SpaceItem & { type: 'document' } }) {
+function TemplateItemDetail({ space, item }: { space: Space; item: SpaceItem }) {
   const { data: templates = [] } = useQuery({
     queryKey: ['item-templates'],
     queryFn: listItemTemplates,
   });
-  const templateName = templates.find(t => t.id === item.template_id)?.name ?? item.template_id;
+  const typeName = templates.find(t => t.id === item.type)?.name ?? item.type;
   return (
     <PageBody>
       <ContentColumn className="max-w-4xl py-6">
         <div className="mb-4 flex items-center gap-2">
-          <span className="rounded-md bg-muted px-2 py-0.5 text-[11px] font-medium text-muted-foreground">
-            {templateName}
+          <span className="rounded-md bg-muted px-2 py-0.5 text-[11px] font-medium text-muted-foreground capitalize">
+            {typeName}
           </span>
         </div>
-        {item.blocks.every(isBlockEmpty) ? (
+        {item.page_blocks.every(isBlockEmpty) ? (
           <div className="rounded-lg border border-dashed border-border bg-background/50 px-4 py-8 text-center text-sm text-muted-foreground">
-            This document has no content yet. Ask the agent to fill it in.
+            This item has no content yet. Ask the agent to fill it in.
           </div>
         ) : (
           <div className="flex flex-col gap-4">
-            {item.blocks.map((block, i) => (
+            {item.page_blocks.map((block, i) => (
               <BlockRenderer key={i} block={block} spaceId={space.id} itemId={item.id} />
             ))}
           </div>
@@ -560,43 +534,7 @@ function DocumentDetail({ space, item }: { space: Space; item: SpaceItem & { typ
   );
 }
 
-function NoteDetail({ space, item }: { space: Space; item: SpaceItem & { type: 'note' } }) {
-  const queryClient = useQueryClient();
-  const [editing, setEditing] = useState(false);
-  const [content, setContent] = useState(item.content);
-  useEffect(() => setContent(item.content), [item.content]);
-  const updateMutation = useMutation({
-    mutationFn: () => updateSpaceItem(space.id, item.id, { content }),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['space-items', space.id] });
-      setEditing(false);
-    },
-  });
-
-  return (
-    <PageBody>
-      <div className="mx-auto max-w-4xl">
-        <div className="mb-4 flex justify-end">
-          {editing ? (
-            <div className="flex gap-2">
-              <Button variant="ghost" size="sm" onClick={() => { setContent(item.content); setEditing(false); }}>Cancel</Button>
-              <Button size="sm" disabled={updateMutation.isPending} onClick={() => updateMutation.mutate()}>{updateMutation.isPending ? 'Saving…' : 'Save note'}</Button>
-            </div>
-          ) : <Button size="sm" variant="outline" className="gap-1.5" onClick={() => setEditing(true)}><NotebookPen size={14} />Edit</Button>}
-        </div>
-        <Surface className="min-h-96 p-5 sm:p-8">
-          {editing ? (
-            <textarea value={content} onChange={event => setContent(event.target.value)} className="min-h-[32rem] w-full resize-none bg-transparent font-mono text-[13px] leading-relaxed outline-none" autoFocus />
-          ) : (
-            <Markdown>{item.content}</Markdown>
-          )}
-        </Surface>
-      </div>
-    </PageBody>
-  );
-}
-
-function FileDetail({ space, item }: { space: Space; item: SpaceItem & { type: 'file' } }) {
+function FileDetail({ space, item }: { space: Space; item: FileItem }) {
   const [objectUrl, setObjectUrl] = useState<string | null>(null);
   const [text, setText] = useState<string | null>(null);
   const { data: blob, isLoading, isError } = useQuery({
@@ -638,23 +576,13 @@ function FileDetail({ space, item }: { space: Space; item: SpaceItem & { type: '
   );
 }
 
-function ItemIcon({ type }: { type: SpaceItemType | 'Chat' }) {
+function ItemIcon({ type }: { type: string }) {
   const icon: Record<string, ReactNode> = {
     repo: <FolderGit2 size={15} />,
     file: <FileText size={15} />,
-    note: <NotebookPen size={15} />,
-    document: <FileType size={15} />,
     Chat: <MessageSquare size={15} />,
   };
-  return <span className="grid size-8 shrink-0 place-items-center rounded-lg bg-muted text-muted-foreground">{icon[type]}</span>;
-}
-
-function Markdown({ children }: { children: string }) {
-  return (
-    <div className="text-[14px] leading-relaxed text-fg-soft [&_h1]:mb-4 [&_h1]:text-xl [&_h1]:font-semibold [&_h1]:text-foreground [&_h2]:mb-3 [&_h2]:mt-6 [&_h2]:text-lg [&_h2]:font-semibold [&_h2]:text-foreground [&_p]:mb-4 [&_ul]:mb-4 [&_ul]:ml-5 [&_ul]:list-disc [&_ol]:mb-4 [&_ol]:ml-5 [&_ol]:list-decimal [&_code]:rounded [&_code]:bg-muted [&_code]:px-1.5 [&_code]:py-0.5 [&_code]:font-mono [&_pre]:my-4 [&_pre]:overflow-auto [&_pre]:rounded-lg [&_pre]:bg-muted [&_pre]:p-4">
-      <ReactMarkdown remarkPlugins={[remarkGfm]}>{children}</ReactMarkdown>
-    </div>
-  );
+  return <span className="grid size-8 shrink-0 place-items-center rounded-lg bg-muted text-muted-foreground">{icon[type] ?? <FileType size={15} />}</span>;
 }
 
 function formatBytes(bytes: number) {

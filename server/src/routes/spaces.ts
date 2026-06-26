@@ -6,20 +6,20 @@ import { getDataDir, getDb } from '../db/index.js';
 import { newId } from '../lib/ids.js';
 import { requireAuthHeaderOrQuery, type AuthedRequest } from '../middleware/auth.js';
 import {
-  createDocumentItem,
   createFileItem,
-  createNoteItem,
   createRepoItem,
+  createTemplateItem,
   deleteItem,
   getItemById,
   getItemsForSpace,
   readItemContent,
-  updateDocumentBlocks,
-  updateDocumentBlock,
-  updateRepoOverviewBlocks,
+  updateItemPageBlocks,
+  updateItemPageBlock,
   updateTaskDone,
   type Block,
   type SpaceItem,
+  type RepoItem,
+  type FileItem,
 } from '../services/items.js';
 import { listItemTemplates, getItemTemplate, createItemTemplate, updateItemTemplate } from '../services/templates.js';
 import { validateBlock, validateBlocks } from '../lib/blocks.js';
@@ -56,7 +56,7 @@ function requireSpace(req: Request, res: Response): { id: string; name: string }
 function requireRepoItem(
   req: Request,
   res: Response,
-): (SpaceItem & { type: 'repo' }) | undefined {
+): RepoItem | undefined {
   if (!requireSpace(req, res)) return undefined;
   const item = getItemById(req.params.itemId);
   if (!item || item.space_id !== req.params.spaceId) {
@@ -67,7 +67,7 @@ function requireRepoItem(
     res.status(400).json({ error: `Operation not supported for item type '${item.type}'` });
     return undefined;
   }
-  return item;
+  return item as RepoItem;
 }
 
 function resolveInItem(base: string, relativePath: string): string {
@@ -202,25 +202,11 @@ router.patch('/item-templates/:templateId', (req, res) => {
 router.post('/:spaceId/items', (req, res) => {
   if (!requireSpace(req, res)) return;
   const { type, name } = req.body as { type?: string; name?: string };
-  if (!name?.trim() || !['repo', 'file', 'note', 'document'].includes(type ?? '')) {
-    res.status(400).json({ error: 'valid type and name required' });
+  if (!name?.trim() || !type?.trim()) {
+    res.status(400).json({ error: 'type and name required' });
     return;
   }
-  if (type === 'document') {
-    const templateId = (req.body.template_id as string | undefined) ?? 'tpl_document';
-    const template = getItemTemplate(templateId);
-    if (!template || template.kind !== 'blocks') {
-      res.status(404).json({ error: `Unknown template '${templateId}'` });
-      return;
-    }
-    res.status(201).json(createDocumentItem({
-      space_id: req.params.spaceId,
-      name: name.trim(),
-      template_id: templateId,
-      blocks: template.blocks ?? [],
-    }));
-    return;
-  }
+
   if (type === 'repo') {
     if (!req.body.repo_path) {
       res.status(400).json({ error: 'repo_path required' });
@@ -234,6 +220,7 @@ router.post('/:spaceId/items', (req, res) => {
     }));
     return;
   }
+
   if (type === 'file') {
     if (!req.body.file_path) {
       res.status(400).json({ error: 'file_path required' });
@@ -248,10 +235,18 @@ router.post('/:spaceId/items', (req, res) => {
     }));
     return;
   }
-  res.status(201).json(createNoteItem({
+
+  // All other types are template-based
+  const template = getItemTemplate(type);
+  if (!template || template.kind !== 'blocks') {
+    res.status(404).json({ error: `Unknown item type '${type}'` });
+    return;
+  }
+  res.status(201).json(createTemplateItem({
     space_id: req.params.spaceId,
     name: name.trim(),
-    content: req.body.content ?? '',
+    type,
+    page_blocks: template.blocks ?? [],
   }));
 });
 
@@ -283,11 +278,10 @@ router.patch('/:spaceId/items/:itemId', (req, res) => {
     res.status(404).json({ error: 'Item not found in this space' });
     return;
   }
-  const { name, content, blocks, overview_blocks, block_id, block } = req.body as {
+  const { name, content, page_blocks, block_id, block } = req.body as {
     name?: string;
     content?: string;
-    blocks?: unknown[];
-    overview_blocks?: unknown[] | null;
+    page_blocks?: unknown[];
     block_id?: string;
     block?: unknown;
   };
@@ -299,56 +293,31 @@ router.patch('/:spaceId/items/:itemId', (req, res) => {
     getDb().prepare('UPDATE space_items SET name = ? WHERE id = ?').run(name.trim(), item.id);
   }
   if (content !== undefined) {
-    if (item.type !== 'note') {
-      res.status(400).json({ error: `Content editing is not supported for item type '${item.type}'` });
-      return;
-    }
-    getDb().prepare('UPDATE space_notes SET content = ? WHERE item_id = ?').run(content, item.id);
+    res.status(400).json({ error: `Content editing is not supported` });
+    return;
   }
-  if (blocks !== undefined) {
-    if (item.type !== 'document') {
-      res.status(400).json({ error: `blocks only supported for document items` });
+  if (page_blocks !== undefined) {
+    if (!Array.isArray(page_blocks)) {
+      res.status(400).json({ error: 'page_blocks must be an array' });
       return;
     }
-    if (!Array.isArray(blocks)) {
-      res.status(400).json({ error: 'blocks must be an array' });
-      return;
-    }
-    const blocksError = validateBlocks(blocks);
+    const blocksError = validateBlocks(page_blocks);
     if (blocksError) {
       res.status(400).json({ error: blocksError });
       return;
     }
-    updateDocumentBlocks(item.id, blocks as Block[]);
+    updateItemPageBlocks(item.id, page_blocks as Block[]);
   }
   if (block_id !== undefined) {
-    if (item.type !== 'document') {
-      res.status(400).json({ error: `block_id only supported for document items` });
-      return;
-    }
     const blockError = validateBlock(block, 'block');
     if (blockError) {
       res.status(400).json({ error: blockError });
       return;
     }
-    if (!updateDocumentBlock(item.id, block_id, block as Block)) {
-      res.status(404).json({ error: `No block with id '${block_id}' on this item — it may predate having an id, in which case use blocks (full replace) instead` });
+    if (!updateItemPageBlock(item.id, block_id, block as Block)) {
+      res.status(404).json({ error: `No block with id '${block_id}' on this item — it may predate having an id, use page_blocks (full replace) instead` });
       return;
     }
-  }
-  if (overview_blocks !== undefined) {
-    if (item.type !== 'repo') {
-      res.status(400).json({ error: `overview_blocks only supported for repo items` });
-      return;
-    }
-    if (overview_blocks !== null) {
-      const overviewError = validateBlocks(overview_blocks);
-      if (overviewError) {
-        res.status(400).json({ error: overviewError });
-        return;
-      }
-    }
-    updateRepoOverviewBlocks(item.id, overview_blocks as Block[] | null);
   }
   res.json(getItemById(item.id));
 });
@@ -360,8 +329,8 @@ router.patch('/:spaceId/items/:itemId/tasks/:taskId', (req, res) => {
     res.status(404).json({ error: 'Item not found in this space' });
     return;
   }
-  if (item.type !== 'document') {
-    res.status(400).json({ error: 'Task updates only supported on document items' });
+  if (item.type === 'repo' || item.type === 'file') {
+    res.status(400).json({ error: 'Task updates only supported on template items' });
     return;
   }
   const { done } = req.body as { done?: boolean };
@@ -394,11 +363,7 @@ router.get('/:spaceId/items/:itemId/content', async (req, res) => {
   }
   try {
     const content = await readItemContent(item);
-    if (item.type === 'note') {
-      res.type('text/markdown').send(content);
-      return;
-    }
-    res.type(item.mime_type ?? 'application/octet-stream').send(content);
+    res.type(item.type === 'file' ? ((item as FileItem).mime_type ?? 'application/octet-stream') : 'application/octet-stream').send(content);
   } catch {
     res.status(404).json({ error: 'Item content not found' });
   }

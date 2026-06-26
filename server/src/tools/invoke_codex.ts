@@ -68,7 +68,7 @@ function mcpServerConfigOverrides(servers: Record<string, McpServerConfig>): str
     if (cfg.url) {
       // HTTP transport
       overrides.push(`-c`, `mcp_servers.${name}.url=${tomlString(cfg.url)}`);
-      overrides.push(`-c`, `mcp_servers.${name}.type="streamable_http"`);
+      overrides.push(`-c`, `mcp_servers.${name}.type="http"`);
       if (cfg.headers && Object.keys(cfg.headers).length > 0) {
         overrides.push(`-c`, `mcp_servers.${name}.headers=${tomlInlineTable(cfg.headers)}`);
       }
@@ -122,6 +122,7 @@ export async function invokeCodex(input: CodexInput, ctx: ToolContext): Promise<
     let sessionId: string | null = null;
     let sessionIdFired = false;
     let resultText = '';
+    let turnFailedMessage: string | null = null;
     let costUsd = 0;
     let stderrText = '';
     let timedOut = false;
@@ -164,12 +165,19 @@ export async function invokeCodex(input: CodexInput, ctx: ToolContext): Promise<
           const usage = event.usage as { input_tokens?: number; output_tokens?: number } | undefined;
           if (usage) costUsd += estimateCodexCost(input.model, usage.input_tokens ?? 0, usage.output_tokens ?? 0);
         }
+        if (event.type === 'turn.failed') {
+          const err = event.error as { message?: string } | undefined;
+          turnFailedMessage = err?.message ?? (event.message as string | undefined) ?? 'Codex turn failed';
+        }
       }
     });
 
     proc.stderr.on('data', (chunk: Buffer) => {
-      stderrText += chunk.toString();
-      appendOutput(ctx.executionId, ctx.userId, chunk.toString());
+      const text = chunk.toString();
+      // Filter rmcp transport noise — non-fatal MCP connection warnings
+      const filtered = text.split('\n').filter(l => !l.includes('rmcp::transport')).join('\n');
+      if (filtered.trim()) stderrText += filtered;
+      appendOutput(ctx.executionId, ctx.userId, text);
     });
 
     proc.on('error', err => {
@@ -185,7 +193,8 @@ export async function invokeCodex(input: CodexInput, ctx: ToolContext): Promise<
         reject(new Error(`codex timed out after ${DELEGATE_TIMEOUT_MS / 1000}s and was killed`));
         return;
       }
-      if (code === 0) resolve({ result: resultText.trim() || 'Done.', sessionId, costUsd });
+      if (code === 0 || resultText) resolve({ result: resultText.trim() || 'Done.', sessionId, costUsd });
+      else if (turnFailedMessage) reject(new Error(turnFailedMessage));
       else reject(new Error(`codex exited with code ${code}${stderrText.trim() ? `: ${stderrText.trim()}` : ''}`));
     });
   });

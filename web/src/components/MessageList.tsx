@@ -5,10 +5,7 @@ import rehypeHighlight from 'rehype-highlight';
 import 'highlight.js/styles/github-dark.css';
 import { ArrowDown, ArrowRight, Check, ChevronDown, ChevronUp, Copy, FileStack, FileText, GitMerge, Image, ListChecks, Pencil, Plug, Sparkles, Target } from 'lucide-react';
 import { Link } from 'react-router-dom';
-import { useQuery, useQueryClient } from '@tanstack/react-query';
 import ExecutionCard from './ExecutionCard.js';
-import { getSpaceItem, updateSpaceItem } from '../lib/api.js';
-import type { Block } from '../types.js';
 import { StatusPill } from '@/components/ui/status-pill';
 import { getToken } from '../lib/auth.js';
 import { cn } from '../lib/utils.js';
@@ -239,65 +236,16 @@ function renderExecutionCard(exec: InlineExecution) {
 }
 
 function ItemCreatedCard({ spaceId, itemId, label, title, isUpdate }: { spaceId: string; itemId: string; label: string; title: string; isUpdate: boolean }) {
-  const qc = useQueryClient();
-  const { data: item } = useQuery({
-    queryKey: ['space-item', spaceId, itemId],
-    queryFn: () => getSpaceItem(spaceId, itemId),
-    staleTime: 30_000,
-  });
-
-  const inputBlocks = (item?.page_blocks ?? []).filter(b => b.type === 'input') as (Block & { type: 'input'; label: string; value: string; placeholder?: string; input_type?: string; options?: string[] })[];
-  const [localValues, setLocalValues] = useState<Record<string, string>>({});
-
-  async function saveValue(block: typeof inputBlocks[0], val: string) {
-    if (!block.id) return;
-    const updated = await updateSpaceItem(spaceId, itemId, {
-      page_blocks: (item?.page_blocks ?? []).map(b => b.id === block.id ? { ...b, value: val } : b) as Block[],
-    });
-    qc.setQueryData(['space-item', spaceId, itemId], updated);
-  }
-
   return (
-    <div className="flex max-w-[94%] flex-col gap-2 sm:max-w-[86%]">
-      <Link
-        to={`/spaces/${spaceId}/items/${itemId}`}
-        className="flex items-center gap-2.5 self-start rounded-xl border border-border-soft bg-card px-3 py-2 text-left text-xs transition-colors hover:border-border hover:bg-muted/30"
-      >
-        <span className="rounded-md bg-muted px-1.5 py-0.5 text-[10px] font-medium text-muted-foreground">{label}</span>
-        <span className="font-medium text-foreground">{title}</span>
-        <span className="text-faint-fg">{isUpdate ? 'updated' : 'created'}</span>
-        <ArrowRight size={11} className="text-faint-fg" />
-      </Link>
-      {inputBlocks.length > 0 && (
-        <div className="rounded-xl border border-border-soft bg-card p-3 flex flex-col gap-2">
-          {inputBlocks.map(block => {
-            const val = localValues[block.id ?? block.label] ?? block.value;
-            const common = {
-              value: val,
-              onChange: (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>) =>
-                setLocalValues(prev => ({ ...prev, [block.id ?? block.label]: e.target.value })),
-              onBlur: () => saveValue(block, val),
-              placeholder: block.placeholder ?? '',
-              className: 'flex-1 min-w-0 rounded-md border border-border-soft bg-background px-2 py-1 text-xs text-foreground outline-none focus:border-border focus:ring-1 focus:ring-ring',
-            };
-            return (
-              <div key={block.id ?? block.label} className="flex items-center gap-2.5">
-                <span className="text-[11px] font-medium text-muted-foreground w-24 shrink-0 truncate">{block.label}</span>
-                {block.input_type === 'multiline' ? (
-                  <textarea rows={2} {...common} className={common.className + ' resize-none'} />
-                ) : block.input_type === 'select' && block.options ? (
-                  <select {...common} className={common.className}>
-                    {block.options.map(o => <option key={o} value={o}>{o}</option>)}
-                  </select>
-                ) : (
-                  <input type={block.input_type === 'number' ? 'number' : 'text'} {...common} />
-                )}
-              </div>
-            );
-          })}
-        </div>
-      )}
-    </div>
+    <Link
+      to={`/spaces/${spaceId}/items/${itemId}`}
+      className="flex items-center gap-2.5 self-start rounded-xl border border-border-soft bg-card px-3 py-2 text-left text-xs transition-colors hover:border-border hover:bg-muted/30"
+    >
+      <span className="rounded-md bg-muted px-1.5 py-0.5 text-[10px] font-medium text-muted-foreground">{label}</span>
+      <span className="font-medium text-foreground">{title}</span>
+      <span className="text-faint-fg">{isUpdate ? 'updated' : 'created'}</span>
+      <ArrowRight size={11} className="text-faint-fg" />
+    </Link>
   );
 }
 

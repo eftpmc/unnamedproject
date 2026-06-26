@@ -513,9 +513,19 @@ function ItemDetail({ space, item }: { space: Space; item: SpaceItem }) {
         className="border-0 pb-0"
         contentClassName="max-w-4xl"
         breadcrumb={(
-          <Button variant="ghost" size="sm" className="h-7 gap-1.5 px-1.5 text-xs text-muted-foreground hover:text-foreground" onClick={() => navigate(`/spaces/${space.id}/items`)}>
-            <ArrowLeft size={13} />Back
-          </Button>
+          <div className="flex items-center gap-1">
+            <Button variant="ghost" size="sm" className="h-7 gap-1.5 px-1.5 text-xs text-muted-foreground hover:text-foreground" onClick={() => navigate(`/spaces/${space.id}/items`)}>
+              <ArrowLeft size={13} />Items
+            </Button>
+            {item.source_session_id && (
+              <>
+                <span className="text-muted-foreground/40">·</span>
+                <Button variant="ghost" size="sm" className="h-7 gap-1.5 px-1.5 text-xs text-muted-foreground hover:text-foreground" onClick={() => navigate(`/c/${item.source_session_id}`)}>
+                  <MessageSquare size={12} />Chat
+                </Button>
+              </>
+            )}
+          </div>
         )}
         actions={(
           <DropdownMenu>

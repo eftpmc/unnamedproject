@@ -2775,12 +2775,6 @@ export function setApnsDeviceToken(userId: string, token: string | null): void {
   `).run(userId, token);
 }
 
-export function getSessionProviderInfo(sessionId: string): { provider_type: string | null; provider_session_id: string | null } | undefined {
-  return getDb()
-    .prepare('SELECT provider_type, provider_session_id FROM sessions WHERE id = ?')
-    .get(sessionId) as { provider_type: string | null; provider_session_id: string | null } | undefined;
-}
-
 export function setSessionProviderInfo(sessionId: string, providerType: string, providerSessionId: string): void {
   getDb()
     .prepare('UPDATE sessions SET provider_type = ?, provider_session_id = ? WHERE id = ?')

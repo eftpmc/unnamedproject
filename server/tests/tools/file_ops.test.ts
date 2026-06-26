@@ -38,7 +38,7 @@ vi.mock('fs/promises', () => ({
   },
 }));
 
-import { readFile, listDir, writeFile } from '../../src/tools/file_ops.js';
+import { readFile, listDir, writeFile, searchFiles } from '../../src/tools/file_ops.js';
 import { requestApproval } from '../../src/services/executor.js';
 
 const mockApproval = requestApproval as ReturnType<typeof vi.fn>;
@@ -108,6 +108,62 @@ describe('file_ops', () => {
 
     it('rejects path traversal', async () => {
       await expect(writeFile({ space_id: 'p1', item_id: 'item-1', path: '../etc/passwd', content: 'x' }, ctx)).rejects.toThrow('Path escapes');
+    });
+  });
+
+  describe('searchFiles', () => {
+    function makeTree(files: Record<string, string>) {
+      mockReaddir.mockImplementation(async (dir: string) => {
+        const rel = dir === REPO_PATH ? '' : (dir as string).slice(REPO_PATH.length + 1);
+        return Object.keys(files)
+          .filter(f => {
+            const parts = f.split('/');
+            if (parts.length === 1) return rel === '';
+            return parts.slice(0, -1).join('/') === rel;
+          })
+          .map(f => {
+            const name = f.split('/').pop()!;
+            return { name, isDirectory: () => false, isFile: () => true };
+          });
+      });
+      mockReadFile.mockImplementation(async (p: string) => {
+        const rel = (p as string).slice(REPO_PATH.length + 1);
+        return files[rel] ?? '';
+      });
+    }
+
+    it('returns matches with file and line number', async () => {
+      makeTree({ 'index.ts': 'const foo = 1;\nconst bar = 2;\n' });
+      const result = await searchFiles({ space_id: 'p1', item_id: 'item-1', pattern: 'foo' }, ctx);
+      expect(result).toContain('index.ts:1:');
+      expect(result).not.toContain('index.ts:2:');
+    });
+
+    it('file_glob *.ts escapes the dot — does not match constants.py', async () => {
+      makeTree({ 'index.ts': 'match', 'constants.py': 'match' });
+      const result = await searchFiles({ space_id: 'p1', item_id: 'item-1', pattern: 'match', file_glob: '*.ts' }, ctx);
+      expect(result).toContain('index.ts');
+      expect(result).not.toContain('constants.py');
+    });
+
+    it('file_glob *.spec.ts only matches spec files', async () => {
+      makeTree({ 'foo.spec.ts': 'test', 'foo.ts': 'test', 'fooxspecyts': 'test' });
+      const result = await searchFiles({ space_id: 'p1', item_id: 'item-1', pattern: 'test', file_glob: '*.spec.ts' }, ctx);
+      expect(result).toContain('foo.spec.ts');
+      expect(result).not.toContain('foo.ts:');
+      expect(result).not.toContain('fooxspecyts');
+    });
+
+    it('returns no-matches message when nothing found', async () => {
+      makeTree({ 'index.ts': 'hello world' });
+      const result = await searchFiles({ space_id: 'p1', item_id: 'item-1', pattern: 'zzznomatch' }, ctx);
+      expect(result).toContain('No matches');
+    });
+
+    it('ignore_case matches case-insensitively', async () => {
+      makeTree({ 'readme.md': 'Hello World' });
+      const result = await searchFiles({ space_id: 'p1', item_id: 'item-1', pattern: 'hello', ignore_case: true }, ctx);
+      expect(result).toContain('readme.md');
     });
   });
 });

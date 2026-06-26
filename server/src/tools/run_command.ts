@@ -26,7 +26,7 @@ const BLOCKED_PATTERNS: RegExp[] = [
   /(\$\(|`).*\bcurl\b/i,
   /wget\s.*-O\s*-/i,
   // Reading private credential files (cat, head, tail, less, base64, xxd, etc.)
-  /(cat|head|tail|less|more|strings|xxd|base64|od)\s+.*\/(\.ssh\/(id_|known_hosts|authorized)|\.aws\/credentials|\.gnupg|\.netrc)\b/i,
+  /(cat|head|tail|less|more|strings|xxd|base64|od)\s+.*\/(\.ssh\/(id_[^\s]*|known_hosts|authorized_keys)|\.aws\/credentials|\.gnupg|\.netrc)\b/i,
   // Exfiltrating environment variables to a network address
   /\b(env|printenv|export)\b.*\|\s*curl/i,
   // Fork bomb

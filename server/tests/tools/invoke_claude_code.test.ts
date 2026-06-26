@@ -165,6 +165,25 @@ describe('invoke_claude_code', () => {
     await expect(promise).rejects.toThrow(/boom: auth error/);
   });
 
+  it('kills the subprocess when the AbortSignal fires', async () => {
+    const proc = makeProc();
+    proc.kill = vi.fn();
+    vi.mocked(spawn).mockReturnValue(proc as any);
+
+    const controller = new AbortController();
+    const promise = invokeClaudeCode(
+      { prompt: 'long task' },
+      { userId: 'u1', executionId: 'e1', repoPath: '/tmp/repo', signal: controller.signal }
+    );
+    await new Promise(setImmediate);
+
+    controller.abort();
+    expect(proc.kill).toHaveBeenCalledWith('SIGTERM');
+
+    proc.emit('close', 0);
+    await promise.catch(() => {});
+  });
+
   it('rejects with a helpful message when the claude binary is missing', async () => {
     const proc = makeProc();
     vi.mocked(spawn).mockReturnValue(proc as any);

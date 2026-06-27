@@ -925,6 +925,29 @@ export const migrations: Migration[] = [
     }
     db.pragma('foreign_keys = ON');
   }},
+  // Add 'google' to connections.type CHECK constraint
+  { version: 27, name: 'connections-add-google-type', noTransaction: true, up: (db) => {
+    db.pragma('foreign_keys = OFF');
+    const sql = (db.prepare("SELECT sql FROM sqlite_master WHERE type='table' AND name='connections'").get() as { sql: string } | undefined)?.sql;
+    if (sql && !sql.includes("'google'")) {
+      const cols = (db.prepare("SELECT name FROM pragma_table_info('connections')").all() as { name: string }[]).map(c => c.name).join(', ');
+      const tmp = '_connections_v27_tmp';
+      db.exec(`ALTER TABLE connections RENAME TO "${tmp}"`);
+      db.exec(`CREATE TABLE connections (
+        id TEXT PRIMARY KEY,
+        user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+        name TEXT NOT NULL,
+        type TEXT NOT NULL CHECK(type IN ('anthropic','openai','github','mcp','local','claude_code','codex','oauth','browser','google')),
+        purpose TEXT NOT NULL DEFAULT 'tool' CHECK(purpose IN ('claude_code','codex','github','mcp','tool','google')),
+        encrypted_config TEXT NOT NULL DEFAULT '',
+        created_at INTEGER NOT NULL DEFAULT (unixepoch()),
+        UNIQUE(user_id, name)
+      )`);
+      db.exec(`INSERT INTO connections (${cols}) SELECT ${cols} FROM "${tmp}"`);
+      db.exec(`DROP TABLE "${tmp}"`);
+    }
+    db.pragma('foreign_keys = ON');
+  }},
 ];
 
 function tableSql(database: Database.Database, name: string): string | undefined {

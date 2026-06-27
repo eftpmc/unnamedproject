@@ -86,9 +86,11 @@ router.get('/callback', async (req, res) => {
       ).run(newId(), userId, service, 'google', service, encrypted);
     }
 
-    res.redirect(`/settings?google_connected=${encodeURIComponent(service)}`);
+    const frontendUrl = process.env.FRONTEND_URL ?? 'http://localhost:5173';
+    res.redirect(`${frontendUrl}/settings?google_connected=${encodeURIComponent(service)}`);
   } catch (err) {
-    res.redirect(`/settings?google_error=${encodeURIComponent((err as Error).message)}`);
+    const frontendUrl = process.env.FRONTEND_URL ?? 'http://localhost:5173';
+    res.redirect(`${frontendUrl}/settings?google_error=${encodeURIComponent((err as Error).message)}`);
   }
 });
 

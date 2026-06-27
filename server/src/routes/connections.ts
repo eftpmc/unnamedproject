@@ -9,7 +9,7 @@ const router = Router();
 router.use(requireAuth);
 
 const VALID_TYPES = ['anthropic', 'openai', 'github', 'mcp', 'local', 'claude_code', 'codex', 'google'] as const;
-const VALID_PURPOSES = ['claude_code', 'codex', 'github', 'mcp', 'tool'] as const;
+const VALID_PURPOSES = ['claude_code', 'codex', 'github', 'mcp', 'tool', 'google'] as const;
 
 // claude_code and codex are self-describing types — purpose is derived from the type.
 // The entries below still guard against manually setting purpose=claude_code/codex on a foreign type.

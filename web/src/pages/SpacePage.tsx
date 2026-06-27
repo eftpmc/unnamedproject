@@ -312,18 +312,23 @@ function ChatsSection({ chats, onNewChat }: { chats: Session[]; onNewChat: () =>
 
 // ─── Documents ───────────────────────────────────────────────────────────────
 
-const STATUS_COLORS: Record<string, string> = {
-  applied:   'bg-muted text-muted-foreground',
-  interview: 'bg-sky-500/10 text-sky-500',
-  offer:     'bg-emerald-500/10 text-emerald-500',
-  rejected:  'bg-red-500/10 text-red-500',
-};
+const STATUS_SUCCESS = /offer|accept|approv|done|complet|hired|won/i;
+const STATUS_ERROR   = /reject|fail|declin|denied|lost|cancel/i;
+const STATUS_WARNING = /interview|screen|review|pending|wait|hold/i;
+const STATUS_INFO    = /apply|appli|submit|open|new/i;
+
+function statusColor(status: string): string {
+  if (STATUS_SUCCESS.test(status)) return 'bg-emerald-500/10 text-emerald-500';
+  if (STATUS_ERROR.test(status))   return 'bg-red-500/10 text-red-500';
+  if (STATUS_WARNING.test(status)) return 'bg-amber-500/10 text-amber-600';
+  if (STATUS_INFO.test(status))    return 'bg-sky-500/10 text-sky-500';
+  return 'bg-muted text-muted-foreground';
+}
 
 function StatusBadge({ status }: { status: string | null }) {
   if (!status) return null;
-  const cls = STATUS_COLORS[status] ?? 'bg-muted text-muted-foreground';
   return (
-    <span className={cn('shrink-0 rounded-full px-2 py-0.5 text-[10px] font-medium capitalize', cls)}>
+    <span className={cn('shrink-0 rounded-full px-2 py-0.5 text-[10px] font-medium capitalize', statusColor(status))}>
       {status}
     </span>
   );

@@ -3,7 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { ChevronRight, Plus, Search } from 'lucide-react';
 import { cn } from '../lib/utils.js';
-import { createSpace, createSpaceItem, getSpaces } from '../lib/api.js';
+import { createSpace, linkProject, getSpaces } from '../lib/api.js';
 import { usePageTitle } from '../lib/usePageTitle.js';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -52,8 +52,7 @@ export default function SpacesPage() {
         enabled_connection_ids: [],
       });
       if (repoPath.trim()) {
-        await createSpaceItem(created.id, {
-          type: 'repo',
+        await linkProject(created.id, {
           name: name.trim(),
           repo_path: repoPath.trim(),
         });

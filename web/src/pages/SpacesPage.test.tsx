@@ -10,7 +10,7 @@ vi.mock('../lib/api.js', () => ({
     { id: 'space-2', name: 'remotion-video', description: null, enabled_connection_ids: [] },
   ]),
   createSpace: vi.fn(),
-  createSpaceItem: vi.fn(),
+  linkProject: vi.fn(),
 }));
 
 vi.mock('../lib/usePageTitle.js', () => ({ usePageTitle: vi.fn() }));

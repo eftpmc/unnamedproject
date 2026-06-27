@@ -457,8 +457,11 @@ export default function ChatView({ chatId }: ChatViewProps) {
           return { events: [...prev.events, ev.event] };
         });
         queryClient.invalidateQueries({ queryKey: ['chat-events', chatId] });
-        if (ev.event.type === 'item_created' || ev.event.type === 'item_updated') {
-          if (ev.event.space_id) queryClient.invalidateQueries({ queryKey: ['space-items', ev.event.space_id] });
+        if (ev.event.type === 'document_created' || ev.event.type === 'document_updated') {
+          if (ev.event.space_id) queryClient.invalidateQueries({ queryKey: ['documents', ev.event.space_id] });
+        }
+        if (ev.event.type === 'project_created') {
+          if (ev.event.space_id) queryClient.invalidateQueries({ queryKey: ['projects', ev.event.space_id] });
         }
       }
     }

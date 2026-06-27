@@ -1,16 +1,12 @@
 import { useQuery } from '@tanstack/react-query';
 import { useNavigate } from 'react-router-dom';
 import { X, GitMerge, Check, Bell, FileStack, ArrowRight } from 'lucide-react';
-import { getSpaceItems } from '../lib/api.js';
+import { getDocuments } from '../lib/api.js';
 import { cn } from '@/lib/utils';
-import type { Space, SpaceItem } from '../types.js';
+import type { Space, Document } from '../types.js';
 
-function itemSnippet(item: SpaceItem): string {
-  for (const block of item.page_blocks) {
-    if (block.type === 'text' && block.content.trim()) return block.content.trim();
-    if (block.type === 'heading' && block.text.trim()) return block.text.trim();
-  }
-  return item.type;
+function docSnippet(doc: Document): string {
+  return doc.type ?? 'document';
 }
 
 interface Approval {
@@ -106,8 +102,8 @@ function PanelContent({
   const primarySpace = pinnedSpace;
 
   const { data: items = [] } = useQuery({
-    queryKey: ['space-items', primarySpace?.id],
-    queryFn: () => getSpaceItems(primarySpace!.id),
+    queryKey: ['documents', primarySpace?.id],
+    queryFn: () => getDocuments(primarySpace!.id),
     enabled: !!primarySpace,
     staleTime: 20_000,
   });
@@ -195,22 +191,22 @@ function PanelContent({
 
       {primarySpace && (
         <section className="flex flex-col gap-2">
-          <span className="text-[11px] font-medium text-muted-foreground">Items</span>
+          <span className="text-[11px] font-medium text-muted-foreground">Documents</span>
           {recentItems.length > 0 ? (
             <div className="flex flex-col gap-2">
-              {recentItems.map(item => (
+              {recentItems.map((doc: Document) => (
                 <button
                   type="button"
-                  onClick={() => navigate(`/spaces/${primarySpace.id}/items/${item.id}`)}
-                  key={item.id}
+                  onClick={() => navigate(`/spaces/${primarySpace.id}/documents/${doc.id}`)}
+                  key={doc.id}
                   className="flex items-center gap-2.5 rounded-lg border border-border-soft bg-card p-2.5 text-left transition-colors hover:bg-muted/40"
                 >
                   <span className="grid size-8 shrink-0 place-items-center rounded-md bg-muted text-muted-foreground">
                     <FileStack size={13} />
                   </span>
                   <span className="min-w-0 flex-1">
-                    <span className="block truncate text-xs font-medium text-foreground">{item.name}</span>
-                    <span className="block truncate text-[11px] text-faint-fg">{itemSnippet(item)}</span>
+                    <span className="block truncate text-xs font-medium text-foreground">{doc.title}</span>
+                    <span className="block truncate text-[11px] text-faint-fg">{docSnippet(doc)}</span>
                   </span>
                   <ArrowRight size={11} className="text-faint-fg" />
                 </button>
@@ -218,7 +214,7 @@ function PanelContent({
             </div>
           ) : (
             <div className="rounded-lg border border-dashed border-border bg-background/50 p-3 text-xs leading-relaxed text-muted-foreground">
-              Items created from this chat will appear here.
+              Documents created from this chat will appear here.
             </div>
           )}
         </section>

@@ -9,8 +9,6 @@ vi.mock('../lib/api.js', () => ({
   getSpaces: vi.fn().mockResolvedValue([]),
   getMemory: vi.fn().mockResolvedValue([]),
   getScheduledTasks: vi.fn().mockResolvedValue([]),
-  listItemTemplates: vi.fn().mockResolvedValue([]),
-  deleteItemTemplate: vi.fn(),
   getSettings: vi.fn().mockResolvedValue({
     projects_root: '/tmp/projects',
     agent_budgets: { claude_code: null, codex: null },
@@ -19,8 +17,6 @@ vi.mock('../lib/api.js', () => ({
   createConnection: vi.fn(),
   deleteConnection: vi.fn(),
   updateSettings: vi.fn(),
-  updateAgentBudgets: vi.fn(),
-  updateScheduledTask: vi.fn(),
   deleteScheduledTask: vi.fn(),
   runScheduledTask: vi.fn(),
 }));

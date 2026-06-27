@@ -238,7 +238,7 @@ function renderExecutionCard(exec: InlineExecution) {
 function ItemCreatedCard({ spaceId, itemId, label, title, isUpdate }: { spaceId: string; itemId: string; label: string; title: string; isUpdate: boolean }) {
   return (
     <Link
-      to={`/spaces/${spaceId}/items/${itemId}`}
+      to={`/spaces/${spaceId}/documents/${itemId}`}
       className="flex items-center gap-2.5 self-start rounded-xl border border-border-soft bg-card px-3 py-2 text-left text-xs transition-colors hover:border-border hover:bg-muted/30"
     >
       <span className="rounded-md bg-muted px-1.5 py-0.5 text-[10px] font-medium text-muted-foreground">{label}</span>
@@ -252,7 +252,7 @@ function ItemCreatedCard({ spaceId, itemId, label, title, isUpdate }: { spaceId:
 function eventIcon(type: SessionEvent['type']) {
   if (type === 'scope_changed' || type === 'project_linked') return Target;
   if (type === 'artifact_created' || type === 'project_created') return Sparkles;
-  if (type === 'item_created' || type === 'item_updated') return FileStack;
+  if (type === 'document_created' || type === 'document_updated') return FileStack;
   return GitMerge;
 }
 
@@ -444,12 +444,12 @@ export default function MessageList({ messages, executions, streamingIds, sessio
               );
             }
             if (
-              (item.event.type === 'item_created' || item.event.type === 'item_updated') &&
+              (item.event.type === 'document_created' || item.event.type === 'document_updated') &&
               item.event.item_id &&
               item.event.space_id
             ) {
-              const isUpdate = item.event.type === 'item_updated';
-              const typeLabel = (item.event.metadata as { itemType?: string })?.itemType ?? 'item';
+              const isUpdate = item.event.type === 'document_updated';
+              const typeLabel = (item.event.metadata as { itemType?: string })?.itemType ?? 'document';
               const label = TEMPLATE_LABELS[typeLabel] ?? typeLabel;
               return (
                 <ItemCreatedCard
@@ -457,7 +457,7 @@ export default function MessageList({ messages, executions, streamingIds, sessio
                   spaceId={item.event.space_id}
                   itemId={item.event.item_id}
                   label={label}
-                  title={item.event.title.replace(/^(Created|Updated) item: /, '')}
+                  title={item.event.title.replace(/^(Created|Updated) document: /, '')}
                   isUpdate={isUpdate}
                 />
               );

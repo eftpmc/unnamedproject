@@ -1,10 +1,56 @@
 import { useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { Copy, Check } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { getTriggers, createTrigger, deleteTrigger, getDocuments } from '../lib/api.js';
+import { timeAgo } from '../lib/utils.js';
 import type { Trigger } from '../types.js';
+
+function WebhookUrl({ triggerId }: { triggerId: string }) {
+  const [copied, setCopied] = useState(false);
+  const url = `${window.location.protocol}//${window.location.hostname}:3000/webhooks/trigger/${triggerId}`;
+
+  function copy() {
+    navigator.clipboard.writeText(url).then(() => {
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
+    });
+  }
+
+  return (
+    <button
+      type="button"
+      onClick={copy}
+      className="flex items-center gap-1.5 rounded bg-muted px-2 py-1 font-mono text-[10px] text-faint-fg transition-colors hover:bg-muted/80 hover:text-muted-foreground"
+    >
+      <span className="max-w-[280px] truncate">{url}</span>
+      {copied ? <Check size={11} className="text-emerald-500" /> : <Copy size={11} />}
+    </button>
+  );
+}
+
+function TriggerCard({ t, onDelete }: { t: Trigger; onDelete: () => void }) {
+  return (
+    <div className="flex flex-col gap-2 rounded-lg border border-border-soft bg-card px-4 py-3">
+      <div className="flex items-center justify-between">
+        <div className="flex items-center gap-3">
+          <span className="font-mono text-sm">{t.schedule_cron ?? t.kind}</span>
+          <span className={`text-[11px] ${t.enabled ? 'text-emerald-500' : 'text-faint-fg'}`}>
+            {t.enabled ? 'enabled' : 'disabled'}
+          </span>
+        </div>
+        <Button size="sm" variant="ghost" onClick={onDelete}>Delete</Button>
+      </div>
+      <div className="flex flex-wrap items-center gap-3 text-[11px] text-faint-fg">
+        {t.last_run_at && <span>Last run {timeAgo(t.last_run_at)}</span>}
+        {t.next_run_at && <span>Next run {timeAgo(t.next_run_at)}</span>}
+        <WebhookUrl triggerId={t.id} />
+      </div>
+    </div>
+  );
+}
 
 export default function TriggersSection({ spaceId }: { spaceId: string }) {
   const qc = useQueryClient();
@@ -37,13 +83,7 @@ export default function TriggersSection({ spaceId }: { spaceId: string }) {
       ) : (
         <div className="flex flex-col gap-2">
           {triggers.map(t => (
-            <div key={t.id} className="flex items-center justify-between rounded-lg border border-border-soft bg-card px-4 py-3">
-              <div className="text-sm">
-                <span className="font-mono">{t.schedule_cron ?? t.kind}</span>
-                <span className="ml-2 text-xs text-faint-fg">{t.enabled ? 'enabled' : 'disabled'}</span>
-              </div>
-              <Button size="sm" variant="ghost" onClick={() => remove.mutate(t.id)}>Delete</Button>
-            </div>
+            <TriggerCard key={t.id} t={t} onDelete={() => remove.mutate(t.id)} />
           ))}
         </div>
       )}

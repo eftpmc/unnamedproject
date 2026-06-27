@@ -893,6 +893,38 @@ export const migrations: Migration[] = [
 
     db.pragma('foreign_keys = ON');
   }},
+  // session_events still has item_id referencing space_items(id) on some DBs
+  // where v25 ran but the evtSql check was missed. Unconditionally rebuild
+  // if the dangling FK is present.
+  { version: 26, name: 'fix-session-events-space-items-fk', noTransaction: true, up: (db) => {
+    db.pragma('foreign_keys = OFF');
+    const evtSql = (db.prepare("SELECT sql FROM sqlite_master WHERE type='table' AND name='session_events'").get() as { sql: string } | undefined)?.sql;
+    if (evtSql && evtSql.includes('space_items')) {
+      const keepCols = (db.prepare("SELECT name FROM pragma_table_info('session_events')").all() as { name: string }[])
+        .map(c => c.name).join(', ');
+      const tmp = '_session_events_v26_tmp';
+      db.exec(`ALTER TABLE session_events RENAME TO "${tmp}"`);
+      db.exec(`CREATE TABLE session_events (
+        id TEXT PRIMARY KEY,
+        session_id TEXT NOT NULL REFERENCES sessions(id) ON DELETE CASCADE,
+        type TEXT NOT NULL CHECK(type IN (
+          'scope_changed','project_linked','space_linked','project_created',
+          'artifact_created','item_created','item_updated','approval_requested','approval_resolved',
+          'mcp_required','subagent_started','subagent_completed','connection_created'
+        )),
+        title TEXT NOT NULL,
+        body TEXT,
+        space_id TEXT REFERENCES spaces(id) ON DELETE SET NULL,
+        item_id TEXT,
+        execution_id TEXT REFERENCES executions(id) ON DELETE SET NULL,
+        metadata TEXT NOT NULL DEFAULT '{}',
+        created_at INTEGER NOT NULL DEFAULT (unixepoch())
+      )`);
+      db.exec(`INSERT INTO session_events (${keepCols}) SELECT ${keepCols} FROM "${tmp}"`);
+      db.exec(`DROP TABLE "${tmp}"`);
+    }
+    db.pragma('foreign_keys = ON');
+  }},
 ];
 
 function tableSql(database: Database.Database, name: string): string | undefined {

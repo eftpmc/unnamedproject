@@ -50,8 +50,8 @@ export async function writeDocument(input: {
 
   if (existing) {
     getDb().prepare(
-      'UPDATE documents SET title=?, type=?, status=?, frontmatter=?, updated_at=? WHERE id=?',
-    ).run(input.title, type, status, JSON.stringify(frontmatter), now, id);
+      'UPDATE documents SET title=?, type=?, status=?, frontmatter=?, source_session_id=COALESCE(?,source_session_id), updated_at=? WHERE id=?',
+    ).run(input.title, type, status, JSON.stringify(frontmatter), input.source_session_id ?? null, now, id);
   } else {
     getDb().prepare(
       'INSERT INTO documents (id,space_id,path,title,type,status,frontmatter,source_session_id,created_at,updated_at) VALUES (?,?,?,?,?,?,?,?,?,?)',
@@ -77,6 +77,7 @@ export function listDocuments(
   if (filter?.type) { sql += ' AND type = ?'; params.push(filter.type); }
   if (filter?.frontmatter) {
     for (const [k, v] of Object.entries(filter.frontmatter)) {
+      if (!/^[\w.]+$/.test(k)) throw new Error(`Invalid frontmatter key: ${k}`);
       sql += ` AND json_extract(frontmatter, '$.${k}') = ?`;
       params.push(v);
     }
@@ -102,7 +103,11 @@ export async function patchFrontmatter(id: string, patch: Record<string, unknown
 export async function deleteDocument(id: string): Promise<boolean> {
   const row = getDb().prepare('SELECT * FROM documents WHERE id = ?').get(id) as DocumentRow | undefined;
   if (!row) return false;
-  try { await fs.unlink(resolveInDocuments(row.space_id, row.path)); } catch { /* already gone */ }
+  try {
+    await fs.unlink(resolveInDocuments(row.space_id, row.path));
+  } catch (err) {
+    if ((err as NodeJS.ErrnoException).code !== 'ENOENT') throw err;
+  }
   getDb().prepare('DELETE FROM documents WHERE id = ?').run(id);
   await commitDocuments(row.space_id, `delete ${row.path}`);
   return true;

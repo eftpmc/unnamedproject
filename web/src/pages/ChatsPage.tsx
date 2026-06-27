@@ -3,7 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { ChevronRight, Search, Trash2, X } from 'lucide-react';
 import { getChats, deleteChat, searchChats, getSpaces } from '../lib/api.js';
-import { timeAgo } from '../lib/utils.js';
+import { cn, timeAgo } from '../lib/utils.js';
 import { usePageTitle } from '../lib/usePageTitle.js';
 import { ConfirmDialog } from '@/components/ui/confirm-dialog';
 import { Button } from '@/components/ui/button';
@@ -36,6 +36,8 @@ function groupChats(chats: Session[]): { label: string; chats: Session[] }[] {
   return Array.from(groups.entries()).map(([label, chats]) => ({ label, chats }));
 }
 
+const PAGE_SIZE = 100;
+
 export default function ChatsPage() {
   usePageTitle('Chats');
   const navigate = useNavigate();
@@ -44,11 +46,29 @@ export default function ChatsPage() {
   const [searchQuery, setSearchQuery] = useState('');
   const [projectFilter, setProjectFilter] = useState<string | null>(null);
   const debouncedQuery = useDebounce(searchQuery, 300);
+  const [extraChats, setExtraChats] = useState<Session[]>([]);
+  const [loadingMore, setLoadingMore] = useState(false);
 
-  const { data: chats = [], isLoading } = useQuery<Session[]>({
+  const { data: firstPage = [], isLoading } = useQuery<Session[]>({
     queryKey: ['chats'],
-    queryFn: getChats,
+    queryFn: () => getChats(),
   });
+
+  const chats = [...firstPage, ...extraChats];
+  const hasMore = firstPage.length === PAGE_SIZE && extraChats.length === 0
+    || (extraChats.length > 0 && extraChats.length % PAGE_SIZE === 0);
+
+  async function loadMore() {
+    const last = chats[chats.length - 1];
+    if (!last) return;
+    setLoadingMore(true);
+    try {
+      const more = await getChats({ before: last.updated_at });
+      setExtraChats(prev => [...prev, ...more]);
+    } finally {
+      setLoadingMore(false);
+    }
+  }
 
   const { data: projects = [] } = useQuery<Space[]>({
     queryKey: ['spaces'],
@@ -154,7 +174,7 @@ export default function ChatsPage() {
                           return (
                             <div
                               key={chat.id}
-                              className="group flex items-center gap-3 rounded-lg border border-border-soft bg-card px-4 py-3.5 transition-[transform,box-shadow,border-color] hover:-translate-y-px hover:border-border hover:shadow-sm"
+                              className="group flex items-center gap-3 rounded-xl border border-border-soft bg-card px-4 py-3 transition-[transform,box-shadow,border-color] hover:-translate-y-px hover:border-border hover:shadow-sm"
                             >
                               <div
                                 role="button"
@@ -172,7 +192,7 @@ export default function ChatsPage() {
                                 <div className="truncate text-sm font-medium text-foreground">
                                   {chat.title ?? 'Untitled chat'}
                                 </div>
-                                <div className="mt-0.5 flex items-center gap-1.5 text-xs text-faint-fg">
+                                <div className="mt-0.5 flex items-center gap-1.5 text-[11px] text-faint-fg">
                                   <span>{timeAgo(chat.updated_at)}</span>
                                   {project && (
                                     <>
@@ -180,7 +200,7 @@ export default function ChatsPage() {
                                       <button
                                         type="button"
                                         onClick={(e) => { e.stopPropagation(); setProjectFilter(project.id === projectFilter ? null : project.id); }}
-                                        className="truncate transition-colors hover:text-foreground"
+                                        className={cn('truncate transition-colors hover:text-foreground', projectFilter === project.id && 'text-foreground font-medium')}
                                       >
                                         {project.name}
                                       </button>
@@ -189,7 +209,7 @@ export default function ChatsPage() {
                                 </div>
                               </div>
                               <ChevronRight
-                                size={15}
+                                size={14}
                                 className="shrink-0 text-faint-fg transition-colors group-hover:text-muted-foreground"
                                 onClick={() => navigate(`/c/${chat.id}`)}
                               />
@@ -211,6 +231,20 @@ export default function ChatsPage() {
                 </div>
               );
             })()}
+
+            {!isSearchActive && hasMore && (
+              <div className="mt-4 flex justify-center">
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="h-8 text-xs"
+                  onClick={loadMore}
+                  disabled={loadingMore}
+                >
+                  {loadingMore ? 'Loading…' : 'Load more'}
+                </Button>
+              </div>
+            )}
           </ContentColumn>
         </PageBody>
       )}

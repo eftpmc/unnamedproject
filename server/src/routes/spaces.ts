@@ -2,6 +2,7 @@ import { Router, type Request, type Response } from 'express';
 import fs from 'fs/promises';
 import fsSync from 'fs';
 import path from 'path';
+import multer from 'multer';
 import { getDataDir, getDb, getSessionsForItem } from '../db/index.js';
 import { newId } from '../lib/ids.js';
 import { requireAuthHeaderOrQuery, type AuthedRequest } from '../middleware/auth.js';
@@ -22,6 +23,11 @@ import { detectCapabilities } from '../services/projectCapabilities.js';
 
 const router = Router();
 router.use(requireAuthHeaderOrQuery);
+
+const fileUpload = multer({
+  storage: multer.memoryStorage(),
+  limits: { files: 1, fileSize: 50 * 1024 * 1024 },
+});
 
 const MEDIA_CONTENT_TYPES: Record<string, string> = {
   '.mp4': 'video/mp4',
@@ -152,7 +158,9 @@ router.delete('/:id', (req, res) => {
 
 router.get('/:spaceId/items', (req, res) => {
   if (!requireSpace(req, res)) return;
-  res.json(getItemsForSpace(req.params.spaceId));
+  const before = req.query.before ? parseInt(req.query.before as string, 10) : undefined;
+  const PAGE = 100;
+  res.json(getItemsForSpace(req.params.spaceId, undefined, { limit: PAGE, before }));
 });
 
 router.get('/item-templates', (req, res) => {
@@ -508,6 +516,82 @@ router.get('/:spaceId/items/:itemId/research/:filename', (req, res) => {
     return;
   }
   res.type('text/plain').send(fsSync.readFileSync(filePath, 'utf-8'));
+});
+
+// ── Item file storage ─────────────────────────────────────────────────────────
+
+function getItemFiles(itemId: string) {
+  return getDb()
+    .prepare('SELECT id, filename, mime_type as mimeType, size_bytes as sizeBytes, created_at as createdAt FROM item_files WHERE item_id = ? ORDER BY created_at')
+    .all(itemId) as { id: string; filename: string; mimeType: string; sizeBytes: number; createdAt: number }[];
+}
+
+function serializeItemFile(spaceId: string, itemId: string, f: { id: string; filename: string; mimeType: string; sizeBytes: number; createdAt: number }) {
+  return { ...f, url: `/spaces/${spaceId}/items/${itemId}/files/${f.id}` };
+}
+
+router.get('/:spaceId/items/:itemId/files', (req, res) => {
+  const { userId } = req as unknown as AuthedRequest;
+  const item = getItemById(req.params.itemId);
+  if (!item || item.space_id !== req.params.spaceId) { res.status(404).json({ error: 'Item not found' }); return; }
+  void userId;
+  res.json(getItemFiles(item.id).map(f => serializeItemFile(req.params.spaceId, item.id, f)));
+});
+
+router.post('/:spaceId/items/:itemId/files', fileUpload.single('file'), (req, res) => {
+  const { userId } = req as unknown as AuthedRequest;
+  const item = getItemById(req.params.itemId);
+  if (!item || item.space_id !== req.params.spaceId) { res.status(404).json({ error: 'Item not found' }); return; }
+  const file = req.file;
+  if (!file) { res.status(400).json({ error: 'file required' }); return; }
+
+  const fileId = newId();
+  const filename = path.basename(file.originalname).replace(/[^\w.\- ()[\]]+/g, '_').trim() || 'file';
+  const dir = path.join(getDataDir(), 'item-files', userId, req.params.spaceId, item.id);
+  fsSync.mkdirSync(dir, { recursive: true });
+  const storagePath = path.join(dir, `${fileId}-${filename}`);
+  fsSync.writeFileSync(storagePath, file.buffer);
+
+  getDb()
+    .prepare('INSERT INTO item_files (id, item_id, filename, mime_type, size_bytes, storage_path) VALUES (?,?,?,?,?,?)')
+    .run(fileId, item.id, filename, file.mimetype || 'application/octet-stream', file.size, storagePath);
+
+  res.status(201).json(serializeItemFile(req.params.spaceId, item.id, {
+    id: fileId, filename, mimeType: file.mimetype || 'application/octet-stream',
+    sizeBytes: file.size, createdAt: Math.floor(Date.now() / 1000),
+  }));
+});
+
+router.get('/:spaceId/items/:itemId/files/:fileId', (req, res) => {
+  const { userId } = req as unknown as AuthedRequest;
+  void userId;
+  const item = getItemById(req.params.itemId);
+  if (!item || item.space_id !== req.params.spaceId) { res.status(404).json({ error: 'Item not found' }); return; }
+
+  const record = getDb()
+    .prepare('SELECT filename, mime_type as mimeType, storage_path as storagePath FROM item_files WHERE id = ? AND item_id = ?')
+    .get(req.params.fileId, item.id) as { filename: string; mimeType: string; storagePath: string } | undefined;
+  if (!record || !fsSync.existsSync(record.storagePath)) { res.status(404).json({ error: 'File not found' }); return; }
+
+  res.setHeader('Content-Disposition', `inline; filename="${record.filename}"`);
+  res.type(record.mimeType);
+  fsSync.createReadStream(record.storagePath).pipe(res);
+});
+
+router.delete('/:spaceId/items/:itemId/files/:fileId', (req, res) => {
+  const { userId } = req as unknown as AuthedRequest;
+  void userId;
+  const item = getItemById(req.params.itemId);
+  if (!item || item.space_id !== req.params.spaceId) { res.status(404).json({ error: 'Item not found' }); return; }
+
+  const record = getDb()
+    .prepare('SELECT storage_path as storagePath FROM item_files WHERE id = ? AND item_id = ?')
+    .get(req.params.fileId, item.id) as { storagePath: string } | undefined;
+  if (!record) { res.status(404).json({ error: 'File not found' }); return; }
+
+  getDb().prepare('DELETE FROM item_files WHERE id = ?').run(req.params.fileId);
+  try { fsSync.unlinkSync(record.storagePath); } catch { /* already gone */ }
+  res.status(204).end();
 });
 
 export default router;

@@ -60,6 +60,20 @@ Every item has a type (string) and a fields blob (structured data for that type)
 - After defining a type, use create_item with type=<your-type-name> and fields matching your schema.
 Types you define are immediately available across all spaces for that user. Define types when the user's data has repeating structure that doesn't fit existing templates — e.g. 'customer', 'experiment', 'bug-report'.
 
+## File storage in items
+Any item can hold uploaded files — no special capability needed. When the user attaches a file (PDF, image, etc.) and you want to store it durably inside an item:
+1. Create or identify the target item (any type works).
+2. Call attach_file_to_item with the space_id, item_id, and message_attachment_path (the path= attribute from the <attachments> block). It returns a preview_block you can paste directly into update_item's append_blocks.
+3. Call update_item with append_blocks: [<the preview_block from step 2>] to add a file-preview block to the item.
+The file-preview block renders PDFs inline and images natively in the item page. For long-form text content (notes, specs), use page_blocks with text/heading blocks instead of fields.
+
+## Relations between items
+Link items together using relation blocks — they render as clickable card chips:
+- \`{ type: 'relation', item_id: '<target_item_id>', space_id: '<target_space_id>', label: '<item_name>' }\`
+- Use update_item with append_blocks to add a relation block to any item.
+- Useful for: linking a "Job Application" to a "Company Research" doc, linking a task to its runbook, linking related notes.
+- Always include both item_id and space_id. Set label to the target item's current name as a readable fallback.
+
 ## Interactive items
 Items support input blocks — labeled fields the user fills in that you can read back via read_item. Use these to build lightweight configuration surfaces or data-collection forms inside the space:
 - \`{ type: 'input', label: 'API endpoint', value: '', placeholder: 'https://...', input_type: 'text' }\`
@@ -245,7 +259,7 @@ export async function buildContextUpdate(userId: string, sessionId: string, quer
   if (summary) blocks.push(summary);
 
   if (blocks.length === 0) return '';
-  return `[Context update]\n${blocks.join('\n\n')}`;
+  return blocks.join('\n\n');
 }
 
 export async function buildContext(userId: string, sessionId: string, intent: Intent, queryText: string): Promise<string> {

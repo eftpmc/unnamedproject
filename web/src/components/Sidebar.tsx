@@ -49,7 +49,7 @@ export default function Sidebar({
   const { isMobile, setOpenMobile } = useSidebar();
   const wsStatus = useWsStatus();
 
-  const { data: chats = [] } = useQuery<Session[]>({ queryKey: ['chats'], queryFn: getChats });
+  const { data: chats = [] } = useQuery<Session[]>({ queryKey: ['chats'], queryFn: () => getChats() });
   const { data: spaces = [] } = useQuery<Space[]>({
     queryKey: ['spaces'],
     queryFn: getSpaces,

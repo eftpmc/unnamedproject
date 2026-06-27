@@ -1,4 +1,4 @@
-import { Component, useRef, type ReactNode } from 'react';
+import { Component, useRef, useState, type ReactNode } from 'react';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
@@ -15,17 +15,22 @@ import {
   XAxis,
   YAxis,
 } from 'recharts';
-import { ArrowDown, ArrowRight, ArrowUp, Plus, X } from 'lucide-react';
+import { ArrowDown, ArrowRight, ArrowUp, Download, ExternalLink, FileText, Plus, X } from 'lucide-react';
 import { cn } from '@/lib/utils';
-import { updateItemTask } from '../lib/api.js';
+import { getSpaceItem, updateItemTask } from '../lib/api.js';
+import { getToken } from '../lib/auth.js';
 import FileBrowser from './FileBrowser.js';
-import type { Block } from '../types.js';
+import type { Block, SpaceItem } from '../types.js';
+import { useQuery } from '@tanstack/react-query';
+import { Link } from 'react-router-dom';
 
 interface BlockRendererProps {
   block: Block;
   spaceId: string;
   itemId: string;
   onEdit?: (updated: Block) => void;
+  /** When true, content blocks are rendered read-only. Interactive blocks (task-list, input) are always editable. */
+  readOnly?: boolean;
 }
 
 // A block render failure (malformed data slipping past server validation,
@@ -50,34 +55,46 @@ class BlockErrorBoundary extends Component<{ children: ReactNode }, { hasError: 
   }
 }
 
-export default function BlockRenderer({ block, spaceId, itemId, onEdit }: BlockRendererProps) {
+export default function BlockRenderer({ block, spaceId, itemId, onEdit, readOnly }: BlockRendererProps) {
   return (
     <BlockErrorBoundary key={JSON.stringify(block)}>
-      {renderBlock(block, spaceId, itemId, onEdit)}
+      {renderBlock(block, spaceId, itemId, onEdit, readOnly)}
     </BlockErrorBoundary>
   );
 }
 
-function renderBlock(block: Block, spaceId: string, itemId: string, onEdit?: (updated: Block) => void) {
+function renderBlock(block: Block, spaceId: string, itemId: string, onEdit?: (updated: Block) => void, readOnly?: boolean) {
+  const edit = readOnly ? undefined : onEdit;
   switch (block.type) {
-    case 'text':      return <TextBlock block={block} onEdit={onEdit} />;
-    case 'heading':   return <HeadingBlock block={block} onEdit={onEdit} />;
-    case 'code':      return <CodeBlock block={block} onEdit={onEdit} />;
+    case 'text':      return <TextBlock block={block} onEdit={edit} />;
+    case 'heading':   return <HeadingBlock block={block} onEdit={edit} />;
+    case 'code':      return <CodeBlock block={block} onEdit={edit} />;
     case 'table':     return <TableBlock block={block} />;
     case 'image':     return <ImageBlock block={block} />;
     case 'task-list': return <TaskListBlock block={block} spaceId={spaceId} itemId={itemId} onEdit={onEdit} />;
-    case 'callout':   return <CalloutBlock block={block} onEdit={onEdit} />;
+    case 'callout':   return <CalloutBlock block={block} onEdit={edit} />;
     case 'file-browser': return <FileBrowser spaceId={spaceId} itemId={itemId} />;
     case 'chart':     return <ChartBlock block={block} />;
     case 'stat':      return <StatBlock block={block} />;
-    case 'list':      return <ListBlock block={block} onEdit={onEdit} />;
+    case 'list':      return <ListBlock block={block} onEdit={edit} />;
     case 'progress':  return <ProgressBlock block={block} />;
     case 'input':     return <InputBlock block={block} onEdit={onEdit} />;
+    case 'file-preview': return <FilePreviewBlock block={block} />;
+    case 'relation':  return <RelationBlock block={block} />;
     default:          return null;
   }
 }
 
+const PROSE_CLASSES = `text-[14px] leading-relaxed text-fg-soft
+  [&_p]:mb-3 [&_p:last-child]:mb-0
+  [&_ul]:mb-3 [&_ul]:ml-5 [&_ul]:list-disc
+  [&_ol]:mb-3 [&_ol]:ml-5 [&_ol]:list-decimal
+  [&_li]:mb-1
+  [&_code]:rounded [&_code]:bg-muted [&_code]:px-1.5 [&_code]:py-0.5 [&_code]:font-mono [&_code]:text-[13px]
+  [&_pre]:my-3 [&_pre]:overflow-x-auto [&_pre]:rounded-xl [&_pre]:border [&_pre]:border-border-soft [&_pre]:bg-muted/30 [&_pre]:p-3`;
+
 function TextBlock({ block, onEdit }: { block: Extract<Block, { type: 'text' }>; onEdit?: (updated: Block) => void }) {
+  const [editing, setEditing] = useState(false);
   const ref = useRef<HTMLTextAreaElement>(null);
 
   function autoResize() {
@@ -87,63 +104,83 @@ function TextBlock({ block, onEdit }: { block: Extract<Block, { type: 'text' }>;
     el.style.height = `${el.scrollHeight}px`;
   }
 
-  if (onEdit) {
+  if (onEdit && editing) {
     return (
       <textarea
         ref={ref}
+        autoFocus
         value={block.content}
         placeholder="Write something…"
         rows={1}
         onChange={e => { onEdit({ ...block, content: e.target.value }); autoResize(); }}
         onFocus={autoResize}
-        className="w-full resize-none overflow-hidden rounded bg-transparent px-1 -mx-1 text-[14px] leading-relaxed text-fg-soft outline-none placeholder:text-faint-fg focus:ring-1 focus:ring-ring/30"
+        onBlur={() => setEditing(false)}
+        className="animate-in fade-in-0 duration-100 w-full resize-none overflow-hidden rounded bg-transparent px-1 -mx-1 text-[14px] leading-relaxed text-fg-soft outline-none placeholder:text-faint-fg focus:ring-1 focus:ring-ring/30"
       />
     );
   }
 
-  if (!block.content.trim()) return null;
+  if (!block.content.trim()) {
+    if (!onEdit) return null;
+    return (
+      <div
+        onClick={() => setEditing(true)}
+        className="cursor-text rounded px-1 -mx-1 py-0.5 text-[14px] text-faint-fg italic hover:bg-muted/30 transition-colors"
+      >
+        Empty text block — click to edit
+      </div>
+    );
+  }
+
   return (
-    <div className="text-[14px] leading-relaxed text-fg-soft
-      [&_p]:mb-3 [&_p:last-child]:mb-0
-      [&_ul]:mb-3 [&_ul]:ml-5 [&_ul]:list-disc
-      [&_ol]:mb-3 [&_ol]:ml-5 [&_ol]:list-decimal
-      [&_li]:mb-1
-      [&_code]:rounded [&_code]:bg-muted [&_code]:px-1.5 [&_code]:py-0.5 [&_code]:font-mono [&_code]:text-[13px]
-      [&_pre]:my-3 [&_pre]:overflow-x-auto [&_pre]:rounded-xl [&_pre]:border [&_pre]:border-border-soft [&_pre]:bg-muted/30 [&_pre]:p-3">
+    <div
+      onClick={onEdit ? () => setEditing(true) : undefined}
+      className={cn(PROSE_CLASSES, onEdit && 'cursor-text rounded px-1 -mx-1 hover:bg-muted/30 transition-colors')}
+    >
       <ReactMarkdown remarkPlugins={[remarkGfm]}>{block.content}</ReactMarkdown>
     </div>
   );
 }
 
 function HeadingBlock({ block, onEdit }: { block: Extract<Block, { type: 'heading' }>; onEdit?: (updated: Block) => void }) {
+  const [editing, setEditing] = useState(false);
   const base = 'font-semibold text-foreground';
-  if (onEdit) {
-    const sizeClass = block.level === 1 ? 'text-xl mt-2 mb-1' : block.level === 2 ? 'text-base mt-4 mb-1' : 'text-sm mt-3 mb-0.5';
+  const sizeClass = block.level === 1 ? 'text-xl mt-2 mb-1' : block.level === 2 ? 'text-base mt-4 mb-1' : 'text-sm mt-3 mb-0.5';
+
+  if (onEdit && editing) {
     return (
       <input
+        autoFocus
         value={block.text}
         onChange={e => onEdit({ ...block, text: e.target.value })}
-        className={cn(base, sizeClass, 'w-full rounded bg-transparent px-1 -mx-1 outline-none focus:ring-1 focus:ring-ring/30')}
+        onBlur={() => setEditing(false)}
+        className={cn(base, sizeClass, 'animate-in fade-in-0 duration-100 w-full rounded bg-transparent px-1 -mx-1 outline-none focus:ring-1 focus:ring-ring/30')}
       />
     );
   }
-  if (block.level === 1) return <h1 className={cn(base, 'text-xl mt-2 mb-1')}>{block.text}</h1>;
-  if (block.level === 2) return <h2 className={cn(base, 'text-base mt-4 mb-1')}>{block.text}</h2>;
-  return <h3 className={cn(base, 'text-sm mt-3 mb-0.5')}>{block.text}</h3>;
+
+  const hoverClass = onEdit ? 'cursor-text rounded px-1 -mx-1 hover:bg-muted/30 transition-colors' : '';
+  const onClick = onEdit ? () => setEditing(true) : undefined;
+  if (block.level === 1) return <h1 onClick={onClick} className={cn(base, sizeClass, hoverClass)}>{block.text}</h1>;
+  if (block.level === 2) return <h2 onClick={onClick} className={cn(base, sizeClass, hoverClass)}>{block.text}</h2>;
+  return <h3 onClick={onClick} className={cn(base, sizeClass, hoverClass)}>{block.text}</h3>;
 }
 
 function CodeBlock({ block, onEdit }: { block: Extract<Block, { type: 'code' }>; onEdit?: (updated: Block) => void }) {
+  const [editing, setEditing] = useState(false);
   const ref = useRef<HTMLTextAreaElement>(null);
+
   function autoResize() {
     const el = ref.current;
     if (!el) return;
     el.style.height = '0';
     el.style.height = `${el.scrollHeight}px`;
   }
+
   return (
     <div className="overflow-hidden rounded-xl border border-border-soft bg-muted/30">
       <div className="flex items-center gap-2 border-b border-border-soft px-3 py-1.5">
-        {onEdit ? (
+        {onEdit && editing ? (
           <input
             value={block.language}
             onChange={e => onEdit({ ...block, language: e.target.value })}
@@ -151,21 +188,26 @@ function CodeBlock({ block, onEdit }: { block: Extract<Block, { type: 'code' }>;
             className="font-mono text-[11px] text-faint-fg bg-transparent outline-none w-24"
           />
         ) : (
-          <span className="font-mono text-[11px] text-faint-fg">{block.language}</span>
+          <span className="font-mono text-[11px] text-faint-fg">{block.language || 'plaintext'}</span>
         )}
       </div>
-      {onEdit ? (
+      {onEdit && editing ? (
         <textarea
           ref={ref}
+          autoFocus
           value={block.content}
           onChange={e => { onEdit({ ...block, content: e.target.value }); autoResize(); }}
           onFocus={autoResize}
+          onBlur={() => setEditing(false)}
           rows={1}
           spellCheck={false}
           className="w-full resize-none overflow-hidden bg-transparent p-3 font-mono text-[12px] leading-relaxed outline-none"
         />
       ) : (
-        <pre className="overflow-x-auto p-3">
+        <pre
+          onClick={onEdit ? () => setEditing(true) : undefined}
+          className={cn('overflow-x-auto p-3', onEdit && 'cursor-text hover:bg-muted/10 transition-colors')}
+        >
           <code className={`language-${block.language} font-mono text-[12px] leading-relaxed`}>
             {block.content}
           </code>
@@ -534,6 +576,80 @@ function ProgressBlock({ block }: { block: Extract<Block, { type: 'progress' }> 
       <div className="h-2 w-full overflow-hidden rounded-full bg-muted">
         <div className="h-full rounded-full bg-primary transition-[width]" style={{ width: `${pct}%` }} />
       </div>
+    </div>
+  );
+}
+
+function RelationBlock({ block }: { block: Extract<Block, { type: 'relation' }> }) {
+  const { data: item } = useQuery<SpaceItem>({
+    queryKey: ['space-item', block.space_id, block.item_id],
+    queryFn: () => getSpaceItem(block.space_id, block.item_id),
+  });
+
+  const name = item?.name ?? block.label ?? 'Linked item';
+  const type = item?.type ?? '';
+
+  return (
+    <Link
+      to={`/spaces/${block.space_id}/items/${block.item_id}`}
+      className="group flex items-center gap-3 rounded-xl border border-border-soft bg-card px-4 py-3 transition-[border-color,box-shadow] hover:border-border hover:shadow-sm"
+    >
+      <div className="grid size-8 shrink-0 place-items-center rounded-lg bg-muted text-muted-foreground">
+        <ExternalLink size={14} />
+      </div>
+      <div className="min-w-0 flex-1">
+        <p className="truncate text-sm font-medium text-foreground">{name}</p>
+        {type && <p className="text-[11px] text-faint-fg capitalize">{type}</p>}
+      </div>
+      <ArrowRight size={14} className="shrink-0 text-faint-fg transition-transform group-hover:translate-x-0.5" />
+    </Link>
+  );
+}
+
+function FilePreviewBlock({ block }: { block: Extract<Block, { type: 'file-preview' }> }) {
+  const isPdf = block.mime_type === 'application/pdf';
+  const isImage = block.mime_type.startsWith('image/');
+  const token = getToken();
+  const apiUrl = token ? `${block.url}?token=${encodeURIComponent(token)}` : block.url;
+
+  if (isPdf) {
+    return (
+      <div className="overflow-hidden rounded-lg border border-border-soft">
+        <div className="flex items-center justify-between border-b border-border-soft bg-muted/40 px-3 py-2">
+          <div className="flex items-center gap-2 text-xs text-muted-foreground">
+            <FileText size={13} />
+            <span className="font-medium text-foreground">{block.filename}</span>
+          </div>
+          <a href={apiUrl} download={block.filename} className="flex items-center gap-1 rounded px-2 py-1 text-[11px] text-muted-foreground hover:bg-muted hover:text-foreground transition-colors">
+            <Download size={11} />Download
+          </a>
+        </div>
+        <iframe src={apiUrl} title={block.filename} className="h-[700px] w-full bg-white" />
+      </div>
+    );
+  }
+
+  if (isImage) {
+    return (
+      <div className="overflow-hidden rounded-lg border border-border-soft">
+        <img src={apiUrl} alt={block.filename} className="max-h-[600px] w-full object-contain bg-muted/20" />
+        <div className="flex items-center justify-between border-t border-border-soft bg-muted/40 px-3 py-2">
+          <span className="text-xs text-muted-foreground">{block.filename}</span>
+          <a href={apiUrl} download={block.filename} className="flex items-center gap-1 rounded px-2 py-1 text-[11px] text-muted-foreground hover:bg-muted hover:text-foreground transition-colors">
+            <Download size={11} />Download
+          </a>
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div className="flex items-center gap-3 rounded-lg border border-border-soft bg-card px-4 py-3">
+      <FileText size={18} className="shrink-0 text-muted-foreground" />
+      <span className="min-w-0 flex-1 truncate text-sm font-medium text-foreground">{block.filename}</span>
+      <a href={apiUrl} download={block.filename} className="flex items-center gap-1.5 rounded-md border border-border-soft bg-muted px-3 py-1.5 text-xs font-medium text-muted-foreground hover:bg-accent hover:text-foreground transition-colors">
+        <Download size={12} />Download
+      </a>
     </div>
   );
 }

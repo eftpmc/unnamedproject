@@ -90,6 +90,7 @@ function hydrate(row: SpaceItemRow): SpaceItemBase {
 export function getItemsForSpace(
   spaceId: string,
   filter?: { type?: string; fields?: Record<string, unknown> },
+  pagination?: { limit: number; before?: number },
 ): SpaceItemBase[] {
   const params: unknown[] = [spaceId];
   let sql = 'SELECT * FROM space_items WHERE space_id = ?';
@@ -106,7 +107,17 @@ export function getItemsForSpace(
     }
   }
 
+  if (pagination?.before !== undefined) {
+    sql += ' AND created_at < ?';
+    params.push(pagination.before);
+  }
+
   sql += ' ORDER BY created_at DESC, id DESC';
+
+  if (pagination?.limit !== undefined) {
+    sql += ` LIMIT ${pagination.limit}`;
+  }
+
   const rows = getDb().prepare(sql).all(...params) as SpaceItemRow[];
   return rows.map(hydrate);
 }

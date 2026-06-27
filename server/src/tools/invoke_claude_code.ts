@@ -105,6 +105,7 @@ export async function invokeClaudeCode(input: ClaudeCodeInput, ctx: ToolContext)
     let costUsd = 0;
     let stderrText = '';
     let timedOut = false;
+    let emittedText = false;
 
     const timeoutTimer = setTimeout(() => {
       timedOut = true;
@@ -134,13 +135,17 @@ export async function invokeClaudeCode(input: ClaudeCodeInput, ctx: ToolContext)
 
         if (event.type === 'assistant') {
           const msg = event.message as { content?: Array<{ type: string; name?: string; input?: Record<string, unknown>; text?: string }> } | undefined;
+          let firstText = true;
           for (const block of msg?.content ?? []) {
             if (block.type === 'tool_use' && block.name) {
               appendOutput(ctx.executionId, ctx.userId, `→ ${summarizeToolUse(block.name, block.input ?? {})}\n`);
             }
             if (block.type === 'text' && block.text) {
-              appendOutput(ctx.executionId, ctx.userId, block.text);
-              ctx.onText?.(block.text);
+              const prefix = (emittedText && firstText) ? '\n\n' : '';
+              appendOutput(ctx.executionId, ctx.userId, prefix + block.text);
+              ctx.onText?.(prefix + block.text);
+              firstText = false;
+              emittedText = true;
             }
           }
         }

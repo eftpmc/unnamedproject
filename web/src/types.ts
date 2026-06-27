@@ -98,7 +98,9 @@ export type BlockContent =
   | { type: 'stat'; label: string; value: string; trend?: { direction: 'up' | 'down' | 'flat'; label?: string } }
   | { type: 'list'; ordered?: boolean; items: string[] }
   | { type: 'progress'; label?: string; value: number; max?: number }
-  | { type: 'input'; label: string; value: string; placeholder?: string; input_type?: 'text' | 'number' | 'multiline' | 'select'; options?: string[] };
+  | { type: 'input'; label: string; value: string; placeholder?: string; input_type?: 'text' | 'number' | 'multiline' | 'select'; options?: string[] }
+  | { type: 'file-preview'; file_id: string; filename: string; mime_type: string; url: string }
+  | { type: 'relation'; item_id: string; space_id: string; label?: string };
 
 export type Block = BlockContent & { id?: string };
 

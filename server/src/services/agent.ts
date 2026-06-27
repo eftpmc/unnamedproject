@@ -142,15 +142,28 @@ export async function runAgentTurn(userId: string, sessionId: string, userMessag
     .get(sessionId) as { model: string | null; effort: string | null; provider_session_id: string | null } | undefined;
 
   const lastUserMsg = getDb()
-    .prepare("SELECT content FROM messages WHERE session_id = ? AND role = 'user' ORDER BY created_at DESC LIMIT 1")
-    .get(sessionId) as { content: string } | undefined;
+    .prepare("SELECT id, content FROM messages WHERE session_id = ? AND role = 'user' ORDER BY created_at DESC LIMIT 1")
+    .get(sessionId) as { id: string; content: string } | undefined;
 
   const prompt = lastUserMsg?.content ?? '';
+
+  const attachments = lastUserMsg
+    ? (getDb()
+        .prepare('SELECT id, filename, mime_type as mimeType, storage_path as storagePath FROM message_attachments WHERE message_id = ? ORDER BY created_at, filename')
+        .all(lastUserMsg.id) as { id: string; filename: string; mimeType: string; storagePath: string }[])
+    : [];
+
+  const attachmentBlock = attachments.length
+    ? `\n\n<attachments>\n${attachments.map(a => `<file id="${a.id}" name="${a.filename}" path="${a.storagePath}" mime_type="${a.mimeType}" />`).join('\n')}\n</attachments>\n\nThe files above are available on disk. Use the Read tool to access text/code files. For binary files (PDF, images) that should be stored in an item, use attach_file_to_item with the file's path attribute.`
+    : '';
+
   const intent = classifyIntent(prompt);
   const isResume = !!session?.provider_session_id;
   const systemPromptSuffix = isResume ? undefined : await buildContext(userId, sessionId, intent, prompt);
   const contextUpdate = isResume ? await buildContextUpdate(userId, sessionId, prompt) : undefined;
-  const effectivePrompt = contextUpdate ? `${contextUpdate}\n\n${prompt}` : prompt;
+  const effectivePrompt = contextUpdate
+    ? `<context>\n${contextUpdate}\n</context>\n\n${prompt}${attachmentBlock}`
+    : `${prompt}${attachmentBlock}`;
 
   const port = process.env.PORT ?? '3000';
   const mcpToken = generateMcpToken(userId, sessionId);

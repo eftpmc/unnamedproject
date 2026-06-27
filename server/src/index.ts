@@ -77,7 +77,7 @@ const authLimiter = rateLimit({
   standardHeaders: 'draft-8',
   legacyHeaders: false,
   message: { error: 'Too many attempts, please try again later.' },
-  skip: () => NODE_ENV === 'test',
+  skip: () => NODE_ENV === 'test' || NODE_ENV === 'development',
 });
 
 initDb();

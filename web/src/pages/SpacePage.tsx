@@ -2,10 +2,14 @@ import { useCallback, useEffect, useRef, useState, type ReactNode } from 'react'
 import { Link, useLocation, useNavigate, useParams } from 'react-router-dom';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { subscribe } from '../lib/ws.js';
+import { getToken } from '../lib/auth.js';
 import {
+  AlignLeft,
   ArrowLeft,
   Check,
   ChevronRight,
+  Code2,
+  Download,
   File,
   FileText,
   FileType,
@@ -13,11 +17,17 @@ import {
   GitBranch,
   GripVertical,
   LayoutDashboard,
+  Link2,
+  ListChecks,
+  ListOrdered,
   MessageSquare,
   MoreHorizontal,
+  Paperclip,
   Plus,
   Search,
+  SlidersHorizontal,
   Trash2,
+  Type,
   X,
 } from 'lucide-react';
 import {
@@ -25,9 +35,11 @@ import {
   createSpaceItem,
   deleteSpace,
   deleteSpaceItem,
+  deleteItemFile,
   getChats,
   getConnections,
   getItemContent,
+  getItemFiles,
   getItemSessions,
   getSpaceItems,
   getSpaces,
@@ -35,6 +47,8 @@ import {
   updateChatConfig,
   updateSpace,
   updateSpaceItem,
+  uploadItemFile,
+  type ItemFile,
 } from '../lib/api.js';
 import { usePageTitle } from '../lib/usePageTitle.js';
 import { timeAgo, cn } from '../lib/utils.js';
@@ -52,6 +66,8 @@ import {
 import { ContentColumn, EmptyPanel, PageBody, PageHeader, PageLoading, PageShell, Surface } from '@/components/ui/app-layout';
 import { TabStrip } from '@/components/ui/tab-strip';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
+import ReactMarkdown from 'react-markdown';
+import remarkGfm from 'remark-gfm';
 import FileBrowser from '../components/FileBrowser.js';
 import BlockRenderer from '../components/BlockRenderer.js';
 import EditableTitle from '../components/EditableTitle.js';
@@ -78,7 +94,7 @@ export default function SpacePage() {
     queryFn: () => getSpaceItems(spaceId!),
     enabled: !!spaceId,
   });
-  const { data: chats = [] } = useQuery<Session[]>({ queryKey: ['chats'], queryFn: getChats });
+  const { data: chats = [] } = useQuery<Session[]>({ queryKey: ['chats'], queryFn: () => getChats() });
   const spaceChats = chats.filter(chat => chat.pinned_space_id === spaceId);
   const currentItem = itemId ? items.find(item => item.id === itemId) ?? null : null;
 
@@ -141,17 +157,49 @@ export default function SpacePage() {
   );
 }
 
+function OverviewCard({ type, title, subtitle, href }: { type: string; title: string; subtitle: string; href: string }) {
+  const navigate = useNavigate();
+  return (
+    <button
+      type="button"
+      onClick={() => navigate(href)}
+      className="flex w-full items-center gap-3 rounded-xl border border-border-soft bg-card px-4 py-3 text-left transition-[transform,box-shadow,border-color] hover:-translate-y-px hover:border-border hover:shadow-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/30"
+    >
+      <ItemIcon type={type} />
+      <span className="min-w-0 flex-1">
+        <span className="block truncate text-sm font-medium text-foreground">{title}</span>
+        <span className="block text-[11px] text-faint-fg">{subtitle}</span>
+      </span>
+      <ChevronRight size={14} className="shrink-0 text-faint-fg" />
+    </button>
+  );
+}
+
+function OverviewSection({ label, children, action }: { label: string; children: ReactNode; action?: ReactNode }) {
+  return (
+    <div className="flex flex-col gap-2">
+      <div className="flex items-center justify-between">
+        <span className="text-xs font-semibold text-muted-foreground">{label}</span>
+        {action}
+      </div>
+      {children}
+    </div>
+  );
+}
+
 function Overview({ space, items, chats, onNewChat }: { space: Space; items: SpaceItem[]; chats: Session[]; onNewChat: () => void }) {
   const navigate = useNavigate();
-  const recent = [
-    ...chats.map(chat => ({ key: chat.id, type: 'Chat' as const, title: chat.title ?? 'Untitled chat', time: chat.updated_at, href: `/c/${chat.id}` })),
-    ...items.map(item => ({ key: item.id, type: item.type, title: item.name, time: item.created_at, href: `/spaces/${space.id}/items/${item.id}` })),
-  ].sort((a, b) => b.time - a.time).slice(0, 12);
+  const recentItems = [...items].sort((a, b) => b.created_at - a.created_at).slice(0, 8);
+  const recentChats = [...chats].sort((a, b) => b.updated_at - a.updated_at).slice(0, 5);
+  const isEmpty = items.length === 0 && chats.length === 0;
 
   return (
     <PageBody>
-      <ContentColumn className="max-w-4xl">
-        {recent.length === 0 ? (
+      <ContentColumn className="flex max-w-4xl flex-col gap-8 py-6">
+        {space.description && (
+          <p className="text-sm leading-relaxed text-muted-foreground">{space.description}</p>
+        )}
+        {isEmpty ? (
           <EmptyPanel
             title="Nothing here yet"
             description="Start a chat pinned to this space, or add an item to track your work."
@@ -167,23 +215,57 @@ function Overview({ space, items, chats, onNewChat }: { space: Space; items: Spa
             )}
           />
         ) : (
-          <div className="flex flex-col gap-2">
-            {recent.map(entry => (
-              <button
-                type="button"
-                key={`${entry.type}-${entry.key}`}
-                onClick={() => navigate(entry.href)}
-                className="flex w-full items-center gap-3 rounded-lg border border-border-soft bg-card px-4 py-3.5 text-left transition-[transform,box-shadow,border-color] hover:-translate-y-px hover:border-border hover:shadow-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/30"
+          <>
+            {recentItems.length > 0 && (
+              <OverviewSection
+                label="Items"
+                action={
+                  <button type="button" onClick={() => navigate(`/spaces/${space.id}/items`)} className="text-[11px] text-faint-fg hover:text-muted-foreground">
+                    View all →
+                  </button>
+                }
               >
-                <ItemIcon type={entry.type} />
-                <span className="min-w-0 flex-1">
-                  <span className="block truncate text-sm font-medium text-foreground">{entry.title}</span>
-                  <span className="block text-xs capitalize text-faint-fg">{entry.type} · {timeAgo(entry.time)}</span>
-                </span>
-                <ChevronRight size={15} className="shrink-0 text-faint-fg" />
-              </button>
-            ))}
-          </div>
+                {recentItems.map(item => {
+                  const preview = itemPreview(item);
+                  const blockCount = item.page_blocks.length;
+                  const meta = [
+                    preview ? preview.slice(0, 60) : null,
+                    blockCount > 0 ? `${blockCount} block${blockCount === 1 ? '' : 's'}` : null,
+                    timeAgo(item.created_at),
+                  ].filter(Boolean).join(' · ');
+                  return (
+                    <OverviewCard
+                      key={item.id}
+                      type={item.type}
+                      title={item.name}
+                      subtitle={meta}
+                      href={`/spaces/${space.id}/items/${item.id}`}
+                    />
+                  );
+                })}
+              </OverviewSection>
+            )}
+            {recentChats.length > 0 && (
+              <OverviewSection
+                label="Chats"
+                action={
+                  <button type="button" onClick={() => navigate(`/spaces/${space.id}/chats`)} className="text-[11px] text-faint-fg hover:text-muted-foreground">
+                    View all →
+                  </button>
+                }
+              >
+                {recentChats.map(chat => (
+                  <OverviewCard
+                    key={chat.id}
+                    type="Chat"
+                    title={chat.title ?? 'Untitled chat'}
+                    subtitle={timeAgo(chat.updated_at)}
+                    href={`/c/${chat.id}`}
+                  />
+                ))}
+              </OverviewSection>
+            )}
+          </>
         )}
       </ContentColumn>
     </PageBody>
@@ -229,7 +311,9 @@ function itemPreview(item: SpaceItem): string | null {
   return null;
 }
 
-function ItemsSection({ space, items }: { space: Space; items: SpaceItem[] }) {
+const ITEMS_PAGE_SIZE = 100;
+
+function ItemsSection({ space, items: firstPage }: { space: Space; items: SpaceItem[] }) {
   const queryClient = useQueryClient();
   const navigate = useNavigate();
   const [filter, setFilter] = useState<string>('all');
@@ -239,6 +323,25 @@ function ItemsSection({ space, items }: { space: Space; items: SpaceItem[] }) {
   const [name, setName] = useState('');
   const [value, setValue] = useState('');
   const [pendingDelete, setPendingDelete] = useState<SpaceItem | null>(null);
+  const [extraItems, setExtraItems] = useState<SpaceItem[]>([]);
+  const [loadingMore, setLoadingMore] = useState(false);
+
+  const items = [...firstPage, ...extraItems];
+  const hasMore = (firstPage.length === ITEMS_PAGE_SIZE && extraItems.length === 0)
+    || (extraItems.length > 0 && extraItems.length % ITEMS_PAGE_SIZE === 0);
+
+  async function loadMore() {
+    const last = items[items.length - 1];
+    if (!last) return;
+    setLoadingMore(true);
+    try {
+      const more = await getSpaceItems(space.id, { before: last.created_at });
+      setExtraItems(prev => [...prev, ...more]);
+    } finally {
+      setLoadingMore(false);
+    }
+  }
+
   const filtered = filter === 'all' ? items : items.filter(item => item.type === filter);
   const visible = search.trim() ? filtered.filter(item => item.name.toLowerCase().includes(search.trim().toLowerCase())) : filtered;
   const requiresValue = type === 'repo' || type === 'file';
@@ -311,18 +414,26 @@ function ItemsSection({ space, items }: { space: Space; items: SpaceItem[] }) {
           <EmptyPanel title={items.length === 0 ? 'No items yet' : search.trim() ? 'No results' : `No ${templates.find(t => t.id === filter)?.name ?? filter} items`} description="Add a repository, file, or templated item to this Space." />
         ) : (
           <div className="flex flex-col gap-2">
-            {visible.map(item => (
-              <div key={item.id} className="group flex items-center gap-3 rounded-lg border border-border-soft bg-card px-4 py-3.5 transition-[transform,box-shadow,border-color] hover:-translate-y-px hover:border-border hover:shadow-sm">
+            {visible.map(item => {
+              const preview = itemPreview(item);
+              const blockCount = item.page_blocks.length;
+              const typeName = templates.find(t => t.id === item.type)?.name ?? item.type;
+              const meta = [
+                typeName,
+                blockCount > 0 ? `${blockCount} block${blockCount === 1 ? '' : 's'}` : null,
+                timeAgo(item.created_at),
+              ].filter(Boolean).join(' · ');
+              return (
+              <div key={item.id} className="group flex items-center gap-3 rounded-xl border border-border-soft bg-card px-4 py-3 transition-[transform,box-shadow,border-color] hover:-translate-y-px hover:border-border hover:shadow-sm">
                 <button type="button" onClick={() => navigate(`/spaces/${space.id}/items/${item.id}`)} className="flex min-w-0 flex-1 items-center gap-3 text-left focus-visible:outline-none">
                   <ItemIcon type={item.type} />
                   <span className="min-w-0 flex-1">
                     <span className="block truncate text-sm font-medium">{item.name}</span>
-                    <span className="mt-0.5 block truncate text-xs text-faint-fg">
-                      {itemPreview(item) ?? (templates.find(t => t.id === item.type)?.name ?? item.type)}
+                    <span className="mt-0.5 block truncate text-[11px] text-faint-fg">
+                      {preview ? `${preview.slice(0, 60)} · ` : ''}{meta}
                     </span>
                   </span>
-                  <span className="shrink-0 text-xs text-faint-fg">{timeAgo(item.created_at)}</span>
-                  <ChevronRight size={15} className="shrink-0 text-faint-fg" />
+                  <ChevronRight size={14} className="shrink-0 text-faint-fg" />
                 </button>
                 <DropdownMenu>
                   <DropdownMenuTrigger asChild>
@@ -335,7 +446,22 @@ function ItemsSection({ space, items }: { space: Space; items: SpaceItem[] }) {
                   </DropdownMenuContent>
                 </DropdownMenu>
               </div>
-            ))}
+              );
+            })}
+          </div>
+        )}
+
+        {!search.trim() && hasMore && (
+          <div className="mt-4 flex justify-center">
+            <Button
+              variant="outline"
+              size="sm"
+              className="h-8 text-xs"
+              onClick={loadMore}
+              disabled={loadingMore}
+            >
+              {loadingMore ? 'Loading…' : 'Load more'}
+            </Button>
           </div>
         )}
       </ContentColumn>
@@ -610,6 +736,77 @@ function RepoDetail({ space, item }: { space: Space; item: RepoItem }) {
   );
 }
 
+function ItemFilesPanel({ spaceId, itemId }: { spaceId: string; itemId: string }) {
+  const queryClient = useQueryClient();
+  const fileInputRef = useRef<HTMLInputElement>(null);
+  const [uploading, setUploading] = useState(false);
+  const token = getToken();
+
+  const { data: files = [] } = useQuery<ItemFile[]>({
+    queryKey: ['item-files', spaceId, itemId],
+    queryFn: () => getItemFiles(spaceId, itemId),
+  });
+
+  const deleteMutation = useMutation({
+    mutationFn: (fileId: string) => deleteItemFile(spaceId, itemId, fileId),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['item-files', spaceId, itemId] }),
+  });
+
+  async function handleUpload(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    setUploading(true);
+    try {
+      await uploadItemFile(spaceId, itemId, file);
+      queryClient.invalidateQueries({ queryKey: ['item-files', spaceId, itemId] });
+    } finally {
+      setUploading(false);
+      if (fileInputRef.current) fileInputRef.current.value = '';
+    }
+  }
+
+  return (
+    <div className="mt-8 border-t border-border-soft pt-6">
+      <div className="mb-3 flex items-center justify-between">
+        <span className="text-[11px] font-medium text-muted-foreground">Attached files</span>
+        <button
+          type="button"
+          disabled={uploading}
+          onClick={() => fileInputRef.current?.click()}
+          className="flex items-center gap-1.5 rounded-md border border-border-soft bg-card px-2.5 py-1 text-[11px] font-medium text-muted-foreground transition-colors hover:border-border hover:text-foreground disabled:opacity-50"
+        >
+          <Paperclip size={11} />
+          {uploading ? 'Uploading…' : 'Upload file'}
+        </button>
+        <input ref={fileInputRef} type="file" className="hidden" onChange={handleUpload} />
+      </div>
+      {files.length === 0 ? (
+        <p className="text-xs text-faint-fg">No files attached.</p>
+      ) : (
+        <div className="flex flex-col gap-2">
+          {files.map(f => (
+            <div key={f.id} className="group flex items-center gap-3 rounded-lg border border-border-soft bg-card px-3 py-2">
+              <FileText size={14} className="shrink-0 text-muted-foreground" />
+              <span className="min-w-0 flex-1 truncate text-sm text-foreground">{f.filename}</span>
+              <span className="text-xs text-faint-fg">{formatBytes(f.sizeBytes)}</span>
+              <a href={token ? `${f.url}?token=${encodeURIComponent(token)}` : f.url} download={f.filename} className="text-faint-fg transition-colors hover:text-muted-foreground">
+                <Download size={13} />
+              </a>
+              <button
+                type="button"
+                onClick={() => deleteMutation.mutate(f.id)}
+                className="text-faint-fg opacity-0 transition-[opacity,color] hover:text-destructive group-hover:opacity-100"
+              >
+                <X size={13} />
+              </button>
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
 function TemplateItemDetail({ space, item }: { space: Space; item: SpaceItem }) {
   const queryClient = useQueryClient();
   const { data: templates = [] } = useQuery({
@@ -620,6 +817,7 @@ function TemplateItemDetail({ space, item }: { space: Space; item: SpaceItem }) 
 
   const [blocks, setBlocks] = useState(item.page_blocks);
   const saveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const pendingSaveRef = useRef<Block[] | null>(null);
   useEffect(() => {
     if (!saveTimerRef.current) setBlocks(item.page_blocks);
   }, [item.id, item.page_blocks]);
@@ -629,10 +827,26 @@ function TemplateItemDetail({ space, item }: { space: Space; item: SpaceItem }) 
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ['space-items', space.id] }),
   });
 
+  // Flush any pending save on unmount so navigating away doesn't silently drop changes
+  useEffect(() => {
+    return () => {
+      if (saveTimerRef.current) {
+        clearTimeout(saveTimerRef.current);
+        saveTimerRef.current = null;
+        if (pendingSaveRef.current) {
+          saveMutation.mutate(pendingSaveRef.current);
+        }
+      }
+    };
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
   const schedulesSave = useCallback((next: Block[]) => {
+    pendingSaveRef.current = next;
     if (saveTimerRef.current) clearTimeout(saveTimerRef.current);
     saveTimerRef.current = setTimeout(() => {
       saveTimerRef.current = null;
+      pendingSaveRef.current = null;
       saveMutation.mutate(next);
     }, 800);
   }, [saveMutation]);
@@ -675,21 +889,26 @@ function TemplateItemDetail({ space, item }: { space: Space; item: SpaceItem }) 
   const [dragOverIdx, setDragOverIdx] = useState<number | null>(null);
 
   const fieldEntries = Object.entries(item.fields).filter(([, v]) => v !== null && v !== undefined && v !== '');
+  const inlineFields = fieldEntries.filter(([, v]) => String(v).length <= 120);
+  const longFields = fieldEntries.filter(([, v]) => String(v).length > 120);
 
   return (
     <PageBody>
       <ContentColumn className="max-w-4xl py-6">
-        <div className="mb-4 flex items-center gap-2">
-          <span className="rounded-md bg-muted px-2 py-0.5 text-[11px] font-medium text-muted-foreground capitalize">
+        <div className="mb-5 flex items-center gap-2">
+          <span className="rounded-full bg-muted px-2.5 py-0.5 text-[11px] font-medium text-muted-foreground capitalize">
             {typeName}
           </span>
+          {blocks.length > 0 && (
+            <span className="text-[11px] text-faint-fg">{blocks.length} block{blocks.length === 1 ? '' : 's'}</span>
+          )}
           {saveMutation.isPending && (
-            <span className="text-[11px] text-faint-fg">Saving…</span>
+            <span className="text-[11px] text-faint-fg">· Saving…</span>
           )}
         </div>
-        {fieldEntries.length > 0 && (
+        {inlineFields.length > 0 && (
           <div className="mb-5 flex flex-wrap gap-x-5 gap-y-2 rounded-lg border border-border-soft bg-card px-4 py-3">
-            {fieldEntries.map(([key, value]) => (
+            {inlineFields.map(([key, value]) => (
               <div key={key} className="flex min-w-0 items-baseline gap-1.5">
                 <span className="shrink-0 text-[11px] text-muted-foreground capitalize">{key.replace(/_/g, ' ')}</span>
                 <span className="min-w-0 truncate font-mono text-xs">{String(value)}</span>
@@ -697,10 +916,28 @@ function TemplateItemDetail({ space, item }: { space: Space; item: SpaceItem }) 
             ))}
           </div>
         )}
-        {blocks.length === 0 ? (
+        {longFields.map(([key, value]) => (
+          <div key={key} className="mb-5">
+            <p className="mb-1.5 text-[11px] font-medium text-muted-foreground capitalize">{key.replace(/_/g, ' ')}</p>
+            <div className="rounded-lg border border-border-soft bg-card px-4 py-3 text-[14px] leading-relaxed text-fg-soft
+              [&_h1]:mb-1 [&_h1]:mt-2 [&_h1]:text-xl [&_h1]:font-semibold [&_h1]:text-foreground
+              [&_h2]:mb-1 [&_h2]:mt-4 [&_h2]:text-base [&_h2]:font-semibold [&_h2]:text-foreground
+              [&_h3]:mb-0.5 [&_h3]:mt-3 [&_h3]:text-sm [&_h3]:font-semibold [&_h3]:text-foreground
+              [&_p]:mb-3 [&_p:last-child]:mb-0
+              [&_ul]:mb-3 [&_ul]:ml-5 [&_ul]:list-disc
+              [&_ol]:mb-3 [&_ol]:ml-5 [&_ol]:list-decimal
+              [&_li]:mb-1
+              [&_hr]:my-4 [&_hr]:border-border-soft
+              [&_code]:rounded [&_code]:bg-muted [&_code]:px-1.5 [&_code]:py-0.5 [&_code]:font-mono [&_code]:text-[13px]
+              [&_pre]:my-3 [&_pre]:overflow-x-auto [&_pre]:rounded-xl [&_pre]:border [&_pre]:border-border-soft [&_pre]:bg-muted/30 [&_pre]:p-3">
+              <ReactMarkdown remarkPlugins={[remarkGfm]}>{String(value)}</ReactMarkdown>
+            </div>
+          </div>
+        ))}
+        {blocks.length === 0 && longFields.length === 0 ? (
           <div className="flex flex-col items-center gap-3 rounded-lg border border-dashed border-border bg-background/50 px-4 py-10 text-center">
             <p className="text-sm text-muted-foreground">No content yet. Ask the agent to fill this in, or add a block below.</p>
-            <AddBlockButton onAdd={addBlock} />
+            <BlockInserter spaceId={space.id} onAdd={addBlock} />
           </div>
         ) : (
           <div className="flex flex-col gap-4">
@@ -748,9 +985,10 @@ function TemplateItemDetail({ space, item }: { space: Space; item: SpaceItem }) 
                 </button>
               </div>
             ))}
-            <AddBlockButton onAdd={addBlock} />
+            <BlockInserter spaceId={space.id} onAdd={addBlock} />
           </div>
         )}
+        <ItemFilesPanel spaceId={space.id} itemId={item.id} />
       </ContentColumn>
     </PageBody>
   );
@@ -799,58 +1037,202 @@ function FileDetail({ space, item }: { space: Space; item: FileItem }) {
   );
 }
 
-const BLOCK_OPTIONS: { label: string; description: string; block: Block }[] = [
-  { label: 'Text', description: 'Plain paragraph', block: { type: 'text', content: '' } },
-  { label: 'Heading', description: 'Section title', block: { type: 'heading', level: 2, text: '' } },
-  { label: 'Code', description: 'Code snippet', block: { type: 'code', language: 'plaintext', content: '' } },
-  { label: 'Callout', description: 'Highlighted note', block: { type: 'callout', variant: 'info', content: '' } },
-  { label: 'Bullet list', description: 'Unordered list', block: { type: 'list', ordered: false, items: [''] } },
-  { label: 'Numbered list', description: 'Ordered list', block: { type: 'list', ordered: true, items: [''] } },
-  { label: 'Task list', description: 'Checkboxes', block: { type: 'task-list', tasks: [] } },
-  { label: 'Text input', description: 'Single-line field', block: { type: 'input', label: 'Label', value: '', input_type: 'text' } },
-  { label: 'Long input', description: 'Multi-line field', block: { type: 'input', label: 'Label', value: '', input_type: 'multiline' } },
-  { label: 'Number input', description: 'Numeric field', block: { type: 'input', label: 'Label', value: '', input_type: 'number' } },
-  { label: 'Dropdown', description: 'Pick from options', block: { type: 'input', label: 'Label', value: '', input_type: 'select', options: ['Option 1', 'Option 2'] } },
+type BlockEntry = { key: string; Icon: React.ElementType; label: string; desc: string; group: string };
+
+const BLOCK_CATALOG: BlockEntry[] = [
+  { key: 'text',     Icon: AlignLeft,        label: 'Text',          desc: 'Paragraph or markdown',       group: 'Content' },
+  { key: 'heading',  Icon: Type,             label: 'Heading',       desc: 'H1, H2, or H3 title',         group: 'Content' },
+  { key: 'code',     Icon: Code2,            label: 'Code',          desc: 'Syntax-highlighted snippet',  group: 'Content' },
+  { key: 'callout',  Icon: MessageSquare,    label: 'Callout',       desc: 'Info, tip, or warning box',   group: 'Content' },
+  { key: 'list',     Icon: ListOrdered,      label: 'List',          desc: 'Bullet or numbered list',     group: 'Content' },
+  { key: 'task',     Icon: ListChecks,       label: 'Task list',     desc: 'Checkboxes with progress',    group: 'Content' },
+  { key: 'input',    Icon: SlidersHorizontal, label: 'Input',        desc: 'User-fillable text field',    group: 'Interactive' },
+  { key: 'relation', Icon: Link2,            label: 'Relation',      desc: 'Link to another item',        group: 'Links' },
 ];
 
-function AddBlockButton({ onAdd }: { onAdd: (block: Block) => void }) {
+function makeBlock(key: string): Block {
+  switch (key) {
+    case 'text':     return { type: 'text', content: '' };
+    case 'heading':  return { type: 'heading', level: 2, text: '' };
+    case 'code':     return { type: 'code', language: 'plaintext', content: '' };
+    case 'callout':  return { type: 'callout', variant: 'info', content: '' };
+    case 'list':     return { type: 'list', ordered: false, items: [''] };
+    case 'task':     return { type: 'task-list', tasks: [] };
+    case 'input':    return { type: 'input', label: 'Label', value: '', input_type: 'text' };
+    default:         return { type: 'text', content: '' };
+  }
+}
+
+function BlockInserter({ spaceId, onAdd }: { spaceId: string; onAdd: (block: Block) => void }) {
   const [open, setOpen] = useState(false);
+  const [query, setQuery] = useState('');
+  const [step, setStep] = useState<'types' | 'relation'>('types');
+  const [highlighted, setHighlighted] = useState(0);
+  const inputRef = useRef<HTMLInputElement>(null);
+
+  const { data: spaceItems = [] } = useQuery<SpaceItem[]>({
+    queryKey: ['space-items', spaceId],
+    queryFn: () => getSpaceItems(spaceId),
+    enabled: open && step === 'relation',
+  });
+
+  const q = query.trim().toLowerCase();
+  const filteredTypes = BLOCK_CATALOG.filter(b =>
+    !q || b.label.toLowerCase().includes(q) || b.desc.toLowerCase().includes(q)
+  );
+  const filteredItems = spaceItems.filter(item =>
+    !q || item.name.toLowerCase().includes(q)
+  );
+
+  const activeList = step === 'types' ? filteredTypes : filteredItems;
+
+  function openPalette() {
+    setOpen(true);
+    setQuery('');
+    setStep('types');
+    setHighlighted(0);
+    setTimeout(() => inputRef.current?.focus(), 0);
+  }
+
+  function close() {
+    setOpen(false);
+    setQuery('');
+    setStep('types');
+  }
+
+  function selectType(key: string) {
+    if (key === 'relation') {
+      setStep('relation');
+      setQuery('');
+      setHighlighted(0);
+      return;
+    }
+    onAdd(makeBlock(key));
+    close();
+  }
+
+  function selectItem(item: SpaceItem) {
+    onAdd({ type: 'relation', item_id: item.id, space_id: spaceId, label: item.name });
+    close();
+  }
+
+  function onKeyDown(e: React.KeyboardEvent) {
+    if (e.key === 'ArrowDown') { e.preventDefault(); setHighlighted(h => Math.min(h + 1, activeList.length - 1)); }
+    else if (e.key === 'ArrowUp') { e.preventDefault(); setHighlighted(h => Math.max(h - 1, 0)); }
+    else if (e.key === 'Enter') {
+      e.preventDefault();
+      if (step === 'types') { const b = filteredTypes[highlighted]; if (b) selectType(b.key); }
+      else { const item = filteredItems[highlighted]; if (item) selectItem(item); }
+    }
+    else if (e.key === 'Escape') close();
+    else if (e.key === 'Backspace' && !query && step === 'relation') { setStep('types'); setHighlighted(0); }
+  }
+
+  const groups = step === 'types'
+    ? Array.from(new Set(filteredTypes.map(b => b.group)))
+    : [];
+
   return (
-    <Popover open={open} onOpenChange={setOpen}>
+    <Popover open={open} onOpenChange={o => { if (!o) close(); }}>
       <PopoverTrigger asChild>
         <button
           type="button"
+          onClick={openPalette}
           className="flex items-center gap-1.5 self-start rounded-md px-2 py-1 text-[11px] text-faint-fg transition-colors hover:bg-muted hover:text-muted-foreground"
         >
           <Plus size={11} />Add block
         </button>
       </PopoverTrigger>
-      <PopoverContent align="start" className="w-52 p-1.5">
-        {BLOCK_OPTIONS.map(opt => (
-          <button
-            key={opt.label}
-            type="button"
-            onClick={() => { onAdd(opt.block); setOpen(false); }}
-            className="flex w-full flex-col rounded-md px-2.5 py-2 text-left transition-colors hover:bg-muted"
-          >
-            <span className="text-xs font-medium text-foreground">{opt.label}</span>
-            <span className="text-[11px] text-faint-fg">{opt.description}</span>
-          </button>
-        ))}
+      <PopoverContent align="start" sideOffset={6} className="w-64 p-0 overflow-hidden">
+        <div className="flex items-center gap-2 border-b border-border-soft px-3 py-2">
+          {step === 'relation' && (
+            <button type="button" onClick={() => { setStep('types'); setQuery(''); setHighlighted(0); }} className="shrink-0 text-faint-fg hover:text-muted-foreground">
+              <ChevronRight size={12} className="rotate-180" />
+            </button>
+          )}
+          <input
+            ref={inputRef}
+            value={query}
+            onChange={e => { setQuery(e.target.value); setHighlighted(0); }}
+            onKeyDown={onKeyDown}
+            placeholder={step === 'relation' ? 'Search items…' : 'Search blocks…'}
+            className="flex-1 bg-transparent text-xs text-foreground outline-none placeholder:text-faint-fg"
+          />
+        </div>
+        <div className="max-h-72 overflow-y-auto py-1">
+          {step === 'types' ? (
+            groups.map(group => (
+              <div key={group}>
+                <p className="px-3 pb-0.5 pt-2 text-[10px] font-semibold text-faint-fg">{group}</p>
+                {filteredTypes.filter(b => b.group === group).map((b, i) => {
+                  const globalIdx = filteredTypes.indexOf(b);
+                  return (
+                    <button
+                      key={b.key}
+                      type="button"
+                      onMouseEnter={() => setHighlighted(globalIdx)}
+                      onClick={() => selectType(b.key)}
+                      className={cn(
+                        'flex w-full items-center gap-3 px-3 py-2 text-left transition-colors',
+                        highlighted === globalIdx ? 'bg-muted' : 'hover:bg-muted/50'
+                      )}
+                    >
+                      <div className="grid size-7 shrink-0 place-items-center rounded-md border border-border-soft bg-background">
+                        <b.Icon size={13} className="text-muted-foreground" />
+                      </div>
+                      <div>
+                        <p className="text-xs font-medium text-foreground">{b.label}</p>
+                        <p className="text-[11px] text-faint-fg">{b.desc}</p>
+                      </div>
+                    </button>
+                  );
+                })}
+              </div>
+            ))
+          ) : (
+            filteredItems.length === 0 ? (
+              <p className="px-3 py-4 text-center text-xs text-faint-fg">No items in this space</p>
+            ) : filteredItems.map((item, i) => (
+              <button
+                key={item.id}
+                type="button"
+                onMouseEnter={() => setHighlighted(i)}
+                onClick={() => selectItem(item)}
+                className={cn(
+                  'flex w-full items-center gap-3 px-3 py-2 text-left transition-colors',
+                  highlighted === i ? 'bg-muted' : 'hover:bg-muted/50'
+                )}
+              >
+                <div className="grid size-7 shrink-0 place-items-center rounded-md border border-border-soft bg-background">
+                  <Link2 size={12} className="text-muted-foreground" />
+                </div>
+                <div className="min-w-0">
+                  <p className="truncate text-xs font-medium text-foreground">{item.name}</p>
+                  <p className="text-[11px] text-faint-fg capitalize">{item.type}</p>
+                </div>
+              </button>
+            ))
+          )}
+        </div>
       </PopoverContent>
     </Popover>
   );
 }
 
-function ItemIcon({ type }: { type: string }) {
-  const icon: Record<string, ReactNode> = {
-    repo: <FolderGit2 size={15} />,
-    file: <FileText size={15} />,
-    Chat: <MessageSquare size={15} />,
-    kanban: <LayoutDashboard size={15} />,
-    // all block-based doc types get FileType; custom template IDs fall through too
+function ItemIcon({ type, size = 8 }: { type: string; size?: number }) {
+  const configs: Record<string, { icon: ReactNode; className: string }> = {
+    repo:   { icon: <FolderGit2 size={15} />,    className: 'bg-blue-500/10 text-blue-400' },
+    file:   { icon: <FileText size={15} />,       className: 'bg-amber-500/10 text-amber-400' },
+    Chat:   { icon: <MessageSquare size={14} />,  className: 'bg-violet-500/10 text-violet-400' },
+    kanban: { icon: <LayoutDashboard size={14} />, className: 'bg-cyan-500/10 text-cyan-400' },
   };
-  return <span className="grid size-8 shrink-0 place-items-center rounded-lg bg-muted text-muted-foreground">{icon[type] ?? <FileType size={15} />}</span>;
+  const cfg = configs[type];
+  const sizeClass = size === 7 ? 'size-7' : size === 9 ? 'size-9' : 'size-8';
+  return (
+    <span className={cn('grid shrink-0 place-items-center rounded-lg', sizeClass, cfg?.className ?? 'bg-emerald-500/10 text-emerald-400')}>
+      {cfg?.icon ?? <FileType size={14} />}
+    </span>
+  );
 }
 
 function formatBytes(bytes: number) {

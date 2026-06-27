@@ -56,7 +56,7 @@ export default function ChatView({ chatId }: ChatViewProps) {
 
   const { data: chats = [] } = useQuery<Session[]>({
     queryKey: ['chats'],
-    queryFn: getChats,
+    queryFn: () => getChats(),
   });
   const chat = chats.find(s => s.id === chatId);
   const effort = chat?.effort ?? 'medium';
@@ -583,8 +583,10 @@ export default function ChatView({ chatId }: ChatViewProps) {
         <EmptyChatState
           value={inputValue}
           onChange={(v) => { setInputValue(v); if (v) localStorage.setItem(draftKey, v); else localStorage.removeItem(draftKey); }}
-          onSendContent={(content) => sendPrompt(content)}
+          onSend={(content, attachments) => sendPrompt(content, attachments)}
           disabled={agentActive}
+          pendingFiles={dropFiles}
+          onPendingFilesConsumed={() => setDropFiles([])}
           projectName={pinnedProject?.name}
           spaces={pinnedProject ? [] : projects}
           onPinSpace={(spaceId) => configMutation.mutate({ pinned_space_id: spaceId })}

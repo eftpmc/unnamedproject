@@ -125,6 +125,19 @@ export function validateBlock(value: unknown, path = 'block'): string | null {
       if (b.options !== undefined && !isStringArray(b.options)) return `${path}.options must be a string array`;
       return null;
 
+    case 'file-preview':
+      if (!isString(b.file_id)) return `${path}.file_id must be a string`;
+      if (!isString(b.filename)) return `${path}.filename must be a string`;
+      if (!isString(b.mime_type)) return `${path}.mime_type must be a string`;
+      if (!isString(b.url)) return `${path}.url must be a string`;
+      return null;
+
+    case 'relation':
+      if (!isString(b.item_id)) return `${path}.item_id must be a string`;
+      if (!isString(b.space_id)) return `${path}.space_id must be a string`;
+      if (b.label !== undefined && !isString(b.label)) return `${path}.label must be a string`;
+      return null;
+
     default:
       return `${path}.type '${String(b.type)}' is not a recognized block type`;
   }

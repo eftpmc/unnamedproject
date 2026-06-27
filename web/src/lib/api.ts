@@ -35,8 +35,9 @@ export async function login(email: string, password: string): Promise<string> {
   return data.token;
 }
 
-export function getChats(): Promise<Session[]> {
-  return request('/sessions');
+export function getChats(opts?: { before?: number }): Promise<Session[]> {
+  const params = opts?.before ? `?before=${opts.before}` : '';
+  return request(`/sessions${params}`);
 }
 
 export function searchChats(q: string): Promise<Session[]> {
@@ -150,8 +151,9 @@ export function updateSpace(id: string, body: { description?: string; name?: str
   return request(`/spaces/${id}`, { method: 'PATCH', body: JSON.stringify(body) });
 }
 
-export function getSpaceItems(spaceId: string): Promise<SpaceItem[]> {
-  return request(`/spaces/${spaceId}/items`);
+export function getSpaceItems(spaceId: string, opts?: { before?: number }): Promise<SpaceItem[]> {
+  const params = opts?.before ? `?before=${opts.before}` : '';
+  return request(`/spaces/${spaceId}/items${params}`);
 }
 
 export function createSpaceItem(
@@ -302,5 +304,28 @@ export function deleteScheduledTask(id: string): Promise<void> {
 
 export function runScheduledTask(id: string): Promise<void> {
   return request(`/scheduled-tasks/${id}/run`, { method: 'POST' });
+}
+
+export interface ItemFile {
+  id: string;
+  filename: string;
+  mimeType: string;
+  sizeBytes: number;
+  createdAt: number;
+  url: string;
+}
+
+export function getItemFiles(spaceId: string, itemId: string): Promise<ItemFile[]> {
+  return request(`/spaces/${spaceId}/items/${itemId}/files`);
+}
+
+export async function uploadItemFile(spaceId: string, itemId: string, file: File): Promise<ItemFile> {
+  const body = new FormData();
+  body.append('file', file);
+  return request(`/spaces/${spaceId}/items/${itemId}/files`, { method: 'POST', body });
+}
+
+export function deleteItemFile(spaceId: string, itemId: string, fileId: string): Promise<void> {
+  return request(`/spaces/${spaceId}/items/${itemId}/files/${fileId}`, { method: 'DELETE' });
 }
 

@@ -11,10 +11,17 @@ router.use(requireAuth);
 
 router.get('/', (req, res) => {
   const { userId } = req as AuthedRequest;
-  const rows = getDb()
-    .prepare('SELECT id, title, effort, pinned_space_id, created_at, updated_at FROM sessions WHERE user_id = ? ORDER BY updated_at DESC LIMIT 200')
-    .all(userId);
-  res.json(rows);
+  const before = req.query.before ? parseInt(req.query.before as string, 10) : undefined;
+  const PAGE = 100;
+
+  const params: unknown[] = [userId];
+  let sql = 'SELECT id, title, effort, pinned_space_id, created_at, updated_at FROM sessions WHERE user_id = ?';
+  if (before) {
+    sql += ' AND updated_at < ?';
+    params.push(before);
+  }
+  sql += ` ORDER BY updated_at DESC LIMIT ${PAGE}`;
+  res.json(getDb().prepare(sql).all(...params));
 });
 
 router.get('/:id/events', (req, res) => {

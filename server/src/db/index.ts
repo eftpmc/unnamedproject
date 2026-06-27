@@ -814,6 +814,20 @@ export const migrations: Migration[] = [
         .run(fileSchema, JSON.stringify(['file-readable']));
     }
   }},
+  { version: 24, name: 'item-file-storage', up: (db) => {
+    db.exec(`
+      CREATE TABLE IF NOT EXISTS item_files (
+        id TEXT PRIMARY KEY,
+        item_id TEXT NOT NULL REFERENCES space_items(id) ON DELETE CASCADE,
+        filename TEXT NOT NULL,
+        mime_type TEXT NOT NULL,
+        size_bytes INTEGER NOT NULL,
+        storage_path TEXT NOT NULL,
+        created_at INTEGER NOT NULL DEFAULT (unixepoch())
+      );
+      CREATE INDEX IF NOT EXISTS idx_item_files_item_id ON item_files(item_id);
+    `);
+  }},
 ];
 
 function tableSql(database: Database.Database, name: string): string | undefined {

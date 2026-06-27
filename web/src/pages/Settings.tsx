@@ -484,6 +484,8 @@ export default function Settings() {
     onSuccess: () => qc.invalidateQueries({ queryKey: ['google-status'] }),
   });
 
+  const [googleError, setGoogleError] = useState('');
+
   // Handle redirect back from Google OAuth
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
@@ -493,6 +495,9 @@ export default function Settings() {
       window.history.replaceState({}, '', '/settings');
       if (connected) {
         qc.invalidateQueries({ queryKey: ['google-status'] });
+        setTab('mcp');
+      } else if (error) {
+        setGoogleError(error);
         setTab('mcp');
       }
     }
@@ -684,6 +689,7 @@ export default function Settings() {
               {/* Google services */}
               <div>
                 <SectionLabel>Google</SectionLabel>
+                {googleError && <p className="mb-2 text-xs text-destructive">{googleError}</p>}
                 <div className="flex flex-col gap-3">
                   <SettingRow>
                     <SettingRowInfo title="Gmail" description="Read, send, and search email" />

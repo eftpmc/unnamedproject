@@ -83,7 +83,7 @@ router.get('/callback', async (req, res) => {
     } else {
       db.prepare(
         'INSERT INTO connections (id, user_id, name, type, purpose, encrypted_config) VALUES (?,?,?,?,?,?)',
-      ).run(newId(), userId, service, 'google', service, encrypted);
+      ).run(newId(), userId, service, 'google', 'google', encrypted);
     }
 
     const frontendUrl = process.env.FRONTEND_URL ?? 'http://localhost:5173';

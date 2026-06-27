@@ -29,7 +29,6 @@ vi.mock('../lib/api.js', () => ({
 
 vi.mock('../components/FileBrowser.js', () => ({ default: () => <div>Repository browser</div> }));
 vi.mock('../components/DocumentView.js', () => ({ default: () => <div>Document editor</div> }));
-vi.mock('../components/TrackerView.js', () => ({ default: () => <div>Tracker view</div> }));
 
 function renderPage(path: string) {
   return render(

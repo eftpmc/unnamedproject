@@ -50,7 +50,6 @@ import { ContentColumn, EmptyPanel, PageBody, PageHeader, PageLoading, PageShell
 import { TabStrip } from '@/components/ui/tab-strip';
 import FileBrowser from '../components/FileBrowser.js';
 import DocumentView from '../components/DocumentView.js';
-import TrackerView from '../components/TrackerView.js';
 import TriggersSection from '../components/TriggersSection.js';
 import type { Connection, Document, DocumentWithBody, Project, Session, Space, WSEvent, WSSessionEventCreated } from '../types.js';
 
@@ -316,7 +315,6 @@ function DocumentsSection({ space, documents }: { space: Space; documents: Docum
   const navigate = useNavigate();
   const [typeFilter, setTypeFilter] = useState<string>('all');
   const [search, setSearch] = useState('');
-  const [showTracker, setShowTracker] = useState(false);
   const [dialogOpen, setDialogOpen] = useState(false);
   const [newTitle, setNewTitle] = useState('');
   const [newType, setNewType] = useState('');
@@ -329,8 +327,6 @@ function DocumentsSection({ space, documents }: { space: Space; documents: Docum
   const visible = search.trim()
     ? filtered.filter(d => d.title.toLowerCase().includes(search.trim().toLowerCase()))
     : filtered;
-  const hasStatuses = filtered.some(d => d.status !== null);
-
   const createMutation = useMutation({
     mutationFn: () => createDocument(space.id, {
       path: newPath.trim() || `${newTitle.trim().toLowerCase().replace(/\s+/g, '-')}.md`,
@@ -360,7 +356,7 @@ function DocumentsSection({ space, documents }: { space: Space; documents: Docum
     <PageBody>
       <ContentColumn className="max-w-4xl">
         <div className="mb-5 flex flex-wrap items-center gap-3">
-          <Select value={typeFilter} onValueChange={v => { setTypeFilter(v); setShowTracker(false); }}>
+          <Select value={typeFilter} onValueChange={v => setTypeFilter(v)}>
             <SelectTrigger size="sm" className="h-8 w-32 text-xs capitalize">
               <SelectValue />
             </SelectTrigger>
@@ -378,27 +374,12 @@ function DocumentsSection({ space, documents }: { space: Space; documents: Docum
               className="h-8 pl-8 text-xs"
             />
           </div>
-          {hasStatuses && (
-            <Button
-              size="sm"
-              variant={showTracker ? 'default' : 'outline'}
-              className="h-8 text-xs"
-              onClick={() => setShowTracker(v => !v)}
-            >
-              Tracker
-            </Button>
-          )}
           <Button size="sm" className="h-8 gap-1.5 text-xs" onClick={() => setDialogOpen(true)}>
             <Plus size={14} />Add document
           </Button>
         </div>
 
-        {showTracker && hasStatuses ? (
-          <TrackerView
-            documents={visible}
-            onOpen={doc => navigate(`/spaces/${space.id}/documents/${doc.id}`)}
-          />
-        ) : visible.length === 0 ? (
+        {visible.length === 0 ? (
           <EmptyPanel
             title={documents.length === 0 ? 'No documents yet' : 'No results'}
             description="Add a markdown document to this Space."

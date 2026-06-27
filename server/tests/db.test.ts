@@ -29,6 +29,17 @@ describe('database schema', () => {
     expect(names).not.toContain('plans');
     expect(names).not.toContain('plan_steps');
     expect(names).not.toContain('campaigns');
+    // new tables from baseline refactor
+    expect(names).toContain('projects');
+    expect(names).toContain('documents');
+    expect(names).toContain('triggers');
+    // legacy item/DAG tables must be absent
+    expect(names).not.toContain('space_items');
+    expect(names).not.toContain('item_templates');
+    expect(names).not.toContain('artifacts');
+    expect(names).not.toContain('pipelines');
+    expect(names).not.toContain('pipeline_tasks');
+    expect(names).not.toContain('campaign_tasks');
   });
 
   it('stamps the schema version after migrating', () => {

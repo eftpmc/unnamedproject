@@ -88,9 +88,12 @@ export function addDocumentItems(database: Database.Database): void {
   `);
 
   // 3. Add overview_blocks column to space_repos if missing
-  const repoCols = database.prepare("SELECT name FROM pragma_table_info('space_repos')").all() as { name: string }[];
-  if (!repoCols.some(c => c.name === 'overview_blocks')) {
-    database.exec('ALTER TABLE space_repos ADD COLUMN overview_blocks TEXT');
+  const spaceReposExists = database.prepare("SELECT 1 FROM sqlite_master WHERE type='table' AND name='space_repos'").get();
+  if (spaceReposExists) {
+    const repoCols = database.prepare("SELECT name FROM pragma_table_info('space_repos')").all() as { name: string }[];
+    if (!repoCols.some(c => c.name === 'overview_blocks')) {
+      database.exec('ALTER TABLE space_repos ADD COLUMN overview_blocks TEXT');
+    }
   }
 
   // 4. Widen session_events.type CHECK to include 'item_updated'
@@ -737,8 +740,10 @@ export const migrations: Migration[] = [
       },
     ];
     for (const { name, create, cols } of fixes) {
-      const exists = (db.prepare(`SELECT name FROM sqlite_master WHERE type='table' AND name='${name}'`).get() as { name: string } | undefined)?.name;
-      if (!exists) continue;
+      const row = db.prepare(`SELECT sql FROM sqlite_master WHERE type='table' AND name='${name}'`).get() as { sql: string } | undefined;
+      if (!row) continue;
+      // Only rebuild tables that still carry a dangling FK from migration 18's temp table
+      if (!row.sql.includes('_space_items_v18_tmp') && !row.sql.includes('_space_items_drop_plans_tmp')) continue;
       const tmp = `_${name}_fk22_tmp`;
       db.exec(`ALTER TABLE "${name}" RENAME TO "${tmp}"`);
       db.exec(create);
@@ -966,6 +971,15 @@ function widenConnectionsTypeForLocal(database: Database.Database): void {
 }
 
 function renameProjectsToSpacesAndAddItems(database: Database.Database): void {
+  // If spaces already exists and projects is the new repo-oriented table
+  // (detected by the presence of space_id column), this migration has already
+  // been applied or the new baseline schema was bootstrapped — skip entirely.
+  const spacesAlreadyExists = database.prepare("SELECT 1 FROM sqlite_master WHERE type='table' AND name='spaces'").get();
+  const projectsColNames = (database.prepare("PRAGMA table_info(projects)").all() as Array<{ name: string }>).map(c => c.name);
+  if (spacesAlreadyExists && projectsColNames.includes('space_id')) {
+    return;
+  }
+
   database.pragma('foreign_keys = OFF');
 
   const projectsTableExists = database
@@ -1316,6 +1330,32 @@ export function initDb(overrideDataDir?: string): void {
   // Drop plan system tables on existing DBs — runs outside migrations so it
   // executes idempotently on every startup without needing a migration version bump.
   dropPlanSystem(db);
+
+  // Drop legacy item/DAG tables — these are superseded by projects/documents/triggers.
+  // Runs on every startup; idempotent. Some legacy migration functions create these
+  // tables even on fresh DBs (e.g. addItemTemplates, addDocumentItems) so we sweep
+  // them up here.
+  dropLegacyItemTables(db);
+}
+
+function dropLegacyItemTables(database: Database.Database): void {
+  database.pragma('foreign_keys = OFF');
+  database.exec(`
+    DROP TABLE IF EXISTS item_files;
+    DROP TABLE IF EXISTS space_documents;
+    DROP TABLE IF EXISTS space_notes;
+    DROP TABLE IF EXISTS space_files;
+    DROP TABLE IF EXISTS space_repos;
+    DROP TABLE IF EXISTS space_notes;
+    DROP TABLE IF EXISTS item_templates;
+    DROP TABLE IF EXISTS space_items;
+    DROP TABLE IF EXISTS artifacts;
+    DROP TABLE IF EXISTS pipeline_tasks;
+    DROP TABLE IF EXISTS pipelines;
+    DROP TABLE IF EXISTS campaign_tasks;
+    DROP TABLE IF EXISTS campaigns;
+  `);
+  database.pragma('foreign_keys = ON');
 }
 
 export function getDb(): Database.Database {
@@ -1340,7 +1380,7 @@ function applySchema(): void {
       id TEXT PRIMARY KEY,
       user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
       name TEXT NOT NULL,
-      type TEXT NOT NULL CHECK(type IN ('anthropic','openai','github','mcp')),
+      type TEXT NOT NULL CHECK(type IN ('anthropic','openai','github','mcp','local','claude_code','codex','oauth','browser')),
       purpose TEXT NOT NULL DEFAULT 'tool'
         CHECK(purpose IN ('claude_code','codex','github','mcp','tool')),
       encrypted_config TEXT NOT NULL,
@@ -1348,16 +1388,54 @@ function applySchema(): void {
       UNIQUE(user_id, name)
     );
 
-    CREATE TABLE IF NOT EXISTS projects (
+    CREATE TABLE IF NOT EXISTS spaces (
       id TEXT PRIMARY KEY,
       user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
       name TEXT NOT NULL,
       description TEXT,
-      repo_path TEXT,
       enabled_connection_ids TEXT NOT NULL DEFAULT '[]',
       created_at INTEGER NOT NULL DEFAULT (unixepoch()),
       UNIQUE(user_id, name)
     );
+
+    CREATE TABLE IF NOT EXISTS projects (
+      id TEXT PRIMARY KEY,
+      space_id TEXT NOT NULL REFERENCES spaces(id) ON DELETE CASCADE,
+      name TEXT NOT NULL,
+      repo_path TEXT NOT NULL,
+      default_branch TEXT,
+      origin TEXT NOT NULL CHECK(origin IN ('created','linked')),
+      created_at INTEGER NOT NULL DEFAULT (unixepoch())
+    );
+    CREATE INDEX IF NOT EXISTS idx_projects_space ON projects(space_id);
+
+    CREATE TABLE IF NOT EXISTS documents (
+      id TEXT PRIMARY KEY,
+      space_id TEXT NOT NULL REFERENCES spaces(id) ON DELETE CASCADE,
+      path TEXT NOT NULL,
+      title TEXT NOT NULL,
+      type TEXT,
+      status TEXT,
+      frontmatter TEXT NOT NULL DEFAULT '{}',
+      source_session_id TEXT REFERENCES sessions(id) ON DELETE SET NULL,
+      created_at INTEGER NOT NULL DEFAULT (unixepoch()),
+      updated_at INTEGER NOT NULL DEFAULT (unixepoch()),
+      UNIQUE(space_id, path)
+    );
+    CREATE INDEX IF NOT EXISTS idx_documents_space_type ON documents(space_id, type);
+
+    CREATE TABLE IF NOT EXISTS triggers (
+      id TEXT PRIMARY KEY,
+      space_id TEXT NOT NULL REFERENCES spaces(id) ON DELETE CASCADE,
+      kind TEXT NOT NULL CHECK(kind IN ('schedule','webhook','manual')),
+      schedule_cron TEXT,
+      playbook_id TEXT REFERENCES documents(id) ON DELETE SET NULL,
+      enabled INTEGER NOT NULL DEFAULT 1,
+      next_run_at INTEGER,
+      last_run_at INTEGER,
+      created_at INTEGER NOT NULL DEFAULT (unixepoch())
+    );
+    CREATE INDEX IF NOT EXISTS idx_triggers_space ON triggers(space_id);
 
     CREATE TABLE IF NOT EXISTS user_settings (
       user_id TEXT PRIMARY KEY REFERENCES users(id) ON DELETE CASCADE,
@@ -1367,7 +1445,9 @@ function applySchema(): void {
       claude_code_daily_budget_usd REAL,
       codex_daily_budget_usd REAL,
       permission_profile TEXT NOT NULL DEFAULT 'fast'
-        CHECK(permission_profile IN ('fast','trusted','strict'))
+        CHECK(permission_profile IN ('fast','trusted','strict')),
+      expo_push_token TEXT,
+      apns_device_token TEXT
     );
 
     CREATE TABLE IF NOT EXISTS agent_usage (
@@ -1383,6 +1463,12 @@ function applySchema(): void {
       user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
       title TEXT,
       effort TEXT NOT NULL DEFAULT 'medium' CHECK(effort IN ('low','medium','high')),
+      model TEXT,
+      pinned_space_id TEXT REFERENCES spaces(id) ON DELETE SET NULL,
+      summary TEXT,
+      provider_type TEXT,
+      provider_session_id TEXT,
+      discovered_tools TEXT NOT NULL DEFAULT '[]',
       created_at INTEGER NOT NULL DEFAULT (unixepoch()),
       updated_at INTEGER NOT NULL DEFAULT (unixepoch())
     );
@@ -1415,23 +1501,26 @@ function applySchema(): void {
       completed_at INTEGER
     );
 
-    CREATE TABLE IF NOT EXISTS session_project_links (
+    CREATE TABLE IF NOT EXISTS session_space_links (
       session_id TEXT NOT NULL REFERENCES sessions(id) ON DELETE CASCADE,
-      project_id TEXT NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
+      space_id TEXT NOT NULL REFERENCES spaces(id) ON DELETE CASCADE,
       source TEXT NOT NULL DEFAULT 'agent' CHECK(source IN ('agent','user','system')),
       created_at INTEGER NOT NULL DEFAULT (unixepoch()),
-      PRIMARY KEY (session_id, project_id)
+      PRIMARY KEY (session_id, space_id)
     );
 
     CREATE TABLE IF NOT EXISTS session_events (
       id TEXT PRIMARY KEY,
       session_id TEXT NOT NULL REFERENCES sessions(id) ON DELETE CASCADE,
-      type TEXT NOT NULL CHECK(type IN ('scope_changed','project_linked','project_created','plan_created','artifact_created','approval_requested','approval_resolved','mcp_required','subagent_started','subagent_completed','connection_created')),
+      type TEXT NOT NULL CHECK(type IN (
+        'scope_changed','project_linked','space_linked','project_created',
+        'artifact_created','item_created','item_updated','approval_requested','approval_resolved',
+        'mcp_required','subagent_started','subagent_completed','connection_created'
+      )),
       title TEXT NOT NULL,
       body TEXT,
-      project_id TEXT REFERENCES projects(id) ON DELETE SET NULL,
-      plan_id TEXT REFERENCES plans(id) ON DELETE SET NULL,
-      artifact_id TEXT REFERENCES artifacts(id) ON DELETE SET NULL,
+      space_id TEXT REFERENCES spaces(id) ON DELETE SET NULL,
+      item_id TEXT,
       execution_id TEXT REFERENCES executions(id) ON DELETE SET NULL,
       metadata TEXT NOT NULL DEFAULT '{}',
       created_at INTEGER NOT NULL DEFAULT (unixepoch())
@@ -1440,7 +1529,7 @@ function applySchema(): void {
     CREATE TABLE IF NOT EXISTS executions (
       id TEXT PRIMARY KEY,
       message_id TEXT REFERENCES messages(id) ON DELETE SET NULL,
-      project_id TEXT REFERENCES projects(id) ON DELETE SET NULL,
+      space_id TEXT REFERENCES spaces(id) ON DELETE SET NULL,
       tool TEXT NOT NULL,
       status TEXT NOT NULL DEFAULT 'pending'
         CHECK(status IN ('pending','running','done','error','awaiting_approval')),
@@ -1466,7 +1555,8 @@ function applySchema(): void {
       type TEXT NOT NULL CHECK(type IN ('user','feedback','project','reference')),
       key TEXT NOT NULL,
       value TEXT NOT NULL,
-      project_id TEXT REFERENCES projects(id) ON DELETE SET NULL,
+      space_id TEXT REFERENCES spaces(id) ON DELETE SET NULL,
+      embedding BLOB,
       created_at INTEGER NOT NULL DEFAULT (unixepoch()),
       updated_at INTEGER NOT NULL DEFAULT (unixepoch()),
       UNIQUE(user_id, type, key)
@@ -1489,73 +1579,11 @@ function applySchema(): void {
       user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
       type TEXT NOT NULL,
       interval_hours INTEGER NOT NULL,
+      prompt TEXT,
+      pinned_space_id TEXT REFERENCES spaces(id) ON DELETE SET NULL,
       enabled INTEGER NOT NULL DEFAULT 1,
       next_run_at INTEGER NOT NULL,
       last_run_at INTEGER,
-      created_at INTEGER NOT NULL DEFAULT (unixepoch())
-    );
-
-    CREATE TABLE IF NOT EXISTS campaigns (
-      id TEXT PRIMARY KEY,
-      project_id TEXT NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
-      session_id TEXT REFERENCES sessions(id) ON DELETE SET NULL,
-      title TEXT NOT NULL,
-      status TEXT NOT NULL DEFAULT 'running'
-        CHECK(status IN ('running','done','error','cancelled')),
-      created_at INTEGER NOT NULL DEFAULT (unixepoch()),
-      completed_at INTEGER
-    );
-
-    CREATE TABLE IF NOT EXISTS campaign_tasks (
-      id TEXT PRIMARY KEY,
-      campaign_id TEXT NOT NULL REFERENCES campaigns(id) ON DELETE CASCADE,
-      title TEXT NOT NULL,
-      agent TEXT NOT NULL CHECK(agent IN ('claude_code','codex','mcp','file_write','git','github','eval','subagent')),
-      status TEXT NOT NULL DEFAULT 'waiting'
-        CHECK(status IN ('waiting','running','done','error')),
-      execution_id TEXT REFERENCES executions(id) ON DELETE SET NULL,
-      position INTEGER NOT NULL,
-      prompt TEXT,
-      depends_on TEXT,
-      tool_args TEXT,
-      created_at INTEGER NOT NULL DEFAULT (unixepoch()),
-      completed_at INTEGER
-    );
-
-    CREATE TABLE IF NOT EXISTS pipelines (
-      id TEXT PRIMARY KEY,
-      user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
-      title TEXT NOT NULL,
-      description TEXT,
-      created_at INTEGER NOT NULL DEFAULT (unixepoch())
-    );
-
-    CREATE TABLE IF NOT EXISTS pipeline_tasks (
-      id TEXT PRIMARY KEY,
-      pipeline_id TEXT NOT NULL REFERENCES pipelines(id) ON DELETE CASCADE,
-      title TEXT NOT NULL,
-      agent TEXT NOT NULL CHECK(agent IN ('claude_code','codex','mcp','file_write','git','github','eval','subagent')),
-      prompt TEXT,
-      tool_args TEXT,
-      depends_on TEXT,
-      position INTEGER NOT NULL,
-      created_at INTEGER NOT NULL DEFAULT (unixepoch())
-    );
-
-    CREATE TABLE IF NOT EXISTS artifacts (
-      id TEXT PRIMARY KEY,
-      space_id TEXT NOT NULL,
-      kind TEXT NOT NULL,
-      title TEXT NOT NULL,
-      description TEXT,
-      status TEXT NOT NULL DEFAULT 'ready'
-        CHECK(status IN ('ready','review','running','error')),
-      mime_type TEXT NOT NULL DEFAULT 'application/octet-stream',
-      path TEXT,
-      url TEXT,
-      metadata TEXT NOT NULL DEFAULT '{}',
-      source_plan_id TEXT,
-      source_step_id TEXT,
       created_at INTEGER NOT NULL DEFAULT (unixepoch())
     );
   `);
@@ -1618,8 +1646,8 @@ function applySchema(): void {
   if (!sessionCols.some(c => c.name === 'model')) {
     db.exec('ALTER TABLE sessions ADD COLUMN model TEXT');
   }
-  if (!sessionCols.some(c => c.name === 'pinned_project_id')) {
-    db.exec('ALTER TABLE sessions ADD COLUMN pinned_project_id TEXT REFERENCES projects(id) ON DELETE SET NULL');
+  if (!sessionCols.some(c => c.name === 'pinned_project_id') && !sessionCols.some(c => c.name === 'pinned_space_id')) {
+    db.exec('ALTER TABLE sessions ADD COLUMN pinned_space_id TEXT REFERENCES spaces(id) ON DELETE SET NULL');
   }
   if (!sessionCols.some(c => c.name === 'summary')) {
     db.exec('ALTER TABLE sessions ADD COLUMN summary TEXT');
@@ -1842,31 +1870,6 @@ function applySchema(): void {
     `);
   }
 
-  // Create pipelines and pipeline_tasks tables for existing DBs (already in CREATE TABLE for new DBs).
-  const tableNames2 = db.prepare("SELECT name FROM sqlite_master WHERE type='table'").all() as { name: string }[];
-  if (!tableNames2.some(t => t.name === 'pipelines')) {
-    db.exec(`
-      CREATE TABLE pipelines (
-        id TEXT PRIMARY KEY,
-        user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
-        title TEXT NOT NULL,
-        description TEXT,
-        created_at INTEGER NOT NULL DEFAULT (unixepoch())
-      );
-      CREATE TABLE pipeline_tasks (
-        id TEXT PRIMARY KEY,
-        pipeline_id TEXT NOT NULL REFERENCES pipelines(id) ON DELETE CASCADE,
-        title TEXT NOT NULL,
-        agent TEXT NOT NULL CHECK(agent IN ('claude_code','codex','mcp','file_write','git','github','eval','subagent')),
-        prompt TEXT,
-        tool_args TEXT,
-        depends_on TEXT,
-        position INTEGER NOT NULL,
-        created_at INTEGER NOT NULL DEFAULT (unixepoch())
-      );
-    `);
-  }
-
   // Fix dangling FKs caused by SQLite auto-rewriting FK references when tables
   // are renamed. Two flavours of the same root bug:
   //
@@ -2037,7 +2040,6 @@ function applySchema(): void {
     CREATE INDEX IF NOT EXISTS idx_message_attachments_message_id ON message_attachments(message_id);
     CREATE INDEX IF NOT EXISTS idx_session_turns_session_status ON session_turns(session_id, status);
     CREATE INDEX IF NOT EXISTS idx_session_events_session_id ON session_events(session_id);
-    CREATE INDEX IF NOT EXISTS idx_plan_steps_plan_id ON plan_steps(plan_id);
     CREATE INDEX IF NOT EXISTS idx_agent_usage_user_tool_date ON agent_usage(user_id, tool, created_at);
     CREATE INDEX IF NOT EXISTS idx_scheduled_tasks_enabled_next ON scheduled_tasks(enabled, next_run_at);
   `);
@@ -2093,7 +2095,7 @@ export const getProjectForUser = getSpaceForUser;
 
 export interface DbAgentWorktree {
   id: string;
-  item_id: string;
+  project_id: string;
   session_id: string;
   branch: string;
   worktree_path: string;
@@ -2101,18 +2103,18 @@ export interface DbAgentWorktree {
   codex_session_id: string | null;
 }
 
-export function getAgentWorktree(itemId: string, sessionId: string): DbAgentWorktree | undefined {
+export function getAgentWorktree(projectId: string, sessionId: string): DbAgentWorktree | undefined {
   return getDb()
-    .prepare('SELECT * FROM agent_worktrees WHERE item_id = ? AND session_id = ?')
-    .get(itemId, sessionId) as DbAgentWorktree | undefined;
+    .prepare('SELECT * FROM agent_worktrees WHERE project_id = ? AND session_id = ?')
+    .get(projectId, sessionId) as DbAgentWorktree | undefined;
 }
 
-export function createAgentWorktree(itemId: string, sessionId: string, branch: string, worktreePath: string): DbAgentWorktree {
+export function createAgentWorktree(projectId: string, sessionId: string, branch: string, worktreePath: string): DbAgentWorktree {
   const id = newId();
   getDb()
-    .prepare('INSERT INTO agent_worktrees (id, item_id, session_id, branch, worktree_path) VALUES (?,?,?,?,?)')
-    .run(id, itemId, sessionId, branch, worktreePath);
-  return getAgentWorktree(itemId, sessionId)!;
+    .prepare('INSERT INTO agent_worktrees (id, project_id, session_id, branch, worktree_path) VALUES (?,?,?,?,?)')
+    .run(id, projectId, sessionId, branch, worktreePath);
+  return getAgentWorktree(projectId, sessionId)!;
 }
 
 export function setAgentWorktreeSession(id: string, tool: 'claude' | 'codex', sessionId: string): void {
@@ -2136,8 +2138,8 @@ export const getProjectsForUser = getSpacesForUser;
 export type SessionEventType =
   | 'scope_changed'
   | 'project_linked'
+  | 'space_linked'
   | 'project_created'
-  | 'plan_created'
   | 'artifact_created'
   | 'item_created'
   | 'item_updated'
@@ -2206,7 +2208,7 @@ export function linkSessionProject(
 ): boolean {
   const result = getDb()
     .prepare(`
-      INSERT OR IGNORE INTO session_project_links (session_id, space_id, source)
+      INSERT OR IGNORE INTO session_space_links (session_id, space_id, source)
       VALUES (?,?,?)
     `)
     .run(sessionId, spaceId, source);
@@ -2218,7 +2220,7 @@ export function getSessionProjectLinks(sessionId: string): Array<DbSpace & { sou
     .prepare(`
       SELECT p.id, p.name, p.description, p.enabled_connection_ids,
              l.source, l.created_at AS linked_at
-      FROM session_project_links l
+      FROM session_space_links l
       JOIN spaces p ON p.id = l.space_id
       WHERE l.session_id = ?
       ORDER BY l.created_at ASC

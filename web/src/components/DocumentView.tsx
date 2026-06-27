@@ -18,7 +18,7 @@ const PROSE_CLASSES = `text-[14px] leading-relaxed text-fg-soft
   [&_pre]:my-3 [&_pre]:overflow-x-auto [&_pre]:rounded-xl [&_pre]:border [&_pre]:border-border-soft [&_pre]:bg-muted/30 [&_pre]:p-3`;
 
 export default function DocumentView({ spaceId, doc, onSaved }: { spaceId: string; doc: DocumentWithBody; onSaved: () => void }) {
-  const [editing, setEditing] = useState(false);
+  const [editing, setEditing] = useState(!doc.body.trim());
   const [body, setBody] = useState(doc.body);
   const [saving, setSaving] = useState(false);
 

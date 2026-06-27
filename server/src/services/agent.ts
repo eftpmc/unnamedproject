@@ -1,5 +1,3 @@
-import fs from 'fs';
-import path from 'path';
 import { getDb, recordAgentUsage, setSessionProviderInfo, type AgentUsageTool } from '../db/index.js';
 import { broadcast } from './socket.js';
 import { newId } from '../lib/ids.js';
@@ -7,7 +5,6 @@ import { classifyIntent } from './intent.js';
 import { buildContext, buildContextUpdate } from './context.js';
 import { generateMcpToken } from '../mcp/auth.js';
 import { getConversationProvider } from './conversation-provider.js';
-import { getItemsForSpace } from './items.js';
 import { getDecryptedConfig } from '../routes/connections.js';
 
 const activeTurnControllers = new Map<string, AbortController>();
@@ -23,42 +20,6 @@ export function getActiveSessionIds(): string[] {
   return Array.from(activeTurnControllers.keys());
 }
 
-function checkpointWorkspaceMd(userId: string, sessionId: string, userPrompt: string, assistantReply: string): void {
-  const session = getDb()
-    .prepare('SELECT pinned_space_id, title FROM sessions WHERE id = ?')
-    .get(sessionId) as { pinned_space_id: string | null; title: string | null } | undefined;
-  if (!session?.pinned_space_id) return;
-
-  const repoItems = getItemsForSpace(session.pinned_space_id)
-    .filter(item => item.type === 'repo');
-  if (repoItems.length === 0) return;
-
-  const repoPath = repoItems[0].fields.repo_path as string;
-  const workspacePath = path.join(repoPath, 'workspace.md');
-
-  const now = new Date();
-  const dateStr = now.toISOString().slice(0, 16).replace('T', ' ');
-
-  const promptSnippet = userPrompt.trim().slice(0, 200).replace(/\n+/g, ' ');
-  // Take the first non-empty paragraph of the reply as the summary
-  const replySnippet = assistantReply
-    .split(/\n{2,}/)
-    .map(p => p.trim())
-    .find(p => p.length > 20)
-    ?.slice(0, 400)
-    .replace(/\n/g, ' ') ?? '';
-
-  const entry = `\n\n---\n*${dateStr}*\n\n**${promptSnippet}${userPrompt.length > 200 ? '…' : ''}**\n${replySnippet}`;
-
-  try {
-    fs.appendFileSync(workspacePath, entry, 'utf8');
-  } catch {
-    // workspace.md may not exist yet — create it with a header
-    try {
-      fs.writeFileSync(workspacePath, `# Workspace Log${entry}`, 'utf8');
-    } catch { /* repo path may not be writable */ }
-  }
-}
 
 function updateSessionSummary(sessionId: string): void {
   const messages = getDb()
@@ -243,5 +204,4 @@ export async function runAgentTurn(userId: string, sessionId: string, userMessag
   try { recordAgentUsage(userId, provider.type as AgentUsageTool, invokeResult.costUsd ?? 0); } catch (e) { console.error('[postTurn:recordUsage]', e); }
   try { maybeGenerateSessionTitle(userId, sessionId); } catch (e) { console.error('[postTurn:title]', e); }
   try { updateSessionSummary(sessionId); } catch (e) { console.error('[postTurn:summary]', e); }
-  try { checkpointWorkspaceMd(userId, sessionId, prompt, fullText); } catch (e) { console.error('[postTurn:workspace]', e); }
 }

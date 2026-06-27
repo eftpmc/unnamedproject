@@ -2,7 +2,7 @@ import fs from 'fs/promises';
 import path from 'path';
 import simpleGit from 'simple-git';
 import { getDb, getSpaceForUser, getSpacesForUser, getProjectsRoot } from '../db/index.js';
-import { getItemsForSpace, createItem } from '../services/items.js';
+import { listProjects as listSpaceProjects } from '../services/projects.js';
 import { newId } from '../lib/ids.js';
 import { requestApproval } from '../services/executor.js';
 
@@ -40,7 +40,10 @@ export async function createProject(
     }
     await fs.mkdir(repoPath, { recursive: true });
     await simpleGit().cwd(repoPath).init();
-    createItem({ space_id: id, name: input.name, type: 'repo', page_blocks: [], fields: { repo_path: repoPath } });
+    const projectId = newId();
+    getDb()
+      .prepare('INSERT INTO projects (id, space_id, name, repo_path, default_branch, origin, created_at) VALUES (?,?,?,?,?,?,?)')
+      .run(projectId, id, input.name, repoPath, null, 'created', Math.floor(Date.now() / 1000));
     return `Created space '${input.name}' (id: ${id}) with repo at ${repoPath}`;
   }
 
@@ -76,9 +79,7 @@ export async function deleteProject(
   const space = getSpaceForUser(input.space_id, userId);
   if (!space) return `Error: space ${input.space_id} not found`;
 
-  const repoPaths = getItemsForSpace(space.id)
-    .filter(item => item.type === 'repo')
-    .map(item => item.fields.repo_path as string);
+  const repoPaths = listSpaceProjects(space.id).map(p => p.repo_path);
 
   const decision = await requestApproval(
     executionId,

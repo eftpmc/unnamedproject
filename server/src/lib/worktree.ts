@@ -8,7 +8,10 @@ import {
   updateAgentWorktreePath,
   type DbAgentWorktree,
 } from '../db/index.js';
-import type { SpaceItemBase } from '../services/items.js';
+interface WorktreeRepoItem {
+  id: string;
+  fields: { repo_path: string };
+}
 
 /**
  * Returns an isolated git worktree for a (repo item, session) pair, on its own
@@ -17,7 +20,7 @@ import type { SpaceItemBase } from '../services/items.js';
  * collide, and the repo's main checkout stays untouched until the
  * session's branch is reviewed and pushed/merged.
  */
-export async function ensureWorktree(repoItem: SpaceItemBase, sessionId: string): Promise<DbAgentWorktree> {
+export async function ensureWorktree(repoItem: WorktreeRepoItem, sessionId: string): Promise<DbAgentWorktree> {
   const repoPath = repoItem.fields.repo_path as string;
   const existing = getAgentWorktree(repoItem.id, sessionId);
   if (existing) {

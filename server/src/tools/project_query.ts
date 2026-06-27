@@ -1,5 +1,5 @@
 import { getDb, getSpaceForUser } from '../db/index.js';
-import { getItemById } from '../services/items.js';
+import { getProject } from '../services/projects.js';
 import { hasGraph, buildGraph, queryGraph } from '../services/graphify.js';
 import { getDecryptedConfig } from '../routes/connections.js';
 
@@ -25,14 +25,13 @@ function getAnthropicApiKey(userId: string): string | null {
 export async function runProjectQuery(input: ProjectQueryInput, userId: string): Promise<string> {
   const space = getSpaceForUser(input.space_id, userId);
   if (!space) return 'Space not found.';
-  const repoItem = getItemById(input.item_id);
-  if (!repoItem || repoItem.space_id !== space.id) return 'Repo item not found in this Space.';
-  if (repoItem.type !== 'repo') return 'Selected item is not a repo.';
+  const project = getProject(input.item_id);
+  if (!project || project.space_id !== space.id) return 'Project not found in this Space.';
 
   const apiKey = getAnthropicApiKey(userId);
-  const repoPath = repoItem.fields.repo_path as string;
+  const repoPath = project.repo_path;
   if (!await hasGraph(repoPath)) {
-    await buildGraph(repoPath, input.item_id);
+    await buildGraph(repoPath, project.id);
   }
 
   return await queryGraph(input.question, repoPath, apiKey);

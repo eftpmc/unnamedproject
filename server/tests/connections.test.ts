@@ -2,7 +2,7 @@ import { describe, it, expect, vi, beforeAll } from 'vitest';
 import request from 'supertest';
 import fs from 'fs';
 import { app } from '../src/index.js';
-import { getDb, initDb, getMcpRegistryToolsForUser } from '../src/db/index.js';
+import { getDb, initDb } from '../src/db/index.js';
 import { getDecryptedConfig } from '../src/routes/connections.js';
 
 vi.mock('../src/lib/mcp-pool.js', () => ({
@@ -90,20 +90,6 @@ describe('connections', () => {
     expect(list.body).toEqual([]);
   });
 
-  it('ingests MCP tools into the registry when an mcp connection is added', async () => {
-    const res = await request(app)
-      .post('/connections')
-      .set('Authorization', `Bearer ${token}`)
-      .send({ name: 'gh-mcp', type: 'mcp', purpose: 'mcp', config: { command: 'mock-mcp', args: '[]', env: '{}' } });
-    expect(res.status).toBe(201);
-    const mcpConnId = res.body.id;
-    const ownUserId = (getDb().prepare('SELECT id FROM users WHERE email = ?').get(email) as { id: string }).id;
-
-    await vi.waitFor(() => {
-      const registered = getMcpRegistryToolsForUser(ownUserId);
-      expect(registered.some(t => t.connection_id === mcpConnId && t.mcp_tool_name === 'search_web')).toBe(true);
-    });
-  });
 
   it('creates a codex connection with api key', async () => {
     const res = await request(app)

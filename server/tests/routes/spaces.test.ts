@@ -36,55 +36,38 @@ describe('spaces routes', () => {
     expect(listed.body[0]).not.toHaveProperty('repo_path');
   });
 
-  it('enforces item ownership and item-type capability checks', async () => {
-    const spaceA = await request(app).post('/spaces').set('Authorization', authorization).send({ name: 'Space A' });
-    const spaceB = await request(app).post('/spaces').set('Authorization', authorization).send({ name: 'Space B' });
-    const repo = await request(app)
-      .post(`/spaces/${spaceA.body.id}/items`)
+  it('updates a space name and description', async () => {
+    const created = await request(app)
+      .post('/spaces')
       .set('Authorization', authorization)
-      .send({ type: 'repo', name: 'repo-a', repo_path: '/repos/a' });
-    const doc = await request(app)
-      .post(`/spaces/${spaceA.body.id}/items`)
-      .set('Authorization', authorization)
-      .send({ type: 'blank', name: 'doc-a' });
-
-    const crossSpace = await request(app)
-      .get(`/spaces/${spaceB.body.id}/items/${repo.body.id}/tree`)
-      .set('Authorization', authorization);
-    expect(crossSpace.status).toBe(404);
-
-    const unsupported = await request(app)
-      .get(`/spaces/${spaceA.body.id}/items/${doc.body.id}/tree`)
-      .set('Authorization', authorization);
-    expect(unsupported.status).toBe(400);
-  });
-
-  it('rejects content update for non-note items', async () => {
-    const space = await request(app).post('/spaces').set('Authorization', authorization).send({ name: 'No Content' });
-    const doc = await request(app)
-      .post(`/spaces/${space.body.id}/items`)
-      .set('Authorization', authorization)
-      .send({ type: 'blank', name: 'Doc' });
+      .send({ name: 'Original Name' });
+    expect(created.status).toBe(201);
 
     const updated = await request(app)
-      .patch(`/spaces/${space.body.id}/items/${doc.body.id}`)
+      .patch(`/spaces/${created.body.id}`)
       .set('Authorization', authorization)
-      .send({ content: 'should fail' });
-    expect(updated.status).toBe(400);
-  });
-
-  it('updates item name', async () => {
-    const space = await request(app).post('/spaces').set('Authorization', authorization).send({ name: 'Rename Test' });
-    const doc = await request(app)
-      .post(`/spaces/${space.body.id}/items`)
-      .set('Authorization', authorization)
-      .send({ type: 'blank', name: 'Draft' });
-
-    const updated = await request(app)
-      .patch(`/spaces/${space.body.id}/items/${doc.body.id}`)
-      .set('Authorization', authorization)
-      .send({ name: 'Final' });
+      .send({ name: 'Updated Name', description: 'new desc' });
     expect(updated.status).toBe(200);
-    expect(updated.body).toMatchObject({ name: 'Final', type: 'blank' });
+
+    const listed = await request(app).get('/spaces').set('Authorization', authorization);
+    const space = listed.body.find((s: { id: string }) => s.id === created.body.id);
+    expect(space.name).toBe('Updated Name');
+    expect(space.description).toBe('new desc');
+  });
+
+  it('deletes a space', async () => {
+    const created = await request(app)
+      .post('/spaces')
+      .set('Authorization', authorization)
+      .send({ name: 'To Delete' });
+    expect(created.status).toBe(201);
+
+    const deleted = await request(app)
+      .delete(`/spaces/${created.body.id}`)
+      .set('Authorization', authorization);
+    expect(deleted.status).toBe(204);
+
+    const listed = await request(app).get('/spaces').set('Authorization', authorization);
+    expect(listed.body.find((s: { id: string }) => s.id === created.body.id)).toBeUndefined();
   });
 });

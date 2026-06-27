@@ -1,46 +1,29 @@
-import fs from 'fs';
-import path from 'path';
-import { getDb, getDataDir, getPermissionProfile, type DbSpace } from '../db/index.js';
-import { getItemsForSpace } from './items.js';
-import { listItemTypes } from './templates.js';
+import { getDb, getPermissionProfile, type DbSpace } from '../db/index.js';
+import { listProjects } from './projects.js';
+import { listDocuments } from './documents.js';
 import { recallRelevant } from './memory.js';
 import { formatEntry } from '../tools/memory_tools.js';
 import type { Intent } from './intent.js';
-import { detectCapabilities } from './projectCapabilities.js';
 
 // ─── Block builders ────────────────────────────────────────────────────────
-
-function readWorkspaceMd(space: DbSpace, repoPath: string | null): string | null {
-  const filePath = repoPath
-    ? path.join(repoPath, 'workspace.md')
-    : path.join(getDataDir(), 'doc-projects', space.id, 'files', 'workspace.md');
-  try {
-    const content = fs.readFileSync(filePath, 'utf8').trim();
-    if (!content) return null;
-    const MAX = 4000;
-    return content.length > MAX ? content.slice(0, MAX) + '\n\n_(workspace.md truncated — file exceeds 4000 chars)_' : content;
-  } catch {
-    return null;
-  }
-}
 
 function baseBlock(intent: Intent): string {
   const isCode = intent.domain === 'code' || intent.domain === 'multi' || intent.domain === 'general';
   const autoApproved = isCode
-    ? 'git_op add/commit, list_spaces, create_space, update_space, pin_space, project_query, rebuild_graph, recall, remember, forget, list_chats, read_chat, list_items, create_item, read_item, update_item, list_item_types, define_item_type, list_connections, test_connection, list_scheduled_tasks, create_scheduled_task, update_scheduled_task'
-    : 'list_spaces, create_space, pin_space, recall, remember, forget, list_chats, read_chat, list_items, create_item, read_item, update_item, list_item_types, define_item_type, list_connections, test_connection';
+    ? 'git_op add/commit, list_spaces, create_space, update_space, pin_space, project_query, rebuild_graph, recall, remember, forget, list_chats, read_chat, write_document, read_document, list_documents, patch_frontmatter, create_project, link_project, list_projects, create_trigger, list_triggers, delete_trigger, list_connections, test_connection'
+    : 'list_spaces, create_space, pin_space, recall, remember, forget, list_chats, read_chat, write_document, read_document, list_documents, patch_frontmatter, list_connections, test_connection';
 
-  return `You are a personal AI assistant with full coding capabilities and access to the user's spaces, items, and memory. You can implement code, write files, run commands, and manage the user's workspace directly.
+  return `You are a personal AI assistant with full coding capabilities and access to the user's spaces, documents, and memory. You can implement code, write files, run commands, and manage the user's workspace directly.
 
 ## Core rules
 - Auto-approved (do without asking): ${autoApproved}
-- User-approved (proceed and the system handles the pause): git_op push, delete_space, delete_scheduled_task
+- User-approved (proceed and the system handles the pause): git_op push, delete_space
 - Never ask the user for permission on an auto-approved action — just do it.
 - After finishing any coding work: run git_op add then git_op commit via the app MCP tools. This is mandatory for changes to be visible. Never ask "should I commit?" — commit first, summarize after.
 
 ## State awareness
 Before starting work in the active Space, check what already exists there:
-- Call list_items with the active space_id — see what's already present before generating a new report or research output.
+- Call list_documents with the active space_id — see what's already present before generating a new report or research output.
 Only check other Spaces when the user's request explicitly involves them.
 If no Space is active and you need a space_id, call list_spaces first — never guess one (e.g. "default"). If list_spaces comes back empty, call create_space to create one, then immediately call pin_space with the new space's id so it becomes the active context for this session. If spaces exist but none is pinned, pick the most relevant one and call pin_space.
 
@@ -50,46 +33,14 @@ GitHub, web search, and other external integrations are configured in Settings �
 ## File search
 Use search_files for fast codebase lookups (finding where a function is defined, tracing usages, locating config). Only fall back to project_query for broad architectural questions that need reasoning across the whole codebase.
 
-## Items
-Items are generic containers in a space — repos, files, runbooks, configs, dashboards, logs, or anything else. There is no separate "document" type; all block-based items are the same thing with different starting blocks. Use existing templates when they fit. Use "blank" when you're creating a new kind of item that doesn't fit an existing template — start with whatever blocks make sense for that specific thing. Never assume what an item is for based on its name alone; call read_item to see its current state before acting.
+## Documents
+A document is a markdown file in the space, the source of truth on disk. Author with write_document (path, title, frontmatter, body). Frontmatter is YAML key/values used for tracking and querying — set \`type\` (e.g. application, resume, workflow, note) and \`status\` where relevant. Query with list_documents({ type, frontmatter }); a tracker is just a query grouped by status. Update a status cheaply with patch_frontmatter — do NOT rewrite the whole file for a field change. Link documents with [[wikilinks]] in the body.
 
-## Item types
-Every item has a type (string) and a fields blob (structured data for that type). Built-in types include 'repo' (fields: repo_path, default_branch) and 'file' (fields: file_path, mime_type, size_bytes). You can define new types at any time:
-- Call list_item_types to see all available types (built-in and custom).
-- Call define_item_type to register a new type: provide a name, a JSON schema for the fields, a list of capability strings ('git-aware', 'file-readable', 'embeddable', etc.), and optional default page_blocks. This is idempotent — re-calling with the same name updates the definition.
-- After defining a type, use create_item with type=<your-type-name> and fields matching your schema.
-Types you define are immediately available across all spaces for that user. Define types when the user's data has repeating structure that doesn't fit existing templates — e.g. 'customer', 'experiment', 'bug-report'.
+## Projects
+A project is a git repo in the space (0..n). Create one with create_project, or link an existing path with link_project. Code tools (read/write/edit/bash/git) operate inside a project — pass its project_id.
 
-## File storage in items
-Any item can hold uploaded files — no special capability needed. When the user attaches a file (PDF, image, etc.) and you want to store it durably inside an item:
-1. Create or identify the target item (any type works).
-2. Call attach_file_to_item with the space_id, item_id, and message_attachment_path (the path= attribute from the <attachments> block). It returns a preview_block you can paste directly into update_item's append_blocks.
-3. Call update_item with append_blocks: [<the preview_block from step 2>] to add a file-preview block to the item.
-The file-preview block renders PDFs inline and images natively in the item page. For long-form text content (notes, specs), use page_blocks with text/heading blocks instead of fields.
-
-## Relations between items
-Link items together using relation blocks — they render as clickable card chips:
-- \`{ type: 'relation', item_id: '<target_item_id>', space_id: '<target_space_id>', label: '<item_name>' }\`
-- Use update_item with append_blocks to add a relation block to any item.
-- Useful for: linking a "Job Application" to a "Company Research" doc, linking a task to its runbook, linking related notes.
-- Always include both item_id and space_id. Set label to the target item's current name as a readable fallback.
-
-## Interactive items
-Items support input blocks — labeled fields the user fills in that you can read back via read_item. Use these to build lightweight configuration surfaces or data-collection forms inside the space:
-- \`{ type: 'input', label: 'API endpoint', value: '', placeholder: 'https://...', input_type: 'text' }\`
-- \`{ type: 'input', label: 'Environment', value: 'staging', input_type: 'select', options: ['dev', 'staging', 'prod'] }\`
-- \`{ type: 'input', label: 'Notes', value: '', input_type: 'multiline' }\`
-- \`{ type: 'input', label: 'Retries', value: '3', input_type: 'number' }\`
-
-Create an item with input blocks when the task needs persistent user-defined parameters. The user fills in the fields in the UI; call read_item to see current values before acting. Patch a single field after the user updates it using update_item with block_id + block (all blocks have a stable id once written).
-
-## Runbook execution
-When the user asks you to run a runbook (an item created from the 'runbook' template):
-1. Call read_item to get the current block contents — specifically the input blocks (parameters) and task-list blocks (steps).
-2. Read the input values. If any required inputs are empty, tell the user which fields need filling before proceeding.
-3. Execute the steps in order. For each step, act on it then immediately check it off: call update_item with block_id=<task-list block's id> and block={ ...the block, tasks: [...with that task's done set to true] }.
-4. After all steps complete, summarize what was done.
-Never start executing a runbook step before the user has filled in its parameters. Runbook items are the canonical place to track progress — check off tasks as you go, not all at once at the end.`;
+## Triggers (the automation loop)
+A trigger runs a playbook document (a document with frontmatter type: workflow) on a schedule. Create with create_trigger({ kind: 'schedule', schedule_cron, playbook_id }). When it fires, a new chat starts pinned to this space seeded with the playbook body; you execute it using the space's connections and tools, writing results back as documents and frontmatter updates. This is how recurring flows (e.g. "search internships each morning, draft applications, track status") run end to end.`;
 }
 
 function permissionBlock(userId: string): string {
@@ -131,7 +82,7 @@ Do not summarize or report done before step 3 completes.`;
 
     case 'writing':
       return `## Writing tasks
-Use write_file for output to save; respond inline for drafts the user has not asked to save.
+Use write_document for output to save; respond inline for drafts the user has not asked to save.
 Confirm path and project with the user before writing any file.
 Do not invoke coding agents for writing, documentation, or note-taking tasks.`;
 
@@ -141,11 +92,11 @@ Use list_connections to find the configured search MCP tool, then call it. Alway
 Cite sources in your response.
 Check recall first before any web search.
 
-After synthesizing findings: save them to the space. Call list_items — if a suitable research doc exists, use update_item with append_blocks; otherwise create_item with type 'tpl_report' and then append_blocks. Use text blocks for narrative, callout blocks (variant 'info') for key insights, a list block for sources. Don't just reply inline — structured output in the space is durable.`;
+After synthesizing findings: save them to the space. Call list_documents — if a suitable research doc exists, use patch_frontmatter to update its status; otherwise write_document with type: research and frontmatter status: draft. Use markdown sections for narrative; link related documents with [[wikilinks]].`;
 
     case 'creative':
       return `## Creative tasks
-Respond inline for short creative work. Use write_file when the user wants output saved.
+Respond inline for short creative work. Use write_document when the user wants output saved.
 Research often improves creative work — check for relevant context before generating.`;
 
     case 'multi':
@@ -157,41 +108,21 @@ Suggested order: research → setup → implementation → verification → git 
   }
 }
 
-function projectContextBlock(space: DbSpace, userId: string): string {
-  const repoItems = getItemsForSpace(space.id)
-    .filter(item => item.type === 'repo');
-  const repoPath = repoItems.length === 1 ? repoItems[0].fields.repo_path as string : null;
-  const detected = repoItems.map(item => detectCapabilities(item.id, item.fields.repo_path as string));
-  const has_graph = detected.some(value => value.has_graph);
-  const capLabels: string[] = [];
-  if (has_graph) capLabels.push('code graph indexed — use project_query for broad codebase questions before reading individual files');
-
+function projectContextBlock(space: DbSpace, _userId: string): string {
+  const projects = listProjects(space.id);
+  const docs = listDocuments(space.id);
   const header = `## Active space: **${space.name}** (id: ${space.id})${space.description ? ' — ' + space.description : ''}`;
 
-  let guidance: string;
-  if (repoItems.length > 0) {
-    const capNote = capLabels.length > 0
-      ? ` Detected capabilities: ${capLabels.join(', ')}.`
-      : ' No special capabilities detected yet.';
-    const repoList = repoItems.map(item => `${item.name} (item_id: ${item.id}, path: ${item.fields.repo_path})`).join('; ');
-    guidance = `\nCode space with repos: ${repoList}.${capNote} Every repo-scoped tool call must include the selected item_id.`;
-  } else {
-    guidance = `\nDoc/writing space (no git repo). Create and read note/file items directly.`;
-  }
+  const projectLine = projects.length > 0
+    ? `\nProjects (git repos) in this space: ${projects.map(p => `${p.name} (project_id: ${p.id}, path: ${p.repo_path})`).join('; ')}. Use code tools with the selected project_id.`
+    : `\nNo projects (git repos) in this space yet. Create one with create_project, or work in documents.`;
 
-  const workspaceMd = readWorkspaceMd(space, repoPath);
-  const workspaceSection = workspaceMd
-    ? `\n\n### workspace.md\n${workspaceMd}\n\n_Update workspace.md after significant progress, decisions, or completed milestones._`
-    : repoItems.length === 1
-      ? `\n\n_No workspace.md yet. Use write_file with item_id ${repoItems[0].id} to create workspace.md._`
-      : '';
+  const docTypes = [...new Set(docs.map(d => d.type).filter(Boolean))];
+  const docLine = docs.length > 0
+    ? `\nDocuments: ${docs.length} total${docTypes.length ? ` (types: ${docTypes.join(', ')})` : ''}. Use list_documents to query by type/status, read_document before editing.`
+    : `\nNo documents yet. Author markdown with write_document.`;
 
-  const customTypes = listItemTypes(userId).filter(t => !t.is_builtin);
-  const typesSection = customTypes.length > 0
-    ? `\n\nCustom item types defined for this user: ${customTypes.map(t => `${t.id} (${t.name})${Object.keys(t.schema).length > 0 ? ' fields: ' + Object.keys(t.schema).join(', ') : ''}`).join('; ')}. Use these types with create_item instead of blank when they fit.`
-    : '';
-
-  return header + guidance + workspaceSection + typesSection;
+  return header + projectLine + docLine;
 }
 
 async function memoryBlock(userId: string, queryText: string, pinnedProjectId?: string): Promise<string> {

@@ -833,6 +833,66 @@ export const migrations: Migration[] = [
       CREATE INDEX IF NOT EXISTS idx_item_files_item_id ON item_files(item_id);
     `);
   }},
+  // Rebuild agent_worktrees to reference projects(id) via project_id.
+  // Migration v5 renamed the column to item_id referencing space_items,
+  // but space_items is now dropped by dropLegacyItemTables. Existing worktree
+  // rows reference items that no longer exist so we drop and recreate clean.
+  // Also rebuild session_events to drop the item_id FK to space_items (added
+  // by v22) — that FK becomes dangling once space_items is dropped, causing
+  // SQLite to fail with "no such table: main.space_items" on any prepare()
+  // that touches the session cascade chain.
+  { version: 25, name: 'rebuild-agent-worktrees-for-projects', noTransaction: true, up: (db) => {
+    db.pragma('foreign_keys = OFF');
+
+    // Rebuild agent_worktrees
+    const wtCols = (db.prepare("SELECT name FROM pragma_table_info('agent_worktrees')").all() as { name: string }[]).map(c => c.name);
+    if (wtCols.includes('item_id') || wtCols.includes('space_id')) {
+      db.exec(`DROP TABLE IF EXISTS agent_worktrees`);
+      db.exec(`
+        CREATE TABLE agent_worktrees (
+          id TEXT PRIMARY KEY,
+          project_id TEXT NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
+          session_id TEXT NOT NULL REFERENCES sessions(id) ON DELETE CASCADE,
+          branch TEXT NOT NULL,
+          worktree_path TEXT NOT NULL,
+          claude_session_id TEXT,
+          codex_session_id TEXT,
+          created_at INTEGER NOT NULL DEFAULT (unixepoch()),
+          UNIQUE(project_id, session_id)
+        )
+      `);
+    }
+
+    // Rebuild session_events: drop item_id FK to space_items.
+    // v22 left item_id referencing space_items(id), which becomes dangling.
+    const evtSql = (db.prepare("SELECT sql FROM sqlite_master WHERE type='table' AND name='session_events'").get() as { sql: string } | undefined)?.sql;
+    if (evtSql && evtSql.includes('space_items')) {
+      const keepCols = (db.prepare("SELECT name FROM pragma_table_info('session_events')").all() as { name: string }[])
+        .map(c => c.name).join(', ');
+      const evtTmp = '_session_events_v25_tmp';
+      db.exec(`ALTER TABLE session_events RENAME TO "${evtTmp}"`);
+      db.exec(`CREATE TABLE session_events (
+        id TEXT PRIMARY KEY,
+        session_id TEXT NOT NULL REFERENCES sessions(id) ON DELETE CASCADE,
+        type TEXT NOT NULL CHECK(type IN (
+          'scope_changed','project_linked','space_linked','project_created',
+          'artifact_created','item_created','item_updated','approval_requested','approval_resolved',
+          'mcp_required','subagent_started','subagent_completed','connection_created'
+        )),
+        title TEXT NOT NULL,
+        body TEXT,
+        space_id TEXT REFERENCES spaces(id) ON DELETE SET NULL,
+        item_id TEXT,
+        execution_id TEXT REFERENCES executions(id) ON DELETE SET NULL,
+        metadata TEXT NOT NULL DEFAULT '{}',
+        created_at INTEGER NOT NULL DEFAULT (unixepoch())
+      )`);
+      db.exec(`INSERT INTO session_events (${keepCols}) SELECT ${keepCols} FROM "${evtTmp}"`);
+      db.exec(`DROP TABLE "${evtTmp}"`);
+    }
+
+    db.pragma('foreign_keys = ON');
+  }},
 ];
 
 function tableSql(database: Database.Database, name: string): string | undefined {
@@ -2275,57 +2335,6 @@ export function getDailyUsage(userId: string, tool: AgentUsageTool): number {
   return row.total;
 }
 
-export interface DbScheduledTask {
-  id: string;
-  type: string;
-  prompt: string | null;
-  interval_hours: number;
-  enabled: number;
-  next_run_at: number;
-  last_run_at: number | null;
-  pinned_space_id: string | null;
-}
-
-export function getScheduledTasksForUser(userId: string): DbScheduledTask[] {
-  return getDb()
-    .prepare('SELECT id, type, prompt, interval_hours, enabled, next_run_at, last_run_at, pinned_space_id FROM scheduled_tasks WHERE user_id = ?')
-    .all(userId) as DbScheduledTask[];
-}
-
-export function getScheduledTaskForUser(id: string, userId: string): DbScheduledTask | undefined {
-  return getDb()
-    .prepare('SELECT id, type, prompt, interval_hours, enabled, next_run_at, last_run_at, pinned_space_id FROM scheduled_tasks WHERE id = ? AND user_id = ?')
-    .get(id, userId) as DbScheduledTask | undefined;
-}
-
-export function updateScheduledTask(id: string, userId: string, updates: { enabled?: boolean; interval_hours?: number; pinned_space_id?: string | null }): void {
-  if (updates.enabled !== undefined) {
-    getDb().prepare('UPDATE scheduled_tasks SET enabled = ? WHERE id = ? AND user_id = ?').run(updates.enabled ? 1 : 0, id, userId);
-  }
-  if (updates.interval_hours !== undefined) {
-    getDb().prepare('UPDATE scheduled_tasks SET interval_hours = ? WHERE id = ? AND user_id = ?').run(updates.interval_hours, id, userId);
-  }
-  if ('pinned_space_id' in updates) {
-    getDb().prepare('UPDATE scheduled_tasks SET pinned_space_id = ? WHERE id = ? AND user_id = ?').run(updates.pinned_space_id ?? null, id, userId);
-  }
-}
-
-export function createScheduledTask(userId: string, type: string, intervalHours: number, prompt?: string, pinnedSpaceId?: string): string {
-  const id = newId();
-  const nextRunAt = Math.floor(Date.now() / 1000) + intervalHours * 3600;
-  getDb()
-    .prepare('INSERT INTO scheduled_tasks (id, user_id, type, interval_hours, next_run_at, prompt, pinned_space_id) VALUES (?,?,?,?,?,?,?)')
-    .run(id, userId, type, intervalHours, nextRunAt, prompt ?? null, pinnedSpaceId ?? null);
-  return id;
-}
-
-export function deleteScheduledTask(id: string, userId: string): boolean {
-  const result = getDb()
-    .prepare('DELETE FROM scheduled_tasks WHERE id = ? AND user_id = ?')
-    .run(id, userId);
-  return result.changes > 0;
-}
-
 export function resumePlan(planId: string): { plan: DbPlan; steps: DbPlanStep[] } | undefined {
   const plan = getPlanById(planId);
   if (!plan) return undefined;
@@ -2337,18 +2346,6 @@ export function resumePlan(planId: string): { plan: DbPlan; steps: DbPlanStep[] 
     .prepare("UPDATE plan_steps SET status = 'waiting', execution_id = NULL, completed_at = NULL WHERE plan_id = ? AND status = 'error'")
     .run(planId);
   return { plan: getPlanById(planId)!, steps: getPlanSteps(planId) };
-}
-
-export function getDueScheduledTasks(now: number): (DbScheduledTask & { user_id: string })[] {
-  return getDb()
-    .prepare('SELECT id, user_id, type, interval_hours, enabled, next_run_at, last_run_at, pinned_space_id FROM scheduled_tasks WHERE enabled = 1 AND next_run_at <= ?')
-    .all(now) as (DbScheduledTask & { user_id: string })[];
-}
-
-export function markScheduledTaskRun(id: string, now: number, intervalHours: number): void {
-  getDb()
-    .prepare('UPDATE scheduled_tasks SET last_run_at = ?, next_run_at = ? WHERE id = ?')
-    .run(now, now + intervalHours * 3600, id);
 }
 
 export interface DbPlan {

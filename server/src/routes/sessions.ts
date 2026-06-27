@@ -206,10 +206,10 @@ router.delete('/:id', (req, res) => {
 router.get('/:id/worktree', async (req, res) => {
   const { userId } = req as unknown as AuthedRequest;
   const wt = getDb().prepare(`
-    SELECT w.id, w.branch, w.worktree_path, json_extract(si.fields, '$.repo_path') AS repo_path, p.name AS project_name
+    SELECT w.id, w.branch, w.worktree_path, pr.repo_path, pr.name AS project_name
     FROM agent_worktrees w
-    JOIN space_items si ON si.id = w.item_id
-    JOIN spaces p ON p.id = si.space_id
+    JOIN projects pr ON pr.id = w.project_id
+    JOIN spaces p ON p.id = pr.space_id
     WHERE w.session_id = ? AND p.user_id = ?
   `).get(req.params.id, userId) as { id: string; branch: string; worktree_path: string; repo_path: string; project_name: string } | undefined;
 
@@ -237,8 +237,8 @@ router.get('/:id/worktree/diff', async (req, res) => {
   const wt = getDb().prepare(`
     SELECT w.worktree_path, p.user_id
     FROM agent_worktrees w
-    JOIN space_items si ON si.id = w.item_id
-    JOIN spaces p ON p.id = si.space_id
+    JOIN projects pr ON pr.id = w.project_id
+    JOIN spaces p ON p.id = pr.space_id
     WHERE w.session_id = ? AND p.user_id = ?
   `).get(req.params.id, userId) as { worktree_path: string } | undefined;
 
@@ -256,10 +256,10 @@ router.get('/:id/worktree/diff', async (req, res) => {
 router.post('/:id/merge', async (req, res) => {
   const { userId } = req as unknown as AuthedRequest;
   const wt = getDb().prepare(`
-    SELECT w.branch, json_extract(si.fields, '$.repo_path') AS repo_path
+    SELECT w.branch, pr.repo_path
     FROM agent_worktrees w
-    JOIN space_items si ON si.id = w.item_id
-    JOIN spaces p ON p.id = si.space_id
+    JOIN projects pr ON pr.id = w.project_id
+    JOIN spaces p ON p.id = pr.space_id
     WHERE w.session_id = ? AND p.user_id = ?
   `).get(req.params.id, userId) as { branch: string; repo_path: string } | undefined;
 

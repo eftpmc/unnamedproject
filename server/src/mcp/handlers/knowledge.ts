@@ -25,7 +25,7 @@ export function registerKnowledgeHandlers(): void {
 
   registerTool({
     name: 'rebuild_graph',
-    description: 'Rebuild the knowledge graph for a repo item',
+    description: 'Rebuild the knowledge graph for a repo project',
     inputSchema: {
       type: 'object',
       properties: {
@@ -34,13 +34,13 @@ export function registerKnowledgeHandlers(): void {
       },
       required: ['space_id', 'item_id'],
     },
-    handler: async (args, userId) => {
-      const { getItemById } = await import('../../services/items.js');
-      const item = getItemById(args.item_id as string);
-      if (!item || item.space_id !== args.space_id || item.type !== 'repo') {
-        return `Error: repo item ${args.item_id} not found in space ${args.space_id}`;
+    handler: async (args) => {
+      const { getProject } = await import('../../services/projects.js');
+      const project = getProject(args.item_id as string);
+      if (!project || project.space_id !== args.space_id) {
+        return `Error: repo project ${args.item_id} not found in space ${args.space_id}`;
       }
-      await buildGraph(item.fields.repo_path as string, item.id);
+      await buildGraph(project.repo_path, project.id);
       return 'Knowledge graph rebuilt successfully.';
     },
   });

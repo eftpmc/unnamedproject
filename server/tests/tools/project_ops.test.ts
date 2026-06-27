@@ -4,9 +4,11 @@ import os from 'os';
 import path from 'path';
 import { listProjects, createProject, updateProject, deleteProject } from '../../src/tools/project_ops.js';
 
+let idSeq = 0;
+
 const dbState = {
   spaces: new Map<string, { id: string; user_id: string; name: string; description: string | null }>(),
-  items: new Map<string, { id: string; space_id: string; type: string; name: string; fields: Record<string, unknown>; page_blocks: [] }>(),
+  projects: new Map<string, { id: string; space_id: string; name: string; repo_path: string }>(),
   projectsRoot: null as string | null,
 };
 
@@ -14,21 +16,31 @@ vi.mock('../../src/db/index.js', () => ({
   getDb: () => ({
     prepare: (sql: string) => ({
       run: (...args: unknown[]) => {
-        if (sql.startsWith('INSERT INTO spaces')) {
+        if (sql.includes('INSERT INTO spaces')) {
           const [id, user_id, name, description] = args as string[];
           dbState.spaces.set(id, { id, user_id, name, description });
-        } else if (sql.startsWith('DELETE FROM spaces')) {
+        } else if (sql.includes('DELETE FROM spaces')) {
           const [id, user_id] = args as string[];
           const s = dbState.spaces.get(id);
           if (s && s.user_id === user_id) dbState.spaces.delete(id);
-        } else if (sql.startsWith('UPDATE spaces SET')) {
-          // description update
-          const [description, id, user_id] = args as string[];
-          const s = dbState.spaces.get(id);
-          if (s && s.user_id === user_id) s.description = description;
-        } else if (sql.startsWith('INSERT INTO space_items')) {
-          const [id, space_id, type, name, , , fields] = args as string[];
-          dbState.items.set(id, { id, space_id, type, name, fields: fields ? JSON.parse(fields) : {}, page_blocks: [] });
+        } else if (sql.includes('UPDATE spaces SET')) {
+          // dynamic UPDATE: extract columns from SET clause
+          const setMatch = sql.match(/SET (.+) WHERE/)?.[1] ?? '';
+          const cols = setMatch.split(',').map(c => c.trim().replace(/\s*=.*/, ''));
+          const idIdx = args.length - 2;
+          const userIdIdx = args.length - 1;
+          const spaceId = args[idIdx] as string;
+          const userId = args[userIdIdx] as string;
+          const s = dbState.spaces.get(spaceId);
+          if (s && s.user_id === userId) {
+            cols.forEach((col, i) => {
+              if (col === 'name') s.name = args[i] as string;
+              if (col === 'description') s.description = args[i] as string;
+            });
+          }
+        } else if (sql.includes('INSERT INTO projects')) {
+          const [id, space_id, name, repo_path] = args as string[];
+          dbState.projects.set(id, { id, space_id, name, repo_path });
         }
         return { changes: 1 };
       },
@@ -44,21 +56,15 @@ vi.mock('../../src/db/index.js', () => ({
   getProjectsRoot: (_userId: string) => dbState.projectsRoot,
 }));
 
-vi.mock('../../src/services/items.js', () => ({
-  getItemsForSpace: (spaceId: string) => {
-    return [...dbState.items.values()]
-      .filter(i => i.space_id === spaceId)
-      .map(i => ({ ...i, created_at: 0, source_session_id: null }));
-  },
-  createItem: (input: { space_id: string; name: string; type: string; page_blocks: []; fields: Record<string, unknown> }) => {
-    const id = 'item-' + input.space_id;
-    const item = { id, space_id: input.space_id, type: input.type, name: input.name, fields: input.fields, page_blocks: [] as [] };
-    dbState.items.set(id, item);
-    return { ...item, created_at: 0, source_session_id: null };
+vi.mock('../../src/services/projects.js', () => ({
+  listProjects: (spaceId: string) => {
+    return [...dbState.projects.values()].filter(p => p.space_id === spaceId);
   },
 }));
 
-vi.mock('../../src/lib/ids.js', () => ({ newId: () => 'new-id' }));
+vi.mock('../../src/lib/ids.js', () => ({
+  newId: () => `id-${++idSeq}`,
+}));
 
 vi.mock('../../src/services/executor.js', () => ({
   requestApproval: vi.fn().mockResolvedValue('approved'),
@@ -68,8 +74,9 @@ const userId = 'u1';
 let tmpRoot: string;
 
 beforeEach(() => {
+  idSeq = 0;
   dbState.spaces.clear();
-  dbState.items.clear();
+  dbState.projects.clear();
   tmpRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'projects-root-'));
   dbState.projectsRoot = tmpRoot;
 });
@@ -80,37 +87,37 @@ describe('list_spaces', () => {
     expect(JSON.parse(result)).toEqual([]);
   });
 
-  it('returns only the requesting user\'s Spaces with id, name, description', async () => {
+  it("returns only the requesting user's Spaces with id, name, description", async () => {
     dbState.spaces.set('p1', { id: 'p1', user_id: userId, name: 'api', description: 'desc' });
     dbState.spaces.set('p2', { id: 'p2', user_id: 'other-user', name: 'not mine', description: null });
 
     const result = await listProjects(userId);
-
     expect(JSON.parse(result)).toEqual([{ id: 'p1', name: 'api', description: 'desc' }]);
   });
 });
 
 describe('create_space', () => {
-  it('creates a project without a repo', async () => {
+  it('creates a space without a repo', async () => {
     const result = await createProject({ name: 'Notes', with_repo: false }, userId, 'exec-1');
-    expect(result).toContain('new-id');
-    expect(dbState.spaces.get('new-id')).toBeDefined();
-    expect(dbState.items.size).toBe(0);
+    expect(result).toContain('id-1');
+    expect(dbState.spaces.size).toBe(1);
+    expect(dbState.projects.size).toBe(0);
   });
 
-  it('creates a project with a repo under projects_root', async () => {
+  it('creates a space with a repo under projects_root', async () => {
     const result = await createProject({ name: 'My App', description: 'desc', with_repo: true }, userId, 'exec-1');
-    expect(result).toContain('new-id');
-    const repoItem = [...dbState.items.values()].find(i => i.space_id === 'new-id');
-    const repoPath = repoItem?.fields.repo_path as string;
-    expect(repoPath).toBe(path.join(tmpRoot, 'my-app'));
-    expect(fs.existsSync(path.join(repoPath, '.git'))).toBe(true);
+    expect(result).toContain('My App');
+    const proj = [...dbState.projects.values()][0];
+    expect(proj).toBeDefined();
+    expect(proj.repo_path).toBe(path.join(tmpRoot, 'my-app'));
+    expect(fs.existsSync(path.join(proj.repo_path, '.git'))).toBe(true);
   });
 
-  it('creates a project without a type field', async () => {
+  it('creates a space without a type field', async () => {
     await createProject({ name: 'Notes', with_repo: false }, userId, 'exec-1');
-    expect(dbState.spaces.has('new-id')).toBe(true);
-    expect((dbState.spaces.get('new-id') as Record<string, unknown>).type).toBeUndefined();
+    const space = dbState.spaces.get('id-1');
+    expect(space).toBeDefined();
+    expect((space as Record<string, unknown>).type).toBeUndefined();
   });
 });
 
@@ -126,7 +133,7 @@ describe('delete_space', () => {
   it('removes the project record without deleting files when delete_files is false', async () => {
     const repoDir = fs.mkdtempSync(path.join(os.tmpdir(), 'proj-repo-'));
     dbState.spaces.set('p1', { id: 'p1', user_id: userId, name: 'api', description: null });
-    dbState.items.set('item-p1', { id: 'item-p1', space_id: 'p1', type: 'repo', name: 'api', fields: { repo_path: repoDir }, page_blocks: [] });
+    dbState.projects.set('proj-p1', { id: 'proj-p1', space_id: 'p1', name: 'api', repo_path: repoDir });
 
     const result = await deleteProject({ space_id: 'p1', delete_files: false }, userId, 'exec-1');
 
@@ -139,7 +146,7 @@ describe('delete_space', () => {
   it('removes the project record and deletes files when delete_files is true', async () => {
     const repoDir = fs.mkdtempSync(path.join(os.tmpdir(), 'proj-repo-'));
     dbState.spaces.set('p1', { id: 'p1', user_id: userId, name: 'api', description: null });
-    dbState.items.set('item-p1', { id: 'item-p1', space_id: 'p1', type: 'repo', name: 'api', fields: { repo_path: repoDir }, page_blocks: [] });
+    dbState.projects.set('proj-p1', { id: 'proj-p1', space_id: 'p1', name: 'api', repo_path: repoDir });
 
     const result = await deleteProject({ space_id: 'p1', delete_files: true }, userId, 'exec-1');
 

@@ -145,10 +145,11 @@ describe('GET /sessions/:id/worktree', () => {
   it('returns worktree info when worktree exists', async () => {
     const db = getDb();
     const wtId = newId();
-    const itemId = `item_${projectId}_repo`;
-    db.prepare("INSERT INTO space_items (id, space_id, type, name, fields) VALUES (?,?,?,?,?)").run(itemId, projectId, 'repo', 'myproj', JSON.stringify({ repo_path: '/fake/repo' }));
-    db.prepare("INSERT INTO agent_worktrees (id, item_id, session_id, branch, worktree_path) VALUES (?,?,?,?,?)")
-      .run(wtId, itemId, sessionId, `agent/${sessionId}`, '/fake/worktree');
+    const repoProjectId = newId();
+    db.prepare("INSERT INTO projects (id, space_id, name, repo_path, default_branch, origin, created_at) VALUES (?,?,?,?,?,?,?)")
+      .run(repoProjectId, projectId, 'myproj', '/fake/repo', null, 'created', Math.floor(Date.now() / 1000));
+    db.prepare("INSERT INTO agent_worktrees (id, project_id, session_id, branch, worktree_path) VALUES (?,?,?,?,?)")
+      .run(wtId, repoProjectId, sessionId, `agent/${sessionId}`, '/fake/worktree');
 
     mockStatus.mockResolvedValueOnce({ files: [{ path: 'foo.ts' }] });
     mockRaw.mockResolvedValueOnce('3\n');

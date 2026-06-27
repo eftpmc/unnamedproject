@@ -1,7 +1,5 @@
 import { describe, it, expect, beforeAll } from 'vitest';
 import fs from 'fs';
-import os from 'os';
-import path from 'path';
 import { initDb, getDb } from '../../src/db/index.js';
 import { newId } from '../../src/lib/ids.js';
 import { buildContext } from '../../src/services/context.js';
@@ -26,28 +24,27 @@ const researchIntent: Intent = { ...DEFAULT_INTENT, domain: 'research' };
 describe('buildContext', () => {
   it('always includes base identity and approval tier content', async () => {
     const ctx = await buildContext(userId, sessionId, DEFAULT_INTENT, '');
-    expect(ctx).toContain('orchestrator');
-    expect(ctx).toContain('auto-approved');
+    expect(ctx).toContain('personal AI assistant');
+    expect(ctx).toContain('Auto-approved');
   });
 
   it('always includes research discipline block', async () => {
     const ctx = await buildContext(userId, sessionId, DEFAULT_INTENT, '');
     expect(ctx).toContain('Research discipline');
-    expect(ctx).toContain('Web search and fetch are provided by MCP servers');
-    expect(ctx).toContain('tool_search');
+    expect(ctx).toContain('Web search');
   });
 
   it('includes worktree isolation guidance for code domain', async () => {
     const ctx = await buildContext(userId, sessionId, codeIntent, '');
+    // Permission block mentions isolated worktrees; code domain mandates git_op commit
     expect(ctx).toContain('worktree');
-    expect(ctx).toContain('invoke_claude_code');
+    expect(ctx).toContain('git_op');
   });
 
-  it('includes write_file guidance for writing domain', async () => {
+  it('includes write_document guidance for writing domain', async () => {
     const ctx = await buildContext(userId, sessionId, writingIntent, '');
-    expect(ctx).toContain('write_file');
-    // The always-on core rules reference the coding-agent commit protocol, but the
-    // writing domain guidance must steer away from delegating to coding agents.
+    expect(ctx).toContain('write_document');
+    // The writing domain guidance must steer away from delegating to coding agents.
     expect(ctx).toContain('Do not invoke coding agents');
   });
 
@@ -95,37 +92,16 @@ describe('buildContext', () => {
     getDb().prepare('UPDATE sessions SET pinned_space_id = NULL WHERE id = ?').run(sessionId);
   });
 
-  it('includes workspace.md content in project context when file exists', async () => {
-    const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'ws-test-'));
-    const workspaceContent = '## Goals\n- Build the login flow\n\n## Done\n- DB schema migration';
-    fs.writeFileSync(path.join(tmpDir, 'workspace.md'), workspaceContent);
-
+  it('includes document guidance for a Space with no projects or documents', async () => {
     const spaceId = newId();
     getDb()
       .prepare('INSERT INTO spaces (id, user_id, name, enabled_connection_ids) VALUES (?,?,?,?)')
-      .run(spaceId, userId, 'ws-project', '[]');
-    const itemId = newId();
-    getDb().prepare('INSERT INTO space_items (id, space_id, type, name, fields) VALUES (?,?,?,?,?)').run(itemId, spaceId, 'repo', 'ws-project', JSON.stringify({ repo_path: tmpDir }));
+      .run(spaceId, userId, 'empty-space', '[]');
     getDb().prepare('UPDATE sessions SET pinned_space_id = ? WHERE id = ?').run(spaceId, sessionId);
 
     const ctx = await buildContext(userId, sessionId, DEFAULT_INTENT, '');
-    expect(ctx).toContain('Build the login flow');
-    expect(ctx).toContain('DB schema migration');
-
-    getDb().prepare('UPDATE sessions SET pinned_space_id = NULL WHERE id = ?').run(sessionId);
-    getDb().prepare('DELETE FROM spaces WHERE id = ?').run(spaceId);
-    fs.rmSync(tmpDir, { recursive: true, force: true });
-  });
-
-  it('describes item-based guidance for a Space without a repo', async () => {
-    const spaceId = newId();
-    getDb()
-      .prepare('INSERT INTO spaces (id, user_id, name, enabled_connection_ids) VALUES (?,?,?,?)')
-      .run(spaceId, userId, 'no-ws-project', '[]');
-    getDb().prepare('UPDATE sessions SET pinned_space_id = ? WHERE id = ?').run(spaceId, sessionId);
-
-    const ctx = await buildContext(userId, sessionId, DEFAULT_INTENT, '');
-    expect(ctx).toContain('Create and read note/file items directly');
+    // New doctrine: space without projects should mention create_project or documents
+    expect(ctx).toMatch(/create_project|write_document|No projects/);
 
     getDb().prepare('UPDATE sessions SET pinned_space_id = NULL WHERE id = ?').run(sessionId);
     getDb().prepare('DELETE FROM spaces WHERE id = ?').run(spaceId);

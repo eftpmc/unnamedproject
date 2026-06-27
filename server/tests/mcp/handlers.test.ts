@@ -57,16 +57,3 @@ describe('space handlers', () => {
   });
 });
 
-describe('item handlers', () => {
-  it('list_items returns empty array for new space', async () => {
-    const token = generateMcpToken(userId);
-    const app = makeApp();
-    // create a space first
-    const createRes = await call(app, 'create_space', { name: 'Item Test Space' }, token);
-    const space = JSON.parse(createRes.body.result.content[0].text);
-    const res = await call(app, 'list_items', { space_id: space.id }, token);
-    expect(res.status).toBe(200);
-    const items = JSON.parse(res.body.result.content[0].text);
-    expect(Array.isArray(items)).toBe(true);
-  });
-});

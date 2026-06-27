@@ -45,7 +45,6 @@ function TreeNode({ entry, spaceId, projectId, depth, selectedPath, onSelect }: 
       >
         <FileText size={15} className="shrink-0 opacity-65" />
         <span className="min-w-0 flex-1 truncate">{entry.name}</span>
-        <span className="hidden shrink-0 font-mono text-[11px] text-faint-fg sm:inline">{entry.path}</span>
       </button>
     );
   }
@@ -65,7 +64,6 @@ function TreeNode({ entry, spaceId, projectId, depth, selectedPath, onSelect }: 
         }
         {open ? <FolderOpen size={15} className="shrink-0 text-on-accent-soft" /> : <Folder size={15} className="shrink-0 text-on-accent-soft" />}
         <span className="min-w-0 flex-1 truncate font-medium">{entry.name}</span>
-        <span className="hidden shrink-0 font-mono text-[11px] text-faint-fg sm:inline">{entry.path}</span>
       </button>
       {open && data?.entries.map(child => (
         <TreeNode

@@ -107,18 +107,23 @@ const MCP_PRESETS: McpPreset[] = [
   // Browser
   { id: 'playwright', name: 'Playwright', description: 'Full browser control — navigate, click, fill forms, screenshot. Essential for web scraping and automation.', command: 'npx', args: ['-y', '@playwright/mcp@latest'] },
   { id: 'puppeteer', name: 'Puppeteer', description: 'Headless Chrome browser automation and screenshots.', command: 'npx', args: ['-y', '@modelcontextprotocol/server-puppeteer'] },
-  // Google
-  { id: 'gmail', name: 'Gmail', description: 'Read, send, and search Gmail. Opens a browser on first run to authorize.', command: 'npx', args: ['-y', '@gongrzhe/server-gmail-autoauth-mcp'] },
-  { id: 'google-drive', name: 'Google Drive', description: 'Browse, read, and search files in Google Drive.', command: 'npx', args: ['-y', '@modelcontextprotocol/server-gdrive'], envVars: [{ key: 'GDRIVE_CLIENT_ID', label: 'OAuth client ID' }, { key: 'GDRIVE_CLIENT_SECRET', label: 'OAuth client secret' }, { key: 'GDRIVE_REFRESH_TOKEN', label: 'Refresh token' }] },
+  // Google — requires a Google Cloud project with OAuth 2.0 credentials.
+  // Gmail: place your downloaded gcp-oauth.keys.json at ~/.gmail-mcp/gcp-oauth.keys.json,
+  // then the server opens a browser on first use to complete authorization.
+  { id: 'gmail', name: 'Gmail', description: 'Read, send, and search Gmail. Requires gcp-oauth.keys.json at ~/.gmail-mcp/ — opens a browser on first use to authorize.', command: 'npx', args: ['-y', '@gongrzhe/server-gmail-autoauth-mcp'] },
+  // Google Drive: run `npx @modelcontextprotocol/server-gdrive auth` once to authorize.
+  { id: 'google-drive', name: 'Google Drive', description: 'Browse, read, and search files in Google Drive. Run `npx @modelcontextprotocol/server-gdrive auth` once to authorize via browser.', command: 'npx', args: ['-y', '@modelcontextprotocol/server-gdrive'] },
   // Dev tools
   { id: 'github', name: 'GitHub', description: 'GitHub API — repos, PRs, issues, code search, and more.', command: 'npx', args: ['-y', '@modelcontextprotocol/server-github'], envVars: [{ key: 'GITHUB_PERSONAL_ACCESS_TOKEN', label: 'Personal access token', placeholder: 'ghp_...' }] },
   // Communication
-  { id: 'slack', name: 'Slack', description: 'Read and post messages, list channels.', command: 'npx', args: ['-y', '@modelcontextprotocol/server-slack'], envVars: [{ key: 'SLACK_BOT_TOKEN', label: 'Bot token', placeholder: 'xoxb-...' }, { key: 'SLACK_TEAM_ID', label: 'Team ID', placeholder: 'T0123456' }] },
+  // Note: @modelcontextprotocol/server-slack is deprecated — using community replacement
+  { id: 'slack', name: 'Slack', description: 'Read and post Slack messages, list channels. Requires a Slack app with a bot token.', command: 'npx', args: ['-y', '@nrjdalal/slack-mcp-server'], envVars: [{ key: 'SLACK_BOT_TOKEN', label: 'Bot token', placeholder: 'xoxb-...' }] },
   // Productivity
-  { id: 'notion', name: 'Notion', description: 'Read and write Notion pages and databases.', command: 'npx', args: ['-y', '@notionhq/notion-mcp-server'], envVars: [{ key: 'NOTION_TOKEN', label: 'Internal integration token', placeholder: 'ntn_...' }] },
+  { id: 'notion', name: 'Notion', description: 'Read and write Notion pages and databases. Create an internal integration at notion.so/my-integrations.', command: 'npx', args: ['-y', '@notionhq/notion-mcp-server'], envVars: [{ key: 'NOTION_TOKEN', label: 'Integration token', placeholder: 'ntn_...' }] },
   { id: 'airtable', name: 'Airtable', description: 'Read and write Airtable bases and tables.', command: 'npx', args: ['-y', 'airtable-mcp-server'], envVars: [{ key: 'AIRTABLE_API_KEY', label: 'Personal access token', placeholder: 'pat...' }] },
   // Search & data
-  { id: 'brave-search', name: 'Brave Search', description: 'Web and local search via the Brave Search API.', command: 'npx', args: ['-y', '@modelcontextprotocol/server-brave-search'], envVars: [{ key: 'BRAVE_API_KEY', label: 'Brave API key' }] },
+  // Note: @modelcontextprotocol/server-brave-search is deprecated — using official Brave package
+  { id: 'brave-search', name: 'Brave Search', description: 'Web search via the Brave Search API. Get a free API key at brave.com/search/api.', command: 'npx', args: ['-y', '@brave/brave-search-mcp-server'], envVars: [{ key: 'BRAVE_API_KEY', label: 'Brave API key' }] },
   { id: 'postgres', name: 'Postgres', description: 'Read-only schema inspection and queries against a Postgres database.', command: 'npx', args: ['-y', '@modelcontextprotocol/server-postgres'], extraArgLabel: 'Connection string', extraArgPlaceholder: 'postgresql://user:pass@host:5432/db' },
   // Reasoning
   { id: 'sequential-thinking', name: 'Sequential Thinking', description: 'Structured step-by-step reasoning tool for complex problems.', command: 'npx', args: ['-y', '@modelcontextprotocol/server-sequential-thinking'] },

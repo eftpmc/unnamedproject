@@ -50,6 +50,7 @@ import { TabStrip } from '@/components/ui/tab-strip';
 import FileBrowser from '../components/FileBrowser.js';
 import DocumentView from '../components/DocumentView.js';
 import TrackerView from '../components/TrackerView.js';
+import TriggersSection from '../components/TriggersSection.js';
 import type { Connection, Document, DocumentWithBody, Project, Session, Space, WSEvent, WSSessionEventCreated } from '../types.js';
 
 type Section = 'overview' | 'documents' | 'projects' | 'triggers' | 'chats' | 'settings';
@@ -149,7 +150,7 @@ export default function SpacePage() {
       {section === 'chats' && <ChatsSection chats={spaceChats} onNewChat={() => startChat.mutate()} />}
       {section === 'documents' && <DocumentsSection space={space} documents={documents} />}
       {section === 'projects' && <ProjectsSection space={space} projects={projects} />}
-      {section === 'triggers' && <div className="p-6 text-sm text-muted-foreground">Triggers coming in Task 6</div>}
+      {section === 'triggers' && <PageBody><ContentColumn className="max-w-4xl"><TriggersSection spaceId={spaceId!} /></ContentColumn></PageBody>}
       {section === 'settings' && <SettingsSection space={space} />}
     </PageShell>
   );

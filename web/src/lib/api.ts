@@ -1,5 +1,5 @@
 import { getToken, setToken, clearToken } from './auth.js';
-import type { Session, Message, Space, SpaceItem, Connection, EffortLevel, UserSettings, Memory, ScheduledTask, SessionWorktree, PermissionProfile, SessionEvent, Block, ItemTemplate } from '../types.js';
+import type { Session, Message, Space, Connection, EffortLevel, UserSettings, Memory, ScheduledTask, SessionWorktree, PermissionProfile, SessionEvent, Document, DocumentWithBody, Project, Trigger } from '../types.js';
 
 async function request<T>(path: string, init: RequestInit = {}): Promise<T> {
   const token = getToken();
@@ -151,111 +151,65 @@ export function updateSpace(id: string, body: { description?: string; name?: str
   return request(`/spaces/${id}`, { method: 'PATCH', body: JSON.stringify(body) });
 }
 
-export function getSpaceItems(spaceId: string, opts?: { before?: number }): Promise<SpaceItem[]> {
-  const params = opts?.before ? `?before=${opts.before}` : '';
-  return request(`/spaces/${spaceId}/items${params}`);
+// Documents
+export function getDocuments(spaceId: string, params?: { type?: string }): Promise<Document[]> {
+  const q = params?.type ? `?type=${encodeURIComponent(params.type)}` : '';
+  return request(`/spaces/${spaceId}/documents${q}`);
 }
 
-export function createSpaceItem(
-  spaceId: string,
-  input: { type: string; name: string; repo_path?: string; file_path?: string },
-): Promise<SpaceItem> {
-  return request(`/spaces/${spaceId}/items`, { method: 'POST', body: JSON.stringify(input) });
+export function getDocument(spaceId: string, docId: string): Promise<DocumentWithBody> {
+  return request(`/spaces/${spaceId}/documents/${docId}`);
 }
 
-export function listItemTemplates(): Promise<ItemTemplate[]> {
-  return request('/spaces/item-templates');
+export function createDocument(spaceId: string, body: { path: string; title: string; frontmatter?: Record<string, unknown>; body: string }): Promise<Document> {
+  return request(`/spaces/${spaceId}/documents`, { method: 'POST', body: JSON.stringify(body) });
 }
 
-export function createItemTemplate(input: { name: string; blocks: Block[] }): Promise<ItemTemplate> {
-  return request('/spaces/item-templates', { method: 'POST', body: JSON.stringify(input) });
+export function updateDocument(spaceId: string, docId: string, body: { title?: string; body?: string; frontmatter?: Record<string, unknown> }): Promise<Document> {
+  return request(`/spaces/${spaceId}/documents/${docId}`, { method: 'PATCH', body: JSON.stringify(body) });
 }
 
-export function updateItemTemplate(
-  templateId: string,
-  input: { blocks: Block[]; name?: string },
-): Promise<ItemTemplate> {
-  return request(`/spaces/item-templates/${templateId}`, { method: 'PATCH', body: JSON.stringify(input) });
+export function deleteDocument(spaceId: string, docId: string): Promise<void> {
+  return request(`/spaces/${spaceId}/documents/${docId}`, { method: 'DELETE' });
 }
 
-export function deleteSpaceItem(spaceId: string, itemId: string): Promise<void> {
-  return request(`/spaces/${spaceId}/items/${itemId}`, { method: 'DELETE' });
+// Projects
+export function getProjects(spaceId: string): Promise<Project[]> {
+  return request(`/spaces/${spaceId}/projects`);
 }
 
-export function getSpaceItem(spaceId: string, itemId: string): Promise<SpaceItem> {
-  return request(`/spaces/${spaceId}/items/${itemId}`);
+export function createProject(spaceId: string, body: { name: string }): Promise<Project> {
+  return request(`/spaces/${spaceId}/projects`, { method: 'POST', body: JSON.stringify(body) });
 }
 
-export function getItemSessions(spaceId: string, itemId: string): Promise<{ id: string; title: string | null; last_event_at: number }[]> {
-  return request(`/spaces/${spaceId}/items/${itemId}/sessions`);
+export function linkProject(spaceId: string, body: { name: string; repo_path: string; default_branch?: string }): Promise<Project> {
+  return request(`/spaces/${spaceId}/projects`, { method: 'POST', body: JSON.stringify(body) });
 }
 
-export function updateSpaceItem(
-  spaceId: string,
-  itemId: string,
-  input: { name?: string; page_blocks?: Block[] },
-): Promise<SpaceItem> {
-  return request(`/spaces/${spaceId}/items/${itemId}`, {
-    method: 'PATCH',
-    body: JSON.stringify(input),
-  });
+export function deleteProject(spaceId: string, projectId: string): Promise<void> {
+  return request(`/spaces/${spaceId}/projects/${projectId}`, { method: 'DELETE' });
 }
 
-export function deleteItemTemplate(templateId: string): Promise<void> {
-  return request(`/spaces/item-templates/${templateId}`, { method: 'DELETE' });
-}
-
-export function updateItemTask(
-  spaceId: string,
-  itemId: string,
-  taskId: string,
-  done: boolean,
-): Promise<SpaceItem> {
-  return request(`/spaces/${spaceId}/items/${itemId}/tasks/${taskId}`, {
-    method: 'PATCH',
-    body: JSON.stringify({ done }),
-  });
-}
-
-export async function getItemContent(spaceId: string, itemId: string): Promise<Blob> {
-  const token = getToken();
-  const res = await fetch(`/spaces/${spaceId}/items/${itemId}/content`, {
-    headers: {
-      ...(token ? { Authorization: `Bearer ${token}` } : {}),
-    },
-  });
-  if (res.status === 401) {
-    clearToken();
-    window.location.href = '/login';
-    throw new Error('Unauthorized');
-  }
-  if (!res.ok) throw new Error(`HTTP ${res.status}`);
-  return res.blob();
-}
-
-export function getItemTree(spaceId: string, itemId: string, dirPath?: string): Promise<{ entries: { name: string; type: 'file' | 'dir'; path: string }[]; base_is_repo: boolean }> {
+export function getProjectTree(spaceId: string, projectId: string, dirPath?: string): Promise<{ entries: { name: string; type: 'file' | 'dir'; path: string }[] }> {
   const q = dirPath ? `?path=${encodeURIComponent(dirPath)}` : '';
-  return request(`/spaces/${spaceId}/items/${itemId}/tree${q}`);
+  return request(`/spaces/${spaceId}/projects/${projectId}/tree${q}`);
 }
 
-export function getItemFile(spaceId: string, itemId: string, filePath: string): Promise<{ content: string; path: string }> {
-  return request(`/spaces/${spaceId}/items/${itemId}/file?path=${encodeURIComponent(filePath)}`);
+export function getProjectFile(spaceId: string, projectId: string, filePath: string): Promise<{ content: string; path: string }> {
+  return request(`/spaces/${spaceId}/projects/${projectId}/file?path=${encodeURIComponent(filePath)}`);
 }
 
-export function getItemWorkspace(spaceId: string, itemId: string): Promise<{ content: string }> {
-  return request(`/spaces/${spaceId}/items/${itemId}/workspace`);
+// Triggers
+export function getTriggers(spaceId: string): Promise<Trigger[]> {
+  return request(`/spaces/${spaceId}/triggers`);
 }
 
-export function updateItemWorkspace(spaceId: string, itemId: string, content: string): Promise<void> {
-  return request(`/spaces/${spaceId}/items/${itemId}/workspace`, { method: 'PUT', body: JSON.stringify({ content }) });
+export function createTrigger(spaceId: string, body: { kind: Trigger['kind']; schedule_cron?: string; playbook_id?: string }): Promise<Trigger> {
+  return request(`/spaces/${spaceId}/triggers`, { method: 'POST', body: JSON.stringify(body) });
 }
 
-export interface SpaceCapabilities {
-  has_graph: boolean;
-}
-
-export function getItemCapabilities(spaceId: string, itemId: string): Promise<SpaceCapabilities> {
-  return request(`/spaces/${spaceId}/items/${itemId}/capabilities`);
+export function deleteTrigger(spaceId: string, triggerId: string): Promise<void> {
+  return request(`/spaces/${spaceId}/triggers/${triggerId}`, { method: 'DELETE' });
 }
 
 export function getSettings(): Promise<UserSettings> {
@@ -290,14 +244,6 @@ export function getScheduledTasks(): Promise<ScheduledTask[]> {
   return request('/scheduled-tasks');
 }
 
-export function createScheduledTask(body: { type: string; interval_hours: number; prompt?: string; pinned_space_id?: string }): Promise<{ id: string }> {
-  return request('/scheduled-tasks', { method: 'POST', body: JSON.stringify(body) });
-}
-
-export function updateScheduledTask(id: string, body: { enabled?: boolean; interval_hours?: number; pinned_space_id?: string | null }): Promise<void> {
-  return request(`/scheduled-tasks/${id}`, { method: 'PATCH', body: JSON.stringify(body) });
-}
-
 export function deleteScheduledTask(id: string): Promise<void> {
   return request(`/scheduled-tasks/${id}`, { method: 'DELETE' });
 }
@@ -306,26 +252,4 @@ export function runScheduledTask(id: string): Promise<void> {
   return request(`/scheduled-tasks/${id}/run`, { method: 'POST' });
 }
 
-export interface ItemFile {
-  id: string;
-  filename: string;
-  mimeType: string;
-  sizeBytes: number;
-  createdAt: number;
-  url: string;
-}
-
-export function getItemFiles(spaceId: string, itemId: string): Promise<ItemFile[]> {
-  return request(`/spaces/${spaceId}/items/${itemId}/files`);
-}
-
-export async function uploadItemFile(spaceId: string, itemId: string, file: File): Promise<ItemFile> {
-  const body = new FormData();
-  body.append('file', file);
-  return request(`/spaces/${spaceId}/items/${itemId}/files`, { method: 'POST', body });
-}
-
-export function deleteItemFile(spaceId: string, itemId: string, fileId: string): Promise<void> {
-  return request(`/spaces/${spaceId}/items/${itemId}/files/${fileId}`, { method: 'DELETE' });
-}
 

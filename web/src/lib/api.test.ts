@@ -10,7 +10,7 @@ vi.mock('./auth', () => ({
 const mockFetch = vi.fn();
 globalThis.fetch = mockFetch;
 
-const { login, getChats, createChat, getChatStatus, sendMessage, getSpaceItems } = await import('./api');
+const { login, getChats, createChat, getChatStatus, sendMessage, getDocuments } = await import('./api');
 
 const mockResponse = (body: unknown, status = 200) => ({
   ok: status >= 200 && status < 300,
@@ -67,10 +67,16 @@ describe('api', () => {
     expect(opts.headers.Authorization).toBe('Bearer test-token');
   });
 
-  it('getSpaceItems fetches the unified item list', async () => {
+  it('getDocuments constructs the correct URL without params', async () => {
     mockFetch.mockResolvedValueOnce(mockResponse([]));
-    await getSpaceItems('space-1');
-    expect(mockFetch).toHaveBeenCalledWith('/spaces/space-1/items', expect.any(Object));
+    await getDocuments('space-1');
+    expect(mockFetch).toHaveBeenCalledWith('/spaces/space-1/documents', expect.any(Object));
+  });
+
+  it('getDocuments appends type query param when provided', async () => {
+    mockFetch.mockResolvedValueOnce(mockResponse([]));
+    await getDocuments('space-1', { type: 'playbook' });
+    expect(mockFetch).toHaveBeenCalledWith('/spaces/space-1/documents?type=playbook', expect.any(Object));
   });
 
 });

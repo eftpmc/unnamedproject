@@ -8,7 +8,7 @@ import { requireAuth, type AuthedRequest } from '../middleware/auth.js';
 const router = Router();
 router.use(requireAuth);
 
-const VALID_TYPES = ['anthropic', 'openai', 'github', 'mcp', 'local', 'claude_code', 'codex'] as const;
+const VALID_TYPES = ['anthropic', 'openai', 'github', 'mcp', 'local', 'claude_code', 'codex', 'google'] as const;
 const VALID_PURPOSES = ['claude_code', 'codex', 'github', 'mcp', 'tool'] as const;
 
 // claude_code and codex are self-describing types — purpose is derived from the type.

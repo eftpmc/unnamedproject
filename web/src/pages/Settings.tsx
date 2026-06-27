@@ -18,7 +18,9 @@ import {
   createConnection,
   deleteConnection,
   deleteScheduledTask,
+  disconnectGoogle,
   getConnections,
+  getGoogleStatus,
   getMemory,
   getSpaces,
   getScheduledTasks,
@@ -107,12 +109,6 @@ const MCP_PRESETS: McpPreset[] = [
   // Browser
   { id: 'playwright', name: 'Playwright', description: 'Full browser control — navigate, click, fill forms, screenshot. Essential for web scraping and automation.', command: 'npx', args: ['-y', '@playwright/mcp@latest'] },
   { id: 'puppeteer', name: 'Puppeteer', description: 'Headless Chrome browser automation and screenshots.', command: 'npx', args: ['-y', '@modelcontextprotocol/server-puppeteer'] },
-  // Google — requires a Google Cloud project with OAuth 2.0 credentials.
-  // Gmail: place your downloaded gcp-oauth.keys.json at ~/.gmail-mcp/gcp-oauth.keys.json,
-  // then the server opens a browser on first use to complete authorization.
-  { id: 'gmail', name: 'Gmail', description: 'Read, send, and search Gmail. Requires gcp-oauth.keys.json at ~/.gmail-mcp/ — opens a browser on first use to authorize.', command: 'npx', args: ['-y', '@gongrzhe/server-gmail-autoauth-mcp'] },
-  // Google Drive: run `npx @modelcontextprotocol/server-gdrive auth` once to authorize.
-  { id: 'google-drive', name: 'Google Drive', description: 'Browse, read, and search files in Google Drive. Run `npx @modelcontextprotocol/server-gdrive auth` once to authorize via browser.', command: 'npx', args: ['-y', '@modelcontextprotocol/server-gdrive'] },
   // Dev tools
   { id: 'github', name: 'GitHub', description: 'GitHub API — repos, PRs, issues, code search, and more.', command: 'npx', args: ['-y', '@modelcontextprotocol/server-github'], envVars: [{ key: 'GITHUB_PERSONAL_ACCESS_TOKEN', label: 'Personal access token', placeholder: 'ghp_...' }] },
   // Communication
@@ -477,6 +473,30 @@ export default function Settings() {
 
   const mcpConnections = connections.filter(c => c.purpose === 'mcp');
 
+  const { data: googleStatus = {} } = useQuery<Record<string, { email: string }>>({
+    queryKey: ['google-status'],
+    queryFn: getGoogleStatus,
+  });
+
+  const disconnectGoogleMutation = useMutation({
+    mutationFn: (service: string) => disconnectGoogle(service),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['google-status'] }),
+  });
+
+  // Handle redirect back from Google OAuth
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    const connected = params.get('google_connected');
+    const error = params.get('google_error');
+    if (connected || error) {
+      window.history.replaceState({}, '', '/settings');
+      if (connected) {
+        qc.invalidateQueries({ queryKey: ['google-status'] });
+        setTab('mcp');
+      }
+    }
+  }, [qc]);
+
   useEffect(() => {
     if (settings?.projects_root) setProjectsRoot(settings.projects_root);
     if (settings?.permission_profile) setPermissionProfile(settings.permission_profile);
@@ -659,9 +679,34 @@ export default function Settings() {
           {/* ── MCP ────────────────────────────────────── */}
           {tab === 'mcp' && (
             <div className="flex flex-col gap-6">
+
+              {/* Google services */}
+              <div>
+                <SectionLabel>Google</SectionLabel>
+                <div className="flex flex-col gap-3">
+                  <SettingRow>
+                    <SettingRowInfo title="Gmail" description="Read, send, and search email" />
+                    <div className="flex items-center gap-2 shrink-0">
+                      {googleStatus['gmail'] ? (
+                        <>
+                          <span className="text-xs text-muted-foreground">{googleStatus['gmail'].email}</span>
+                          <ConnectedBadge />
+                          <DeleteBtn onClick={() => disconnectGoogleMutation.mutate('gmail')} />
+                        </>
+                      ) : (
+                        <Button size="sm" asChild>
+                          <a href="http://localhost:3000/auth/google/start?service=gmail">Connect</a>
+                        </Button>
+                      )}
+                    </div>
+                  </SettingRow>
+                </div>
+                <HintText>Requires <code className="text-xs">GOOGLE_CLIENT_ID</code> and <code className="text-xs">GOOGLE_CLIENT_SECRET</code> in your server .env.</HintText>
+              </div>
+
               {mcpConnections.length > 0 && (
                 <div className="flex flex-col gap-3">
-                  <SectionLabel>Connected</SectionLabel>
+                  <SectionLabel>Connected MCP servers</SectionLabel>
                   {mcpConnections.map(c => (
                     <SettingRow key={c.id}>
                       <SettingRowInfo title={c.name} description="MCP server" />

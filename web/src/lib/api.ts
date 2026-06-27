@@ -252,4 +252,12 @@ export function runScheduledTask(id: string): Promise<void> {
   return request(`/scheduled-tasks/${id}/run`, { method: 'POST' });
 }
 
+export function getGoogleStatus(): Promise<Record<string, { email: string }>> {
+  return request('/auth/google/status');
+}
+
+export function disconnectGoogle(service: string): Promise<void> {
+  return request(`/auth/google/${service}`, { method: 'DELETE' });
+}
+
 

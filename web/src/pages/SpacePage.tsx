@@ -26,6 +26,7 @@ import {
   getDocuments,
   getDocument,
   createDocument,
+  updateDocument,
   deleteDocument,
   getProjects,
   createProject,
@@ -80,7 +81,7 @@ export default function SpacePage() {
     enabled: !!spaceId,
   });
 
-  const { data: projects = [] } = useQuery<Project[]>({
+  const { data: projects = [], isLoading: projectsLoading } = useQuery<Project[]>({
     queryKey: ['projects', spaceId],
     queryFn: () => getProjects(spaceId!),
     enabled: !!spaceId,
@@ -126,6 +127,7 @@ export default function SpacePage() {
     return <DocumentDetail space={space} docId={docId} />;
   }
   if (projectId) {
+    if (projectsLoading) return <PageShell><PageLoading rows={4} /></PageShell>;
     const project = projects.find(p => p.id === projectId) ?? null;
     return project
       ? <ProjectDetail space={space} project={project} />
@@ -477,11 +479,24 @@ function DocumentDetail({ space, docId }: { space: Space; docId: string }) {
   const navigate = useNavigate();
   const queryClient = useQueryClient();
   const [confirmDelete, setConfirmDelete] = useState(false);
+  const [frontmatterDraft, setFrontmatterDraft] = useState<{ [key: string]: string }>({});
 
   const { data: doc, isLoading } = useQuery<DocumentWithBody>({
     queryKey: ['document', space.id, docId],
     queryFn: () => getDocument(space.id, docId),
   });
+
+  useEffect(() => {
+    if (doc) {
+      setFrontmatterDraft(
+        Object.fromEntries(
+          Object.entries(doc.frontmatter)
+            .filter(([, v]) => v !== null && v !== undefined && v !== '')
+            .map(([k, v]) => [k, String(v)]),
+        ),
+      );
+    }
+  }, [doc]);
 
   const deleteMutation = useMutation({
     mutationFn: () => deleteDocument(space.id, docId),
@@ -529,10 +544,23 @@ function DocumentDetail({ space, docId }: { space: Space; docId: string }) {
         <ContentColumn className="max-w-4xl py-6">
           {frontmatterEntries.length > 0 && (
             <div className="mb-5 flex flex-wrap gap-x-5 gap-y-2 rounded-lg border border-border-soft bg-card px-4 py-3">
-              {frontmatterEntries.map(([key, value]) => (
+              {frontmatterEntries.map(([key]) => (
                 <div key={key} className="flex min-w-0 items-baseline gap-1.5">
                   <span className="shrink-0 text-[11px] text-muted-foreground capitalize">{key.replace(/_/g, ' ')}</span>
-                  <span className="min-w-0 truncate font-mono text-xs">{String(value)}</span>
+                  <input
+                    className="min-w-0 truncate bg-transparent font-mono text-xs focus:outline-none"
+                    value={frontmatterDraft[key] ?? ''}
+                    onChange={e => setFrontmatterDraft(prev => ({ ...prev, [key]: e.target.value }))}
+                    onBlur={e => {
+                      const newVal = e.target.value;
+                      const original = String(doc.frontmatter[key] ?? '');
+                      if (newVal !== original) {
+                        updateDocument(space.id, doc.id, { frontmatter: { [key]: newVal } }).then(() => {
+                          queryClient.invalidateQueries({ queryKey: ['document', space.id, docId] });
+                        });
+                      }
+                    }}
+                  />
                 </div>
               ))}
             </div>

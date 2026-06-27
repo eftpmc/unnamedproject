@@ -36,9 +36,9 @@ export type SessionEventType =
   | 'scope_changed'
   | 'project_linked'
   | 'project_created'
+  | 'document_created'
+  | 'document_updated'
   | 'artifact_created'
-  | 'item_created'
-  | 'item_updated'
   | 'approval_requested'
   | 'approval_resolved'
   | 'mcp_required';
@@ -85,48 +85,42 @@ export interface Space {
   created_at?: number;
 }
 
-export type BlockContent =
-  | { type: 'text'; content: string }
-  | { type: 'heading'; level: 1 | 2 | 3; text: string }
-  | { type: 'code'; language: string; content: string }
-  | { type: 'table'; headers: string[]; rows: string[][] }
-  | { type: 'image'; url: string; alt?: string; caption?: string }
-  | { type: 'task-list'; tasks: { id: string; text: string; done: boolean }[] }
-  | { type: 'callout'; variant: 'info' | 'warning' | 'success' | 'error'; content: string }
-  | { type: 'file-browser' }
-  | { type: 'chart'; chartType: 'line' | 'bar' | 'pie'; title?: string; data: { label: string; value: number }[] }
-  | { type: 'stat'; label: string; value: string; trend?: { direction: 'up' | 'down' | 'flat'; label?: string } }
-  | { type: 'list'; ordered?: boolean; items: string[] }
-  | { type: 'progress'; label?: string; value: number; max?: number }
-  | { type: 'input'; label: string; value: string; placeholder?: string; input_type?: 'text' | 'number' | 'multiline' | 'select'; options?: string[] }
-  | { type: 'file-preview'; file_id: string; filename: string; mime_type: string; url: string }
-  | { type: 'relation'; item_id: string; space_id: string; label?: string };
-
-export type Block = BlockContent & { id?: string };
-
-export interface SpaceItemBase {
+export interface Document {
   id: string;
   space_id: string;
-  type: string;
-  name: string;
+  path: string;
+  title: string;
+  type: string | null;
+  status: string | null;
+  frontmatter: Record<string, unknown>;
   source_session_id: string | null;
   created_at: number;
-  page_blocks: Block[];
-  fields: Record<string, unknown>;
+  updated_at: number;
 }
 
-export type RepoItem = SpaceItemBase & { type: 'repo'; fields: { repo_path: string; default_branch?: string | null } };
-export type FileItem = SpaceItemBase & { type: 'file'; fields: { file_path: string; size_bytes?: number | null; mime_type?: string | null } };
+export interface DocumentWithBody extends Document {
+  body: string;
+}
 
-export type SpaceItem = RepoItem | FileItem | SpaceItemBase;
-
-export interface ItemTemplate {
+export interface Project {
   id: string;
-  user_id: string | null;
-  kind: 'system' | 'blocks';
+  space_id: string;
   name: string;
-  blocks: Block[] | null;
-  is_builtin: boolean;
+  repo_path: string;
+  default_branch: string | null;
+  origin: 'created' | 'linked';
+  created_at: number;
+}
+
+export interface Trigger {
+  id: string;
+  space_id: string;
+  kind: 'schedule' | 'webhook' | 'manual';
+  schedule_cron: string | null;
+  playbook_id: string | null;
+  enabled: number;
+  next_run_at: number | null;
+  last_run_at: number | null;
   created_at: number;
 }
 

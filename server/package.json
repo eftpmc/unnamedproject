@@ -20,6 +20,7 @@
     "better-sqlite3": "^11.0.0",
     "express": "^4.19.2",
     "express-rate-limit": "^8.5.2",
+    "gray-matter": "^4.0.3",
     "helmet": "^8.2.0",
     "jsonwebtoken": "^9.0.2",
     "multer": "^2.1.1",

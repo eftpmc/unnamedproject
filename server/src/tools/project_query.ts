@@ -5,7 +5,7 @@ import { getDecryptedConfig } from '../routes/connections.js';
 
 interface ProjectQueryInput {
   space_id: string;
-  item_id: string;
+  project_id: string;
   question: string;
 }
 
@@ -25,7 +25,7 @@ function getAnthropicApiKey(userId: string): string | null {
 export async function runProjectQuery(input: ProjectQueryInput, userId: string): Promise<string> {
   const space = getSpaceForUser(input.space_id, userId);
   if (!space) return 'Space not found.';
-  const project = getProject(input.item_id);
+  const project = getProject(input.project_id);
   if (!project || project.space_id !== space.id) return 'Project not found in this Space.';
 
   const apiKey = getAnthropicApiKey(userId);

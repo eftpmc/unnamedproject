@@ -17,7 +17,7 @@ export function registerKnowledgeHandlers(): void {
     },
     handler: async (args, userId) => {
       return runProjectQuery(
-        { space_id: args.space_id as string, item_id: args.project_id as string, question: args.question as string },
+        { space_id: args.space_id as string, project_id: args.project_id as string, question: args.question as string },
         userId,
       );
     },

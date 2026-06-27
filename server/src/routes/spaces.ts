@@ -264,9 +264,15 @@ router.post('/:spaceId/triggers', (req, res) => {
     res.status(400).json({ error: 'kind required (schedule|webhook|manual)' });
     return;
   }
-  const next_run_at = kind === 'schedule' && schedule_cron
-    ? nextCronRun(schedule_cron, Math.floor(Date.now() / 1000))
-    : null;
+  let next_run_at: number | null = null;
+  if (kind === 'schedule' && schedule_cron) {
+    try {
+      next_run_at = nextCronRun(schedule_cron, Math.floor(Date.now() / 1000));
+    } catch {
+      res.status(400).json({ error: 'invalid schedule_cron expression' });
+      return;
+    }
+  }
   res.status(201).json(createTrigger({
     space_id: req.params.spaceId,
     kind,

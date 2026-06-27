@@ -29,9 +29,15 @@ export async function fireTrigger(triggerId: string): Promise<void> {
     .run(messageId, sessionId, 'user', prompt);
 
   const next = trigger.schedule_cron ? nextCronRun(trigger.schedule_cron, Math.floor(Date.now() / 1000)) : null;
-  markTriggerRun(trigger.id, next);
+  markTriggerRun(trigger.id, next);  // advance schedule (prevents double-fire on restart)
 
-  await runAgentTurn(trigger.user_id, sessionId, messageId);
+  try {
+    await runAgentTurn(trigger.user_id, sessionId, messageId);
+  } catch (err) {
+    console.error(`[fireTrigger] runAgentTurn failed for trigger ${triggerId}:`, err);
+    // Reset next_run_at so the trigger retries next poll instead of being silently skipped
+    markTriggerRun(trigger.id, Math.floor(Date.now() / 1000));
+  }
 }
 
 export async function runDueTriggers(): Promise<void> {

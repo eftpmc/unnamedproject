@@ -20,6 +20,7 @@ import {
   deleteScheduledTask,
   disconnectGoogle,
   getConnections,
+  getGoogleAuthUrl,
   getGoogleStatus,
   getMemory,
   getSpaces,
@@ -694,9 +695,10 @@ export default function Settings() {
                           <DeleteBtn onClick={() => disconnectGoogleMutation.mutate('gmail')} />
                         </>
                       ) : (
-                        <Button size="sm" asChild>
-                          <a href="http://localhost:3000/auth/google/start?service=gmail">Connect</a>
-                        </Button>
+                        <Button size="sm" onClick={async () => {
+                          const { url } = await getGoogleAuthUrl('gmail');
+                          window.location.href = url;
+                        }}>Connect</Button>
                       )}
                     </div>
                   </SettingRow>

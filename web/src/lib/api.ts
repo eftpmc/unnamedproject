@@ -256,6 +256,10 @@ export function getGoogleStatus(): Promise<Record<string, { email: string }>> {
   return request('/auth/google/status');
 }
 
+export function getGoogleAuthUrl(service: string): Promise<{ url: string }> {
+  return request(`/auth/google/url?service=${service}`);
+}
+
 export function disconnectGoogle(service: string): Promise<void> {
   return request(`/auth/google/${service}`, { method: 'DELETE' });
 }

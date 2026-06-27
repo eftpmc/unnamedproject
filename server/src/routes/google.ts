@@ -22,8 +22,8 @@ const GMAIL_SCOPES = [
   'https://www.googleapis.com/auth/userinfo.email',
 ];
 
-// GET /auth/google/start?service=gmail — redirect to Google consent
-router.get('/start', requireAuth, (req, res) => {
+// GET /auth/google/url?service=gmail — return OAuth URL as JSON (called by frontend with auth header)
+router.get('/url', requireAuth, (req, res) => {
   const { userId } = req as AuthedRequest;
   const service = (req.query.service as string) ?? 'gmail';
   try {
@@ -34,7 +34,7 @@ router.get('/start', requireAuth, (req, res) => {
       scope: GMAIL_SCOPES,
       state: `${userId}:${service}`,
     });
-    res.redirect(url);
+    res.json({ url });
   } catch (err) {
     res.status(500).json({ error: (err as Error).message });
   }

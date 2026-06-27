@@ -1,108 +1,67 @@
-# Task 1 Report: Delete item/blocks/schema/capabilities/DAG subsystem
+# Task 1 Report: Replace item/block types with Document/Project/Trigger in web/src/types.ts
 
-## Status: COMPLETE
+## Plan
+Plan 3: Web UI — Task 1 of 7
 
-## What was deleted
+## Summary
+Successfully updated `web/src/types.ts` to replace the old item/block type system with the new Document/Project/Trigger architecture, aligning the frontend type definitions with the backend refactor.
 
-**Service files (git rm):**
-- `server/src/lib/blocks.ts`, `blocks.test.ts`
-- `server/src/lib/item-schema.ts`, `item-schema.test.ts`
-- `server/src/mcp/handlers/items.ts`
-- `server/src/mcp/handlers/schedules.ts`
-- `server/src/routes/scheduled_tasks.ts`
-- `server/src/routes/spaces-items.test.ts`
-- `server/src/services/capabilities.ts`, `capabilities.test.ts`
-- `server/src/services/items.ts`, `items.test.ts`
-- `server/src/services/scheduled_tasks.ts`
-- `server/src/services/templates.ts`
-- `server/src/tools/item_ops.ts`, `item_ops.test.ts`
+## Changes Made
 
-**Test files for removed functionality (git rm):**
-- `tests/services/items.test.ts`, `scheduled_tasks.test.ts`, `scheduler.test.ts`
-- `tests/services/toolRegistry.test.ts`, `toolSearch.test.ts`, `agent_pipeline.test.ts` (source files deleted in prior commit)
-- `tests/scheduled-tasks-route.test.ts`
-- `tests/lib/worktree.test.ts`
-- `tests/db/migration-v5.test.ts`
-- `tests/tools/run_command.test.ts`, `file_ops.test.ts` (source tools no longer exist)
-- `tests/tools/definitions.test.ts` (source deleted in prior commit)
+### Types Removed
+- `BlockContent` (union type for 14 different block content variants)
+- `Block` (composite type extending BlockContent with optional id)
+- `SpaceItemBase` (base interface for space items)
+- `RepoItem` (repo-specific space item type)
+- `FileItem` (file-specific space item type)
+- `SpaceItem` (union type)
+- `ItemTemplate` (interface for block templates)
 
-## Key rewrites
+### SessionEventType Union Updated
+Replaced `'item_created' | 'item_updated'` with `'document_created' | 'document_updated'`
+- Maintains existing event types: scope_changed, project_linked, project_created, artifact_created, approval_requested, approval_resolved, mcp_required
 
-**`services/context.ts`**: Replaced item/runbook/capabilities doctrine with projects+documents+triggers doctrine. `buildContext` now calls `listProjects` and `listDocuments` instead of `getItemsForSpace`.
+### Types Added
+- `Document` — Core document interface with id, space_id, path, title, type, status, frontmatter, source_session_id, created_at, updated_at
+- `DocumentWithBody` — Extended Document interface with body field
+- `Project` — Project interface with id, space_id, name, repo_path, default_branch, origin ('created' | 'linked'), created_at
+- `Trigger` — Trigger interface with id, space_id, kind ('schedule' | 'webhook' | 'manual'), schedule_cron, playbook_id, enabled, next_run_at, last_run_at, created_at
 
-**`services/scheduler.ts`**: Replaced full scheduler with no-op stub (polls once per hour, does nothing). Trigger runner wired in Task 5.
+## Verification
 
-**`services/agent.ts`**: Removed `checkpointWorkspaceMd` call (wrote workspace.md on every turn).
+### Typecheck Results
+Ran: `cd web && npx tsc --noEmit`
+- ✅ No errors within `types.ts` itself — file is internally consistent
+- ✅ Errors only in other files that import removed types (expected; fixed in later tasks):
+  - BlockRenderer.tsx, BlockRenderer.test.tsx
+  - ChatView.tsx, ContextPanel.tsx, MessageList.tsx
+  - api.ts
+  - Settings.tsx, SpacePage.tsx
 
-**`routes/spaces.ts`**: Stripped all item/template/file-upload endpoints. Now space CRUD only (GET, POST, PATCH, DELETE).
+### File Changes Summary
+- 1 file modified: web/src/types.ts
+- 29 lines inserted (new Document, DocumentWithBody, Project, Trigger types)
+- 35 lines deleted (old BlockContent, Block, SpaceItemBase, RepoItem, FileItem, SpaceItem, ItemTemplate)
+- Net change: -6 lines
 
-**`routes/sessions.ts`**: Three worktree queries updated from `item_id`/`space_items` joins to `project_id`/`projects` joins.
-
-**`routes/auth.ts`**: Removed `createScheduledTask` call on register.
-
-**`tools/project_query.ts`**: Uses `getProject` from projects service instead of `getItemById`.
-**`tools/project_ops.ts`**: Uses `listProjects` from projects service instead of `getItemsForSpace`.
-**`tools/project_ops.ts`**: `createProject` inserts into `projects` table; `deleteProject` gets repo paths from projects service.
-
-**`mcp/handlers/index.ts`**: Removed `registerItemHandlers`, `registerScheduleHandlers`.
-**`mcp/handlers/git.ts`**: Uses `getProject` instead of `getItemById`.
-**`mcp/handlers/knowledge.ts`**: Dynamic import switched to `services/projects.js`.
-**`lib/worktree.ts`**: Replaced `SpaceItemBase` type dependency with inline `WorktreeRepoItem` interface.
-
-**`db/index.ts`**: Removed `DbScheduledTask` and all 7 scheduled-task DB functions. Added migration v25 which:
-1. Rebuilds `agent_worktrees` with `project_id REFERENCES projects(id)` instead of `item_id REFERENCES space_items(id)`.
-2. Rebuilds `session_events` to drop the dangling FK `item_id REFERENCES space_items(id)` left by migration v22 — without this, any `DELETE FROM sessions` prepare() failed with "no such table: main.space_items" because SQLite validates the cascade chain at prepare time.
-
-## Test files updated
-
-- `tests/tools/project_query.test.ts`: Mocks `services/projects.js` / `getProject` instead of deleted `services/items.js`.
-- `tests/tools/project_ops.test.ts`: Mock `services/projects.js` / `listProjects` for repo-path deletion; `getDb` mock handles `INSERT INTO projects`.
-- `tests/services/context.test.ts`: Updated 4 assertions to match new doctrine text; replaced 2 old item-based tests with new document/projects-based checks.
-- `tests/sessions-new.test.ts`: Worktree setup inserts into `projects` + `agent_worktrees.project_id` instead of `space_items` + `item_id`.
-- `tests/routes/spaces.ts`: Removed 3 deleted item-route tests; added PATCH/DELETE tests.
-- `tests/mcp/handlers.test.ts`: Removed `item handlers` describe block (tests deleted `list_items`).
-- `tests/auth.test.ts`: Removed `scheduled_tasks` assertion.
-- `tests/connections.test.ts`: Removed MCP tool ingestion test (backend ingestion path deleted).
-
-## Result
-
-- `npx tsc --noEmit`: clean (0 errors)
-- `npx vitest run`: 47 test files, 230 tests — all pass
-- No source file imports `services/items.js`, `services/templates.js`, `lib/blocks.js`, `lib/item-schema.js`, `services/capabilities.js`, `services/scheduled_tasks.js`, or `tools/item_ops.js`
-
----
-
-# Code-Review Fix Report (post-review pass)
-
-## Changes
-
-### Issue 1: `detectCapabilities` signature / vestigial file
-
-- Searched all non-test `.ts` files for `detectCapabilities` imports.
-- Result: zero production imports. File was entirely dead code.
-- **Deleted:** `server/src/services/projectCapabilities.ts`, `server/src/services/projectCapabilities.test.ts`
-
-### Issue 2: MCP tool schemas still used `item_id`
-
-**`server/src/mcp/handlers/git.ts`** (`git_op` tool):
-- `inputSchema.properties`: `item_id` → `project_id`
-- `inputSchema.required`: `['space_id', 'item_id', 'op']` → `['space_id', 'project_id', 'op']`
-- Handler: `args.item_id` → `args.project_id` (two occurrences: `getProject` call and error string)
-
-**`server/src/mcp/handlers/knowledge.ts`** (`project_query` and `rebuild_graph` tools):
-- Both tools: `item_id` → `project_id` in schema properties and required arrays
-- `project_query` handler: `args.item_id` → `args.project_id`; internal call to `runProjectQuery` still passes `item_id:` key (matching `ProjectQueryInput` interface in `project_query.ts`)
-- `rebuild_graph` handler: `args.item_id` → `args.project_id` (two occurrences)
-
-### Issue 3: Stale comment in `auth.test.ts`
-
-**`server/tests/auth.test.ts`** (`creates first user` test):
-- Removed dead comment `// scheduled_tasks table no longer exists; task scheduling removed in item/DAG refactor`
-- Test body retains the two meaningful assertions (`res.status` and `res.body.token`)
-
-## Test results
+## Commit
 
 ```
-npx tsc --noEmit   → 0 errors
-npx vitest run     → 46 test files, 227 tests — all passed (19.87s)
+Commit: 4336cda5f6aec0174ab7e289ed8da52f1933b855
+Author: ari <61393419+eftpmc@users.noreply.github.com>
+Date: Sat Jun 27 00:06:24 2026 -0400
+
+Message: refactor(web): replace item/block types with Document/Project/Trigger
 ```
+
+## Status
+
+STATUS: DONE
+
+All requirements from task-1-brief.md met:
+- [x] Old types removed from types.ts
+- [x] New types added with correct interfaces per specification
+- [x] SessionEventType updated to replace item_created/item_updated with document_created/document_updated
+- [x] types.ts has no internal errors
+- [x] Changes committed with appropriate message
+- [x] Typecheck confirms no errors in types.ts (errors in downstream files are expected)

@@ -220,7 +220,8 @@ router.get('/:spaceId/projects/:projectId/tree', async (req, res) => {
   }
   try {
     const entries = await fs.readdir(dir, { withFileTypes: true });
-    res.json(entries.map(e => ({ name: e.name, type: e.isDirectory() ? 'dir' : 'file' })));
+    const prefix = relPath ? `${relPath}/` : '';
+    res.json({ entries: entries.map(e => ({ name: e.name, type: e.isDirectory() ? 'dir' : 'file', path: `${prefix}${e.name}` })) });
   } catch {
     res.status(404).json({ error: 'Path not found' });
   }

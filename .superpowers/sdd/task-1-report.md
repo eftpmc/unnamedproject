@@ -69,3 +69,40 @@
 - `npx tsc --noEmit`: clean (0 errors)
 - `npx vitest run`: 47 test files, 230 tests — all pass
 - No source file imports `services/items.js`, `services/templates.js`, `lib/blocks.js`, `lib/item-schema.js`, `services/capabilities.js`, `services/scheduled_tasks.js`, or `tools/item_ops.js`
+
+---
+
+# Code-Review Fix Report (post-review pass)
+
+## Changes
+
+### Issue 1: `detectCapabilities` signature / vestigial file
+
+- Searched all non-test `.ts` files for `detectCapabilities` imports.
+- Result: zero production imports. File was entirely dead code.
+- **Deleted:** `server/src/services/projectCapabilities.ts`, `server/src/services/projectCapabilities.test.ts`
+
+### Issue 2: MCP tool schemas still used `item_id`
+
+**`server/src/mcp/handlers/git.ts`** (`git_op` tool):
+- `inputSchema.properties`: `item_id` → `project_id`
+- `inputSchema.required`: `['space_id', 'item_id', 'op']` → `['space_id', 'project_id', 'op']`
+- Handler: `args.item_id` → `args.project_id` (two occurrences: `getProject` call and error string)
+
+**`server/src/mcp/handlers/knowledge.ts`** (`project_query` and `rebuild_graph` tools):
+- Both tools: `item_id` → `project_id` in schema properties and required arrays
+- `project_query` handler: `args.item_id` → `args.project_id`; internal call to `runProjectQuery` still passes `item_id:` key (matching `ProjectQueryInput` interface in `project_query.ts`)
+- `rebuild_graph` handler: `args.item_id` → `args.project_id` (two occurrences)
+
+### Issue 3: Stale comment in `auth.test.ts`
+
+**`server/tests/auth.test.ts`** (`creates first user` test):
+- Removed dead comment `// scheduled_tasks table no longer exists; task scheduling removed in item/DAG refactor`
+- Test body retains the two meaningful assertions (`res.status` and `res.body.token`)
+
+## Test results
+
+```
+npx tsc --noEmit   → 0 errors
+npx vitest run     → 46 test files, 227 tests — all passed (19.87s)
+```

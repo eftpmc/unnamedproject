@@ -13,17 +13,17 @@ export function registerGitHandlers(): void {
       type: 'object',
       properties: {
         space_id: { type: 'string' },
-        item_id: { type: 'string' },
+        project_id: { type: 'string' },
         op: { type: 'string', enum: ['log', 'diff', 'status', 'add', 'commit', 'push'] },
         message: { type: 'string' },
         branch: { type: 'string' },
       },
-      required: ['space_id', 'item_id', 'op'],
+      required: ['space_id', 'project_id', 'op'],
     },
     handler: async (args, userId, sessionId) => {
-      const project = getProject(args.item_id as string);
+      const project = getProject(args.project_id as string);
       if (!project || project.space_id !== args.space_id) {
-        return `Error: repo project ${args.item_id} not found in space ${args.space_id}`;
+        return `Error: repo project ${args.project_id} not found in space ${args.space_id}`;
       }
       const repoItem = { id: project.id, fields: { repo_path: project.repo_path } };
       const executionId = createExecution(userId, null, args.space_id as string, 'git_op');

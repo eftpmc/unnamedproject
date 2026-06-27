@@ -24,8 +24,6 @@ describe('POST /auth/register', () => {
       .send({ email, password: 'password123' });
     expect(res.status).toBe(201);
     expect(res.body.token).toBeDefined();
-
-    // scheduled_tasks table no longer exists; task scheduling removed in item/DAG refactor
   });
 
   it('rejects duplicate email', async () => {

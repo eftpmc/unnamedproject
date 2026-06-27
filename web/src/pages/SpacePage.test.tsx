@@ -6,26 +6,30 @@ import SpacePage from './SpacePage.js';
 
 vi.mock('../lib/api.js', () => ({
   getSpaces: vi.fn().mockResolvedValue([{ id: 'space-1', name: 'Test Space', description: 'A useful Space', enabled_connection_ids: [] }]),
-  getSpaceItems: vi.fn().mockResolvedValue([
-    { id: 'repo-1', space_id: 'space-1', type: 'repo', name: 'Web repo', fields: { repo_path: '/tmp/web', default_branch: 'main' }, page_blocks: [], source_session_id: null, created_at: 10 },
-    { id: 'note-1', space_id: 'space-1', type: 'note', name: 'Release notes', fields: {}, page_blocks: [{ type: 'text', content: '# Ready' }], source_session_id: null, created_at: 9 },
-    { id: 'doc-1', space_id: 'space-1', type: 'document', name: 'Empty Doc', fields: {}, page_blocks: [], source_session_id: null, created_at: 8 },
+  getDocuments: vi.fn().mockResolvedValue([
+    { id: 'doc-1', space_id: 'space-1', path: 'notes.md', title: 'Release notes', type: 'note', status: 'draft', frontmatter: {}, source_session_id: null, created_at: 10, updated_at: 10 },
+    { id: 'doc-2', space_id: 'space-1', path: 'workflow.md', title: 'Daily workflow', type: 'workflow', status: null, frontmatter: {}, source_session_id: null, created_at: 9, updated_at: 9 },
   ]),
-  listItemTemplates: vi.fn().mockResolvedValue([
-    { id: 'tpl_document', user_id: null, kind: 'blocks', name: 'Document', blocks: [{ type: 'text', content: '' }], item_type: 'document', is_builtin: true, created_at: 1 },
+  getProjects: vi.fn().mockResolvedValue([
+    { id: 'proj-1', space_id: 'space-1', name: 'Web repo', repo_path: '/tmp/web', default_branch: 'main', origin: 'created', created_at: 8 },
   ]),
   getChats: vi.fn().mockResolvedValue([{ id: 'chat-1', title: 'Fix the render bug', effort: 'low', model: null, pinned_space_id: 'space-1', created_at: 1, updated_at: 2 }]),
+  getConnections: vi.fn().mockResolvedValue([]),
   createChat: vi.fn(),
   updateChatConfig: vi.fn(),
-  createSpaceItem: vi.fn(),
-  deleteSpaceItem: vi.fn(),
+  createDocument: vi.fn(),
+  deleteDocument: vi.fn(),
+  getDocument: vi.fn(),
+  createProject: vi.fn(),
+  linkProject: vi.fn(),
+  deleteProject: vi.fn(),
   updateSpace: vi.fn(),
   deleteSpace: vi.fn(),
-  updateSpaceItem: vi.fn(),
-  getItemContent: vi.fn(),
 }));
 
 vi.mock('../components/FileBrowser.js', () => ({ default: () => <div>Repository browser</div> }));
+vi.mock('../components/DocumentView.js', () => ({ default: () => <div>Document editor</div> }));
+vi.mock('../components/TrackerView.js', () => ({ default: () => <div>Tracker view</div> }));
 
 function renderPage(path: string) {
   return render(
@@ -33,8 +37,13 @@ function renderPage(path: string) {
       <MemoryRouter initialEntries={[path]}>
         <Routes>
           <Route path="/spaces/:spaceId" element={<SpacePage />} />
-          <Route path="/spaces/:spaceId/:section" element={<SpacePage />} />
-          <Route path="/spaces/:spaceId/items/:itemId" element={<SpacePage />} />
+          <Route path="/spaces/:spaceId/chats" element={<SpacePage />} />
+          <Route path="/spaces/:spaceId/documents" element={<SpacePage />} />
+          <Route path="/spaces/:spaceId/documents/:docId" element={<SpacePage />} />
+          <Route path="/spaces/:spaceId/projects" element={<SpacePage />} />
+          <Route path="/spaces/:spaceId/projects/:projectId" element={<SpacePage />} />
+          <Route path="/spaces/:spaceId/triggers" element={<SpacePage />} />
+          <Route path="/spaces/:spaceId/settings" element={<SpacePage />} />
         </Routes>
       </MemoryRouter>
     </QueryClientProvider>,
@@ -42,19 +51,15 @@ function renderPage(path: string) {
 }
 
 describe('SpacePage', () => {
-  it('renders the Space overview with tab bar and activity list', async () => {
+  it('renders the Space overview with new tab bar', async () => {
     renderPage('/spaces/space-1');
     expect(await screen.findByText('Test Space')).toBeInTheDocument();
     expect(screen.getByRole('link', { name: 'Chats' })).toBeInTheDocument();
-    expect(screen.getByRole('link', { name: 'Items' })).toBeInTheDocument();
+    expect(screen.getByRole('link', { name: 'Documents' })).toBeInTheDocument();
+    expect(screen.getByRole('link', { name: 'Projects' })).toBeInTheDocument();
+    expect(screen.getByRole('link', { name: 'Triggers' })).toBeInTheDocument();
     expect(screen.getByRole('link', { name: 'Settings' })).toBeInTheDocument();
-    expect(screen.queryByRole('link', { name: 'Plans' })).not.toBeInTheDocument();
-    expect(screen.queryByRole('link', { name: 'Pipelines' })).not.toBeInTheDocument();
-    // Stat cards removed — "Running" label no longer present
-    expect(screen.queryByText('Running')).not.toBeInTheDocument();
-    // Activity items present
-    expect(screen.getByText('Web repo')).toBeInTheDocument();
-    expect(screen.getByText('Fix the render bug')).toBeInTheDocument();
+    expect(screen.queryByRole('link', { name: 'Items' })).not.toBeInTheDocument();
   });
 
   it('marks the Overview tab active on the space root route', async () => {
@@ -67,9 +72,15 @@ describe('SpacePage', () => {
     expect(await screen.findByRole('link', { name: 'Chats' })).toHaveAttribute('aria-current', 'page');
   });
 
-  it('marks the Items tab active on the items sub-route', async () => {
-    renderPage('/spaces/space-1/items');
-    expect(await screen.findByRole('link', { name: 'Items' })).toHaveAttribute('aria-current', 'page');
+  it('marks the Documents tab active on the documents sub-route', async () => {
+    renderPage('/spaces/space-1/documents');
+    expect(await screen.findByRole('link', { name: 'Documents' })).toHaveAttribute('aria-current', 'page');
+  });
+
+  it('lists documents in the Documents tab', async () => {
+    renderPage('/spaces/space-1/documents');
+    expect(await screen.findByText('Release notes')).toBeInTheDocument();
+    expect(screen.getByText('Daily workflow')).toBeInTheDocument();
   });
 
   it('shows only chats pinned to the Space', async () => {
@@ -77,25 +88,15 @@ describe('SpacePage', () => {
     expect(await screen.findByText('Fix the render bug')).toBeInTheDocument();
   });
 
-  it('lists unified Items', async () => {
-    renderPage('/spaces/space-1/items');
+  it('lists projects in the Projects tab', async () => {
+    renderPage('/spaces/space-1/projects');
     expect(await screen.findByText('Web repo')).toBeInTheDocument();
-    expect(screen.getByText('Release notes')).toBeInTheDocument();
   });
 
-  it('drills into a repository Item without showing tab bar', async () => {
-    renderPage('/spaces/space-1/items/repo-1');
-    expect(await screen.findByText('Repository browser')).toBeInTheDocument();
-    expect(screen.queryByRole('link', { name: 'Pipelines' })).not.toBeInTheDocument();
-  });
-
-  it('shows the persistent space-name header on every tab, with no per-tab title or breadcrumb', async () => {
-    renderPage('/spaces/space-1/items');
-    // Space name appears as the header title on a non-Overview tab.
+  it('shows the persistent space-name header on every tab', async () => {
+    renderPage('/spaces/space-1/documents');
     expect(await screen.findByRole('heading', { name: 'Test Space' })).toBeInTheDocument();
-    // No separate "Items" page title.
-    expect(screen.queryByRole('heading', { name: 'Items' })).not.toBeInTheDocument();
-    // No breadcrumb link back to the space (the old single stray link).
+    expect(screen.queryByRole('heading', { name: 'Documents' })).not.toBeInTheDocument();
     expect(screen.queryByRole('link', { name: 'Test Space' })).not.toBeInTheDocument();
   });
 
@@ -103,11 +104,5 @@ describe('SpacePage', () => {
     renderPage('/spaces/space-1');
     expect(await screen.findByRole('heading', { name: 'Test Space' })).toBeInTheDocument();
     expect(screen.queryByText('A useful Space')).not.toBeInTheDocument();
-    expect(screen.queryByText('Everything related to this work, in one place.')).not.toBeInTheDocument();
-  });
-
-  it('shows the empty-state message for a document with no blocks', async () => {
-    renderPage('/spaces/space-1/items/doc-1');
-    expect(await screen.findByText('No content yet. Ask the agent to fill this in, or add a block below.')).toBeInTheDocument();
   });
 });

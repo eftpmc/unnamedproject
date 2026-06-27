@@ -108,12 +108,10 @@ const MCP_PRESETS: McpPreset[] = [
   { id: 'playwright', name: 'Playwright', description: 'Full browser control — navigate, click, fill forms, screenshot. Essential for web scraping and automation.', command: 'npx', args: ['-y', '@playwright/mcp@latest'] },
   { id: 'puppeteer', name: 'Puppeteer', description: 'Headless Chrome browser automation and screenshots.', command: 'npx', args: ['-y', '@modelcontextprotocol/server-puppeteer'] },
   // Google
-  { id: 'gmail', name: 'Gmail', description: 'Read, send, and search Gmail. Requires a Google Cloud OAuth client.', command: 'npx', args: ['-y', 'gcp-mcp-gmail'], envVars: [{ key: 'GMAIL_OAUTH_CLIENT_ID', label: 'OAuth client ID' }, { key: 'GMAIL_OAUTH_CLIENT_SECRET', label: 'OAuth client secret' }, { key: 'GMAIL_OAUTH_REFRESH_TOKEN', label: 'Refresh token' }] },
+  { id: 'gmail', name: 'Gmail', description: 'Read, send, and search Gmail. Opens a browser on first run to authorize.', command: 'npx', args: ['-y', '@gongrzhe/server-gmail-autoauth-mcp'] },
   { id: 'google-drive', name: 'Google Drive', description: 'Browse, read, and search files in Google Drive.', command: 'npx', args: ['-y', '@modelcontextprotocol/server-gdrive'], envVars: [{ key: 'GDRIVE_CLIENT_ID', label: 'OAuth client ID' }, { key: 'GDRIVE_CLIENT_SECRET', label: 'OAuth client secret' }, { key: 'GDRIVE_REFRESH_TOKEN', label: 'Refresh token' }] },
-  { id: 'google-calendar', name: 'Google Calendar', description: 'Read and create calendar events.', command: 'npx', args: ['-y', '@modelcontextprotocol/server-google-calendar'], envVars: [{ key: 'GOOGLE_CLIENT_ID', label: 'OAuth client ID' }, { key: 'GOOGLE_CLIENT_SECRET', label: 'OAuth client secret' }, { key: 'GOOGLE_REFRESH_TOKEN', label: 'Refresh token' }] },
   // Dev tools
   { id: 'github', name: 'GitHub', description: 'GitHub API — repos, PRs, issues, code search, and more.', command: 'npx', args: ['-y', '@modelcontextprotocol/server-github'], envVars: [{ key: 'GITHUB_PERSONAL_ACCESS_TOKEN', label: 'Personal access token', placeholder: 'ghp_...' }] },
-  { id: 'linear', name: 'Linear', description: 'Read and create Linear issues, projects, and cycles.', command: 'npx', args: ['-y', '@linear/mcp-server'], envVars: [{ key: 'LINEAR_API_KEY', label: 'API key', placeholder: 'lin_api_...' }] },
   // Communication
   { id: 'slack', name: 'Slack', description: 'Read and post messages, list channels.', command: 'npx', args: ['-y', '@modelcontextprotocol/server-slack'], envVars: [{ key: 'SLACK_BOT_TOKEN', label: 'Bot token', placeholder: 'xoxb-...' }, { key: 'SLACK_TEAM_ID', label: 'Team ID', placeholder: 'T0123456' }] },
   // Productivity

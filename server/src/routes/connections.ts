@@ -8,7 +8,7 @@ import { requireAuth, type AuthedRequest } from '../middleware/auth.js';
 const router = Router();
 router.use(requireAuth);
 
-const VALID_TYPES = ['anthropic', 'openai', 'github', 'mcp', 'local', 'claude_code', 'codex', 'n8n'] as const;
+const VALID_TYPES = ['anthropic', 'openai', 'github', 'mcp', 'local', 'claude_code', 'codex'] as const;
 const VALID_PURPOSES = ['claude_code', 'codex', 'github', 'mcp', 'tool'] as const;
 
 // claude_code and codex are self-describing types — purpose is derived from the type.
@@ -132,13 +132,6 @@ router.get('/:id/test', async (req, res) => {
       // Local servers (Ollama, LM Studio) may return 401 without a key — that still
       // means the server is reachable, which is what the test cares about.
       if (!r.ok && r.status !== 401) throw new Error(`HTTP ${r.status}`);
-    } else if (row.type === 'n8n') {
-      const baseUrl = config.baseUrl?.replace(/\/$/, '');
-      if (!baseUrl) throw new Error('Missing baseUrl in n8n connection config');
-      const headers: Record<string, string> = { 'Content-Type': 'application/json' };
-      if (config.apiKey) headers['X-N8N-API-KEY'] = config.apiKey;
-      const r = await fetch(`${baseUrl}/api/v1/workflows?limit=1`, { headers });
-      if (!r.ok) throw new Error(`HTTP ${r.status}`);
     } else {
       res.json({ ok: null }); // MCP — not testable via HTTP
       return;

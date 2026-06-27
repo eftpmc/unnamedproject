@@ -4,10 +4,10 @@ import { fireTrigger } from '../services/triggerRunner.js';
 
 const router = Router();
 
-// POST /webhooks/n8n/:triggerId
-// n8n calls this to fire a trigger. No auth — the triggerId acts as the secret.
+// POST /webhooks/trigger/:triggerId
+// Fire a trigger from any external system. No auth — the triggerId acts as the secret.
 // Responds immediately; runs the trigger in the background.
-router.post('/n8n/:triggerId', (req, res) => {
+router.post('/trigger/:triggerId', (req, res) => {
   const { triggerId } = req.params;
   const trigger = getDb()
     .prepare('SELECT id FROM triggers WHERE id = ?')

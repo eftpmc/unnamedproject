@@ -7,7 +7,6 @@ import { registerConnectionHandlers } from './connections.js';
 import { registerDocumentHandlers } from './documents.js';
 import { registerProjectHandlers } from './projects.js';
 import { registerTriggerHandlers } from './triggers.js';
-import { registerN8nHandlers } from './n8n.js';
 
 registerSpaceHandlers();
 registerMemoryHandlers();
@@ -18,4 +17,3 @@ registerConnectionHandlers();
 registerDocumentHandlers();
 registerProjectHandlers();
 registerTriggerHandlers();
-registerN8nHandlers();

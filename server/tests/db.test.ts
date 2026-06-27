@@ -24,7 +24,7 @@ describe('database schema', () => {
     expect(names).toContain('executions');
     expect(names).toContain('approvals');
     expect(names).toContain('memories');
-    expect(names).toContain('scheduled_tasks');
+    expect(names).not.toContain('scheduled_tasks');
     // plans/plan_steps have been dropped — the ConversationProvider handles orchestration.
     expect(names).not.toContain('plans');
     expect(names).not.toContain('plan_steps');

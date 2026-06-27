@@ -1346,7 +1346,6 @@ function dropLegacyItemTables(database: Database.Database): void {
     DROP TABLE IF EXISTS space_notes;
     DROP TABLE IF EXISTS space_files;
     DROP TABLE IF EXISTS space_repos;
-    DROP TABLE IF EXISTS space_notes;
     DROP TABLE IF EXISTS item_templates;
     DROP TABLE IF EXISTS space_items;
     DROP TABLE IF EXISTS artifacts;
@@ -1354,6 +1353,7 @@ function dropLegacyItemTables(database: Database.Database): void {
     DROP TABLE IF EXISTS pipelines;
     DROP TABLE IF EXISTS campaign_tasks;
     DROP TABLE IF EXISTS campaigns;
+    DROP TABLE IF EXISTS scheduled_tasks;
   `);
   database.pragma('foreign_keys = ON');
 }
@@ -1574,18 +1574,6 @@ function applySchema(): void {
       UNIQUE(project_id, session_id)
     );
 
-    CREATE TABLE IF NOT EXISTS scheduled_tasks (
-      id TEXT PRIMARY KEY,
-      user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
-      type TEXT NOT NULL,
-      interval_hours INTEGER NOT NULL,
-      prompt TEXT,
-      pinned_space_id TEXT REFERENCES spaces(id) ON DELETE SET NULL,
-      enabled INTEGER NOT NULL DEFAULT 1,
-      next_run_at INTEGER NOT NULL,
-      last_run_at INTEGER,
-      created_at INTEGER NOT NULL DEFAULT (unixepoch())
-    );
   `);
 
   const connectionCols = db.prepare("SELECT name FROM pragma_table_info('connections')").all() as { name: string }[];
@@ -1703,7 +1691,7 @@ function applySchema(): void {
   }
 
   const scheduledCols = db.prepare("SELECT name FROM pragma_table_info('scheduled_tasks')").all() as { name: string }[];
-  if (!scheduledCols.some(c => c.name === 'prompt')) {
+  if (scheduledCols.length > 0 && !scheduledCols.some(c => c.name === 'prompt')) {
     db.exec("ALTER TABLE scheduled_tasks ADD COLUMN prompt TEXT");
   }
 
@@ -2041,7 +2029,6 @@ function applySchema(): void {
     CREATE INDEX IF NOT EXISTS idx_session_turns_session_status ON session_turns(session_id, status);
     CREATE INDEX IF NOT EXISTS idx_session_events_session_id ON session_events(session_id);
     CREATE INDEX IF NOT EXISTS idx_agent_usage_user_tool_date ON agent_usage(user_id, tool, created_at);
-    CREATE INDEX IF NOT EXISTS idx_scheduled_tasks_enabled_next ON scheduled_tasks(enabled, next_run_at);
   `);
 }
 

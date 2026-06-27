@@ -5,6 +5,7 @@ import { registerChatHandlers } from './chats.js';
 import { registerGitHandlers } from './git.js';
 import { registerConnectionHandlers } from './connections.js';
 import { registerDocumentHandlers } from './documents.js';
+import { registerProjectHandlers } from './projects.js';
 
 registerSpaceHandlers();
 registerMemoryHandlers();
@@ -13,3 +14,4 @@ registerChatHandlers();
 registerGitHandlers();
 registerConnectionHandlers();
 registerDocumentHandlers();
+registerProjectHandlers();

@@ -6,7 +6,7 @@ import { cn } from '@/lib/utils';
 import type { Space, Document } from '../types.js';
 
 function docSnippet(doc: Document): string {
-  return doc.type ?? 'document';
+  return [doc.type, doc.status].filter(Boolean).join(' · ') || 'document';
 }
 
 interface Approval {

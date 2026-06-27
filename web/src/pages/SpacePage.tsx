@@ -159,7 +159,7 @@ export default function SpacePage() {
 
 // ─── Overview ────────────────────────────────────────────────────────────────
 
-function OverviewCard({ icon, title, subtitle, href }: { icon: ReactNode; title: string; subtitle: string; href: string }) {
+function OverviewCard({ icon, title, subtitle, badge, href }: { icon: ReactNode; title: string; subtitle: string; badge?: ReactNode; href: string }) {
   const navigate = useNavigate();
   return (
     <button
@@ -172,6 +172,7 @@ function OverviewCard({ icon, title, subtitle, href }: { icon: ReactNode; title:
         <span className="block truncate text-sm font-medium text-foreground">{title}</span>
         <span className="block text-[11px] text-faint-fg">{subtitle}</span>
       </span>
+      {badge}
       <ChevronRight size={14} className="shrink-0 text-faint-fg" />
     </button>
   );
@@ -232,7 +233,8 @@ function Overview({ space, documents, projects, chats, onNewChat }: {
                     key={doc.id}
                     icon={<span className="grid size-8 shrink-0 place-items-center rounded-lg bg-emerald-500/10 text-emerald-400"><FileText size={14} /></span>}
                     title={doc.title}
-                    subtitle={[doc.type, doc.status, timeAgo(doc.updated_at)].filter(Boolean).join(' · ')}
+                    subtitle={[doc.type, timeAgo(doc.updated_at)].filter(Boolean).join(' · ')}
+                    badge={<StatusBadge status={doc.status} />}
                     href={`/spaces/${space.id}/documents/${doc.id}`}
                   />
                 ))}
@@ -309,6 +311,23 @@ function ChatsSection({ chats, onNewChat }: { chats: Session[]; onNewChat: () =>
 }
 
 // ─── Documents ───────────────────────────────────────────────────────────────
+
+const STATUS_COLORS: Record<string, string> = {
+  applied:   'bg-muted text-muted-foreground',
+  interview: 'bg-sky-500/10 text-sky-500',
+  offer:     'bg-emerald-500/10 text-emerald-500',
+  rejected:  'bg-red-500/10 text-red-500',
+};
+
+function StatusBadge({ status }: { status: string | null }) {
+  if (!status) return null;
+  const cls = STATUS_COLORS[status] ?? 'bg-muted text-muted-foreground';
+  return (
+    <span className={cn('shrink-0 rounded-full px-2 py-0.5 text-[10px] font-medium capitalize', cls)}>
+      {status}
+    </span>
+  );
+}
 
 function DocumentsSection({ space, documents }: { space: Space; documents: Document[] }) {
   const queryClient = useQueryClient();
@@ -399,9 +418,10 @@ function DocumentsSection({ space, documents }: { space: Space; documents: Docum
                   <span className="min-w-0 flex-1">
                     <span className="block truncate text-sm font-medium">{doc.title}</span>
                     <span className="mt-0.5 block truncate text-[11px] text-faint-fg">
-                      {[doc.type, doc.status, timeAgo(doc.updated_at)].filter(Boolean).join(' · ')}
+                      {[doc.type, timeAgo(doc.updated_at)].filter(Boolean).join(' · ')}
                     </span>
                   </span>
+                  <StatusBadge status={doc.status} />
                   <ChevronRight size={14} className="shrink-0 text-faint-fg" />
                 </button>
                 <DropdownMenu>

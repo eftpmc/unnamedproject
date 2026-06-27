@@ -71,47 +71,6 @@ function maybeGenerateSessionTitle(userId: string, sessionId: string): void {
 
 type McpServerEntry = { url?: string; headers?: Record<string, string>; command?: string; args?: string[]; env?: Record<string, string> };
 
-async function getGoogleMcpServers(userId: string): Promise<Record<string, McpServerEntry>> {
-  const conns = getDb()
-    .prepare("SELECT id, name, encrypted_config FROM connections WHERE user_id = ? AND type = 'google' ORDER BY created_at")
-    .all(userId) as { id: string; name: string; encrypted_config: string }[];
-
-  const servers: Record<string, McpServerEntry> = {};
-  for (const conn of conns) {
-    try {
-      const { decrypt, deriveKey } = await import('../lib/crypto.js');
-      const { google } = await import('googleapis');
-      const cfg = JSON.parse(decrypt(conn.encrypted_config, deriveKey())) as {
-        access_token: string; refresh_token: string; expiry_date: number; email: string;
-      };
-
-      const oauth2 = new google.auth.OAuth2(process.env.GOOGLE_CLIENT_ID, process.env.GOOGLE_CLIENT_SECRET);
-      oauth2.setCredentials({ access_token: cfg.access_token, refresh_token: cfg.refresh_token, expiry_date: cfg.expiry_date });
-
-      // Refresh if expired or expiring within 5 minutes
-      const needsRefresh = !cfg.expiry_date || cfg.expiry_date - Date.now() < 5 * 60 * 1000;
-      let accessToken = cfg.access_token;
-      if (needsRefresh) {
-        const { credentials } = await oauth2.refreshAccessToken();
-        accessToken = credentials.access_token ?? cfg.access_token;
-        const { encrypt } = await import('../lib/crypto.js');
-        const updated = { ...cfg, access_token: accessToken, expiry_date: credentials.expiry_date ?? cfg.expiry_date };
-        getDb()
-          .prepare("UPDATE connections SET encrypted_config = ? WHERE id = ?")
-          .run(encrypt(JSON.stringify(updated), deriveKey()), conn.id);
-      }
-
-      const MCP_URLS: Record<string, string> = {
-        gmail: 'https://gmailmcp.googleapis.com/mcp/v1',
-      };
-      const url = MCP_URLS[conn.name];
-      if (url) {
-        servers[conn.name] = { url, headers: { Authorization: `Bearer ${accessToken}` } };
-      }
-    } catch { /* skip if credentials invalid */ }
-  }
-  return servers;
-}
 
 function getUserMcpServers(userId: string): Record<string, McpServerEntry> {
   const conns = getDb()
@@ -173,7 +132,6 @@ export async function runAgentTurn(userId: string, sessionId: string, userMessag
   const mcpServers = {
     app: { url: `http://localhost:${port}/mcp`, headers: { Authorization: `Bearer ${mcpToken}` } },
     ...getUserMcpServers(userId),
-    ...await getGoogleMcpServers(userId),
   };
 
   const replyId = newId();

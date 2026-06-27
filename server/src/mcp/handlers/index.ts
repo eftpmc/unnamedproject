@@ -6,6 +6,7 @@ import { registerGitHandlers } from './git.js';
 import { registerConnectionHandlers } from './connections.js';
 import { registerDocumentHandlers } from './documents.js';
 import { registerProjectHandlers } from './projects.js';
+import { registerTriggerHandlers } from './triggers.js';
 
 registerSpaceHandlers();
 registerMemoryHandlers();
@@ -15,3 +16,4 @@ registerGitHandlers();
 registerConnectionHandlers();
 registerDocumentHandlers();
 registerProjectHandlers();
+registerTriggerHandlers();

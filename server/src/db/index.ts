@@ -2798,3 +2798,11 @@ export function getSessionsForItem(itemId: string, userId: string, limit = 10): 
     LIMIT ?
   `).all(itemId, userId, limit) as ItemSession[];
 }
+
+export function getDueTriggers(nowUnix: number): Array<{ id: string; space_id: string; schedule_cron: string | null; playbook_id: string | null; user_id: string }> {
+  return getDb().prepare(`
+    SELECT t.id, t.space_id, t.schedule_cron, t.playbook_id, s.user_id
+    FROM triggers t JOIN spaces s ON s.id = t.space_id
+    WHERE t.enabled = 1 AND t.kind = 'schedule' AND t.next_run_at IS NOT NULL AND t.next_run_at <= ?
+  `).all(nowUnix) as Array<{ id: string; space_id: string; schedule_cron: string | null; playbook_id: string | null; user_id: string }>;
+}

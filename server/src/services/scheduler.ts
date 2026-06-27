@@ -1,4 +1,9 @@
+import { runDueTriggers } from './triggerRunner.js';
+
+const POLL_INTERVAL_MS = 5 * 60 * 1000;
+
 export function startScheduler(): NodeJS.Timeout {
-  // Trigger polling is wired in Task 5 (triggerRunner).
-  return setInterval(() => {}, 60 * 60 * 1000);
+  return setInterval(() => {
+    runDueTriggers().catch(err => console.error('[scheduler] error:', err));
+  }, POLL_INTERVAL_MS);
 }

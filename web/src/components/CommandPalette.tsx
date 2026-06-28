@@ -52,7 +52,7 @@ function PaletteModal({ open, onOpenChange }: { open: boolean; onOpenChange: (v:
 
   const { data: projects = [] } = useQuery<Project[]>({
     queryKey: ['projects'],
-    queryFn: getProjects,
+    queryFn: () => getProjects(),
     enabled: open,
     staleTime: 30_000,
   });

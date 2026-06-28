@@ -2,7 +2,7 @@ import { useState, useRef } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { ChevronDown, MoreHorizontal, Pencil, Plus, Search, Trash2, X } from 'lucide-react';
-import { getChats, deleteChat, searchChats, getSpaces, updateChatConfig } from '../lib/api.js';
+import { getChats, deleteChat, searchChats, getProjects, updateChatConfig } from '../lib/api.js';
 import { cn, timeAgo } from '../lib/utils.js';
 import { usePageTitle } from '../lib/usePageTitle.js';
 import { ConfirmDialog } from '@/components/ui/confirm-dialog';
@@ -10,7 +10,7 @@ import { Button } from '@/components/ui/button';
 import { DataTable, DataTableBody, DataTableHeader, DataTableRow } from '@/components/ui/data-table';
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
 import { ContentColumn, EmptyPanel, PageBody, PageHeader, PageLoading, PageShell } from '@/components/ui/app-layout';
-import type { Space, Session } from '../types.js';
+import type { Project, Session } from '../types.js';
 import { useDebounce } from '../lib/useDebounce.js';
 
 function dateGroup(unixSeconds: number): string {
@@ -75,12 +75,13 @@ export default function ChatsPage() {
     }
   }
 
-  const { data: projects = [] } = useQuery<Space[]>({
-    queryKey: ['spaces'],
-    queryFn: getSpaces,
+  const { data: projects = [] } = useQuery<Project[]>({
+    queryKey: ['projects'],
+    queryFn: () => getProjects(),
     staleTime: 60_000,
   });
-  const projectById = Object.fromEntries(projects.map(p => [p.id, p]));
+  // Key by space_id since sessions store pinned_space_id (not project id)
+  const projectById = Object.fromEntries(projects.map(p => [p.space_id, p]));
 
   const { data: searchResults, isFetching: isSearching } = useQuery<Session[]>({
     queryKey: ['chats-search', debouncedQuery],
@@ -124,7 +125,7 @@ export default function ChatsPage() {
     : baseChats;
 
   // Only show projects that actually have chats pinned to them
-  const projectsWithChats = projects.filter(p => chats.some(c => c.pinned_space_id === p.id));
+  const projectsWithChats = projects.filter(p => chats.some(c => c.pinned_space_id === p.space_id));
 
   function updateProjectFilter(projectId: string | null) {
     const next = new URLSearchParams(searchParams);
@@ -199,8 +200,8 @@ export default function ChatsPage() {
                       {projectsWithChats.map(project => (
                         <DropdownMenuItem
                           key={project.id}
-                          onSelect={() => updateProjectFilter(project.id === projectFilter ? null : project.id)}
-                          className={cn(projectFilter === project.id && 'font-medium')}
+                          onSelect={() => updateProjectFilter(project.space_id === projectFilter ? null : project.space_id)}
+                          className={cn(projectFilter === project.space_id && 'font-medium')}
                         >
                           {project.name}
                         </DropdownMenuItem>
@@ -295,8 +296,8 @@ export default function ChatsPage() {
                                   {project ? (
                                     <button
                                       type="button"
-                                      onClick={(e) => { e.stopPropagation(); updateProjectFilter(project.id === projectFilter ? null : project.id); }}
-                                      className={cn('block max-w-full truncate text-left text-xs text-muted-foreground transition-colors hover:text-foreground', projectFilter === project.id && 'text-foreground font-medium')}
+                                      onClick={(e) => { e.stopPropagation(); updateProjectFilter(project.space_id === projectFilter ? null : project.space_id); }}
+                                      className={cn('block max-w-full truncate text-left text-xs text-muted-foreground transition-colors hover:text-foreground', projectFilter === project.space_id && 'text-foreground font-medium')}
                                     >
                                       {project.name}
                                     </button>

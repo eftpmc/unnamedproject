@@ -109,7 +109,7 @@ function ProjectSelector({ currentProject }: { currentProject: Project }) {
 
   const { data: projects = [] } = useQuery<Project[]>({
     queryKey: ['projects'],
-    queryFn: getProjects,
+    queryFn: () => getProjects(),
     staleTime: 60_000,
   });
 

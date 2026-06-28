@@ -27,7 +27,7 @@ import {
   getGoogleAuthUrl,
   getGoogleStatus,
   getMemory,
-  getSpaces,
+  getProjects,
   getScheduledTasks,
   getSettings,
   runScheduledTask,
@@ -39,7 +39,7 @@ import { usePageTitle } from '../lib/usePageTitle.js';
 import { useTheme } from '../lib/useTheme.js';
 import { useAccent } from '../lib/useAccent.js';
 import { ACCENT_PRESETS, DEFAULT_ACCENT } from '../lib/accent.js';
-import type { AgentProvider, Connection, GoogleAccount, Memory, PermissionProfile, Space, ScheduledTask, UserSettings } from '../types.js';
+import type { AgentProvider, Connection, GoogleAccount, Memory, PermissionProfile, Project, ScheduledTask, UserSettings } from '../types.js';
 
 type Section = 'tools' | 'mcp' | 'workspace' | 'memory' | 'appearance';
 const SETTINGS_SECTIONS: Section[] = ['tools', 'mcp', 'workspace', 'memory', 'appearance'];
@@ -502,7 +502,7 @@ export default function Settings() {
 
   const { data: connections = [] } = useQuery<Connection[]>({ queryKey: ['connections'], queryFn: getConnections });
   const { data: agentProviders = [] } = useQuery<AgentProvider[]>({ queryKey: ['agent-providers'], queryFn: getAgentProviders });
-  const { data: spaces = [] } = useQuery<Space[]>({ queryKey: ['spaces'], queryFn: getSpaces });
+  const { data: projects = [] } = useQuery<Project[]>({ queryKey: ['projects'], queryFn: () => getProjects() });
   const { data: memory = [] } = useQuery<Memory[]>({ queryKey: ['memory'], queryFn: getMemory });
   const { data: scheduledTasks = [] } = useQuery<ScheduledTask[]>({ queryKey: ['scheduledTasks'], queryFn: getScheduledTasks });
   const { data: settings } = useQuery<UserSettings>({ queryKey: ['settings'], queryFn: getSettings });
@@ -907,7 +907,7 @@ export default function Settings() {
                               {m.key}
                               {m.type === 'project' && (
                                 <div className="mt-0.5 font-sans text-[11px] text-faint-fg">
-                                  {spaces.find(space => space.id === m.space_id)?.name ?? m.space_id}
+                                  {projects.find(p => p.space_id === m.space_id)?.name ?? m.space_id}
                                 </div>
                               )}
                             </div>

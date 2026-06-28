@@ -136,7 +136,7 @@ export default function SpacePage() {
   return (
     <PageShell>
       <PageHeader
-        className="border-0 pb-0"
+       
         contentClassName="max-w-4xl"
         title={space.name}
         actions={section !== 'settings' ? (
@@ -521,7 +521,7 @@ function DocumentDetail({ space, docId }: { space: Space; docId: string }) {
     <PageShell>
       <PageHeader
         title={doc.title}
-        className="border-0 pb-0"
+       
         contentClassName="max-w-4xl"
         breadcrumb={(
           <Button
@@ -766,7 +766,7 @@ function ProjectDetail({ space, project }: { space: Space; project: Project }) {
     <PageShell>
       <PageHeader
         title={project.name}
-        className="border-0 pb-0"
+       
         contentClassName="max-w-4xl"
         breadcrumb={(
           <Button

@@ -24,7 +24,7 @@ import mcpRouter from './mcp/index.js';
 import projectsRoutes from './routes/projects.js';
 import documentsRoutes from './routes/documents.js';
 import triggersRoutes from './routes/triggers.js';
-import agentProvidersRoutes from './routes/agent-providers.js';
+import mediaRoutes from './routes/media.js';
 
 const PORT = process.env.PORT ?? '3000';
 const NODE_ENV = process.env.NODE_ENV;
@@ -104,8 +104,8 @@ app.use('/webhooks', wrapAsyncErrors(webhooksRoutes));
 app.use('/auth/google', wrapAsyncErrors(googleRoutes));
 
 app.use('/documents', wrapAsyncErrors(documentsRoutes));
+app.use('/media', wrapAsyncErrors(mediaRoutes));
 app.use('/triggers', wrapAsyncErrors(triggersRoutes));
-app.use('/agent-providers', wrapAsyncErrors(agentProvidersRoutes));
 
 app.use('/mcp', mcpRouter);
 

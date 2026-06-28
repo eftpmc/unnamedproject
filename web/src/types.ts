@@ -32,6 +32,12 @@ export interface MessageAttachment {
   createdAt: number;
 }
 
+export interface MediaItem extends MessageAttachment {
+  messageId: string;
+  sessionId: string;
+  sessionTitle: string | null;
+}
+
 export type SessionEventType =
   | 'scope_changed'
   | 'project_linked'
@@ -270,4 +276,3 @@ export interface AgentProvider {
   type: 'claude_code' | 'codex';
   created_at: number;
 }
-

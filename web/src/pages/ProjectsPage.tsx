@@ -1,13 +1,13 @@
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { FolderGit2, GitBranch, Plus } from 'lucide-react';
-import { getProjects, createTopLevelProject, deleteTopLevelProject } from '../lib/api.js';
+import { MoreHorizontal, Plus, Trash2 } from 'lucide-react';
+import { deleteTopLevelProject, getProjects } from '../lib/api.js';
 import { usePageTitle } from '../lib/usePageTitle.js';
-import { timeAgo } from '../lib/utils.js';
 import { Button } from '@/components/ui/button';
-import { Input } from '@/components/ui/input';
-import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
+import { ConfirmDialog } from '@/components/ui/confirm-dialog';
+import { DataTable, DataTableBody, DataTableHeader, DataTableRow } from '@/components/ui/data-table';
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
 import { CenteredEmptyState, ContentColumn, PageBody, PageHeader, PageLoading, PageShell } from '@/components/ui/app-layout';
 import type { Project } from '../types.js';
 
@@ -15,36 +15,28 @@ export default function ProjectsPage() {
   usePageTitle('Projects');
   const navigate = useNavigate();
   const queryClient = useQueryClient();
-  const [open, setOpen] = useState(false);
-  const [name, setName] = useState('');
-  const [repoPath, setRepoPath] = useState('');
-  const [branch, setBranch] = useState('');
+  const [pendingDelete, setPendingDelete] = useState<Project | null>(null);
 
-  const { data: projects = [], isLoading } = useQuery<Project[]>({ queryKey: ['projects'], queryFn: getProjects });
-
-  const createMutation = useMutation({
-    mutationFn: () => createTopLevelProject({
-      name: name.trim(),
-      ...(repoPath.trim() ? { repo_path: repoPath.trim() } : {}),
-      ...(branch.trim() ? { default_branch: branch.trim() } : {}),
-    }),
-    onSuccess: project => {
+  const { data: projects = [], isLoading } = useQuery<Project[]>({ queryKey: ['projects'], queryFn: () => getProjects() });
+  const deleteMutation = useMutation({
+    mutationFn: (projectId: string) => deleteTopLevelProject(projectId),
+    onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['projects'] });
-      setOpen(false);
-      setName(''); setRepoPath(''); setBranch('');
-      navigate(`/projects/${project.id}`);
+      setPendingDelete(null);
     },
+    onError: () => setPendingDelete(null),
   });
 
   return (
     <PageShell>
       <PageHeader
         title="Projects"
-        className="border-0 pb-0"
-        contentClassName="max-w-5xl"
+        className="px-4 pt-6 sm:px-8 sm:pt-10"
+        contentClassName="max-w-7xl"
+        titleClassName="text-2xl sm:text-3xl"
         actions={
-          <Button size="sm" className="h-8 gap-1.5 text-xs" onClick={() => setOpen(true)}>
-            <Plus size={14} />New project
+          <Button size="lg" className="h-9 gap-2 rounded-lg px-3 text-sm shadow-sm" onClick={() => navigate('/projects/new')}>
+            <Plus size={16} />New project
           </Button>
         }
       />
@@ -54,61 +46,75 @@ export default function ProjectsPage() {
           title="No projects yet"
           description="Create a project or link a local git repository."
           actionLabel="New project"
-          onAction={() => setOpen(true)}
+          onAction={() => navigate('/projects/new')}
         />
       ) : (
-        <PageBody>
-          <ContentColumn className="max-w-5xl">
-            <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
-              {projects.map(project => (
-                <button
-                  key={project.id}
-                  type="button"
-                  onClick={() => navigate(`/projects/${project.id}`)}
-                  className="flex flex-col gap-3 rounded-xl border border-border-soft bg-card p-4 text-left transition-[transform,box-shadow,border-color] hover:-translate-y-px hover:border-border hover:shadow-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/30"
-                >
-                  <div className="flex items-center gap-3">
-                    <span className="grid size-9 shrink-0 place-items-center rounded-lg bg-blue-500/10 text-blue-400">
-                      <FolderGit2 size={16} />
-                    </span>
-                    <span className="min-w-0 flex-1">
-                      <span className="block truncate text-sm font-medium text-foreground">{project.name}</span>
-                      {project.default_branch && (
-                        <span className="flex items-center gap-1 text-[11px] text-faint-fg">
-                          <GitBranch size={10} />{project.default_branch}
-                        </span>
-                      )}
-                    </span>
-                  </div>
-                  {project.repo_path && (
-                    <span className="truncate font-mono text-[11px] text-faint-fg">{project.repo_path}</span>
-                  )}
-                </button>
-              ))}
-            </div>
+        <PageBody className="px-4 pt-5 sm:px-8 sm:pt-9">
+          <ContentColumn className="max-w-7xl">
+            <DataTable>
+              <DataTableHeader className="grid-cols-[minmax(0,1fr)_1.75rem] sm:grid-cols-[minmax(0,1fr)_8rem_1.75rem] lg:grid-cols-[minmax(0,1fr)_8rem_7rem_1.75rem]">
+                <span>Name</span>
+                <span className="hidden sm:block">Branch</span>
+                <span className="hidden lg:block">Origin</span>
+                <span />
+              </DataTableHeader>
+              <DataTableBody>
+                {projects.map(project => (
+                  <DataTableRow
+                    key={project.id}
+                    className="grid-cols-[minmax(0,1fr)_1.75rem] sm:grid-cols-[minmax(0,1fr)_8rem_1.75rem] lg:grid-cols-[minmax(0,1fr)_8rem_7rem_1.75rem]"
+                  >
+                    <div className="min-w-0">
+                      <button
+                        type="button"
+                        onClick={() => navigate(`/projects/${project.id}`)}
+                        className="block min-w-0 truncate text-left text-sm font-medium text-foreground underline-offset-2 hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/30"
+                      >
+                        {project.name}
+                      </button>
+                      <div className="mt-0.5 flex gap-2 text-[11px] text-faint-fg sm:hidden">
+                        <span className="truncate">{project.default_branch ?? 'Not set'}</span>
+                        <span className="shrink-0">·</span>
+                        <span className="truncate">{project.origin === 'linked' ? 'Linked repo' : 'Created'}</span>
+                      </div>
+                    </div>
+                    <span className="hidden truncate text-xs text-muted-foreground sm:block">{project.default_branch ?? 'Not set'}</span>
+                    <span className="hidden truncate text-xs text-muted-foreground lg:block">{project.origin === 'linked' ? 'Linked repo' : 'Created'}</span>
+                    <DropdownMenu>
+                      <DropdownMenuTrigger asChild>
+                        <button
+                          type="button"
+                          title="Project options"
+                          aria-label={`Options for ${project.name}`}
+                          className="grid size-7 place-items-center rounded-md text-muted-foreground transition-colors hover:bg-background hover:text-foreground"
+                        >
+                          <MoreHorizontal size={14} />
+                        </button>
+                      </DropdownMenuTrigger>
+                      <DropdownMenuContent align="end" className="w-32">
+                        <DropdownMenuItem variant="destructive" onSelect={() => setPendingDelete(project)}>
+                          <Trash2 size={14} />
+                          Delete
+                        </DropdownMenuItem>
+                      </DropdownMenuContent>
+                    </DropdownMenu>
+                  </DataTableRow>
+                ))}
+              </DataTableBody>
+            </DataTable>
           </ContentColumn>
         </PageBody>
       )}
 
-      <Dialog open={open} onOpenChange={setOpen}>
-        <DialogContent className="sm:max-w-md">
-          <DialogHeader>
-            <DialogTitle>New project</DialogTitle>
-            <DialogDescription>Create empty or link an existing repository.</DialogDescription>
-          </DialogHeader>
-          <div className="flex flex-col gap-3 py-2">
-            <Input placeholder="Project name" value={name} onChange={e => setName(e.target.value)} autoFocus />
-            <Input placeholder="Local repo path (optional)" value={repoPath} onChange={e => setRepoPath(e.target.value)} />
-            <Input placeholder="Default branch (optional)" value={branch} onChange={e => setBranch(e.target.value)} />
-          </div>
-          <DialogFooter>
-            <Button variant="ghost" onClick={() => setOpen(false)}>Cancel</Button>
-            <Button disabled={!name.trim() || createMutation.isPending} onClick={() => createMutation.mutate()}>
-              {createMutation.isPending ? 'Creating…' : 'Create'}
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
+      {pendingDelete && (
+        <ConfirmDialog
+          title={`Delete ${pendingDelete.name}?`}
+          description="This will permanently delete the project and its documents."
+          confirmLabel="Delete"
+          onConfirm={() => deleteMutation.mutate(pendingDelete.id)}
+          onCancel={() => setPendingDelete(null)}
+        />
+      )}
     </PageShell>
   );
 }

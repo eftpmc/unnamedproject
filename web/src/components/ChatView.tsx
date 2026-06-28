@@ -537,11 +537,10 @@ export default function ChatView({ chatId }: ChatViewProps) {
               </DropdownMenuTrigger>
               <DropdownMenuContent align="start" className="w-56">
                 <ScopePopover
-                  spaces={projects}
+                  projects={projects}
                   pinnedProject={pinnedProject}
                   agentActive={agentActive}
-                  onOpenSpace={(spaceId) => navigate(`/spaces/${spaceId}`)}
-                  onScopeChange={(spaceId) => configMutation.mutate({ pinned_space_id: spaceId })}
+                  onScopeChange={(projectId) => configMutation.mutate({ pinned_space_id: projectId })}
                 />
                 {worktree && (
                   <DropdownMenuItem onSelect={() => setDiffOpen(true)}>
@@ -591,8 +590,8 @@ export default function ChatView({ chatId }: ChatViewProps) {
           pendingFiles={dropFiles}
           onPendingFilesConsumed={() => setDropFiles([])}
           projectName={pinnedProject?.name}
-          spaces={pinnedProject ? [] : projects}
-          onPinSpace={(spaceId) => configMutation.mutate({ pinned_space_id: spaceId })}
+          projects={pinnedProject ? [] : projects}
+          onPinProject={(projectId) => configMutation.mutate({ pinned_space_id: projectId })}
         />
       ) : (
         <MessageList
@@ -701,7 +700,7 @@ export default function ChatView({ chatId }: ChatViewProps) {
       <ContextPanel
         open={ctxOpen}
         onClose={() => { setCtxOpen(false); localStorage.setItem('ctx_panel', 'closed'); }}
-        pinnedSpace={pinnedProject}
+        pinnedProject={pinnedProject}
         worktree={worktree ? { branch: worktree.branch, commits_ahead: worktree.ahead } : null}
         pendingApproval={pendingApproval ? {
           executionId: pendingApproval.executionId,

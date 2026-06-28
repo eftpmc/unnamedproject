@@ -1,4 +1,4 @@
-import { describe, it, expect, vi, beforeAll, afterAll } from 'vitest';
+import { describe, it, expect, vi, beforeAll, afterAll, beforeEach } from 'vitest';
 import fs from 'fs';
 import path from 'path';
 import { initDb, getDb, closeDb } from '../../src/db/index.js';
@@ -14,9 +14,9 @@ const mockInvoke = vi.fn().mockImplementation(async (params) => {
 
 vi.mock('../../src/services/conversation-provider.js', () => ({
   getConversationProvider: vi.fn().mockResolvedValue({
-    type: 'claude_code',
+    type: 'codex',
     invoke: mockInvoke,
-    resolveModel: vi.fn().mockResolvedValue('claude-sonnet-4-6'),
+    resolveModel: vi.fn().mockResolvedValue('codex-mini-latest'),
   }),
 }));
 vi.mock('../../src/services/socket.js', () => ({ broadcast: vi.fn() }));
@@ -42,6 +42,15 @@ beforeAll(() => {
 afterAll(() => closeDb());
 
 describe('runAgentTurn', () => {
+  beforeEach(() => {
+    mockInvoke.mockReset();
+    mockInvoke.mockImplementation(async (params) => {
+      params.onText('Hello from provider');
+      params.onSessionId('prov-sess-1');
+      return { costUsd: 0.001 };
+    });
+  });
+
   it('streams text delta and stores provider session id', async () => {
     const { broadcast } = await import('../../src/services/socket.js');
     const { runAgentTurn } = await import('../../src/services/agent.js');
@@ -55,5 +64,30 @@ describe('runAgentTurn', () => {
 
     const session = getDb().prepare('SELECT provider_session_id FROM sessions WHERE id = ?').get('s1') as { provider_session_id: string | null };
     expect(session.provider_session_id).toBe('prov-sess-1');
+  });
+
+  it('retries codex once without resume when the saved thread rollout is missing', async () => {
+    const { runAgentTurn } = await import('../../src/services/agent.js');
+    const db = getDb();
+    db.prepare("INSERT INTO sessions (id, user_id, provider_type, provider_session_id) VALUES ('s2','u1','codex','stale-thread')").run();
+    db.prepare("INSERT INTO messages (id, session_id, role, content) VALUES ('m2','s2','user','continue')").run();
+    db.prepare("INSERT INTO session_turns (id, session_id, user_message_id, status) VALUES ('t2','s2','m2','running')").run();
+
+    mockInvoke
+      .mockRejectedValueOnce(new Error('codex exited with code 1: Error: thread/resume: thread/resume failed: no rollout found for thread id 5f3d61d7-bf'))
+      .mockImplementationOnce(async (params) => {
+        params.onText('Fresh thread response');
+        params.onSessionId('fresh-thread');
+        return { costUsd: 0.001 };
+      });
+
+    await runAgentTurn('u1', 's2', 'm2');
+
+    expect(mockInvoke).toHaveBeenCalledTimes(2);
+    expect(mockInvoke.mock.calls[0][0].resumeSessionId).toBe('stale-thread');
+    expect(mockInvoke.mock.calls[1][0].resumeSessionId).toBeNull();
+
+    const session = db.prepare('SELECT provider_session_id FROM sessions WHERE id = ?').get('s2') as { provider_session_id: string | null };
+    expect(session.provider_session_id).toBe('fresh-thread');
   });
 });

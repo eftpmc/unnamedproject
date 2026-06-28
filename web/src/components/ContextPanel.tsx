@@ -18,7 +18,7 @@ interface Approval {
 interface ContextPanelProps {
   open: boolean;
   onClose: () => void;
-  pinnedSpace: Space | null;
+  pinnedProject: Space | null;
   worktree: { branch: string; commits_ahead: number } | null;
   pendingApproval: Approval | null;
   onApprove: (approvalId: string) => void;
@@ -30,7 +30,7 @@ interface ContextPanelProps {
 export default function ContextPanel({
   open,
   onClose,
-  pinnedSpace,
+  pinnedProject,
   worktree,
   pendingApproval,
   onApprove,
@@ -50,7 +50,7 @@ export default function ContextPanel({
         <div className="h-full w-72 overflow-y-auto">
           <PanelContent
             onClose={onClose}
-            pinnedSpace={pinnedSpace}
+            pinnedProject={pinnedProject}
             worktree={worktree}
             pendingApproval={pendingApproval}
             onApprove={onApprove}
@@ -72,7 +72,7 @@ export default function ContextPanel({
             <div className="mx-auto mt-2 h-1 w-8 rounded-full bg-border" />
             <PanelContent
               onClose={onClose}
-              pinnedSpace={pinnedSpace}
+              pinnedProject={pinnedProject}
               worktree={worktree}
               pendingApproval={pendingApproval}
               onApprove={onApprove}
@@ -89,7 +89,7 @@ export default function ContextPanel({
 
 function PanelContent({
   onClose,
-  pinnedSpace,
+  pinnedProject,
   worktree,
   pendingApproval,
   onApprove,
@@ -99,12 +99,12 @@ function PanelContent({
 }: Omit<ContextPanelProps, 'open'>) {
   const navigate = useNavigate();
 
-  const primarySpace = pinnedSpace;
+  const primaryProject = pinnedProject;
 
   const { data: items = [] } = useQuery({
-    queryKey: ['documents', primarySpace?.id],
-    queryFn: () => getDocuments(primarySpace!.id),
-    enabled: !!primarySpace,
+    queryKey: ['documents', primaryProject?.id],
+    queryFn: () => getDocuments(primaryProject!.id),
+    enabled: !!primaryProject,
     staleTime: 20_000,
   });
   const recentItems = items.slice(0, 3);
@@ -122,15 +122,15 @@ function PanelContent({
         </button>
       </div>
 
-      {/* Spaces */}
-      {pinnedSpace && (
+      {/* Project */}
+      {pinnedProject && (
         <section className="flex flex-col gap-2">
-          <span className="text-[11px] font-medium text-muted-foreground">Space</span>
+          <span className="text-[11px] font-medium text-muted-foreground">Project</span>
           <div className="flex flex-col gap-1.5">
-            <SpaceRow
-              space={pinnedSpace}
+            <ProjectContextRow
+              project={pinnedProject}
               label="Pinned"
-              onClick={() => navigate(`/spaces/${pinnedSpace.id}`)}
+              onClick={() => navigate('/projects')}
             />
           </div>
         </section>
@@ -189,7 +189,7 @@ function PanelContent({
         </section>
       )}
 
-      {primarySpace && (
+      {primaryProject && (
         <section className="flex flex-col gap-2">
           <span className="text-[11px] font-medium text-muted-foreground">Documents</span>
           {recentItems.length > 0 ? (
@@ -197,7 +197,7 @@ function PanelContent({
               {recentItems.map((doc: Document) => (
                 <button
                   type="button"
-                  onClick={() => navigate(`/spaces/${primarySpace.id}/documents/${doc.id}`)}
+                  onClick={() => navigate(`/documents/${doc.id}`)}
                   key={doc.id}
                   className="flex items-center gap-2.5 rounded-lg border border-border-soft bg-card p-2.5 text-left transition-colors hover:bg-muted/40"
                 >
@@ -223,13 +223,13 @@ function PanelContent({
   );
 }
 
-function SpaceRow({
-  space,
+function ProjectContextRow({
+  project,
   label,
   icon,
   onClick,
 }: {
-  space: Space;
+  project: Space;
   label: string;
   icon?: React.ReactNode;
   onClick: () => void;
@@ -242,8 +242,8 @@ function SpaceRow({
     >
       <span className="size-2 shrink-0 rounded-full bg-success shadow-[0_0_0_3px_color-mix(in_oklch,var(--success)_22%,transparent)]" />
       <div className="min-w-0 flex-1">
-        <div className="truncate text-xs font-medium text-foreground">{space.name}</div>
-        {space.description && <div className="truncate text-[11px] text-faint-fg">{space.description}</div>}
+        <div className="truncate text-xs font-medium text-foreground">{project.name}</div>
+        {project.description && <div className="truncate text-[11px] text-faint-fg">{project.description}</div>}
       </div>
       <span className="flex shrink-0 items-center gap-0.5 text-[10px] text-faint-fg">
         {icon}

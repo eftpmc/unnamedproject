@@ -218,7 +218,7 @@ function renderExecutionCard(exec: InlineExecution) {
         return (
           <Link
             key={exec.executionId}
-            to={`/spaces/${parsed.space_id as string}/items/${parsed.id as string}`}
+            to={`/documents/${parsed.id as string}`}
             className="flex items-center gap-3 rounded-lg border border-border-soft bg-card p-3.5 transition-colors hover:border-border"
           >
             <span className="grid size-8 place-items-center rounded-md bg-muted text-muted-foreground"><FileText size={14} /></span>
@@ -238,7 +238,7 @@ function renderExecutionCard(exec: InlineExecution) {
 function ItemCreatedCard({ spaceId, itemId, label, title, isUpdate }: { spaceId: string; itemId: string; label: string; title: string; isUpdate: boolean }) {
   return (
     <Link
-      to={`/spaces/${spaceId}/documents/${itemId}`}
+      to={`/documents/${itemId}`}
       className="flex items-center gap-2.5 self-start rounded-xl border border-border-soft bg-card px-3 py-2 text-left text-xs transition-colors hover:border-border hover:bg-muted/30"
     >
       <span className="rounded-md bg-muted px-1.5 py-0.5 text-[10px] font-medium text-muted-foreground">{label}</span>

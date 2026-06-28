@@ -79,7 +79,7 @@ export async function getConversationProvider(userId: string): Promise<Conversat
 
     if (conn.type === 'codex') {
       const { CodexProvider } = await import('./conversation/codex-provider.js');
-      providers.push(new CodexProvider({ model: model ?? 'codex-mini-latest', permissionProfile }));
+      providers.push(new CodexProvider({ model, permissionProfile }));
     } else {
       providers.push(new ClaudeCodeProvider({ model: model ?? 'claude-sonnet-4-6', permissionProfile }));
     }

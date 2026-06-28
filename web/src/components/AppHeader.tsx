@@ -1,6 +1,6 @@
 import { useLocation, useNavigate, useParams } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
-import { Bell, ChevronsUpDown, Check } from 'lucide-react';
+import { Bell, ChevronsUpDown, Check, Menu } from 'lucide-react';
 import { useState } from 'react';
 import { getProjects, getProject } from '../lib/api.js';
 import { cn } from '../lib/utils.js';
@@ -8,12 +8,13 @@ import UserMenu from './UserMenu.js';
 import type { Project } from '../types.js';
 
 interface AppHeaderProps {
-  onToggleSidebar: () => void;
+  onToggleSidebar?: () => void;
+  onOpenSidebar?: () => void;
   pendingApprovalCount: number;
   onOpenInbox: () => void;
 }
 
-export default function AppHeader({ onToggleSidebar, pendingApprovalCount, onOpenInbox }: AppHeaderProps) {
+export default function AppHeader({ onToggleSidebar, onOpenSidebar, pendingApprovalCount, onOpenInbox }: AppHeaderProps) {
   const location = useLocation();
   const params = useParams<{ projectId?: string }>();
   const isInProject = location.pathname.startsWith('/projects/') && !!params.projectId;
@@ -26,14 +27,15 @@ export default function AppHeader({ onToggleSidebar, pendingApprovalCount, onOpe
 
   return (
     <header className="flex h-12 shrink-0 items-center border-b border-border-soft bg-background">
-      {/* Logo cell — same width as collapsed sidebar */}
+      {/* Mobile: explicit menu. Desktop: logo cell aligned to collapsed sidebar. */}
       <button
         type="button"
-        onClick={onToggleSidebar}
-        aria-label="Toggle navigation"
+        onClick={onOpenSidebar ?? onToggleSidebar}
+        aria-label={onOpenSidebar ? 'Open navigation' : 'Toggle navigation'}
         className="flex h-12 w-12 shrink-0 items-center justify-center border-r border-border-soft transition-colors hover:bg-muted"
       >
-        <div className="grid size-7 place-items-center rounded-lg bg-primary text-xs font-semibold text-primary-foreground shadow-sm">
+        <Menu size={17} strokeWidth={1.85} className="text-muted-foreground sm:hidden" />
+        <div className="hidden size-7 place-items-center rounded-lg bg-primary text-xs font-semibold text-primary-foreground shadow-sm sm:grid">
           u
         </div>
       </button>

@@ -9,20 +9,18 @@ import { cn } from '../lib/utils.js';
 import type { Space } from '../types.js';
 
 export default function ScopePopover({
-  spaces,
+  projects,
   pinnedProject,
   agentActive,
-  onOpenSpace,
   onScopeChange,
 }: {
-  spaces: Space[];
+  projects: Space[];
   pinnedProject: Space | null;
   agentActive: boolean;
-  onOpenSpace: (spaceId: string) => void;
-  onScopeChange: (spaceId: string | null) => void;
+  onScopeChange: (projectId: string | null) => void;
 }) {
   const isAuto = !pinnedProject;
-  const triggerLabel = pinnedProject?.name ?? 'No space';
+  const triggerLabel = pinnedProject?.name ?? 'No project';
 
   return (
     <DropdownMenuSub>
@@ -36,26 +34,25 @@ export default function ScopePopover({
       </DropdownMenuSubTrigger>
       <DropdownMenuSubContent className="w-72 p-2">
         <div className="px-2 pb-1.5 pt-1 text-[11px] font-semibold text-faint-fg">
-          Pinned space
+          Pinned project
         </div>
         <ScopeOption
           selected={isAuto}
           icon={<Target size={14} />}
           title="None"
-          description="Let the agent create or choose a space."
+          description="Let the agent create or choose a project."
           onClick={() => onScopeChange(null)}
         />
         <div className="my-1 border-t border-border-soft" />
         <div className="max-h-60 overflow-y-auto">
-          {spaces.map(space => (
+          {projects.map(project => (
             <ScopeOption
-              key={space.id}
-              selected={pinnedProject?.id === space.id}
+              key={project.id}
+              selected={pinnedProject?.id === project.id}
               icon={<Folder size={14} />}
-              title={space.name}
-              description="Space context"
-              onClick={() => onScopeChange(space.id)}
-              onAuxClick={() => onOpenSpace(space.id)}
+              title={project.name}
+              description="Project context"
+              onClick={() => onScopeChange(project.id)}
             />
           ))}
         </div>
@@ -70,42 +67,29 @@ function ScopeOption({
   title,
   description,
   onClick,
-  onAuxClick,
 }: {
   selected: boolean;
   icon: React.ReactNode;
   title: string;
   description: string;
   onClick: () => void;
-  onAuxClick?: () => void;
 }) {
   return (
-    <div className="group flex items-center gap-1">
-      <DropdownMenuItem
-        onSelect={onClick}
-        className={cn(
-          'min-w-0 flex-1 gap-2 px-2 py-2',
-          selected && 'bg-accent-tint text-on-accent-soft',
-        )}
-      >
-        <span className={cn('grid size-7 shrink-0 place-items-center rounded-md', selected ? 'bg-primary/10' : 'bg-muted text-muted-foreground')}>
-          {icon}
-        </span>
-        <span className="min-w-0 flex-1">
-          <span className="block truncate text-xs font-medium text-foreground">{title}</span>
-          <span className="block truncate text-[11px] text-muted-foreground">{description}</span>
-        </span>
-        {selected && <Check size={13} className="shrink-0" strokeWidth={2.4} />}
-      </DropdownMenuItem>
-      {onAuxClick && (
-        <button
-          type="button"
-          onClick={onAuxClick}
-          className="hidden shrink-0 rounded-md px-1.5 py-1 text-[11px] font-medium text-muted-foreground transition-colors hover:bg-muted hover:text-foreground group-hover:block"
-        >
-          Open
-        </button>
+    <DropdownMenuItem
+      onSelect={onClick}
+      className={cn(
+        'min-w-0 gap-2 px-2 py-2',
+        selected && 'bg-accent-tint text-on-accent-soft',
       )}
-    </div>
+    >
+      <span className={cn('grid size-7 shrink-0 place-items-center rounded-md', selected ? 'bg-primary/10' : 'bg-muted text-muted-foreground')}>
+        {icon}
+      </span>
+      <span className="min-w-0 flex-1">
+        <span className="block truncate text-xs font-medium text-foreground">{title}</span>
+        <span className="block truncate text-[11px] text-muted-foreground">{description}</span>
+      </span>
+      {selected && <Check size={13} className="shrink-0" strokeWidth={2.4} />}
+    </DropdownMenuItem>
   );
 }

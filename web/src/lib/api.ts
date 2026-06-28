@@ -1,5 +1,5 @@
 import { getToken, setToken, clearToken } from './auth.js';
-import type { Session, Message, Space, Connection, AgentProvider, GoogleAccount, EffortLevel, UserSettings, Memory, ScheduledTask, SessionWorktree, PermissionProfile, SessionEvent, Document, DocumentWithBody, Project, Trigger, FileEntry } from '../types.js';
+import type { Session, Message, Space, Connection, AgentProvider, GoogleAccount, EffortLevel, UserSettings, Memory, ScheduledTask, SessionWorktree, PermissionProfile, SessionEvent, Document, DocumentWithBody, Project, Trigger, FileEntry, MediaItem } from '../types.js';
 
 async function request<T>(path: string, init: RequestInit = {}): Promise<T> {
   const token = getToken();
@@ -117,6 +117,10 @@ export function sendMessage(sessionId: string, content: string, attachments: Fil
     body.append('attachments', attachment);
   }
   return request(`/sessions/${sessionId}/messages`, { method: 'POST', body });
+}
+
+export function getMedia(): Promise<MediaItem[]> {
+  return request('/media');
 }
 
 export function getPendingApprovals(): Promise<Array<{ approval_id: string; execution_id: string; action: string; payload: Record<string, unknown> }>> {
@@ -343,5 +347,4 @@ export function deleteAgentProvider(id: string): Promise<void> {
 export function testAgentProvider(id: string): Promise<{ ok: boolean | null; latencyMs?: number; error?: string }> {
   return request(`/agent-providers/${id}/test`);
 }
-
 

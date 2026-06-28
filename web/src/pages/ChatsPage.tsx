@@ -1,13 +1,16 @@
 import { useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { ChevronRight, Search, Trash2, X } from 'lucide-react';
+import { MoreHorizontal, Plus, Search, Trash2, X } from 'lucide-react';
 import { getChats, deleteChat, searchChats, getSpaces } from '../lib/api.js';
 import { cn, timeAgo } from '../lib/utils.js';
 import { usePageTitle } from '../lib/usePageTitle.js';
 import { ConfirmDialog } from '@/components/ui/confirm-dialog';
 import { Button } from '@/components/ui/button';
+import { DataTable, DataTableBody, DataTableHeader, DataTableRow } from '@/components/ui/data-table';
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
 import { ContentColumn, EmptyPanel, PageBody, PageHeader, PageLoading, PageShell } from '@/components/ui/app-layout';
+import { FilterStrip } from '@/components/ui/filter-strip';
 import type { Space, Session } from '../types.js';
 import { useDebounce } from '../lib/useDebounce.js';
 
@@ -41,10 +44,11 @@ const PAGE_SIZE = 100;
 export default function ChatsPage() {
   usePageTitle('Chats');
   const navigate = useNavigate();
+  const [searchParams, setSearchParams] = useSearchParams();
   const queryClient = useQueryClient();
   const [pendingDelete, setPendingDelete] = useState<string | null>(null);
   const [searchQuery, setSearchQuery] = useState('');
-  const [projectFilter, setProjectFilter] = useState<string | null>(null);
+  const projectFilter = searchParams.get('project');
   const debouncedQuery = useDebounce(searchQuery, 300);
   const [extraChats, setExtraChats] = useState<Session[]>([]);
   const [loadingMore, setLoadingMore] = useState(false);
@@ -76,6 +80,10 @@ export default function ChatsPage() {
     staleTime: 60_000,
   });
   const projectById = Object.fromEntries(projects.map(p => [p.id, p]));
+  const projectFilterItems = [
+    { value: 'all', label: 'All' },
+    ...projects.map(project => ({ value: project.id, label: project.name })),
+  ];
 
   const { data: searchResults, isFetching: isSearching } = useQuery<Session[]>({
     queryKey: ['chats-search', debouncedQuery],
@@ -100,46 +108,56 @@ export default function ChatsPage() {
     ? baseChats.filter(c => c.pinned_space_id === projectFilter)
     : baseChats;
 
+  function updateProjectFilter(projectId: string | null) {
+    const next = new URLSearchParams(searchParams);
+    if (projectId) next.set('project', projectId);
+    else next.delete('project');
+    setSearchParams(next, { replace: true });
+  }
+
   return (
     <PageShell>
-      <PageHeader title="Chats" className="border-0 pb-0" contentClassName="max-w-4xl" />
+      <PageHeader
+        title="Chats"
+        className="px-4 pt-6 sm:px-8 sm:pt-10"
+        contentClassName="max-w-7xl"
+        titleClassName="text-2xl sm:text-3xl"
+        actions={
+          <Button size="lg" className="h-9 gap-2 rounded-lg px-3 text-sm shadow-sm" onClick={() => navigate('/c')}>
+            <Plus size={16} />New chat
+          </Button>
+        }
+      />
 
       {isLoading ? (
         <PageLoading rows={5} />
       ) : (
-        <PageBody>
-          <ContentColumn className="max-w-4xl">
-            <div className="relative mb-5">
-              <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-faint-fg pointer-events-none" />
-              <input
-                value={searchQuery}
-                onChange={e => setSearchQuery(e.target.value)}
-                placeholder="Search chats…"
-                className="w-full rounded-lg border border-border-soft bg-card py-2 pl-8 pr-8 text-sm text-foreground placeholder:text-faint-fg focus:border-border focus:outline-none focus:ring-2 focus:ring-ring transition-colors"
-              />
-              {searchQuery && (
-                <button
-                  onClick={() => setSearchQuery('')}
-                  className="absolute right-2.5 top-1/2 -translate-y-1/2 text-faint-fg hover:text-muted-foreground transition-colors"
-                >
-                  <X size={13} />
-                </button>
-              )}
-            </div>
-
-            {projectFilter && (
-              <div className="mb-3 flex items-center gap-2">
-                <span className="text-xs text-muted-foreground">Filtered by</span>
-                <button
-                  type="button"
-                  onClick={() => setProjectFilter(null)}
-                  className="flex items-center gap-1 rounded-md border border-border bg-muted px-2.5 py-0.5 text-xs font-medium text-foreground hover:bg-accent transition-colors"
-                >
-                  {projectById[projectFilter]?.name ?? 'Space'}
-                  <X size={11} className="ml-0.5 text-faint-fg" />
-                </button>
+        <PageBody className="px-4 pt-5 sm:px-8 sm:pt-9">
+          <ContentColumn className="max-w-7xl">
+            <div className="mb-5 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+              <div className="relative min-w-0 flex-1">
+                <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-faint-fg pointer-events-none" />
+                <input
+                  value={searchQuery}
+                  onChange={e => setSearchQuery(e.target.value)}
+                  placeholder="Search chats…"
+                  className="h-9 w-full rounded-lg border border-border-soft bg-card py-2 pl-8 pr-8 text-sm text-foreground placeholder:text-faint-fg transition-colors focus:border-border focus:outline-none focus:ring-2 focus:ring-ring"
+                />
+                {searchQuery && (
+                  <button
+                    onClick={() => setSearchQuery('')}
+                    className="absolute right-2.5 top-1/2 -translate-y-1/2 text-faint-fg hover:text-muted-foreground transition-colors"
+                  >
+                    <X size={13} />
+                  </button>
+                )}
               </div>
-            )}
+              <FilterStrip
+                value={projectFilter ?? 'all'}
+                items={projectFilterItems}
+                onValueChange={value => updateProjectFilter(value === 'all' ? null : value)}
+              />
+            </div>
 
             {isSearchActive && (
               <p className="mb-3 text-xs text-muted-foreground">
@@ -160,73 +178,91 @@ export default function ChatsPage() {
               const useGroups = !isSearchActive && !projectFilter;
               const groups = useGroups ? groupChats(displayedChats) : [{ label: '', chats: displayedChats }];
               return (
-                <div className="flex flex-col gap-5">
+                <div>
                   {groups.map(({ label, chats: groupChats }) => (
-                    <div key={label}>
+                    <section key={label} className="mb-6 last:mb-0">
                       {label && (
-                        <div className="mb-2 px-1 text-[11px] font-semibold text-faint-fg">
+                        <div className="mb-2 text-xs font-medium text-muted-foreground">
                           {label}
                         </div>
                       )}
-                      <div className="flex flex-col gap-2">
-                        {groupChats.map(chat => {
-                          const project = chat.pinned_space_id ? projectById[chat.pinned_space_id] : null;
-                          return (
-                            <div
-                              key={chat.id}
-                              className="group flex items-center gap-3 rounded-xl border border-border-soft bg-card px-4 py-3 transition-[transform,box-shadow,border-color] hover:-translate-y-px hover:border-border hover:shadow-sm"
-                            >
-                              <div
-                                role="button"
-                                tabIndex={0}
-                                aria-label={`Open chat: ${chat.title ?? 'Untitled chat'}`}
-                                className="min-w-0 flex-1 text-left cursor-pointer"
-                                onClick={() => navigate(`/c/${chat.id}`)}
-                                onKeyDown={(e) => {
-                                  if (e.key === 'Enter' || e.key === ' ') {
-                                    e.preventDefault();
-                                    navigate(`/c/${chat.id}`);
-                                  }
-                                }}
+                      <DataTable>
+                        <DataTableHeader className="grid-cols-[minmax(0,1fr)_1.75rem] sm:grid-cols-[minmax(0,1fr)_6rem_1.75rem] lg:grid-cols-[minmax(0,1fr)_12rem_6rem_1.75rem]">
+                          <span>Title</span>
+                          <span className="hidden lg:block">Project</span>
+                          <span className="hidden justify-self-end sm:block">Updated</span>
+                          <span />
+                        </DataTableHeader>
+                        <DataTableBody>
+                          {groupChats.map(chat => {
+                            const project = chat.pinned_space_id ? projectById[chat.pinned_space_id] : null;
+                            return (
+                              <DataTableRow
+                                key={chat.id}
+                                className="grid-cols-[minmax(0,1fr)_1.75rem] sm:grid-cols-[minmax(0,1fr)_6rem_1.75rem] lg:grid-cols-[minmax(0,1fr)_12rem_6rem_1.75rem]"
                               >
-                                <div className="truncate text-sm font-medium text-foreground">
-                                  {chat.title ?? 'Untitled chat'}
+                                <div
+                                  role="button"
+                                  tabIndex={0}
+                                  aria-label={`Open chat: ${chat.title ?? 'Untitled chat'}`}
+                                  className="min-w-0 cursor-pointer text-left"
+                                  onClick={() => navigate(`/c/${chat.id}`)}
+                                  onKeyDown={(e) => {
+                                    if (e.key === 'Enter' || e.key === ' ') {
+                                      e.preventDefault();
+                                      navigate(`/c/${chat.id}`);
+                                    }
+                                  }}
+                                >
+                                  <div className="truncate text-sm font-medium text-foreground underline-offset-2 hover:underline">
+                                    {chat.title ?? 'Untitled chat'}
+                                  </div>
+                                  <div className="mt-0.5 flex gap-2 text-[11px] text-faint-fg sm:hidden">
+                                    <span className="truncate">{project?.name ?? 'No project'}</span>
+                                    <span className="shrink-0">·</span>
+                                    <span className="shrink-0">{timeAgo(chat.updated_at)}</span>
+                                  </div>
                                 </div>
-                                <div className="mt-0.5 flex items-center gap-1.5 text-[11px] text-faint-fg">
-                                  <span>{timeAgo(chat.updated_at)}</span>
-                                  {project && (
-                                    <>
-                                      <span>·</span>
-                                      <button
-                                        type="button"
-                                        onClick={(e) => { e.stopPropagation(); setProjectFilter(project.id === projectFilter ? null : project.id); }}
-                                        className={cn('truncate transition-colors hover:text-foreground', projectFilter === project.id && 'text-foreground font-medium')}
-                                      >
-                                        {project.name}
-                                      </button>
-                                    </>
+                                <div className="hidden min-w-0 lg:block">
+                                  {project ? (
+                                    <button
+                                      type="button"
+                                      onClick={(e) => { e.stopPropagation(); updateProjectFilter(project.id === projectFilter ? null : project.id); }}
+                                      className={cn('block max-w-full truncate text-left text-xs text-muted-foreground transition-colors hover:text-foreground', projectFilter === project.id && 'text-foreground font-medium')}
+                                    >
+                                      {project.name}
+                                    </button>
+                                  ) : (
+                                    <span className="text-xs text-faint-fg">None</span>
                                   )}
                                 </div>
-                              </div>
-                              <ChevronRight
-                                size={14}
-                                className="shrink-0 text-faint-fg transition-colors group-hover:text-muted-foreground"
-                                onClick={() => navigate(`/c/${chat.id}`)}
-                              />
-                              <Button
-                                variant="ghost"
-                                size="icon-sm"
-                                aria-label={`Delete chat: ${chat.title ?? 'Untitled chat'}`}
-                                className="shrink-0 text-faint-fg opacity-0 transition-[opacity,color] hover:text-destructive group-hover:opacity-100"
-                                onClick={() => setPendingDelete(chat.id)}
-                              >
-                                <Trash2 size={14} />
-                              </Button>
-                            </div>
-                          );
-                        })}
-                      </div>
-                    </div>
+                                <span className="hidden justify-self-end whitespace-nowrap text-[11px] text-faint-fg sm:block">{timeAgo(chat.updated_at)}</span>
+                                <DropdownMenu>
+                                  <DropdownMenuTrigger asChild>
+                                    <button
+                                      type="button"
+                                      aria-label={`Options for ${chat.title ?? 'Untitled chat'}`}
+                                      className="grid size-7 place-items-center rounded-md text-muted-foreground transition-colors hover:bg-background hover:text-foreground"
+                                    >
+                                      <MoreHorizontal size={14} />
+                                    </button>
+                                  </DropdownMenuTrigger>
+                                  <DropdownMenuContent align="end" className="w-36">
+                                    <DropdownMenuItem
+                                      variant="destructive"
+                                      onSelect={() => setPendingDelete(chat.id)}
+                                    >
+                                      <Trash2 size={14} />
+                                      Delete
+                                    </DropdownMenuItem>
+                                  </DropdownMenuContent>
+                                </DropdownMenu>
+                              </DataTableRow>
+                            );
+                          })}
+                        </DataTableBody>
+                      </DataTable>
+                    </section>
                   ))}
                 </div>
               );

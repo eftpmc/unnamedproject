@@ -15,8 +15,8 @@ interface EmptyChatStateProps {
   pendingFiles?: File[];
   onPendingFilesConsumed?: () => void;
   projectName?: string;
-  spaces?: Space[];
-  onPinSpace?: (spaceId: string) => void;
+  projects?: Space[];
+  onPinProject?: (projectId: string) => void;
 }
 
 const DEFAULT_PROMPTS = [
@@ -25,7 +25,7 @@ const DEFAULT_PROMPTS = [
   'Start by asking me the fewest questions needed to get moving.',
 ];
 
-export default function EmptyChatState({ value, onChange, onSend, disabled, pendingFiles, onPendingFilesConsumed, projectName, spaces = [], onPinSpace }: EmptyChatStateProps) {
+export default function EmptyChatState({ value, onChange, onSend, disabled, pendingFiles, onPendingFilesConsumed, projectName, projects = [], onPinProject }: EmptyChatStateProps) {
   const fileInputRef = useRef<HTMLInputElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const [attachments, setAttachments] = useState<File[]>([]);
@@ -70,33 +70,33 @@ export default function EmptyChatState({ value, onChange, onSend, disabled, pend
     e.target.value = '';
   }
 
-  const showSpacePins = !projectName && spaces.length > 0 && onPinSpace;
+  const showProjectPins = !projectName && projects.length > 0 && onPinProject;
   const canSend = !disabled && (!!value.trim() || attachments.length > 0);
 
   return (
     <div className="flex flex-1 items-end justify-center pb-5 sm:items-center sm:pb-0">
       <div className="w-full px-4 sm:px-6" style={{ maxWidth: '46rem' }}>
 
-        {!projectName && spaces.length === 0 && (
+        {!projectName && projects.length === 0 && (
           <p className="mb-5 text-center text-xs text-faint-fg">
-            The agent will create a space when you start.
+            The agent will create a project when you start.
           </p>
         )}
 
-        {showSpacePins && (
+        {showProjectPins && (
           <div className="mb-5">
-            <p className="mb-2.5 text-[11px] font-medium text-faint-fg">Pin a space to get started</p>
+            <p className="mb-2.5 text-[11px] font-medium text-faint-fg">Pin a project to get started</p>
             <div className="flex flex-wrap gap-2">
-              {spaces.slice(0, 6).map(space => (
+              {projects.slice(0, 6).map(project => (
                 <button
-                  key={space.id}
+                  key={project.id}
                   type="button"
                   disabled={disabled}
-                  onClick={() => onPinSpace(space.id)}
+                  onClick={() => onPinProject(project.id)}
                   className="flex items-center gap-1.5 rounded-lg border border-border-soft bg-card px-3 py-1.5 text-xs font-medium text-muted-foreground transition-[border-color,box-shadow] hover:border-border hover:text-foreground hover:shadow-sm disabled:opacity-50"
                 >
                   <Folder size={12} className="shrink-0" />
-                  {space.name}
+                  {project.name}
                 </button>
               ))}
             </div>

@@ -11,13 +11,12 @@ const wrap = (ui: React.ReactElement) => (
 
 describe('AppSidebar', () => {
   it('renders icon-only nav items by default (collapsed)', () => {
-    render(wrap(<AppSidebar expanded={false} onToggle={() => {}} />));
-    // Icons present, labels hidden
+    render(wrap(<AppSidebar pinned={false} onTogglePin={() => {}} />));
     expect(screen.queryByText('Chats')).not.toBeInTheDocument();
   });
 
-  it('shows labels when expanded', () => {
-    render(wrap(<AppSidebar expanded={true} onToggle={() => {}} />));
+  it('shows labels when pinned open', () => {
+    render(wrap(<AppSidebar pinned={true} onTogglePin={() => {}} />));
     expect(screen.getByText('Chats')).toBeInTheDocument();
     expect(screen.getByText('Projects')).toBeInTheDocument();
   });

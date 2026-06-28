@@ -5,7 +5,7 @@ import remarkGfm from 'remark-gfm';
 import { ChevronRight, ChevronDown, FileText, Folder, FolderOpen, Loader2 } from 'lucide-react';
 import { getProjectTree, getProjectFile } from '../lib/api.js';
 import { cn } from '@/lib/utils';
-import { EmptyPanel, Surface } from '@/components/ui/app-layout';
+import { EmptyPanel } from '@/components/ui/app-layout';
 import type { FileEntry } from '../types.js';
 
 interface FileBrowserProps {
@@ -37,11 +37,11 @@ function TreeNode({ entry, spaceId, projectId, depth, selectedPath, onSelect }: 
       <button
         onClick={() => onSelect(entry.path)}
         className={cn(
-          'flex w-full items-center gap-2 px-3 py-2 text-left text-sm transition-colors hover:bg-muted/50',
-          selectedPath === entry.path && 'bg-muted text-foreground font-medium',
+          'flex min-h-9 w-full items-center gap-2 rounded-md px-2 py-1.5 text-left text-sm transition-colors hover:bg-muted/40',
+          selectedPath === entry.path && 'bg-muted/70 text-foreground font-medium',
           selectedPath !== entry.path && 'text-muted-foreground',
         )}
-        style={{ paddingLeft: `${12 + depth * 16}px` }}
+        style={{ paddingLeft: `${8 + depth * 16}px` }}
       >
         <FileText size={15} className="shrink-0 opacity-65" />
         <span className="min-w-0 flex-1 truncate">{entry.name}</span>
@@ -53,8 +53,8 @@ function TreeNode({ entry, spaceId, projectId, depth, selectedPath, onSelect }: 
     <div>
       <button
         onClick={() => setOpen(v => !v)}
-        className="flex w-full items-center gap-2 px-3 py-2 text-left text-sm text-muted-foreground transition-colors hover:bg-muted/50"
-        style={{ paddingLeft: `${12 + depth * 16}px` }}
+        className="flex min-h-9 w-full items-center gap-2 rounded-md px-2 py-1.5 text-left text-sm text-muted-foreground transition-colors hover:bg-muted/40"
+        style={{ paddingLeft: `${8 + depth * 16}px` }}
       >
         {isFetching
           ? <Loader2 size={13} className="shrink-0 animate-spin opacity-60" />
@@ -127,12 +127,12 @@ export default function FileBrowser({ spaceId, projectId, projectName = 'Reposit
 
   return (
     <div className="grid min-h-[30rem] gap-4 lg:grid-cols-[minmax(18rem,0.8fr)_minmax(0,1.2fr)]">
-      <Surface className="min-w-0 overflow-hidden bg-card">
+      <section className="min-w-0 overflow-hidden rounded-lg border border-border-soft bg-card">
         <div className="border-b border-border-soft px-4 py-3">
-          <div className="text-sm font-semibold text-foreground">{projectName}</div>
+          <div className="truncate text-sm font-medium text-foreground">{projectName}</div>
           <div className="mt-0.5 text-xs text-muted-foreground">Repository files</div>
         </div>
-        <div className="max-h-[34rem] overflow-y-auto py-2">
+        <div className="max-h-[22rem] overflow-y-auto p-1 lg:max-h-[34rem]">
         {isLoading && (
           <div className="flex items-center justify-center py-8">
             <Loader2 size={14} className="animate-spin text-muted-foreground/50" />
@@ -159,9 +159,9 @@ export default function FileBrowser({ spaceId, projectId, projectName = 'Reposit
           />
         ))}
         </div>
-      </Surface>
+      </section>
 
-      <Surface className="flex min-w-0 flex-col overflow-hidden bg-card">
+      <section className="flex min-h-[18rem] min-w-0 flex-col overflow-hidden rounded-lg border border-border-soft bg-card lg:min-h-0">
         {!selectedPath && (
           <div className="flex flex-1 items-center justify-center">
             <p className="text-xs text-muted-foreground">Select a file to view</p>
@@ -172,7 +172,7 @@ export default function FileBrowser({ spaceId, projectId, projectName = 'Reposit
             <div className="flex h-11 shrink-0 items-center border-b border-border-soft px-4">
               <span className="truncate font-mono text-xs text-muted-foreground">{selectedPath}</span>
             </div>
-            <div className="flex-1 overflow-auto">
+            <div className="min-h-0 flex-1 overflow-auto">
               {fileLoading && (
                 <div className="flex items-center justify-center py-8">
                   <Loader2 size={14} className="animate-spin text-muted-foreground/50" />
@@ -191,7 +191,7 @@ export default function FileBrowser({ spaceId, projectId, projectName = 'Reposit
             </div>
           </>
         )}
-      </Surface>
+      </section>
     </div>
   );
 }

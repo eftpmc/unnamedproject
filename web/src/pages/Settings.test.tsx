@@ -23,8 +23,6 @@ vi.mock('../lib/api.js', () => ({
   getAgentProviders: vi.fn().mockResolvedValue([]),
 }));
 
-vi.mock('../lib/auth.js', () => ({ clearToken: vi.fn() }));
-
 function renderSettings() {
   const queryClient = new QueryClient();
   return render(

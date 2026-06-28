@@ -7,12 +7,12 @@ import ChatView from '../components/ChatView.js';
 import EmptyState from '../components/EmptyState.js';
 import InboxPanel from '../components/InboxPanel.js';
 import ErrorBoundary from '../components/ErrorBoundary.js';
+import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle } from '@/components/ui/sheet';
 import { getAgentProviders } from '../lib/api.js';
 import { connect, disconnect, subscribe } from '../lib/ws.js';
-import { cn } from '../lib/utils.js';
 import type { AgentProvider, Session, WSApprovalRequested, WSExecutionUpdate, WSTurnComplete } from '../types.js';
 
-const PAGE_ROUTES = ['/chats', '/projects', '/documents', '/media', '/triggers', '/settings', '/spaces'];
+const PAGE_ROUTES = ['/home', '/chats', '/projects', '/documents', '/media', '/triggers', '/settings'];
 
 export default function AppLayout() {
   const { chatId } = useParams<{ chatId?: string }>();
@@ -20,15 +20,13 @@ export default function AppLayout() {
   const navigate = useNavigate();
   const queryClient = useQueryClient();
 
-  const [sidebarExpanded, setSidebarExpanded] = useState(false);
+  const [sidebarPinned, setSidebarPinned] = useState(false);
+  const [mobileSidebarOpen, setMobileSidebarOpen] = useState(false);
   const [pendingApprovals, setPendingApprovals] = useState<Map<string, string>>(new Map());
   const [inboxOpen, setInboxOpen] = useState(false);
 
   const chatIdRef = useRef(chatId);
   useEffect(() => { chatIdRef.current = chatId; }, [chatId]);
-
-  // Close sidebar on route change (mobile UX)
-  useEffect(() => { setSidebarExpanded(false); }, [location.pathname]);
 
 
   const { data: agentProviders = [] } = useQuery<AgentProvider[]>({ queryKey: ['agent-providers'], queryFn: getAgentProviders, staleTime: 60_000 });
@@ -86,31 +84,35 @@ export default function AppLayout() {
       : <EmptyState hasLeadAgent={hasLeadAgent} />;
 
   return (
-    <div className={cn('flex h-screen flex-col overflow-hidden bg-background text-foreground')}>
-      {/* Header — always h-12, full width */}
-      <AppHeader
-        onToggleSidebar={() => setSidebarExpanded(v => !v)}
-        pendingApprovalCount={pendingApprovals.size}
-        onOpenInbox={() => setInboxOpen(true)}
-      />
+    <div className="relative flex h-screen overflow-hidden bg-background text-foreground">
+      <div className="hidden sm:block">
+        <AppSidebar pinned={sidebarPinned} onTogglePin={() => setSidebarPinned(v => !v)} />
+      </div>
 
-      {/* Body row — sidebar + content */}
-      <div className="relative flex min-h-0 flex-1">
-        {/* Spacer: reserves 48px in flow so content never shifts */}
-        <div className="w-12 shrink-0" aria-hidden />
-        <AppSidebar expanded={sidebarExpanded} onToggle={() => setSidebarExpanded(v => !v)} />
-
-        {/* Overlay backdrop when sidebar is expanded */}
-        {sidebarExpanded && (
-          <div
-            className="absolute inset-0 z-[9] bg-black/20"
-            onClick={() => setSidebarExpanded(false)}
-            aria-hidden
+      <Sheet open={mobileSidebarOpen} onOpenChange={setMobileSidebarOpen}>
+        <SheetContent side="left" className="w-72 max-w-[85vw] gap-0 p-0" showCloseButton={false}>
+          <SheetHeader className="sr-only">
+            <SheetTitle>Navigation</SheetTitle>
+            <SheetDescription>Main app navigation</SheetDescription>
+          </SheetHeader>
+          <AppSidebar
+            pinned
+            mobile
+            onTogglePin={() => undefined}
+            onNavigate={() => setMobileSidebarOpen(false)}
           />
-        )}
+        </SheetContent>
+      </Sheet>
 
-        {/* Main content — always starts at 0, fills remaining space */}
-        <main className="min-h-0 flex-1 overflow-auto">
+      {/* Content reserves the collapsed sidebar gutter; expanded sidebar overlays it. */}
+      <div className="flex min-w-0 flex-1 flex-col sm:pl-12">
+        <AppHeader
+          pendingApprovalCount={pendingApprovals.size}
+          onOpenInbox={() => setInboxOpen(true)}
+          onOpenSidebar={() => setMobileSidebarOpen(true)}
+        />
+
+        <main className="flex min-h-0 flex-1 flex-col overflow-auto">
           <ErrorBoundary key={location.pathname}>
             {mainContent}
           </ErrorBoundary>

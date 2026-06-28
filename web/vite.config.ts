@@ -46,6 +46,18 @@ export default defineConfig({
         target: 'http://localhost:3000',
         bypass: apiOrSpaBypass,
       },
+      '/documents': {
+        target: 'http://localhost:3000',
+        bypass: apiOrSpaBypass,
+      },
+      '/media': {
+        target: 'http://localhost:3000',
+        bypass: apiOrSpaBypass,
+      },
+      '/triggers': {
+        target: 'http://localhost:3000',
+        bypass: apiOrSpaBypass,
+      },
     },
   },
   test: {

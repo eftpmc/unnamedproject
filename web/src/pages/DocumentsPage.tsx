@@ -1,29 +1,61 @@
 import { useState } from 'react';
+import { Link } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
-import { FileText, Search } from 'lucide-react';
+import { Clipboard, MoreHorizontal, Search } from 'lucide-react';
 import { getAllDocuments } from '../lib/api.js';
 import { usePageTitle } from '../lib/usePageTitle.js';
 import { timeAgo } from '../lib/utils.js';
 import { Input } from '@/components/ui/input';
-import { CenteredEmptyState, ContentColumn, PageBody, PageHeader, PageLoading, PageShell } from '@/components/ui/app-layout';
+import { CenteredEmptyState, ContentColumn, EmptyPanel, PageBody, PageHeader, PageLoading, PageShell } from '@/components/ui/app-layout';
+import { DataTable, DataTableBody, DataTableHeader, DataTableRow } from '@/components/ui/data-table';
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
+import { FilterStrip } from '@/components/ui/filter-strip';
 import type { Document } from '../types.js';
+
+function documentKind(doc: Document): string {
+  if (doc.type) return doc.type;
+  if (doc.path.endsWith('.md') || doc.path.endsWith('.mdx')) return 'Markdown';
+  return 'Document';
+}
 
 export default function DocumentsPage() {
   usePageTitle('Documents');
   const [search, setSearch] = useState('');
+  const [filter, setFilter] = useState('all');
 
   const { data: documents = [], isLoading } = useQuery<Document[]>({
     queryKey: ['documents-global'],
     queryFn: () => getAllDocuments(),
   });
 
-  const visible = search.trim()
-    ? documents.filter(d => d.title.toLowerCase().includes(search.toLowerCase()))
-    : documents;
+  const filters = [
+    { value: 'all', label: 'All' },
+    ...Array.from(new Set(documents.map(documentKind)))
+      .sort((a, b) => a.localeCompare(b))
+      .map(kind => ({ value: kind, label: kind })),
+  ];
+  const visible = documents.filter(doc => {
+    const query = search.trim().toLowerCase();
+    const kind = documentKind(doc);
+    if (filter !== 'all' && kind !== filter) return false;
+    if (!query) return true;
+    return doc.title.toLowerCase().includes(query)
+      || doc.path.toLowerCase().includes(query)
+      || kind.toLowerCase().includes(query);
+  });
+
+  function copyPath(path: string) {
+    void navigator.clipboard?.writeText(path);
+  }
 
   return (
     <PageShell>
-      <PageHeader title="Documents" className="border-0 pb-0" contentClassName="max-w-5xl" />
+      <PageHeader
+        title="Documents"
+        className="px-4 pt-6 sm:px-8 sm:pt-10"
+        contentClassName="max-w-7xl"
+        titleClassName="text-2xl sm:text-3xl"
+      />
 
       {isLoading ? <PageLoading rows={4} /> : documents.length === 0 ? (
         <CenteredEmptyState
@@ -31,43 +63,69 @@ export default function DocumentsPage() {
           description="Documents created by the agent will appear here."
         />
       ) : (
-        <PageBody>
-          <ContentColumn className="max-w-5xl">
-            <div className="relative mb-5">
-              <Search size={13} className="absolute left-3 top-1/2 -translate-y-1/2 text-faint-fg pointer-events-none" />
-              <Input
-                value={search}
-                onChange={e => setSearch(e.target.value)}
-                placeholder="Search documents…"
-                className="pl-8"
-              />
+        <PageBody className="px-4 pt-5 sm:px-8 sm:pt-9">
+          <ContentColumn className="max-w-7xl">
+            <div className="mb-5 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+              <div className="relative min-w-0 flex-1">
+                <Search size={13} className="absolute left-3 top-1/2 -translate-y-1/2 text-faint-fg pointer-events-none" />
+                <Input
+                  value={search}
+                  onChange={e => setSearch(e.target.value)}
+                  placeholder="Search documents…"
+                  className="pl-8"
+                />
+              </div>
+              <FilterStrip value={filter} items={filters} onValueChange={setFilter} />
             </div>
             {visible.length === 0 ? (
-              <p className="text-sm text-muted-foreground">No results for "{search}".</p>
+              <EmptyPanel title="No results" description={`Nothing matched "${search || filter}".`} />
             ) : (
-              <div className="flex flex-col gap-2">
-                {visible.map(doc => (
-                  <div
-                    key={doc.id}
-                    className="flex items-center gap-3 rounded-xl border border-border-soft bg-card px-4 py-3"
-                  >
-                    <span className="grid size-8 shrink-0 place-items-center rounded-lg bg-emerald-500/10 text-emerald-400">
-                      <FileText size={14} />
-                    </span>
-                    <span className="min-w-0 flex-1">
-                      <span className="block truncate text-sm font-medium">{doc.title}</span>
-                      <span className="block text-[11px] text-faint-fg">
-                        {[doc.type, timeAgo(doc.updated_at)].filter(Boolean).join(' · ')}
-                      </span>
-                    </span>
-                    {doc.status && (
-                      <span className="shrink-0 rounded-full bg-muted px-2 py-0.5 text-[10px] font-medium capitalize text-muted-foreground">
-                        {doc.status}
-                      </span>
-                    )}
-                  </div>
-                ))}
-              </div>
+              <DataTable>
+                <DataTableHeader className="grid-cols-[minmax(0,1fr)_1.75rem] sm:grid-cols-[minmax(0,1fr)_8rem_6rem_1.75rem]">
+                  <span>Title</span>
+                  <span className="hidden sm:block">Type</span>
+                  <span className="hidden justify-self-end sm:block">Updated</span>
+                  <span />
+                </DataTableHeader>
+                <DataTableBody>
+                  {visible.map(doc => (
+                    <DataTableRow
+                      key={doc.id}
+                      className="grid-cols-[minmax(0,1fr)_1.75rem] sm:grid-cols-[minmax(0,1fr)_8rem_6rem_1.75rem]"
+                    >
+                      <div className="min-w-0">
+                        <Link to={`/documents/${doc.id}`} className="block truncate text-sm font-medium text-foreground underline-offset-2 hover:underline">
+                          {doc.title}
+                        </Link>
+                        <div className="mt-0.5 flex gap-2 text-[11px] text-faint-fg sm:hidden">
+                          <span className="truncate">{documentKind(doc)}</span>
+                          <span className="shrink-0">·</span>
+                          <span className="shrink-0">{timeAgo(doc.updated_at)}</span>
+                        </div>
+                      </div>
+                      <span className="hidden truncate text-xs text-muted-foreground sm:block">{documentKind(doc)}</span>
+                      <span className="hidden justify-self-end whitespace-nowrap text-[11px] text-faint-fg sm:block">{timeAgo(doc.updated_at)}</span>
+                      <DropdownMenu>
+                        <DropdownMenuTrigger asChild>
+                          <button
+                            type="button"
+                            aria-label={`Options for ${doc.title}`}
+                            className="grid size-7 place-items-center rounded-md text-muted-foreground transition-colors hover:bg-background hover:text-foreground"
+                          >
+                            <MoreHorizontal size={14} />
+                          </button>
+                        </DropdownMenuTrigger>
+                        <DropdownMenuContent align="end" className="w-36">
+                          <DropdownMenuItem onSelect={() => copyPath(doc.path)}>
+                            <Clipboard size={14} />
+                            Copy path
+                          </DropdownMenuItem>
+                        </DropdownMenuContent>
+                      </DropdownMenu>
+                    </DataTableRow>
+                  ))}
+                </DataTableBody>
+              </DataTable>
             )}
           </ContentColumn>
         </PageBody>

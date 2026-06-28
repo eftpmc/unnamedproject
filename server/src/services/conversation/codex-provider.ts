@@ -4,8 +4,16 @@ import { normalizePermissionProfile } from '../permissions.js';
 import type { ConversationProvider, InvokeParams } from '../conversation-provider.js';
 
 interface CodexConfig {
-  model: string;
+  model?: string;
   permissionProfile: string;
+}
+
+const UNSUPPORTED_CHATGPT_ACCOUNT_MODELS = new Set(['codex-mini-latest']);
+
+function resolveCodexModel(model?: string): string | undefined {
+  const normalized = model?.trim();
+  if (!normalized || UNSUPPORTED_CHATGPT_ACCOUNT_MODELS.has(normalized)) return undefined;
+  return normalized;
 }
 
 export class CodexProvider implements ConversationProvider {
@@ -21,7 +29,7 @@ export class CodexProvider implements ConversationProvider {
     const executionId = createExecution(userId, null, null, 'codex');
     try {
       const result = await invokeCodex(
-        { prompt: params.prompt, model: this.config.model },
+        { prompt: params.prompt, model: resolveCodexModel(this.config.model) },
         {
           userId,
           executionId,
@@ -44,6 +52,6 @@ export class CodexProvider implements ConversationProvider {
   }
 
   async resolveModel(): Promise<string> {
-    return this.config.model;
+    return resolveCodexModel(this.config.model) ?? 'Codex default';
   }
 }

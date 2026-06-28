@@ -16,6 +16,7 @@ function PageHeader({
   breadcrumb,
   className,
   contentClassName,
+  titleClassName,
 }: {
   title: React.ReactNode;
   description?: React.ReactNode;
@@ -24,13 +25,14 @@ function PageHeader({
   className?: string;
   /** Constrains and centers the header's inner content (e.g. "max-w-2xl") to match a page's content column width. The header's own background/border stay full-width. */
   contentClassName?: string;
+  titleClassName?: string;
 }) {
   return (
-    <header className={cn('shrink-0 border-b border-border-soft px-5 py-4', className)}>
+    <header className={cn('shrink-0 px-6 pt-6 pb-0', className)}>
       <div className={cn('mx-auto w-full', contentClassName)}>
-        {breadcrumb && <div className="mb-1.5">{breadcrumb}</div>}
-        <div className="flex min-h-8 items-center justify-between gap-3">
-          <h1 className="truncate text-[15px] font-semibold tracking-tight text-foreground">
+        {breadcrumb && <div className="mb-1 text-sm text-muted-foreground">{breadcrumb}</div>}
+        <div className="flex min-h-8 flex-wrap items-center justify-between gap-3">
+          <h1 className={cn('min-w-0 truncate text-xl font-semibold tracking-tight text-foreground', titleClassName)}>
             {title}
           </h1>
           {actions && <div className="flex shrink-0 items-center gap-2">{actions}</div>}
@@ -46,7 +48,7 @@ function PageHeader({
 function PageBody({ className, children, ...props }: React.ComponentProps<'div'>) {
   return (
     <div
-      className={cn('flex-1 overflow-y-auto px-5 py-5', className)}
+      className={cn('flex-1 overflow-y-auto px-6 py-6', className)}
       {...props}
     >
       {children}

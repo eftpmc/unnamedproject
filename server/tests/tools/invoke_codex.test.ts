@@ -111,6 +111,28 @@ describe('invoke_codex', () => {
     expect(args).toContain('mcp_servers.myserver.env={ "TOKEN" = "abc" }');
   });
 
+  it('passes HTTP MCP auth headers using Codex config.toml http_headers', async () => {
+    const proc = makeProc();
+    vi.mocked(spawn).mockReturnValue(proc as any);
+
+    const promise = invokeCodex(
+      { prompt: 'use gmail' },
+      {
+        userId: 'u1', executionId: 'e1', repoPath: '/tmp/repo',
+        mcpServers: { app: { url: 'http://localhost:3000/mcp', headers: { Authorization: 'Bearer mcp-token' } } },
+      }
+    );
+    await new Promise(setImmediate);
+    proc.emit('close', 0);
+    await promise;
+
+    const args = vi.mocked(spawn).mock.calls[0][1] as string[];
+    expect(args).toContain('mcp_servers.app.url="http://localhost:3000/mcp"');
+    expect(args).toContain('mcp_servers.app.http_headers={ "Authorization" = "Bearer mcp-token" }');
+    expect(args).not.toContain('mcp_servers.app.headers={ "Authorization" = "Bearer mcp-token" }');
+    expect(args).not.toContain('mcp_servers.app.type="http"');
+  });
+
   it('prepends delegate framing to the prompt for a fresh session', async () => {
     const proc = makeProc();
     vi.mocked(spawn).mockReturnValue(proc as any);

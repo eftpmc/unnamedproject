@@ -1,27 +1,25 @@
-import { useState } from 'react';
-import { useNavigate, useParams, useLocation } from 'react-router-dom';
+import type React from 'react';
+import { useEffect, useState } from 'react';
+import { Link, useNavigate, useParams, useLocation } from 'react-router-dom';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { GitBranch, MessageSquare } from 'lucide-react';
+import { ArrowRight, GitBranch } from 'lucide-react';
 import {
   getProject, updateProject, deleteTopLevelProject,
-  getChats, createChat, updateChatConfig,
   getConnections, updateSpace, getSpaces,
 } from '../lib/api.js';
 import { usePageTitle } from '../lib/usePageTitle.js';
-import { timeAgo } from '../lib/utils.js';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { ConfirmDialog } from '@/components/ui/confirm-dialog';
-import { ContentColumn, EmptyPanel, PageBody, PageHeader, PageLoading, PageShell } from '@/components/ui/app-layout';
+import { PageBody, PageHeader, PageLoading, PageShell } from '@/components/ui/app-layout';
 import FileBrowser from '../components/FileBrowser.js';
-import type { Connection, Project, Session } from '../types.js';
+import type { Connection, Project } from '../types.js';
 
-type SubRoute = 'overview' | 'files' | 'chats';
+type SubRoute = 'overview' | 'files';
 
 function subRoute(pathname: string, projectId: string): SubRoute {
   const suffix = pathname.slice(`/projects/${projectId}`.length).split('/').filter(Boolean)[0];
   if (suffix === 'files') return 'files';
-  if (suffix === 'chats') return 'chats';
   return 'overview';
 }
 
@@ -29,7 +27,6 @@ export default function ProjectPage() {
   const { projectId } = useParams<{ projectId: string }>();
   const location = useLocation();
   const navigate = useNavigate();
-  const queryClient = useQueryClient();
   const view = subRoute(location.pathname, projectId!);
 
   const { data: project, isLoading } = useQuery<Project>({
@@ -40,27 +37,21 @@ export default function ProjectPage() {
 
   usePageTitle(project?.name);
 
-  const { data: chats = [] } = useQuery<Session[]>({ queryKey: ['chats'], queryFn: () => getChats() });
-  const projectChats = chats.filter(c => c.pinned_space_id === project?.space_id);
-
-  const startChat = useMutation({
-    mutationFn: async () => {
-      const created = await createChat();
-      await updateChatConfig(created.id, { pinned_space_id: project!.space_id });
-      return created.id;
-    },
-    onSuccess: id => navigate(`/c/${id}`),
-  });
-
   if (isLoading) return <PageShell><PageLoading rows={4} /></PageShell>;
   if (!project) return <PageShell><PageHeader title="Project not found" /></PageShell>;
 
   if (view === 'files') {
     return (
       <PageShell>
-        <PageHeader title="Files" contentClassName="max-w-5xl" className="border-0 pb-0" />
-        <PageBody className="p-4 sm:p-5">
-          <div className="mx-auto max-w-5xl">
+        <PageHeader
+          title={project.name}
+          breadcrumb="Files"
+          className="px-4 pt-6 sm:px-8 sm:pt-10"
+          contentClassName="max-w-7xl"
+          titleClassName="text-2xl sm:text-3xl"
+        />
+        <PageBody className="px-4 pt-5 sm:px-8 sm:pt-9">
+          <div className="mx-auto max-w-7xl">
             <FileBrowser spaceId={project.space_id} projectId={project.id} projectName={project.name} />
           </div>
         </PageBody>
@@ -68,59 +59,18 @@ export default function ProjectPage() {
     );
   }
 
-  if (view === 'chats') {
-    return (
-      <PageShell>
-        <PageHeader
-          title="Chats"
-          contentClassName="max-w-5xl"
-          className="border-0 pb-0"
-          actions={
-            <Button size="sm" className="h-8 gap-1.5 text-xs" onClick={() => startChat.mutate()} disabled={startChat.isPending}>
-              <MessageSquare size={14} />New chat
-            </Button>
-          }
-        />
-        <PageBody>
-          <ContentColumn className="max-w-5xl">
-            {projectChats.length === 0 ? (
-              <EmptyPanel
-                title="No chats yet"
-                description="Start a chat pinned to this project."
-                action={<Button size="sm" onClick={() => startChat.mutate()}>Start chat</Button>}
-              />
-            ) : (
-              <div className="flex flex-col gap-2">
-                {projectChats.sort((a, b) => b.updated_at - a.updated_at).map(chat => (
-                  <button
-                    key={chat.id}
-                    type="button"
-                    onClick={() => navigate(`/c/${chat.id}`)}
-                    className="flex items-center gap-3 rounded-lg border border-border-soft bg-card px-4 py-3.5 text-left transition-[transform,box-shadow,border-color] hover:-translate-y-px hover:border-border hover:shadow-sm"
-                  >
-                    <MessageSquare size={15} className="shrink-0 text-muted-foreground" />
-                    <span className="min-w-0 flex-1 truncate text-sm font-medium">{chat.title ?? 'Untitled chat'}</span>
-                    <span className="shrink-0 text-xs text-faint-fg">{timeAgo(chat.updated_at)}</span>
-                  </button>
-                ))}
-              </div>
-            )}
-          </ContentColumn>
-        </PageBody>
-      </PageShell>
-    );
-  }
-
   // Overview (default)
-  return <ProjectOverview project={project} chats={projectChats} onNewChat={() => startChat.mutate()} />;
+  return (
+    <ProjectOverview project={project} navigate={navigate} />
+  );
 }
 
-function ProjectOverview({ project, chats, onNewChat }: { project: Project; chats: Session[]; onNewChat: () => void }) {
-  const navigate = useNavigate();
+function ProjectOverview({ project, navigate }: { project: Project; navigate: ReturnType<typeof useNavigate> }) {
   const queryClient = useQueryClient();
   const [confirmDelete, setConfirmDelete] = useState(false);
   const [editName, setEditName] = useState(project.name);
   const [editBranch, setEditBranch] = useState(project.default_branch ?? '');
+  const [settingsEditing, setSettingsEditing] = useState(false);
 
   const { data: connections = [] } = useQuery<Connection[]>({ queryKey: ['connections'], queryFn: getConnections });
   const mcpConnections = connections.filter(c => c.type === 'mcp');
@@ -155,108 +105,55 @@ function ProjectOverview({ project, chats, onNewChat }: { project: Project; chat
     );
   }
 
-  const recentChats = [...chats].sort((a, b) => b.updated_at - a.updated_at).slice(0, 5);
+  useEffect(() => {
+    setEditName(project.name);
+    setEditBranch(project.default_branch ?? '');
+    setSettingsEditing(false);
+  }, [project.id, project.name, project.default_branch]);
 
   return (
     <PageShell>
-      <PageHeader title="Overview" contentClassName="max-w-5xl" className="border-0 pb-0"
-        actions={
-          <Button size="sm" className="h-8 gap-1.5 text-xs" onClick={onNewChat}>
-            <MessageSquare size={14} />New chat
-          </Button>
-        }
+      <PageHeader
+        title={project.name}
+        breadcrumb="Overview"
+        className="px-4 pt-6 sm:px-8 sm:pt-10"
+        contentClassName="max-w-7xl"
+        titleClassName="text-2xl sm:text-3xl"
       />
-      <PageBody>
-        <div className="mx-auto flex max-w-5xl flex-col gap-6 px-5 py-6 lg:flex-row lg:items-start">
-
-          {/* Main column */}
-          <div className="min-w-0 flex-1 flex flex-col gap-6">
-            {/* Repo info */}
-            {project.repo_path && (
-              <div className="flex items-center gap-3 rounded-lg border border-border-soft bg-card px-4 py-3">
-                <GitBranch size={14} className="shrink-0 text-muted-foreground" />
-                <span className="min-w-0 flex-1 truncate font-mono text-xs text-muted-foreground">{project.repo_path}</span>
-                {project.default_branch && (
-                  <span className="rounded-md bg-muted px-2 py-1 font-mono text-[11px]">{project.default_branch}</span>
-                )}
-              </div>
-            )}
-
-            {/* Recent chats */}
-            {recentChats.length > 0 && (
-              <div className="flex flex-col gap-2">
-                <div className="flex items-center justify-between">
-                  <span className="text-xs font-semibold text-muted-foreground">Recent chats</span>
-                  <button type="button" onClick={() => navigate(`/projects/${project.id}/chats`)} className="text-[11px] text-faint-fg hover:text-muted-foreground">View all →</button>
-                </div>
-                {recentChats.map(chat => (
-                  <button key={chat.id} type="button" onClick={() => navigate(`/c/${chat.id}`)}
-                    className="flex items-center gap-3 rounded-lg border border-border-soft bg-card px-4 py-3 text-left transition-[transform,box-shadow,border-color] hover:-translate-y-px hover:border-border hover:shadow-sm"
-                  >
-                    <MessageSquare size={14} className="shrink-0 text-muted-foreground" />
-                    <span className="min-w-0 flex-1 truncate text-sm font-medium">{chat.title ?? 'Untitled chat'}</span>
-                    <span className="shrink-0 text-xs text-faint-fg">{timeAgo(chat.updated_at)}</span>
-                  </button>
-                ))}
-              </div>
-            )}
+      <PageBody className="px-4 pt-5 sm:px-8 sm:pt-9">
+        <div className="mx-auto grid w-full max-w-7xl gap-5 lg:grid-cols-[minmax(0,1fr)_20rem] lg:gap-6">
+          <div className="min-w-0 space-y-5">
+            <ProjectSummaryPanel project={project} />
           </div>
 
-          {/* Right panel */}
-          <div className="flex w-full flex-col gap-4 lg:w-72 lg:shrink-0">
-            {/* Settings */}
-            <div className="rounded-xl border border-border-soft bg-card p-4">
-              <h3 className="mb-3 text-xs font-semibold text-muted-foreground">Project</h3>
-              <div className="flex flex-col gap-2">
-                <div>
-                  <label className="mb-1 block text-[11px] font-medium text-muted-foreground">Name</label>
-                  <Input value={editName} onChange={e => setEditName(e.target.value)} className="h-8 text-xs" />
-                </div>
-                <div>
-                  <label className="mb-1 block text-[11px] font-medium text-muted-foreground">Default branch</label>
-                  <Input value={editBranch} onChange={e => setEditBranch(e.target.value)} placeholder="main" className="h-8 text-xs" />
-                </div>
-                <Button size="sm" className="h-7 text-xs" disabled={updateMutation.isPending} onClick={() => updateMutation.mutate()}>
-                  {updateMutation.isPending ? 'Saving…' : 'Save'}
-                </Button>
-              </div>
-            </div>
+          <aside className="min-w-0 space-y-5 pt-1">
+            <ProjectSettingsPanel
+              project={project}
+              editing={settingsEditing}
+              editName={editName}
+              editBranch={editBranch}
+              saving={updateMutation.isPending}
+              onNameChange={setEditName}
+              onBranchChange={setEditBranch}
+              onEdit={() => setSettingsEditing(true)}
+              onCancel={() => {
+                setEditName(project.name);
+                setEditBranch(project.default_branch ?? '');
+                setSettingsEditing(false);
+              }}
+              onSave={() => updateMutation.mutate(undefined, { onSuccess: () => setSettingsEditing(false) })}
+            />
 
-            {/* MCP tools */}
             {mcpConnections.length > 0 && (
-              <div className="rounded-xl border border-border-soft bg-card p-4">
-                <h3 className="mb-3 text-xs font-semibold text-muted-foreground">MCP tools</h3>
-                <div className="flex flex-col gap-2">
-                  {mcpConnections.map(conn => {
-                    const enabled = (space?.enabled_connection_ids ?? []).includes(conn.id);
-                    return (
-                      <div key={conn.id} className="flex items-center justify-between gap-2">
-                        <span className="text-xs font-medium">{conn.name}</span>
-                        <button
-                          type="button"
-                          role="switch"
-                          aria-checked={enabled}
-                          onClick={() => toggleMcp(conn.id)}
-                          className={`relative inline-flex h-5 w-9 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors ${enabled ? 'bg-primary' : 'bg-muted'}`}
-                        >
-                          <span className={`inline-block size-4 rounded-full bg-white shadow-sm transition-transform ${enabled ? 'translate-x-4' : 'translate-x-0'}`} />
-                        </button>
-                      </div>
-                    );
-                  })}
-                </div>
-              </div>
+              <McpToolsPanel
+                connections={mcpConnections}
+                enabledIds={space?.enabled_connection_ids ?? []}
+                onToggle={toggleMcp}
+              />
             )}
 
-            {/* Danger zone */}
-            <div className="rounded-xl border border-destructive/25 bg-destructive/5 p-4">
-              <h3 className="mb-1 text-xs font-semibold text-destructive">Danger zone</h3>
-              <p className="mb-3 text-[11px] text-muted-foreground">Permanently deletes this project and its documents.</p>
-              <Button variant="destructive" size="sm" className="h-7 text-xs w-full" onClick={() => setConfirmDelete(true)}>
-                Delete project
-              </Button>
-            </div>
-          </div>
+            <DangerPanel onDelete={() => setConfirmDelete(true)} />
+          </aside>
         </div>
       </PageBody>
 
@@ -270,5 +167,190 @@ function ProjectOverview({ project, chats, onNewChat }: { project: Project; chat
         />
       )}
     </PageShell>
+  );
+}
+
+function ProjectSummaryPanel({ project }: { project: Project }) {
+  return (
+    <section className="rounded-lg border border-border-soft bg-card">
+      <div className="flex min-h-12 items-center justify-between gap-3 border-b border-border-soft px-4 py-2.5">
+        <div className="min-w-0">
+          <h2 className="text-sm font-medium text-foreground">Repository</h2>
+          <p className="mt-0.5 truncate text-xs text-muted-foreground">
+            {project.repo_path || 'No repository linked'}
+          </p>
+        </div>
+        <Link
+          to={`/projects/${project.id}/files`}
+          className="grid size-7 shrink-0 place-items-center rounded-md text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
+          title="View files"
+          aria-label="View files"
+        >
+          <ArrowRight size={14} />
+        </Link>
+      </div>
+      <div className="grid divide-y divide-border-soft sm:grid-cols-3 sm:divide-x sm:divide-y-0">
+        <ProjectFact label="Branch" value={project.default_branch ?? 'Not set'} icon={<GitBranch size={11} />} />
+        <ProjectFact label="Origin" value={project.origin === 'linked' ? 'Linked repo' : 'Created'} />
+        <ProjectFact label="Created" value={formatProjectDate(project.created_at)} />
+      </div>
+    </section>
+  );
+}
+
+function ProjectFact({ label, value, icon, mono }: { label: string; value: string; icon?: React.ReactNode; mono?: boolean }) {
+  return (
+    <div className="min-w-0 px-4 py-2.5">
+      <div className="text-[11px] font-medium text-muted-foreground">{label}</div>
+      <div className={`mt-0.5 flex min-w-0 items-center gap-1.5 truncate text-sm text-foreground ${mono ? 'font-mono text-xs' : 'font-medium'}`}>
+        {icon && <span className="shrink-0 text-faint-fg">{icon}</span>}
+        <span className="truncate">{value}</span>
+      </div>
+    </div>
+  );
+}
+
+function formatProjectDate(unixSeconds: number): string {
+  return new Date(unixSeconds * 1000).toLocaleDateString(undefined, {
+    month: 'short',
+    day: 'numeric',
+    year: 'numeric',
+  });
+}
+
+function ProjectSettingsPanel({
+  project,
+  editing,
+  editName,
+  editBranch,
+  saving,
+  onNameChange,
+  onBranchChange,
+  onEdit,
+  onCancel,
+  onSave,
+}: {
+  project: Project;
+  editing: boolean;
+  editName: string;
+  editBranch: string;
+  saving: boolean;
+  onNameChange: (value: string) => void;
+  onBranchChange: (value: string) => void;
+  onEdit: () => void;
+  onCancel: () => void;
+  onSave: () => void;
+}) {
+  return (
+    <RightRailSection
+      title={(
+        <span className="flex items-center justify-between gap-3">
+          <span>Project settings</span>
+          {!editing && (
+            <button
+              type="button"
+              onClick={onEdit}
+              className="text-xs font-medium text-primary hover:underline"
+            >
+              Edit
+            </button>
+          )}
+        </span>
+      )}
+    >
+      {editing ? (
+        <div className="space-y-2.5">
+          <label className="block">
+            <span className="mb-1 block text-[11px] font-medium text-muted-foreground">Name</span>
+            <Input value={editName} onChange={e => onNameChange(e.target.value)} className="h-8 text-xs" />
+          </label>
+          <label className="block">
+            <span className="mb-1 block text-[11px] font-medium text-muted-foreground">Default branch</span>
+            <Input value={editBranch} onChange={e => onBranchChange(e.target.value)} placeholder="main" className="h-8 text-xs" />
+          </label>
+          <div className="flex items-center gap-2 pt-1">
+            <Button size="sm" className="h-7 text-xs" disabled={saving || !editName.trim()} onClick={onSave}>
+              {saving ? 'Saving...' : 'Save'}
+            </Button>
+            <Button variant="ghost" size="sm" className="h-7 text-xs" disabled={saving} onClick={onCancel}>
+              Cancel
+            </Button>
+          </div>
+        </div>
+      ) : (
+        <div className="space-y-1">
+          <ReadOnlyRow label="Name" value={project.name} />
+          <ReadOnlyRow label="Default branch" value={project.default_branch ?? 'Not set'} />
+        </div>
+      )}
+    </RightRailSection>
+  );
+}
+
+function ReadOnlyRow({ label, value }: { label: string; value: string }) {
+  return (
+    <div className="grid min-h-8 grid-cols-[7rem_minmax(0,1fr)] items-center gap-3">
+      <span className="text-xs text-muted-foreground">{label}</span>
+      <span className="truncate text-sm font-medium text-foreground">{value}</span>
+    </div>
+  );
+}
+
+function McpToolsPanel({
+  connections,
+  enabledIds,
+  onToggle,
+}: {
+  connections: Connection[];
+  enabledIds: string[];
+  onToggle: (connectionId: string) => void;
+}) {
+  return (
+    <RightRailSection
+      title={(
+        <span className="flex items-center gap-2">
+          MCP tools
+        <span className="rounded-full bg-muted px-1.5 py-0.5 text-[11px] font-medium leading-none text-muted-foreground">{connections.length}</span>
+        </span>
+      )}
+    >
+      <div className="space-y-1">
+        {connections.map(conn => {
+          const enabled = enabledIds.includes(conn.id);
+          return (
+            <div key={conn.id} className="grid min-h-8 grid-cols-[minmax(0,1fr)_2.25rem] items-center gap-3">
+              <span className="truncate text-sm font-medium text-foreground">{conn.name}</span>
+              <button
+                type="button"
+                role="switch"
+                aria-checked={enabled}
+                onClick={() => onToggle(conn.id)}
+                className={`relative inline-flex h-5 w-9 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors ${enabled ? 'bg-primary' : 'bg-muted'}`}
+              >
+                <span className={`inline-block size-4 rounded-full bg-white shadow-sm transition-transform ${enabled ? 'translate-x-4' : 'translate-x-0'}`} />
+              </button>
+            </div>
+          );
+        })}
+      </div>
+    </RightRailSection>
+  );
+}
+
+function DangerPanel({ onDelete }: { onDelete: () => void }) {
+  return (
+    <RightRailSection title={<span className="text-destructive">Danger zone</span>}>
+      <p className="mb-3 text-xs leading-relaxed text-muted-foreground">Permanently deletes this project and its documents.</p>
+      <Button variant="destructive" size="sm" className="h-7 text-xs" onClick={onDelete}>Delete project</Button>
+    </RightRailSection>
+  );
+}
+
+function RightRailSection({ title, children }: { title: React.ReactNode; children: React.ReactNode }) {
+  return (
+    <section className="border-t border-border-soft pt-4 first:border-t-0 first:pt-0">
+      <h2 className="mb-2.5 text-sm font-medium text-foreground">{title}</h2>
+      {children}
+    </section>
   );
 }

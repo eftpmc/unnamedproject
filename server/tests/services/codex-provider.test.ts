@@ -44,4 +44,21 @@ describe('CodexProvider', () => {
     expect(chunks).toEqual(['codex says hi']);
     expect(sessionId).toBe('thread-xyz');
   });
+
+  it('omits legacy codex-mini-latest so ChatGPT accounts can use the Codex default', async () => {
+    const { CodexProvider } = await import('../../src/services/conversation/codex-provider.js');
+    const provider = new CodexProvider({ model: 'codex-mini-latest', permissionProfile: 'default' });
+
+    await provider.invoke({
+      prompt: 'hello',
+      onText: vi.fn(),
+      onSessionId: vi.fn(),
+      mcpServers: {},
+    });
+
+    expect(invokeCodexMock).toHaveBeenLastCalledWith(
+      expect.objectContaining({ prompt: 'hello', model: undefined }),
+      expect.any(Object),
+    );
+  });
 });

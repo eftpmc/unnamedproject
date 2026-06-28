@@ -1,8 +1,7 @@
 import { useState, useEffect } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useParams } from 'react-router-dom';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Check, Moon, Play, Plus, Sun, Trash2 } from 'lucide-react';
-import { QRCodeSVG } from 'qrcode.react';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
@@ -12,7 +11,6 @@ import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Textarea } from '@/components/ui/textarea';
 import { ContentColumn, PageBody, PageHeader, PageShell } from '@/components/ui/app-layout';
-import { TabStrip } from '@/components/ui/tab-strip';
 import { cn } from '@/lib/utils';
 import {
   createConnection,
@@ -34,22 +32,21 @@ import {
   testConnection,
   updateSettings,
 } from '../lib/api.js';
-import { clearToken, getToken } from '../lib/auth.js';
 import { usePageTitle } from '../lib/usePageTitle.js';
 import { useTheme } from '../lib/useTheme.js';
 import { useAccent } from '../lib/useAccent.js';
 import { ACCENT_PRESETS, DEFAULT_ACCENT } from '../lib/accent.js';
 import type { AgentProvider, Connection, GoogleAccount, Memory, PermissionProfile, Space, ScheduledTask, UserSettings } from '../types.js';
 
-type Tab = 'tools' | 'mcp' | 'workspace' | 'memory' | 'account';
-
-const TABS: { id: Tab; label: string }[] = [
-  { id: 'tools', label: 'Tools' },
-  { id: 'mcp', label: 'MCP' },
-  { id: 'workspace', label: 'Workspace' },
-  { id: 'memory', label: 'Memory' },
-  { id: 'account', label: 'Account' },
-];
+type Section = 'tools' | 'mcp' | 'workspace' | 'memory' | 'appearance';
+const SETTINGS_SECTIONS: Section[] = ['tools', 'mcp', 'workspace', 'memory', 'appearance'];
+const SECTION_TITLES: Record<Section, string> = {
+  tools: 'Tools',
+  mcp: 'MCP',
+  workspace: 'Workspace',
+  memory: 'Memory',
+  appearance: 'Appearance',
+};
 
 type SetupKind = 'claude_code' | 'codex' | 'mcp';
 
@@ -147,12 +144,12 @@ function DeleteBtn({ onClick }: { onClick: () => void }) {
 }
 
 function SectionLabel({ children }: { children: React.ReactNode }) {
-  return <div className="mb-3 text-[11px] font-semibold tracking-wide text-faint-fg">{children}</div>;
+  return <div className="mb-3 text-sm font-medium text-foreground">{children}</div>;
 }
 
 function SettingRow({ children, className }: { children: React.ReactNode; className?: string }) {
   return (
-    <div className={cn('flex items-center justify-between gap-4 rounded-lg border border-border-soft bg-card p-4', className)}>
+    <div className={cn('flex flex-col gap-3 rounded-lg border border-border-soft bg-card p-4 sm:flex-row sm:items-center sm:justify-between sm:gap-4', className)}>
       {children}
     </div>
   );
@@ -241,33 +238,6 @@ function HintText({ children }: { children: React.ReactNode }) {
   return <p className="mt-2 max-w-2xl text-xs leading-relaxed text-muted-foreground/70">{children}</p>;
 }
 
-function ConnectMobileSection() {
-  const [showQr, setShowQr] = useState(false);
-  const token = getToken() ?? '';
-  const url = window.location.origin.replace(/:\d+$/, ':3000');
-  const qrValue = JSON.stringify({ url, token });
-
-  return (
-    <div className="flex flex-col gap-3">
-      <div className="flex items-center justify-between">
-        <div>
-          <div className="text-sm font-medium text-foreground">Connect Mobile</div>
-          <div className="text-xs text-muted-foreground">Scan from the Unnamed mobile app to connect instantly</div>
-        </div>
-        <Button variant="outline" size="sm" onClick={() => setShowQr(v => !v)}>
-          {showQr ? 'Hide QR' : 'Show QR'}
-        </Button>
-      </div>
-      {showQr && (
-        <div className="flex flex-col items-center gap-2 rounded-xl border border-border p-6 bg-white">
-          <QRCodeSVG value={qrValue} size={200} />
-          <p className="text-xs text-muted-foreground">Open the mobile app and tap "Scan QR code"</p>
-        </div>
-      )}
-    </div>
-  );
-}
-
 function ProviderRow({
   kind,
   providers,
@@ -301,7 +271,7 @@ function ProviderRow({
         <SettingRowInfo title={meta.title} description={provider ? provider.name : meta.description} />
         {health?.ok === false && <div className="mt-1 text-xs text-destructive">Error: {health.error}</div>}
       </div>
-      <div className="flex items-center gap-2 shrink-0">
+      <div className="flex shrink-0 items-center gap-2 self-start sm:self-center">
         {healthDot && <span title={healthTitle} className={cn('size-2 shrink-0 rounded-full', healthDot)} />}
         {provider ? (health?.ok === false ? <ConnectionErrorBadge /> : <ConnectedBadge />) : <NotSetBadge />}
         <Button size="sm" variant={provider ? 'ghost' : 'default'} onClick={() => onOpenSetup(kind)}>
@@ -355,7 +325,7 @@ function SetupModal({
 
         {existing && activeSetup !== 'mcp' && (
           <div className="flex items-center gap-3 rounded-lg border border-border-soft bg-card px-4 py-3">
-            <div className="flex-1 min-w-0">
+            <div className="min-w-0 flex-1">
               <div className="text-sm text-foreground">{existing.name}</div>
               <div className="mt-1 flex items-center gap-2">
                 <ConnectedBadge />
@@ -414,7 +384,7 @@ function SetupModal({
                 <div>
                   <Label>Model</Label>
                   <Input
-                    placeholder={activeSetup === 'claude_code' ? 'claude-sonnet-4-6' : 'codex-mini-latest'}
+                    placeholder={activeSetup === 'claude_code' ? 'claude-sonnet-4-6' : 'Use Codex account default'}
                     value={providerModel}
                     onChange={e => updateForm({ providerModel: e.target.value })}
                     className="text-sm"
@@ -451,7 +421,8 @@ export default function Settings() {
   usePageTitle('Settings');
   const navigate = useNavigate();
   const qc = useQueryClient();
-  const [tab, setTab] = useState<Tab>('tools');
+  const { section: sectionParam } = useParams<{ section?: string }>();
+  const section = SETTINGS_SECTIONS.includes(sectionParam as Section) ? (sectionParam as Section) : 'tools';
 
   const { data: connections = [] } = useQuery<Connection[]>({ queryKey: ['connections'], queryFn: getConnections });
   const { data: agentProviders = [] } = useQuery<AgentProvider[]>({ queryKey: ['agent-providers'], queryFn: getAgentProviders });
@@ -488,17 +459,22 @@ export default function Settings() {
 
   // Handle redirect back from Google OAuth
   useEffect(() => {
+    if (sectionParam && !SETTINGS_SECTIONS.includes(sectionParam as Section)) {
+      navigate('/settings/tools', { replace: true });
+    }
+  }, [navigate, sectionParam]);
+
+  useEffect(() => {
     const params = new URLSearchParams(window.location.search);
     const connected = params.get('google_connected');
     const error = params.get('google_error');
     if (connected || error) {
-      window.history.replaceState({}, '', '/settings');
       if (connected) {
         qc.invalidateQueries({ queryKey: ['google-status'] });
-        setTab('mcp');
+        navigate('/settings/mcp', { replace: true });
       } else if (error) {
         setGoogleError(error);
-        setTab('mcp');
+        navigate('/settings/mcp', { replace: true });
       }
     }
   }, [qc]);
@@ -515,11 +491,12 @@ export default function Settings() {
       const { setupName, mcpCommand, mcpArgs, mcpEnv, mcpPreset, mcpExtraArg, mcpEnvValues, providerModel, providerPermissionProfile } = form;
 
       if (activeSetup === 'claude_code' || activeSetup === 'codex') {
-        const defaultModel = activeSetup === 'claude_code' ? 'claude-sonnet-4-6' : 'codex-mini-latest';
+        const defaultModel = activeSetup === 'claude_code' ? 'claude-sonnet-4-6' : '';
+        const resolvedModel = providerModel.trim() || defaultModel;
         return createAgentProvider({
           name: setupName.trim() || meta.title,
           type: activeSetup,
-          config: { model: providerModel.trim() || defaultModel, permissionProfile: providerPermissionProfile },
+          config: { ...(resolvedModel ? { model: resolvedModel } : {}), permissionProfile: providerPermissionProfile },
         });
       }
 
@@ -604,51 +581,22 @@ export default function Settings() {
     setSetupError('');
   }
 
-  function handleSignOut() {
-    clearToken();
-    navigate('/login', { replace: true });
-  }
-
   return (
     <PageShell>
       <PageHeader
-        title="Settings"
-        className="border-b-0 pb-0"
-        contentClassName="max-w-4xl"
+        title={SECTION_TITLES[section]}
+        breadcrumb="Settings"
+        className="px-4 pt-6 sm:px-8 sm:pt-10"
+        contentClassName="max-w-5xl"
+        titleClassName="text-2xl sm:text-3xl"
       />
 
-      {/* Tab strip */}
-      <div className="shrink-0 px-5 py-3">
-        <div className="mx-auto w-full max-w-4xl">
-          <TabStrip
-            tabs={TABS.map(t => ({ key: t.id, label: t.label }))}
-            activeKey={tab}
-            ariaLabel="Settings sections"
-            onSelect={t => setTab(t.key as Tab)}
-            renderTab={(t, isActive) => (
-              <button
-                key={t.key}
-                type="button"
-                onClick={() => setTab(t.key as Tab)}
-                className={cn(
-                  'inline-flex h-full items-center justify-center rounded-md px-3 text-sm font-medium whitespace-nowrap transition-all',
-                  isActive
-                    ? 'bg-background text-foreground shadow-sm'
-                    : 'text-muted-foreground hover:text-foreground',
-                )}
-              >
-                {t.label}
-              </button>
-            )}
-          />
-        </div>
-      </div>
-
-      <PageBody>
-        <ContentColumn className="max-w-4xl">
+      <PageBody className="px-4 pt-5 sm:px-8 sm:pt-9">
+        <ContentColumn className="max-w-5xl">
+          <div className="flex flex-col gap-8">
 
           {/* ── Tools ──────────────────────────────────── */}
-          {tab === 'tools' && (
+          {section === 'tools' && (
             <div className="flex flex-col gap-7">
               <div>
                 <SectionLabel>Coding tools</SectionLabel>
@@ -659,9 +607,9 @@ export default function Settings() {
               </div>
               <div>
                 <SectionLabel>Permissions</SectionLabel>
-                <div className="rounded-lg border border-border-soft bg-card p-4 flex flex-col gap-4">
-                  <div className="flex items-end gap-3">
-                    <div className="flex-1">
+                <div className="flex flex-col gap-4 rounded-lg border border-border-soft bg-card p-4">
+                  <div className="flex flex-col gap-3 sm:flex-row sm:items-end">
+                    <div className="min-w-0 flex-1">
                       <Label className="text-xs">Permission profile</Label>
                       <Select value={permissionProfile} onValueChange={value => setPermissionProfile(value as PermissionProfile)}>
                         <SelectTrigger className="mt-1">
@@ -676,7 +624,7 @@ export default function Settings() {
                     </div>
                     <Button
                       size="sm"
-                      className="h-9 gap-1.5 text-xs"
+                      className="h-9 gap-1.5 text-xs sm:self-end"
                       onClick={() => updateSettingsMutation.mutate({ projects_root: projectsRoot, permission_profile: permissionProfile })}
                     >
                       <Check size={13} strokeWidth={2.2} />
@@ -693,7 +641,7 @@ export default function Settings() {
           )}
 
           {/* ── MCP ────────────────────────────────────── */}
-          {tab === 'mcp' && (
+          {section === 'mcp' && (
             <div className="flex flex-col gap-6">
 
               {/* Google services */}
@@ -713,7 +661,7 @@ export default function Settings() {
                               <div className="text-sm font-medium text-foreground">{label}</div>
                               <div className="text-xs text-muted-foreground">{acct.email}{acct.name !== svc ? ` · ${acct.name}` : ''}</div>
                             </div>
-                            <div className="flex items-center gap-2 shrink-0">
+                            <div className="flex shrink-0 items-center gap-2 self-start sm:self-center">
                               <ConnectedBadge />
                               <DeleteBtn onClick={() => disconnectGoogleMutation.mutate(acct.id)} />
                             </div>
@@ -721,7 +669,7 @@ export default function Settings() {
                         )) : (
                           <SettingRow>
                             <SettingRowInfo title={label} description={description} />
-                            <div className="shrink-0">
+                            <div className="shrink-0 self-start sm:self-center">
                               <Button size="sm" onClick={() => setGoogleConnectDialog({ service: svc, label: svc })}>Connect</Button>
                             </div>
                           </SettingRow>
@@ -746,7 +694,7 @@ export default function Settings() {
                   {mcpConnections.map(c => (
                     <SettingRow key={c.id}>
                       <SettingRowInfo title={c.name} description="MCP server" />
-                      <div className="flex items-center gap-2 shrink-0">
+                      <div className="flex shrink-0 items-center gap-2 self-start sm:self-center">
                         <ConnectedBadge />
                         <DeleteBtn onClick={() => setPendingDelete({ id: c.id })} />
                       </div>
@@ -784,13 +732,13 @@ export default function Settings() {
           )}
 
           {/* ── Workspace ──────────────────────────────── */}
-          {tab === 'workspace' && (
+          {section === 'workspace' && (
             <div className="flex flex-col gap-7">
               <div>
-                <SectionLabel>Spaces repository root</SectionLabel>
-                <div className="rounded-lg border border-border-soft bg-card p-4 flex flex-col gap-3">
-                  <div className="flex gap-3 items-end">
-                    <div className="flex-1">
+                <SectionLabel>Projects repository root</SectionLabel>
+                <div className="flex flex-col gap-3 rounded-lg border border-border-soft bg-card p-4">
+                  <div className="flex flex-col gap-3 sm:flex-row sm:items-end">
+                    <div className="min-w-0 flex-1">
                       <Label className="text-xs">Directory path</Label>
                       <Input
                         placeholder="/Users/you/projects"
@@ -799,16 +747,16 @@ export default function Settings() {
                         className="mt-1 text-sm font-mono"
                       />
                     </div>
-                    <Button size="sm" className="h-9 gap-1.5 text-xs" onClick={() => updateSettingsMutation.mutate({ projects_root: projectsRoot })}>
+                    <Button size="sm" className="h-9 gap-1.5 text-xs sm:self-end" onClick={() => updateSettingsMutation.mutate({ projects_root: projectsRoot })}>
                       <Check size={13} strokeWidth={2.2} />
                       Save
                     </Button>
-                    <Button size="sm" variant="ghost" className="h-9 text-xs" onClick={() => { setProjectsRoot(''); updateSettingsMutation.mutate({ projects_root: '' }); }}>
+                    <Button size="sm" variant="ghost" className="h-9 text-xs sm:self-end" onClick={() => { setProjectsRoot(''); updateSettingsMutation.mutate({ projects_root: '' }); }}>
                       Reset
                     </Button>
                   </div>
                   {projectsRootError && <div className="text-sm text-destructive">{projectsRootError}</div>}
-                  <HintText>Repositories created for new Spaces are stored here. Keep the default, or point to a workspace location such as <code>~/code</code>.</HintText>
+                  <HintText>Repositories created for new projects are stored here. Keep the default, or point to a workspace location such as <code>~/code</code>.</HintText>
                 </div>
               </div>
 
@@ -823,9 +771,9 @@ export default function Settings() {
                     {scheduledTasks.map(task => {
                       const nextRun = task.enabled ? new Date(task.next_run_at * 1000).toLocaleString() : null;
                       return (
-                        <div key={task.id} className="rounded-lg border border-border-soft bg-card p-4 flex flex-col gap-3">
+                        <div key={task.id} className="flex flex-col gap-3 rounded-lg border border-border-soft bg-card p-4">
                           <div className="flex items-start gap-3">
-                            <div className="flex-1 min-w-0">
+                            <div className="min-w-0 flex-1">
                               <div className="text-sm font-medium text-foreground">
                                 {task.type === 'reorganize_memory' ? 'Memory reorganization' : task.type}
                               </div>
@@ -839,7 +787,7 @@ export default function Settings() {
                                 </div>
                               )}
                             </div>
-                            <div className="flex items-center gap-2 shrink-0">
+                            <div className="flex shrink-0 items-center gap-2">
                               <Button variant="ghost" size="sm" className="h-7 gap-1 text-xs" onClick={() => runTaskMutation.mutate(task.id)}>
                                 <Play size={11} />
                                 Run now
@@ -859,7 +807,7 @@ export default function Settings() {
           )}
 
           {/* ── Memory ─────────────────────────────────── */}
-          {tab === 'memory' && (
+          {section === 'memory' && (
             <div className="flex flex-col gap-5">
               <SectionLabel>Stored memory</SectionLabel>
               {memory.length === 0 ? (
@@ -875,8 +823,8 @@ export default function Settings() {
                       <div className="mb-2 text-[11px] font-semibold capitalize text-faint-fg">{type}</div>
                       <div className="flex flex-col gap-1.5">
                         {entries.map(m => (
-                          <div key={`${m.type}-${m.key}`} className="flex items-start gap-4 rounded-lg border border-border-soft bg-card px-4 py-3">
-                            <div className="w-36 shrink-0 font-mono text-xs text-muted-foreground">
+                          <div key={`${m.type}-${m.key}`} className="flex flex-col gap-2 rounded-lg border border-border-soft bg-card px-4 py-3 sm:flex-row sm:items-start sm:gap-4">
+                            <div className="shrink-0 font-mono text-xs text-muted-foreground sm:w-36">
                               {m.key}
                               {m.type === 'project' && (
                                 <div className="mt-0.5 font-sans text-[11px] text-faint-fg">
@@ -895,23 +843,14 @@ export default function Settings() {
             </div>
           )}
 
-          {/* ── Account ────────────────────────────────── */}
-          {tab === 'account' && (
+          {/* ── Appearance ─────────────────────────────── */}
+          {section === 'appearance' && (
             <div className="flex flex-col gap-3">
-              <SectionLabel>Appearance</SectionLabel>
               <AppearanceSection />
-              <SectionLabel>Account</SectionLabel>
-              <ConnectMobileSection />
-              <div className="flex items-center justify-between gap-4 rounded-lg border border-destructive/20 bg-destructive/5 px-4 py-4">
-                <div>
-                  <div className="text-sm font-medium text-foreground">Sign out</div>
-                  <div className="mt-0.5 text-xs text-muted-foreground">You will be returned to the login screen.</div>
-                </div>
-                <Button variant="destructive" size="sm" onClick={handleSignOut}>Sign out</Button>
-              </div>
             </div>
           )}
 
+          </div>
         </ContentColumn>
       </PageBody>
 

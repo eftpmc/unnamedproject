@@ -61,9 +61,8 @@ function mcpServerConfigOverrides(servers: Record<string, McpServerConfig>): str
     if (cfg.url) {
       // HTTP transport
       overrides.push(`-c`, `mcp_servers.${name}.url=${tomlString(cfg.url)}`);
-      overrides.push(`-c`, `mcp_servers.${name}.type="http"`);
       if (cfg.headers && Object.keys(cfg.headers).length > 0) {
-        overrides.push(`-c`, `mcp_servers.${name}.headers=${tomlInlineTable(cfg.headers)}`);
+        overrides.push(`-c`, `mcp_servers.${name}.http_headers=${tomlInlineTable(cfg.headers)}`);
       }
     } else if (cfg.command) {
       // stdio transport

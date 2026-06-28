@@ -42,9 +42,16 @@ router.post('/', async (req, res) => {
     'INSERT INTO spaces (id, user_id, name, description, enabled_connection_ids) VALUES (?, ?, ?, NULL, ?)',
   ).run(spaceId, userId, name.trim(), '[]');
 
-  const project = repo_path
-    ? linkProject({ space_id: spaceId, name: name.trim(), repo_path, default_branch }) // linkProject is synchronous
-    : await createProject({ space_id: spaceId, name: name.trim() });
+  let project;
+  try {
+    project = repo_path
+      ? linkProject({ space_id: spaceId, name: name.trim(), repo_path, default_branch }) // linkProject is synchronous
+      : await createProject({ space_id: spaceId, name: name.trim() });
+  } catch (err) {
+    // Roll back the orphaned space if project creation fails
+    getDb().prepare('DELETE FROM spaces WHERE id = ?').run(spaceId);
+    throw err;
+  }
 
   res.status(201).json(project);
 });

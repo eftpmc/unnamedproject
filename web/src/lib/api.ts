@@ -228,17 +228,14 @@ export function deleteTopLevelProject(id: string): Promise<void> {
   return request(`/projects/${id}`, { method: 'DELETE' });
 }
 
-export function getProjectTree(spaceId: string, projectId: string, dirPath?: string): Promise<{ entries: { name: string; type: 'file' | 'dir'; path: string }[] }>;
-export function getProjectTree(id: string, dirPath?: string): Promise<{ entries: FileEntry[] }>;
-export function getProjectTree(spaceIdOrId: string, projectIdOrDirPath?: string, dirPath?: string): Promise<any> {
-  if (dirPath !== undefined) {
-    // Old signature: (spaceId, projectId, dirPath)
-    const q = dirPath ? `?path=${encodeURIComponent(dirPath)}` : '';
-    return request(`/spaces/${spaceIdOrId}/projects/${projectIdOrDirPath}/tree${q}`);
-  }
-  // New signature: (id, dirPath?)
-  const q = projectIdOrDirPath ? `?path=${encodeURIComponent(projectIdOrDirPath)}` : '';
-  return request(`/projects/${spaceIdOrId}/tree${q}`);
+export function getProjectTree(spaceId: string, projectId: string, dirPath?: string): Promise<{ entries: { name: string; type: 'file' | 'dir'; path: string }[] }> {
+  const q = dirPath ? `?path=${encodeURIComponent(dirPath)}` : '';
+  return request(`/spaces/${spaceId}/projects/${projectId}/tree${q}`);
+}
+
+export function getProjectTreeByProjectId(projectId: string, dirPath?: string): Promise<{ entries: FileEntry[] }> {
+  const q = dirPath ? `?path=${encodeURIComponent(dirPath)}` : '';
+  return request(`/projects/${projectId}/tree${q}`);
 }
 
 export function getProjectFile(spaceId: string, projectId: string, filePath: string): Promise<{ content: string; path: string }>;

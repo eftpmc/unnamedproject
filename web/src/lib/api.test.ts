@@ -10,7 +10,7 @@ vi.mock('./auth', () => ({
 const mockFetch = vi.fn();
 globalThis.fetch = mockFetch;
 
-const { login, getChats, createChat, getChatStatus, sendMessage, getDocuments } = await import('./api');
+const { login, getChats, createChat, getChatStatus, sendMessage, getDocuments, getProjects: getTopLevelProjects, createTopLevelProject, getAllDocuments, getAllTriggers } = await import('./api');
 
 const mockResponse = (body: unknown, status = 200) => ({
   ok: status >= 200 && status < 300,
@@ -79,4 +79,40 @@ describe('api', () => {
     expect(mockFetch).toHaveBeenCalledWith('/spaces/space-1/documents?type=playbook', expect.any(Object));
   });
 
+});
+
+// Top-level API tests
+describe('Top-level API functions', () => {
+  describe('getProjects', () => {
+    it('calls GET /projects', async () => {
+      mockFetch.mockResolvedValueOnce(mockResponse([]));
+      const result = await getTopLevelProjects();
+      expect(mockFetch).toHaveBeenCalledWith('/projects', expect.objectContaining({ headers: expect.objectContaining({ Authorization: 'Bearer test-token' }) }));
+      expect(result).toEqual([]);
+    });
+  });
+
+  describe('createTopLevelProject', () => {
+    it('calls POST /projects with name', async () => {
+      mockFetch.mockResolvedValueOnce(mockResponse({ id: '1', name: 'test', space_id: 'sp1', repo_path: '', default_branch: null, origin: 'created', created_at: 0 }));
+      await createTopLevelProject({ name: 'test' });
+      expect(mockFetch).toHaveBeenCalledWith('/projects', expect.objectContaining({ method: 'POST' }));
+    });
+  });
+
+  describe('getAllDocuments', () => {
+    it('calls GET /documents', async () => {
+      mockFetch.mockResolvedValueOnce(mockResponse([]));
+      await getAllDocuments();
+      expect(mockFetch).toHaveBeenCalledWith('/documents', expect.anything());
+    });
+  });
+
+  describe('getAllTriggers', () => {
+    it('calls GET /triggers', async () => {
+      mockFetch.mockResolvedValueOnce(mockResponse([]));
+      await getAllTriggers();
+      expect(mockFetch).toHaveBeenCalledWith('/triggers', expect.anything());
+    });
+  });
 });

@@ -5,18 +5,16 @@ import Login from './pages/Login.js';
 import AppLayout from './pages/AppLayout.js';
 import Settings from './pages/Settings.js';
 import ChatsPage from './pages/ChatsPage.js';
-import SpacesPage from './pages/SpacesPage.js';
-import SpacePage from './pages/SpacePage.js';
+import ProjectsPage from './pages/ProjectsPage.js';
+import ProjectPage from './pages/ProjectPage.js';
+import DocumentsPage from './pages/DocumentsPage.js';
+import TriggersPage from './pages/TriggersPage.js';
+import MediaPage from './pages/MediaPage.js';
 import { TooltipProvider } from '@/components/ui/tooltip';
 
 const queryClient = new QueryClient({
   defaultOptions: { queries: { retry: 1, staleTime: 30_000 } },
 });
-
-function LegacyProjectRedirect({ suffix = '' }: { suffix?: string }) {
-  const { projectId } = useParams<{ projectId: string }>();
-  return <Navigate to={`/spaces/${projectId}${suffix}`} replace />;
-}
 
 const router = createBrowserRouter([
   { path: '/login', element: <Login /> },
@@ -30,21 +28,19 @@ const router = createBrowserRouter([
       { path: 'c', element: null },
       { path: 'c/:chatId', element: null },
       { path: 'chats', element: <ChatsPage /> },
-      { path: 'activity', element: <Navigate to="/" replace /> },
-      { path: 'spaces', element: <SpacesPage /> },
-      { path: 'spaces/:spaceId', element: <SpacePage /> },
-      { path: 'spaces/:spaceId/chats', element: <SpacePage /> },
-      { path: 'spaces/:spaceId/documents', element: <SpacePage /> },
-      { path: 'spaces/:spaceId/documents/:docId', element: <SpacePage /> },
-      { path: 'spaces/:spaceId/projects', element: <SpacePage /> },
-      { path: 'spaces/:spaceId/projects/:projectId', element: <SpacePage /> },
-      { path: 'spaces/:spaceId/triggers', element: <SpacePage /> },
-      { path: 'spaces/:spaceId/settings', element: <SpacePage /> },
-      { path: 'projects', element: <Navigate to="/spaces" replace /> },
-      { path: 'projects/:projectId', element: <LegacyProjectRedirect /> },
-      { path: 'projects/:projectId/:tab', element: <LegacyProjectRedirect /> },
-      { path: 'pipelines', element: <Navigate to="/spaces" replace /> },
+      { path: 'projects', element: <ProjectsPage /> },
+      { path: 'projects/:projectId', element: <ProjectPage /> },
+      { path: 'projects/:projectId/files', element: <ProjectPage /> },
+      { path: 'projects/:projectId/chats', element: <ProjectPage /> },
+      { path: 'documents', element: <DocumentsPage /> },
+      { path: 'media', element: <MediaPage /> },
+      { path: 'triggers', element: <TriggersPage /> },
       { path: 'settings', element: <Settings /> },
+      // Legacy redirects
+      { path: 'spaces', element: <Navigate to="/projects" replace /> },
+      { path: 'spaces/:spaceId', element: <Navigate to="/projects" replace /> },
+      { path: 'spaces/:spaceId/*', element: <Navigate to="/projects" replace /> },
+      { path: 'activity', element: <Navigate to="/" replace /> },
     ],
   },
 ]);

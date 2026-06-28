@@ -54,6 +54,19 @@ export async function deleteProject(request: APIRequestContext, id: string): Pro
   await request.delete(`${BASE}/projects/${id}`, { headers: AUTH });
 }
 
+export async function createGlobalDocument(request: APIRequestContext, spaceId: string, title = 'Playwright test doc'): Promise<string> {
+  const res = await request.post(`${BASE}/documents`, {
+    headers: AUTH,
+    data: { title, space_id: spaceId },
+  });
+  const body = await res.json() as { id: string };
+  return body.id;
+}
+
+export async function deleteDocument(request: APIRequestContext, id: string): Promise<void> {
+  await request.delete(`${BASE}/documents/${id}`, { headers: AUTH });
+}
+
 export async function createTrigger(request: APIRequestContext, projectId: string, kind: 'schedule' | 'webhook' | 'manual' = 'manual'): Promise<string> {
   const res = await request.post(`${BASE}/triggers`, {
     headers: AUTH,

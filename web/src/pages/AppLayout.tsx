@@ -5,7 +5,6 @@ import AppSidebar from '../components/Sidebar.js';
 import AppHeader from '../components/AppHeader.js';
 import ChatView from '../components/ChatView.js';
 import EmptyState from '../components/EmptyState.js';
-import InboxPanel from '../components/InboxPanel.js';
 import ErrorBoundary from '../components/ErrorBoundary.js';
 import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle } from '@/components/ui/sheet';
 import { CommandPaletteProvider } from '../components/CommandPalette.js';
@@ -24,7 +23,6 @@ export default function AppLayout() {
   const [sidebarPinned, setSidebarPinned] = useState(false);
   const [mobileSidebarOpen, setMobileSidebarOpen] = useState(false);
   const [pendingApprovals, setPendingApprovals] = useState<Map<string, { approvalId: string; action: string; payload: Record<string, unknown> }>>(new Map());
-  const [inboxOpen, setInboxOpen] = useState(false);
 
   const chatIdRef = useRef(chatId);
   useEffect(() => { chatIdRef.current = chatId; }, [chatId]);
@@ -109,8 +107,8 @@ export default function AppLayout() {
       {/* Content reserves the collapsed sidebar gutter; expanded sidebar overlays it. */}
       <div className="flex min-w-0 flex-1 flex-col sm:pl-12">
         <AppHeader
-          pendingApprovalCount={pendingApprovals.size}
-          onOpenInbox={() => setInboxOpen(true)}
+          pendingApprovals={pendingApprovals}
+          onApprovalResolved={handleApprovalResolved}
           onOpenSidebar={() => setMobileSidebarOpen(true)}
         />
 
@@ -121,12 +119,6 @@ export default function AppLayout() {
         </main>
       </div>
 
-      <InboxPanel
-        open={inboxOpen}
-        onOpenChange={setInboxOpen}
-        pendingApprovals={pendingApprovals}
-        onApprovalResolved={handleApprovalResolved}
-      />
     </div>
     </CommandPaletteProvider>
   );

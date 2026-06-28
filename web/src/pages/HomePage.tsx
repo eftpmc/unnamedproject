@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useRef, useEffect } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { ArrowRight, MoreHorizontal, Pencil, Plus, Trash2 } from 'lucide-react';
@@ -143,6 +143,14 @@ function ProjectRow({ project, divided, onDeleteProject }: { project: Project; d
   const queryClient = useQueryClient();
   const [renaming, setRenaming] = useState(false);
   const [renameValue, setRenameValue] = useState('');
+  const renameInputRef = useRef<HTMLInputElement>(null);
+
+  useEffect(() => {
+    if (renaming) {
+      const t = setTimeout(() => renameInputRef.current?.select(), 0);
+      return () => clearTimeout(t);
+    }
+  }, [renaming]);
 
   const renameMutation = useMutation({
     mutationFn: (name: string) => updateProject(project.id, { name }),
@@ -167,7 +175,7 @@ function ProjectRow({ project, divided, onDeleteProject }: { project: Project; d
     <ModuleRow divided={divided} className="grid-cols-[minmax(0,1fr)_1.75rem]">
         {renaming ? (
           <input
-            autoFocus
+            ref={renameInputRef}
             className="min-w-0 flex-1 rounded border border-ring bg-background px-1 text-sm font-medium text-foreground outline-none focus:ring-2 focus:ring-ring/50"
             value={renameValue}
             onChange={e => setRenameValue(e.target.value)}
@@ -245,6 +253,14 @@ function ChatRow({ chat, divided, onDeleteChat }: { chat: Session; divided: bool
   const queryClient = useQueryClient();
   const [renaming, setRenaming] = useState(false);
   const [renameValue, setRenameValue] = useState('');
+  const renameInputRef = useRef<HTMLInputElement>(null);
+
+  useEffect(() => {
+    if (renaming) {
+      const t = setTimeout(() => renameInputRef.current?.select(), 0);
+      return () => clearTimeout(t);
+    }
+  }, [renaming]);
 
   const renameMutation = useMutation({
     mutationFn: (title: string) => updateChatConfig(chat.id, { title }),
@@ -269,7 +285,7 @@ function ChatRow({ chat, divided, onDeleteChat }: { chat: Session; divided: bool
     <ModuleRow divided={divided} className="grid-cols-[minmax(0,1fr)_1.75rem] sm:grid-cols-[minmax(0,1fr)_4.5rem_1.75rem]">
         {renaming ? (
           <input
-            autoFocus
+            ref={renameInputRef}
             className="min-w-0 flex-1 rounded border border-ring bg-background px-1 text-sm font-medium text-foreground outline-none focus:ring-2 focus:ring-ring/50"
             value={renameValue}
             onChange={e => setRenameValue(e.target.value)}

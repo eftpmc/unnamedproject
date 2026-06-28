@@ -1,12 +1,13 @@
 import { useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { Trash2 } from 'lucide-react';
+import { MoreHorizontal, Trash2 } from 'lucide-react';
 import { getAllTriggers, updateGlobalTrigger, deleteGlobalTrigger } from '../lib/api.js';
 import { usePageTitle } from '../lib/usePageTitle.js';
 import { timeAgo } from '../lib/utils.js';
 import { ConfirmDialog } from '@/components/ui/confirm-dialog';
-import { CenteredEmptyState, ContentColumn, PageBody, PageHeader, PageShell, PageLoading } from '@/components/ui/app-layout';
+import { CenteredEmptyState, ContentColumn, PageBody, PageHeader, PageLoading, PageShell } from '@/components/ui/app-layout';
 import { DataTable, DataTableBody, DataTableHeader, DataTableRow } from '@/components/ui/data-table';
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
 import type { Trigger } from '../types.js';
 
 export default function TriggersPage() {
@@ -38,11 +39,12 @@ export default function TriggersPage() {
         contentClassName="max-w-7xl"
         titleClassName="text-2xl sm:text-3xl"
       />
-      <PageBody className="px-4 pt-5 sm:px-8 sm:pt-9">
-        <ContentColumn className="max-w-7xl">
-          {isLoading ? <PageLoading rows={3} /> : triggers.length === 0 ? (
-            <CenteredEmptyState title="No triggers yet" description="Triggers created by the agent will appear here." />
-          ) : (
+
+      {isLoading ? <PageLoading rows={3} /> : triggers.length === 0 ? (
+        <CenteredEmptyState title="No triggers yet" description="Triggers created by the agent will appear here." />
+      ) : (
+        <PageBody className="px-4 pt-5 sm:px-8 sm:pt-9">
+          <ContentColumn className="max-w-7xl">
             <DataTable>
               <DataTableHeader className="grid-cols-[minmax(0,1fr)_7rem_4rem_1.75rem] sm:grid-cols-[minmax(0,1fr)_12rem_4rem_5rem_1.75rem]">
                 <span>Trigger</span>
@@ -76,22 +78,31 @@ export default function TriggersPage() {
                       <span className="hidden justify-self-end whitespace-nowrap text-[11px] text-faint-fg sm:block">
                         {t.last_run_at ? timeAgo(t.last_run_at) : 'Never'}
                       </span>
-                      <button
-                        type="button"
-                        aria-label="Delete trigger"
-                        onClick={() => setPendingDelete(t)}
-                        className="grid size-7 place-items-center justify-self-end rounded-md text-muted-foreground transition-colors hover:bg-background hover:text-destructive"
-                      >
-                        <Trash2 size={13} />
-                      </button>
+                      <DropdownMenu>
+                        <DropdownMenuTrigger asChild>
+                          <button
+                            type="button"
+                            aria-label={`Options for ${t.kind} trigger`}
+                            className="grid size-7 place-items-center rounded-md text-muted-foreground transition-colors hover:bg-background hover:text-foreground"
+                          >
+                            <MoreHorizontal size={14} />
+                          </button>
+                        </DropdownMenuTrigger>
+                        <DropdownMenuContent align="end" className="w-32">
+                          <DropdownMenuItem variant="destructive" onSelect={() => setPendingDelete(t)}>
+                            <Trash2 size={14} />
+                            Delete
+                          </DropdownMenuItem>
+                        </DropdownMenuContent>
+                      </DropdownMenu>
                     </DataTableRow>
                   );
                 })}
               </DataTableBody>
             </DataTable>
-          )}
-        </ContentColumn>
-      </PageBody>
+          </ContentColumn>
+        </PageBody>
+      )}
 
       {pendingDelete && (
         <ConfirmDialog

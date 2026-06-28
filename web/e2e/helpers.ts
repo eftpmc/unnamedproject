@@ -40,3 +40,29 @@ export async function createDocument(request: APIRequestContext, spaceId: string
   const body = await res.json() as { id: string };
   return body.id;
 }
+
+export async function createProject(request: APIRequestContext, name = 'Playwright test project'): Promise<string> {
+  const res = await request.post(`${BASE}/projects`, {
+    headers: AUTH,
+    data: { name },
+  });
+  const body = await res.json() as { id: string };
+  return body.id;
+}
+
+export async function deleteProject(request: APIRequestContext, id: string): Promise<void> {
+  await request.delete(`${BASE}/projects/${id}`, { headers: AUTH });
+}
+
+export async function createTrigger(request: APIRequestContext, projectId: string, kind: 'schedule' | 'webhook' | 'manual' = 'manual'): Promise<string> {
+  const res = await request.post(`${BASE}/triggers`, {
+    headers: AUTH,
+    data: { kind, project_id: projectId },
+  });
+  const body = await res.json() as { id: string };
+  return body.id;
+}
+
+export async function deleteTrigger(request: APIRequestContext, id: string): Promise<void> {
+  await request.delete(`${BASE}/triggers/${id}`, { headers: AUTH });
+}

@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { useNavigate, useParams, useLocation } from 'react-router-dom';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { GitBranch, MessageSquare, Plus, Trash2 } from 'lucide-react';
+import { GitBranch, MessageSquare } from 'lucide-react';
 import {
   getProject, updateProject, deleteTopLevelProject,
   getChats, createChat, updateChatConfig,
@@ -60,7 +60,9 @@ export default function ProjectPage() {
       <PageShell>
         <PageHeader title="Files" contentClassName="max-w-5xl" className="border-0 pb-0" />
         <PageBody className="p-4 sm:p-5">
-          <FileBrowser spaceId={project.space_id} projectId={project.id} projectName={project.name} />
+          <div className="mx-auto max-w-5xl">
+            <FileBrowser spaceId={project.space_id} projectId={project.id} projectName={project.name} />
+          </div>
         </PageBody>
       </PageShell>
     );

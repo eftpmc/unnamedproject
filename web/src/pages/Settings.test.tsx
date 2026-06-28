@@ -19,6 +19,8 @@ vi.mock('../lib/api.js', () => ({
   updateSettings: vi.fn(),
   deleteScheduledTask: vi.fn(),
   runScheduledTask: vi.fn(),
+  getGoogleStatus: vi.fn().mockResolvedValue({}),
+  getAgentProviders: vi.fn().mockResolvedValue([]),
 }));
 
 vi.mock('../lib/auth.js', () => ({ clearToken: vi.fn() }));

@@ -289,6 +289,10 @@ export function getConnections(): Promise<Connection[]> {
   return request('/connections');
 }
 
+export function getAgentProviders(): Promise<import('../types.js').AgentProvider[]> {
+  return request('/agent-providers');
+}
+
 export function createConnection(body: { name: string; type: string; purpose?: string; config: Record<string, unknown> }): Promise<{ id: string }> {
   return request('/connections', { method: 'POST', body: JSON.stringify(body) });
 }

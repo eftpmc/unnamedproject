@@ -250,3 +250,10 @@ export interface ScheduledTask {
   pinned_space_id: string | null;
 }
 
+export interface AgentProvider {
+  id: string;
+  name: string;
+  type: 'claude_code' | 'codex';
+  created_at: number;
+}
+

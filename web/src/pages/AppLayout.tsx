@@ -1,41 +1,18 @@
-import { useEffect, useRef, useState, type CSSProperties } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { Outlet, useParams, useLocation, useNavigate } from 'react-router-dom';
-import { Menu } from 'lucide-react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
-import Sidebar from '../components/Sidebar.js';
+import AppSidebar from '../components/Sidebar.js';
+import AppHeader from '../components/AppHeader.js';
 import ChatView from '../components/ChatView.js';
 import EmptyState from '../components/EmptyState.js';
 import InboxPanel from '../components/InboxPanel.js';
 import ErrorBoundary from '../components/ErrorBoundary.js';
-import { getConnections } from '../lib/api.js';
+import { getAgentProviders } from '../lib/api.js';
 import { connect, disconnect, subscribe } from '../lib/ws.js';
-import { SidebarInset, SidebarProvider, useSidebar } from '@/components/ui/sidebar';
-import type { Connection, Session, WSApprovalRequested, WSExecutionUpdate, WSTurnComplete } from '../types.js';
+import { cn } from '../lib/utils.js';
+import type { AgentProvider, Session, WSApprovalRequested, WSExecutionUpdate, WSTurnComplete } from '../types.js';
 
-const PAGE_ROUTES = ['/chats', '/spaces', '/settings'];
-
-/** Mobile-only top bar: hamburger (left) · brand mark (centered) · spacer. */
-function MobileTopbar() {
-  const { toggleSidebar } = useSidebar();
-  return (
-    <header className="relative flex shrink-0 items-center justify-between border-b border-border-soft bg-background px-4 py-2.5 md:hidden">
-      <button
-        type="button"
-        onClick={toggleSidebar}
-        aria-label="Open navigation"
-        className="grid size-9 shrink-0 place-items-center rounded-md bg-muted text-fg-soft transition-colors hover:bg-accent hover:text-foreground"
-      >
-        <Menu size={18} strokeWidth={2} />
-      </button>
-      <div className="pointer-events-none absolute left-1/2 -translate-x-1/2">
-        <div className="grid size-7 shrink-0 place-items-center rounded-md bg-primary text-sm font-semibold text-primary-foreground shadow-sm">
-          u
-        </div>
-      </div>
-      <div className="size-9 shrink-0" aria-hidden />
-    </header>
-  );
-}
+const PAGE_ROUTES = ['/chats', '/projects', '/documents', '/media', '/triggers', '/settings', '/spaces'];
 
 export default function AppLayout() {
   const { chatId } = useParams<{ chatId?: string }>();
@@ -43,20 +20,18 @@ export default function AppLayout() {
   const navigate = useNavigate();
   const queryClient = useQueryClient();
 
-  // executionId → approvalId for pending approvals
+  const [sidebarExpanded, setSidebarExpanded] = useState(false);
   const [pendingApprovals, setPendingApprovals] = useState<Map<string, string>>(new Map());
   const [inboxOpen, setInboxOpen] = useState(false);
 
-  // Keep a ref to chatId so the WS callback always has the current value
   const chatIdRef = useRef(chatId);
   useEffect(() => { chatIdRef.current = chatId; }, [chatId]);
 
-  const { data: connections = [] } = useQuery<Connection[]>({
-    queryKey: ['connections'],
-    queryFn: getConnections,
-    staleTime: 60_000,
-  });
-  const hasLeadAgent = connections.some(c => c.purpose === 'claude_code' || c.purpose === 'codex');
+  // Close sidebar on route change (mobile UX)
+  useEffect(() => { setSidebarExpanded(false); }, [location.pathname]);
+
+  const { data: agentProviders = [] } = useQuery<AgentProvider[]>({ queryKey: ['agent-providers'], queryFn: getAgentProviders, staleTime: 60_000 });
+  const hasLeadAgent = agentProviders.length > 0;
 
   useEffect(() => {
     connect();
@@ -66,66 +41,43 @@ export default function AppLayout() {
         setPendingApprovals(prev => new Map(prev).set(e.executionId, e.approvalId));
         if ('Notification' in window) {
           const isCurrentChat = e.sessionId ? chatIdRef.current === e.sessionId : false;
-          const isVisible = document.visibilityState === 'visible';
-          if (!isCurrentChat || !isVisible) {
-            const actionLabel = e.action.replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase());
+          if (!isCurrentChat || document.visibilityState !== 'visible') {
+            const label = e.action.replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase());
             const fire = () => {
-              const n = new Notification('Approval needed', {
-                body: actionLabel,
-                icon: '/favicon.ico',
-                tag: `approval-${e.executionId}`,
-                requireInteraction: true,
-              });
+              const n = new Notification('Approval needed', { body: label, icon: '/favicon.ico', tag: `approval-${e.executionId}`, requireInteraction: true });
               if (e.sessionId) n.onclick = () => { window.focus(); navigate(`/c/${e.sessionId}`); };
             };
-            if (Notification.permission === 'granted') {
-              fire();
-            } else if (Notification.permission === 'default') {
-              Notification.requestPermission().then(p => { if (p === 'granted') fire(); });
-            }
+            if (Notification.permission === 'granted') fire();
+            else if (Notification.permission === 'default') Notification.requestPermission().then(p => { if (p === 'granted') fire(); });
           }
         }
       } else if (event.type === 'execution_update') {
         const e = event as unknown as WSExecutionUpdate;
         if (e.status === 'running' || e.status === 'done' || e.status === 'error') {
-          setPendingApprovals(prev => {
-            const next = new Map(prev);
-            next.delete(e.executionId);
-            return next;
-          });
+          setPendingApprovals(prev => { const next = new Map(prev); next.delete(e.executionId); return next; });
         }
       } else if (event.type === 'turn_complete') {
         const e = event as unknown as WSTurnComplete;
-        // Only notify for successful completions, not user-initiated stops
-        if (e.status === 'done' && ('Notification' in window)) {
+        if (e.status === 'done' && 'Notification' in window) {
           const isCurrentChat = chatIdRef.current === e.sessionId;
-          const isVisible = document.visibilityState === 'visible';
-          if (!isCurrentChat || !isVisible) {
+          if (!isCurrentChat || document.visibilityState !== 'visible') {
             const chats = queryClient.getQueryData<Session[]>(['chats']);
             const title = chats?.find(c => c.id === e.sessionId)?.title ?? 'Agent finished';
             const fire = () => new Notification('unnamed', { body: title, icon: '/favicon.ico', tag: e.sessionId });
-            if (Notification.permission === 'granted') {
-              fire();
-            } else if (Notification.permission === 'default') {
-              Notification.requestPermission().then(p => { if (p === 'granted') fire(); });
-            }
+            if (Notification.permission === 'granted') fire();
+            else if (Notification.permission === 'default') Notification.requestPermission().then(p => { if (p === 'granted') fire(); });
           }
         }
       }
     });
     return () => { unsub(); disconnect(); };
-  }, [queryClient]);
+  }, [queryClient, navigate]);
 
   function handleApprovalResolved(executionId: string) {
-    setPendingApprovals(prev => {
-      const next = new Map(prev);
-      next.delete(executionId);
-      return next;
-    });
+    setPendingApprovals(prev => { const next = new Map(prev); next.delete(executionId); return next; });
   }
 
   const isPageRoute = PAGE_ROUTES.some(r => location.pathname === r || location.pathname.startsWith(r + '/'));
-
   const mainContent = isPageRoute
     ? <Outlet />
     : chatId
@@ -133,27 +85,43 @@ export default function AppLayout() {
       : <EmptyState hasLeadAgent={hasLeadAgent} />;
 
   return (
-    <SidebarProvider
-      className="h-full min-h-0 bg-muted/45 text-foreground"
-      style={{ '--sidebar-width': '17rem' } as CSSProperties}
-    >
-      <Sidebar
+    <div className={cn('flex h-screen flex-col overflow-hidden bg-background text-foreground')}>
+      {/* Header — always h-12, full width */}
+      <AppHeader
+        onToggleSidebar={() => setSidebarExpanded(v => !v)}
         pendingApprovalCount={pendingApprovals.size}
         onOpenInbox={() => setInboxOpen(true)}
-        hasLeadAgent={hasLeadAgent}
       />
-      <SidebarInset className="relative min-h-0 min-w-0 overflow-hidden bg-background/58 backdrop-blur">
-        <MobileTopbar />
-        <ErrorBoundary key={location.pathname}>
-          {mainContent}
-        </ErrorBoundary>
-      </SidebarInset>
+
+      {/* Body row — sidebar + content */}
+      <div className="relative flex min-h-0 flex-1">
+        {/* Spacer: reserves 48px in flow so content never shifts */}
+        <div className="w-12 shrink-0" aria-hidden />
+        <AppSidebar expanded={sidebarExpanded} onToggle={() => setSidebarExpanded(v => !v)} />
+
+        {/* Overlay backdrop when sidebar is expanded */}
+        {sidebarExpanded && (
+          <div
+            className="absolute inset-0 z-[9] bg-black/20"
+            onClick={() => setSidebarExpanded(false)}
+            aria-hidden
+          />
+        )}
+
+        {/* Main content — always starts at 0, fills remaining space */}
+        <main className="min-h-0 flex-1 overflow-auto">
+          <ErrorBoundary key={location.pathname}>
+            {mainContent}
+          </ErrorBoundary>
+        </main>
+      </div>
+
       <InboxPanel
         open={inboxOpen}
         onOpenChange={setInboxOpen}
         pendingApprovals={pendingApprovals}
         onApprovalResolved={handleApprovalResolved}
       />
-    </SidebarProvider>
+    </div>
   );
 }

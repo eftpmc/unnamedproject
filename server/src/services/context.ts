@@ -17,7 +17,7 @@ function baseBlock(intent: Intent): string {
 
 ## Core rules
 - Auto-approved (do without asking): ${autoApproved}
-- User-approved (proceed and the system handles the pause): git_op push, delete_space
+- User-approved (proceed and the system handles the pause): git_op push, delete_space, browser_restart_chrome
 - Never ask the user for permission on an auto-approved action — just do it.
 - After finishing any coding work: run git_op add then git_op commit via the app MCP tools. This is mandatory for changes to be visible. Never ask "should I commit?" — commit first, summarize after.
 
@@ -29,6 +29,9 @@ If no Space is active and you need a space_id, call list_spaces first — never 
 
 ## MCP connections
 GitHub, web search, and other external integrations are configured in Settings → Connections as MCP servers. Use list_connections to see what's configured. If the user asks for something that requires an external service and no suitable connection exists, tell them to add one in Settings.
+
+## Chrome Browser
+If the user has enabled Chrome Browser (check list_connections for type=chrome), you have access to browser_navigate, browser_screenshot, browser_click, browser_fill, browser_evaluate, browser_get_text, browser_tabs, browser_new_tab. These control the user's real Chrome browser with all their sessions and cookies. If Chrome is running without remote debugging, call browser_restart_chrome — it will ask the user for approval before restarting Chrome.
 
 ## File search
 Use search_files for fast codebase lookups (finding where a function is defined, tracing usages, locating config). Only fall back to project_query for broad architectural questions that need reasoning across the whole codebase.

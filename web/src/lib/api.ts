@@ -123,6 +123,10 @@ export function getMedia(): Promise<MediaItem[]> {
   return request('/media');
 }
 
+export function deleteMedia(id: string): Promise<void> {
+  return request(`/media/${id}`, { method: 'DELETE' });
+}
+
 export function getPendingApprovals(): Promise<Array<{ approval_id: string; execution_id: string; action: string; payload: Record<string, unknown> }>> {
   return request('/executions/pending-approvals');
 }
@@ -278,6 +282,10 @@ export function deleteGlobalTrigger(id: string): Promise<void> {
   return request(`/triggers/${id}`, { method: 'DELETE' });
 }
 
+export function updateGlobalTrigger(id: string, body: { enabled: boolean }): Promise<Trigger> {
+  return request(`/triggers/${id}`, { method: 'PATCH', body: JSON.stringify(body) });
+}
+
 export function getSettings(): Promise<UserSettings> {
   return request('/settings');
 }
@@ -320,6 +328,21 @@ export function runScheduledTask(id: string): Promise<void> {
 
 export function getGoogleStatus(): Promise<Record<string, GoogleAccount[]>> {
   return request('/auth/google/status');
+}
+
+export function getChromeStatus(): Promise<{ enabled: boolean; chromeRunning: boolean; debugPortOpen: boolean }> {
+  return request('/connections/chrome/status');
+}
+
+export function enableChrome(): Promise<{ id: string }> {
+  return request('/connections', {
+    method: 'POST',
+    body: JSON.stringify({ name: 'Chrome Browser', type: 'chrome', purpose: 'chrome', config: {} }),
+  });
+}
+
+export function disableChrome(id: string): Promise<void> {
+  return request(`/connections/${id}`, { method: 'DELETE' });
 }
 
 export function getGoogleAuthUrl(service: string, label?: string): Promise<{ url: string }> {

@@ -21,8 +21,8 @@ interface EmptyChatStateProps {
 
 const DEFAULT_PROMPTS = [
   'Help me plan the next useful step.',
-  'Review this app and suggest the highest-impact improvements.',
-  'Start by asking me the fewest questions needed to get moving.',
+  'Review this and suggest improvements.',
+  'Start with the fewest questions needed.',
 ];
 
 export default function EmptyChatState({ value, onChange, onSend, disabled, pendingFiles, onPendingFilesConsumed, projectName, projects = [], onPinProject }: EmptyChatStateProps) {
@@ -32,9 +32,9 @@ export default function EmptyChatState({ value, onChange, onSend, disabled, pend
 
   const prompts = projectName
     ? [
-        `Give me a quick orientation to ${projectName}.`,
-        `Review the current state of ${projectName} and suggest next steps.`,
-        `Find the highest-impact UI/UX improvements for ${projectName}.`,
+        `Orient me on ${projectName}.`,
+        `What's the highest-impact thing to work on in ${projectName}?`,
+        `Review the current state of ${projectName}.`,
       ]
     : DEFAULT_PROMPTS;
 
@@ -70,54 +70,15 @@ export default function EmptyChatState({ value, onChange, onSend, disabled, pend
     e.target.value = '';
   }
 
-  const showProjectPins = !projectName && projects.length > 0 && onPinProject;
   const canSend = !disabled && (!!value.trim() || attachments.length > 0);
+  const showProjectPins = !projectName && projects.length > 0 && onPinProject;
 
   return (
-    <div className="flex flex-1 items-end justify-center pb-5 sm:items-center sm:pb-0">
-      <div className="w-full px-4 sm:px-6" style={{ maxWidth: '46rem' }}>
+    <div className="flex flex-1 items-center justify-center px-4 py-8 sm:px-6">
+      <div className="w-full" style={{ maxWidth: '42rem' }}>
 
-        {!projectName && projects.length === 0 && (
-          <p className="mb-5 text-center text-xs text-faint-fg">
-            The agent will create a project when you start.
-          </p>
-        )}
-
-        {showProjectPins && (
-          <div className="mb-5">
-            <p className="mb-2.5 text-[11px] font-medium text-faint-fg">Pin a project to get started</p>
-            <div className="flex flex-wrap gap-2">
-              {projects.slice(0, 6).map(project => (
-                <button
-                  key={project.id}
-                  type="button"
-                  disabled={disabled}
-                  onClick={() => onPinProject(project.id)}
-                  className="flex items-center gap-1.5 rounded-lg border border-border-soft bg-card px-3 py-1.5 text-xs font-medium text-muted-foreground transition-[border-color,box-shadow] hover:border-border hover:text-foreground hover:shadow-sm disabled:opacity-50"
-                >
-                  <Folder size={12} className="shrink-0" />
-                  {project.name}
-                </button>
-              ))}
-            </div>
-          </div>
-        )}
-
-        <div className="mb-5 grid grid-cols-1 gap-2 sm:grid-cols-3">
-          {prompts.map(prompt => (
-            <button
-              key={prompt}
-              type="button"
-              disabled={disabled}
-              onClick={() => submit(prompt)}
-              className="rounded-xl border border-border-soft bg-card px-3 py-2.5 text-left text-xs text-muted-foreground transition-[border-color,box-shadow] hover:border-border hover:text-foreground hover:shadow-sm disabled:opacity-50"
-            >
-              {prompt}
-            </button>
-          ))}
-        </div>
-
-        <div className="rounded-[18px] border border-input bg-card px-3 pb-2.5 pt-2.5 shadow-sm">
+        {/* Input — primary element */}
+        <div className="rounded-[18px] border border-input bg-card px-3 pb-2.5 pt-3 shadow-sm">
           {attachments.length > 0 && (
             <div className="mb-2 flex flex-wrap gap-1.5">
               {attachments.map((file, i) => (
@@ -140,12 +101,9 @@ export default function EmptyChatState({ value, onChange, onSend, disabled, pend
             value={value}
             onChange={e => onChange(e.target.value)}
             onKeyDown={(e: KeyboardEvent<HTMLTextAreaElement>) => {
-              if (e.key === 'Enter' && !e.shiftKey) {
-                e.preventDefault();
-                submit();
-              }
+              if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); submit(); }
             }}
-            placeholder="Message…"
+            placeholder={projectName ? `Ask anything about ${projectName}…` : 'Message…'}
             disabled={disabled}
             rows={1}
             autoFocus
@@ -176,14 +134,44 @@ export default function EmptyChatState({ value, onChange, onSend, disabled, pend
               <ArrowUp size={16} strokeWidth={2} />
             </button>
           </div>
-          <input
-            ref={fileInputRef}
-            type="file"
-            multiple
-            className="hidden"
-            onChange={handleFilesSelected}
-          />
+          <input ref={fileInputRef} type="file" multiple className="hidden" onChange={handleFilesSelected} />
         </div>
+
+        {/* Prompt chips — secondary */}
+        <div className="mt-3 flex flex-wrap gap-2">
+          {prompts.map(prompt => (
+            <button
+              key={prompt}
+              type="button"
+              disabled={disabled}
+              onClick={() => submit(prompt)}
+              className="rounded-full border border-border-soft bg-card px-3 py-1.5 text-left text-xs text-muted-foreground transition-colors hover:border-border hover:bg-muted hover:text-foreground disabled:opacity-50"
+            >
+              {prompt}
+            </button>
+          ))}
+        </div>
+
+        {/* Project pins */}
+        {showProjectPins && (
+          <div className="mt-5 border-t border-border-soft pt-4">
+            <p className="mb-2 text-[11px] font-medium text-faint-fg">Pin a project</p>
+            <div className="flex flex-wrap gap-2">
+              {projects.slice(0, 6).map(project => (
+                <button
+                  key={project.id}
+                  type="button"
+                  disabled={disabled}
+                  onClick={() => onPinProject(project.id)}
+                  className="flex items-center gap-1.5 rounded-lg border border-border-soft bg-card px-3 py-1.5 text-xs font-medium text-muted-foreground transition-colors hover:border-border hover:text-foreground disabled:opacity-50"
+                >
+                  <Folder size={12} className="shrink-0" />
+                  {project.name}
+                </button>
+              ))}
+            </div>
+          </div>
+        )}
       </div>
     </div>
   );

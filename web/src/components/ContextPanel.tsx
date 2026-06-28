@@ -172,14 +172,14 @@ function PanelContent({
           <div className="flex gap-2">
             <button
               type="button"
-              onClick={() => onDeny(pendingApproval.approvalId)}
+              onClick={() => onDeny(pendingApproval.executionId)}
               className="flex-1 rounded-lg px-2 py-1.5 text-xs font-medium text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
             >
               Deny
             </button>
             <button
               type="button"
-              onClick={() => onApprove(pendingApproval.approvalId)}
+              onClick={() => onApprove(pendingApproval.executionId)}
               className="flex flex-1 items-center justify-center gap-1 rounded-lg bg-primary px-2 py-1.5 text-xs font-medium text-primary-foreground transition-[filter] hover:brightness-105"
             >
               <Check size={11} strokeWidth={2.5} />

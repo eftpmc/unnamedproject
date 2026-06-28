@@ -146,8 +146,8 @@ export interface UserSettings {
 export interface Connection {
   id: string;
   name: string;
-  type: 'github' | 'mcp' | 'google';
-  purpose: 'github' | 'mcp' | 'tool' | 'google';
+  type: 'github' | 'mcp' | 'google' | 'chrome';
+  purpose: 'github' | 'mcp' | 'tool' | 'google' | 'chrome';
   service?: string;
   created_at: number;
 }

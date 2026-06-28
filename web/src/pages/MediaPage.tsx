@@ -1,15 +1,16 @@
 import { useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
-import { useQuery } from '@tanstack/react-query';
-import { Download, MoreHorizontal, Search } from 'lucide-react';
-import { getMedia } from '../lib/api.js';
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { Download, MoreHorizontal, Search, Trash2 } from 'lucide-react';
+import { getMedia, deleteMedia } from '../lib/api.js';
 import { getToken } from '../lib/auth.js';
 import { timeAgo } from '../lib/utils.js';
 import { usePageTitle } from '../lib/usePageTitle.js';
 import { Input } from '@/components/ui/input';
 import { CenteredEmptyState, ContentColumn, EmptyPanel, PageBody, PageHeader, PageLoading, PageShell } from '@/components/ui/app-layout';
 import { DataTable, DataTableBody, DataTableHeader, DataTableRow } from '@/components/ui/data-table';
-import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
+import { ConfirmDialog } from '@/components/ui/confirm-dialog';
 import { FilterStrip } from '@/components/ui/filter-strip';
 import type { MediaItem } from '../types.js';
 
@@ -49,13 +50,24 @@ async function downloadMedia(item: MediaItem) {
 
 export default function MediaPage() {
   usePageTitle('Media');
+  const queryClient = useQueryClient();
   const [search, setSearch] = useState('');
   const [filter, setFilter] = useState('all');
   const [downloadingId, setDownloadingId] = useState<string | null>(null);
+  const [pendingDelete, setPendingDelete] = useState<string | null>(null);
 
   const { data: media = [], isLoading } = useQuery<MediaItem[]>({
     queryKey: ['media'],
     queryFn: getMedia,
+  });
+
+  const deleteMutation = useMutation({
+    mutationFn: deleteMedia,
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['media'] });
+      setPendingDelete(null);
+    },
+    onError: () => setPendingDelete(null),
   });
 
   const visible = useMemo(() => {
@@ -179,13 +191,21 @@ export default function MediaPage() {
                             <MoreHorizontal size={14} />
                           </button>
                         </DropdownMenuTrigger>
-                        <DropdownMenuContent align="end" className="w-36">
+                        <DropdownMenuContent align="end" className="w-40">
                           <DropdownMenuItem
                             disabled={downloadingId === item.id}
                             onSelect={() => handleDownload(item)}
                           >
                             <Download size={14} />
                             Download
+                          </DropdownMenuItem>
+                          <DropdownMenuSeparator />
+                          <DropdownMenuItem
+                            variant="destructive"
+                            onSelect={() => setPendingDelete(item.id)}
+                          >
+                            <Trash2 size={14} />
+                            Delete
                           </DropdownMenuItem>
                         </DropdownMenuContent>
                       </DropdownMenu>
@@ -196,6 +216,16 @@ export default function MediaPage() {
             )}
           </ContentColumn>
         </PageBody>
+      )}
+
+      {pendingDelete && (
+        <ConfirmDialog
+          title="Delete file?"
+          description="This will permanently remove the file. This action cannot be undone."
+          confirmLabel="Delete"
+          onConfirm={() => deleteMutation.mutate(pendingDelete)}
+          onCancel={() => setPendingDelete(null)}
+        />
       )}
     </PageShell>
   );

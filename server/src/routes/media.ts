@@ -1,4 +1,5 @@
 import { Router } from 'express';
+import { unlink } from 'fs/promises';
 import { getDb } from '../db/index.js';
 import { requireAuth, type AuthedRequest } from '../middleware/auth.js';
 
@@ -41,6 +42,36 @@ router.get('/', (req, res) => {
     ...row,
     url: `/sessions/${row.sessionId}/messages/${row.messageId}/attachments/${row.id}`,
   })));
+});
+
+router.delete('/:id', async (req, res) => {
+  const { userId } = req as unknown as AuthedRequest;
+  const { id } = req.params;
+
+  const row = getDb()
+    .prepare(`
+      SELECT a.id, a.storage_path
+      FROM message_attachments a
+      JOIN messages m ON m.id = a.message_id
+      JOIN sessions s ON s.id = m.session_id
+      WHERE a.id = ? AND s.user_id = ?
+    `)
+    .get(id, userId) as { id: string; storage_path: string } | undefined;
+
+  if (!row) {
+    res.status(404).json({ error: 'Not found' });
+    return;
+  }
+
+  getDb().prepare('DELETE FROM message_attachments WHERE id = ?').run(id);
+
+  try {
+    await unlink(row.storage_path);
+  } catch {
+    // File already gone — not an error
+  }
+
+  res.status(204).end();
 });
 
 export default router;

@@ -1,13 +1,13 @@
 import { useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { ArrowRight, MoreHorizontal, Plus, Trash2 } from 'lucide-react';
+import { ArrowRight, MoreHorizontal, Pencil, Plus, Trash2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { ConfirmDialog } from '@/components/ui/confirm-dialog';
-import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
 import { PageBody, PageHeader, PageLoading, PageShell } from '@/components/ui/app-layout';
 import { ModuleCard, ModuleEmptyRow, ModuleIconButton, ModuleIconLink, ModuleRow, ModuleRowList } from '@/components/ui/module-card';
-import { deleteChat, deleteTopLevelProject, getChats, getProjects } from '../lib/api.js';
+import { deleteChat, deleteTopLevelProject, getChats, getProjects, updateChatConfig, updateProject } from '../lib/api.js';
 import { timeAgo } from '../lib/utils.js';
 import { usePageTitle } from '../lib/usePageTitle.js';
 import type { Project, Session } from '../types.js';
@@ -140,14 +140,51 @@ function ProjectsCard({ projects, onAddProject, onDeleteProject }: { projects: P
 }
 
 function ProjectRow({ project, divided, onDeleteProject }: { project: Project; divided: boolean; onDeleteProject: (project: Project) => void }) {
+  const queryClient = useQueryClient();
+  const [renaming, setRenaming] = useState(false);
+  const [renameValue, setRenameValue] = useState('');
+
+  const renameMutation = useMutation({
+    mutationFn: (name: string) => updateProject(project.id, { name }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['projects'] });
+      setRenaming(false);
+    },
+  });
+
+  function startRename() {
+    setRenameValue(project.name);
+    setRenaming(true);
+  }
+
+  function commitRename() {
+    const trimmed = renameValue.trim();
+    if (!trimmed || trimmed === project.name) { setRenaming(false); return; }
+    renameMutation.mutate(trimmed);
+  }
+
   return (
     <ModuleRow divided={divided} className="grid-cols-[minmax(0,1fr)_1.75rem]">
-        <Link
-          to={`/projects/${project.id}`}
-          className="min-w-0 flex-1 truncate text-sm font-medium text-foreground underline-offset-2 hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/30"
-        >
-          {project.name}
-        </Link>
+        {renaming ? (
+          <input
+            autoFocus
+            className="min-w-0 flex-1 rounded border border-ring bg-background px-1 text-sm font-medium text-foreground outline-none focus:ring-2 focus:ring-ring/50"
+            value={renameValue}
+            onChange={e => setRenameValue(e.target.value)}
+            onKeyDown={e => {
+              if (e.key === 'Enter') { e.preventDefault(); commitRename(); }
+              if (e.key === 'Escape') { e.preventDefault(); setRenaming(false); }
+            }}
+            onBlur={commitRename}
+          />
+        ) : (
+          <Link
+            to={`/projects/${project.id}`}
+            className="min-w-0 flex-1 truncate text-sm font-medium text-foreground underline-offset-2 hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/30"
+          >
+            {project.name}
+          </Link>
+        )}
         <DropdownMenu>
           <DropdownMenuTrigger asChild>
             <button
@@ -159,7 +196,12 @@ function ProjectRow({ project, divided, onDeleteProject }: { project: Project; d
               <MoreHorizontal size={13} />
             </button>
           </DropdownMenuTrigger>
-          <DropdownMenuContent align="end" className="w-32">
+          <DropdownMenuContent align="end" className="w-40">
+            <DropdownMenuItem onSelect={startRename}>
+              <Pencil size={14} />
+              Rename
+            </DropdownMenuItem>
+            <DropdownMenuSeparator />
             <DropdownMenuItem variant="destructive" onSelect={() => onDeleteProject(project)}>
               <Trash2 size={14} />
               Delete
@@ -200,14 +242,51 @@ function RecentChatsCard({ chats, totalCount, onNewChat, onDeleteChat }: { chats
 }
 
 function ChatRow({ chat, divided, onDeleteChat }: { chat: Session; divided: boolean; onDeleteChat: (chat: Session) => void }) {
+  const queryClient = useQueryClient();
+  const [renaming, setRenaming] = useState(false);
+  const [renameValue, setRenameValue] = useState('');
+
+  const renameMutation = useMutation({
+    mutationFn: (title: string) => updateChatConfig(chat.id, { title }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['chats'] });
+      setRenaming(false);
+    },
+  });
+
+  function startRename() {
+    setRenameValue(chat.title ?? '');
+    setRenaming(true);
+  }
+
+  function commitRename() {
+    const trimmed = renameValue.trim();
+    if (!trimmed || trimmed === chat.title) { setRenaming(false); return; }
+    renameMutation.mutate(trimmed);
+  }
+
   return (
     <ModuleRow divided={divided} className="grid-cols-[minmax(0,1fr)_1.75rem] sm:grid-cols-[minmax(0,1fr)_4.5rem_1.75rem]">
-        <Link
-          to={`/c/${chat.id}`}
-          className="min-w-0 flex-1 truncate text-sm font-medium text-foreground underline-offset-2 hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/30"
-        >
-          {chat.title ?? 'Untitled chat'}
-        </Link>
+        {renaming ? (
+          <input
+            autoFocus
+            className="min-w-0 flex-1 rounded border border-ring bg-background px-1 text-sm font-medium text-foreground outline-none focus:ring-2 focus:ring-ring/50"
+            value={renameValue}
+            onChange={e => setRenameValue(e.target.value)}
+            onKeyDown={e => {
+              if (e.key === 'Enter') { e.preventDefault(); commitRename(); }
+              if (e.key === 'Escape') { e.preventDefault(); setRenaming(false); }
+            }}
+            onBlur={commitRename}
+          />
+        ) : (
+          <Link
+            to={`/c/${chat.id}`}
+            className="min-w-0 flex-1 truncate text-sm font-medium text-foreground underline-offset-2 hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/30"
+          >
+            {chat.title ?? 'Untitled chat'}
+          </Link>
+        )}
         <span className="hidden justify-self-end whitespace-nowrap text-[11px] text-faint-fg sm:block">{timeAgo(chat.updated_at)}</span>
         <DropdownMenu>
           <DropdownMenuTrigger asChild>
@@ -220,7 +299,12 @@ function ChatRow({ chat, divided, onDeleteChat }: { chat: Session; divided: bool
               <MoreHorizontal size={13} />
             </button>
           </DropdownMenuTrigger>
-          <DropdownMenuContent align="end" className="w-32">
+          <DropdownMenuContent align="end" className="w-40">
+            <DropdownMenuItem onSelect={startRename}>
+              <Pencil size={14} />
+              Rename
+            </DropdownMenuItem>
+            <DropdownMenuSeparator />
             <DropdownMenuItem variant="destructive" onSelect={() => onDeleteChat(chat)}>
               <Trash2 size={14} />
               Delete

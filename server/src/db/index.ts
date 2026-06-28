@@ -1023,6 +1023,30 @@ export const migrations: Migration[] = [
     }
     db.pragma('foreign_keys = ON');
   }},
+  { version: 30, name: 'connections-add-chrome-type', noTransaction: true, up: (db) => {
+    db.pragma('foreign_keys = OFF');
+    const connSql = (db.prepare("SELECT sql FROM sqlite_master WHERE type='table' AND name='connections'").get() as { sql: string } | undefined)?.sql;
+    if (connSql && !connSql.includes("'chrome'")) {
+      const tmp = '_connections_v30_tmp';
+      db.exec(`ALTER TABLE connections RENAME TO "${tmp}"`);
+      db.exec(`CREATE TABLE connections (
+        id TEXT PRIMARY KEY,
+        user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+        name TEXT NOT NULL,
+        type TEXT NOT NULL CHECK(type IN ('github','mcp','google','chrome')),
+        purpose TEXT NOT NULL DEFAULT 'tool' CHECK(purpose IN ('github','mcp','tool','google','chrome')),
+        service TEXT,
+        encrypted_config TEXT NOT NULL DEFAULT '',
+        created_at INTEGER NOT NULL DEFAULT (unixepoch()),
+        UNIQUE(user_id, name)
+      )`);
+      db.exec(`INSERT INTO connections (id, user_id, name, type, purpose, service, encrypted_config, created_at)
+        SELECT id, user_id, name, type, purpose, service, encrypted_config, created_at
+        FROM "${tmp}"`);
+      db.exec(`DROP TABLE "${tmp}"`);
+    }
+    db.pragma('foreign_keys = ON');
+  }},
 ];
 
 function tableSql(database: Database.Database, name: string): string | undefined {

@@ -1,3 +1,4 @@
+import { execSync } from 'child_process';
 import { Router } from 'express';
 import { google } from 'googleapis';
 import { getDb } from '../db/index.js';
@@ -8,12 +9,13 @@ import { requireAuth, type AuthedRequest } from '../middleware/auth.js';
 const router = Router();
 router.use(requireAuth);
 
-const VALID_TYPES = ['github', 'mcp', 'google'] as const;
-const VALID_PURPOSES = ['github', 'mcp', 'tool', 'google'] as const;
+const VALID_TYPES = ['github', 'mcp', 'google', 'chrome'] as const;
+const VALID_PURPOSES = ['github', 'mcp', 'tool', 'google', 'chrome'] as const;
 
 const PURPOSE_ALLOWED_TYPES: Record<string, string[]> = {
   github: ['github'],
   mcp: ['mcp'],
+  chrome: ['chrome'],
 };
 
 router.get('/', (req, res) => {
@@ -98,6 +100,30 @@ router.get('/:id/test', async (req, res) => {
   } catch (err) {
     res.json({ ok: false, error: (err as Error).message, latencyMs: Date.now() - start });
   }
+});
+
+router.get('/chrome/status', async (req, res) => {
+  const { userId } = req as unknown as AuthedRequest;
+  const enabled = !!getDb()
+    .prepare("SELECT id FROM connections WHERE user_id = ? AND type = 'chrome' LIMIT 1")
+    .get(userId);
+
+  let chromeRunning = false;
+  let debugPortOpen = false;
+
+  try {
+    execSync('pgrep -f "Google Chrome" > /dev/null 2>&1', { stdio: 'ignore' });
+    chromeRunning = true;
+  } catch { /* not running */ }
+
+  if (chromeRunning) {
+    try {
+      const r = await fetch('http://localhost:9222/json/version', { signal: AbortSignal.timeout(1000) });
+      debugPortOpen = r.ok;
+    } catch { /* not open */ }
+  }
+
+  res.json({ enabled, chromeRunning, debugPortOpen });
 });
 
 router.delete('/:id', (req, res) => {

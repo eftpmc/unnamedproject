@@ -15,9 +15,9 @@ router.get('/pending-approvals', (req, res) => {
       SELECT a.id as approval_id, a.execution_id, a.action, a.payload
       FROM approvals a
       JOIN executions e ON e.id = a.execution_id
-      JOIN messages m ON m.id = e.message_id
-      JOIN sessions t ON t.id = m.session_id
-      WHERE t.user_id = ? AND a.status = 'pending'
+      LEFT JOIN messages m ON m.id = e.message_id
+      LEFT JOIN sessions t ON t.id = m.session_id
+      WHERE (t.user_id = ? OR e.message_id IS NULL) AND a.status = 'pending'
     `)
     .all(userId) as Array<{ approval_id: string; execution_id: string; action: string; payload: string }>;
   res.json(rows.map(r => ({ ...r, payload: JSON.parse(r.payload) })));
@@ -46,9 +46,9 @@ router.post('/:id/approve', (req, res) => {
     .prepare(`
       SELECT a.id FROM approvals a
       JOIN executions e ON e.id = a.execution_id
-      JOIN messages m ON m.id = e.message_id
-      JOIN sessions t ON t.id = m.session_id
-      WHERE e.id = ? AND t.user_id = ? AND a.status = 'pending'
+      LEFT JOIN messages m ON m.id = e.message_id
+      LEFT JOIN sessions t ON t.id = m.session_id
+      WHERE e.id = ? AND (t.user_id = ? OR e.message_id IS NULL) AND a.status = 'pending'
     `)
     .get(req.params.id, userId) as { id: string } | undefined;
   if (!approval) { res.status(404).json({ error: 'No pending approval found' }); return; }
@@ -68,9 +68,9 @@ router.post('/:id/reject', (req, res) => {
     .prepare(`
       SELECT a.id FROM approvals a
       JOIN executions e ON e.id = a.execution_id
-      JOIN messages m ON m.id = e.message_id
-      JOIN sessions t ON t.id = m.session_id
-      WHERE e.id = ? AND t.user_id = ? AND a.status = 'pending'
+      LEFT JOIN messages m ON m.id = e.message_id
+      LEFT JOIN sessions t ON t.id = m.session_id
+      WHERE e.id = ? AND (t.user_id = ? OR e.message_id IS NULL) AND a.status = 'pending'
     `)
     .get(req.params.id, userId) as { id: string } | undefined;
   if (!approval) { res.status(404).json({ error: 'No pending approval found' }); return; }

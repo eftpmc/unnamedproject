@@ -85,26 +85,29 @@ export async function requestApproval(
     `)
     .get(executionId) as { sessionId: string; spaceId: string | null } | undefined;
 
+  // Fall back to session_id from payload for tools that run without a message context
+  const sessionId = executionContext?.sessionId ?? (typeof payload.session_id === 'string' ? payload.session_id : null);
+
   getDb()
     .prepare("UPDATE executions SET status = 'awaiting_approval' WHERE id = ?")
     .run(executionId);
-  if (executionContext) {
+  if (sessionId) {
     const event = createSessionEvent({
-      sessionId: executionContext.sessionId,
+      sessionId,
       type: 'approval_requested',
       title: `Approval needed: ${action}`,
       body: 'The agent is waiting for your decision.',
-      spaceId: executionContext.spaceId,
+      spaceId: executionContext?.spaceId ?? null,
       executionId,
       metadata: { action, payload },
     });
     broadcast(userId, {
       type: 'session_event_created',
-      sessionId: executionContext.sessionId,
+      sessionId,
       event: { ...event, metadata: JSON.parse(event.metadata || '{}') },
     });
   }
-  broadcast(userId, { type: 'approval_requested', sessionId: executionContext?.sessionId ?? null, executionId, approvalId, action, payload });
+  broadcast(userId, { type: 'approval_requested', sessionId, executionId, approvalId, action, payload });
   const expoToken = getExpoPushToken(userId);
   if (expoToken) {
     fetch('https://exp.host/--/api/v2/push/send', {

@@ -1,14 +1,14 @@
 import { useState } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { ChevronDown, MoreHorizontal, Plus, Search, Trash2, X } from 'lucide-react';
-import { getChats, deleteChat, searchChats, getSpaces } from '../lib/api.js';
+import { ChevronDown, MoreHorizontal, Pencil, Plus, Search, Trash2, X } from 'lucide-react';
+import { getChats, deleteChat, searchChats, getSpaces, updateChatConfig } from '../lib/api.js';
 import { cn, timeAgo } from '../lib/utils.js';
 import { usePageTitle } from '../lib/usePageTitle.js';
 import { ConfirmDialog } from '@/components/ui/confirm-dialog';
 import { Button } from '@/components/ui/button';
 import { DataTable, DataTableBody, DataTableHeader, DataTableRow } from '@/components/ui/data-table';
-import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
 import { ContentColumn, EmptyPanel, PageBody, PageHeader, PageLoading, PageShell } from '@/components/ui/app-layout';
 import type { Space, Session } from '../types.js';
 import { useDebounce } from '../lib/useDebounce.js';
@@ -46,6 +46,7 @@ export default function ChatsPage() {
   const [searchParams, setSearchParams] = useSearchParams();
   const queryClient = useQueryClient();
   const [pendingDelete, setPendingDelete] = useState<string | null>(null);
+  const [renaming, setRenaming] = useState<{ id: string; value: string } | null>(null);
   const [searchQuery, setSearchQuery] = useState('');
   const projectFilter = searchParams.get('project');
   const debouncedQuery = useDebounce(searchQuery, 300);
@@ -96,6 +97,24 @@ export default function ChatsPage() {
     },
     onError: () => setPendingDelete(null),
   });
+
+  const renameMutation = useMutation({
+    mutationFn: ({ id, title }: { id: string; title: string }) => updateChatConfig(id, { title }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['chats'] });
+      queryClient.invalidateQueries({ queryKey: ['chats-search'] });
+      setRenaming(null);
+    },
+  });
+
+  function commitRename() {
+    if (!renaming) return;
+    const trimmed = renaming.value.trim();
+    if (!trimmed) { setRenaming(null); return; }
+    const original = chats.find(c => c.id === renaming.id)?.title;
+    if (trimmed === original) { setRenaming(null); return; }
+    renameMutation.mutate({ id: renaming.id, title: trimmed });
+  }
 
   const isSearchActive = debouncedQuery.length >= 2;
   const baseChats = isSearchActive ? (searchResults ?? []) : chats;
@@ -233,27 +252,43 @@ export default function ChatsPage() {
                                 key={chat.id}
                                 className="grid-cols-[minmax(0,1fr)_1.75rem] sm:grid-cols-[minmax(0,1fr)_6rem_1.75rem] lg:grid-cols-[minmax(0,1fr)_12rem_6rem_1.75rem]"
                               >
-                                <div
-                                  role="button"
-                                  tabIndex={0}
-                                  aria-label={`Open chat: ${chat.title ?? 'Untitled chat'}`}
-                                  className="min-w-0 cursor-pointer text-left"
-                                  onClick={() => navigate(`/c/${chat.id}`)}
-                                  onKeyDown={(e) => {
-                                    if (e.key === 'Enter' || e.key === ' ') {
-                                      e.preventDefault();
-                                      navigate(`/c/${chat.id}`);
-                                    }
-                                  }}
-                                >
-                                  <div className="truncate text-sm font-medium text-foreground underline-offset-2 hover:underline">
-                                    {chat.title ?? 'Untitled chat'}
-                                  </div>
-                                  <div className="mt-0.5 flex gap-2 text-[11px] text-faint-fg sm:hidden">
-                                    <span className="truncate">{project?.name ?? 'No project'}</span>
-                                    <span className="shrink-0">·</span>
-                                    <span className="shrink-0">{timeAgo(chat.updated_at)}</span>
-                                  </div>
+                                <div className="min-w-0">
+                                  {renaming?.id === chat.id ? (
+                                    <input
+                                      autoFocus
+                                      className="w-full rounded border border-ring bg-background px-1 text-sm font-medium text-foreground outline-none focus:ring-2 focus:ring-ring/50"
+                                      value={renaming.value}
+                                      onChange={e => setRenaming(r => r ? { ...r, value: e.target.value } : r)}
+                                      onKeyDown={e => {
+                                        if (e.key === 'Enter') { e.preventDefault(); commitRename(); }
+                                        if (e.key === 'Escape') { e.preventDefault(); setRenaming(null); }
+                                      }}
+                                      onBlur={commitRename}
+                                    />
+                                  ) : (
+                                    <div
+                                      role="button"
+                                      tabIndex={0}
+                                      aria-label={`Open chat: ${chat.title ?? 'Untitled chat'}`}
+                                      className="cursor-pointer text-left"
+                                      onClick={() => navigate(`/c/${chat.id}`)}
+                                      onKeyDown={(e) => {
+                                        if (e.key === 'Enter' || e.key === ' ') {
+                                          e.preventDefault();
+                                          navigate(`/c/${chat.id}`);
+                                        }
+                                      }}
+                                    >
+                                      <div className="truncate text-sm font-medium text-foreground underline-offset-2 hover:underline">
+                                        {chat.title ?? 'Untitled chat'}
+                                      </div>
+                                      <div className="mt-0.5 flex gap-2 text-[11px] text-faint-fg sm:hidden">
+                                        <span className="truncate">{project?.name ?? 'No project'}</span>
+                                        <span className="shrink-0">·</span>
+                                        <span className="shrink-0">{timeAgo(chat.updated_at)}</span>
+                                      </div>
+                                    </div>
+                                  )}
                                 </div>
                                 <div className="hidden min-w-0 lg:block">
                                   {project ? (
@@ -279,7 +314,14 @@ export default function ChatsPage() {
                                       <MoreHorizontal size={14} />
                                     </button>
                                   </DropdownMenuTrigger>
-                                  <DropdownMenuContent align="end" className="w-36">
+                                  <DropdownMenuContent align="end" className="w-40">
+                                    <DropdownMenuItem
+                                      onSelect={() => setRenaming({ id: chat.id, value: chat.title ?? '' })}
+                                    >
+                                      <Pencil size={14} />
+                                      Rename
+                                    </DropdownMenuItem>
+                                    <DropdownMenuSeparator />
                                     <DropdownMenuItem
                                       variant="destructive"
                                       onSelect={() => setPendingDelete(chat.id)}

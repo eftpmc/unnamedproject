@@ -17,7 +17,7 @@ import WorktreeDiff from './WorktreeDiff.js';
 import ContextBar from './ContextBar.js';
 import EmptyChatState from './EmptyChatState.js';
 import ScopePopover from './ScopePopover.js';
-import { getMessages, sendMessage, getChats, updateChatConfig, getSessionWorktree, mergeSessionBranch, getWorktreeDiff, getSpaces, truncateMessagesFrom, approveExecution, rejectExecution, getChatEvents, getChatStatus, stopChat } from '../lib/api.js';
+import { getMessages, sendMessage, getChats, updateChatConfig, getSessionWorktree, mergeSessionBranch, getWorktreeDiff, getSpaces, getProjects, truncateMessagesFrom, approveExecution, rejectExecution, getChatEvents, getChatStatus, stopChat } from '../lib/api.js';
 import { subscribe } from '../lib/ws.js';
 import { cn } from '../lib/utils.js';
 import { usePageTitle } from '../lib/usePageTitle.js';
@@ -25,7 +25,6 @@ import { getAgentStatusText } from '../lib/chatStatus.js';
 import type { EffortLevel, Message, MessageExecution, Session, SessionEvent, WSEvent, WSMessageCreated, WSMessageStarted, WSMessageDelta, WSExecutionUpdate, WSApprovalRequested, WSAutoApproved, WSSessionTitleUpdated, WSSessionEventCreated, WSAgentError, WSTurnComplete } from '../types.js';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Button } from '@/components/ui/button';
-import { PageHeader } from '@/components/ui/app-layout';
 
 type InlineExecution = MessageExecution;
 
@@ -63,11 +62,18 @@ export default function ChatView({ chatId }: ChatViewProps) {
 
   usePageTitle(chat?.title);
 
-  const { data: projects = [] } = useQuery({
+  const { data: allSpaces = [] } = useQuery({
     queryKey: ['spaces'],
     queryFn: getSpaces,
   });
-  const pinnedProject = projects.find(p => p.id === chat?.pinned_space_id) ?? null;
+  const { data: topLevelProjects = [] } = useQuery({
+    queryKey: ['projects'],
+    queryFn: () => getProjects(),
+    staleTime: 60_000,
+  });
+  const validSpaceIds = new Set(topLevelProjects.map(p => p.space_id));
+  const projects = allSpaces.filter(s => validSpaceIds.has(s.id));
+  const pinnedProject = allSpaces.find(p => p.id === chat?.pinned_space_id) ?? null;
 
   const configMutation = useMutation({
     mutationFn: (config: { effort?: EffortLevel; pinned_space_id?: string | null; title?: string }) => updateChatConfig(chatId, config),
@@ -201,11 +207,11 @@ export default function ChatView({ chatId }: ChatViewProps) {
     });
   }
 
-  async function handleApprove(approvalId: string) {
-    await approveExecution(approvalId);
+  async function handleApprove(executionId: string) {
+    await approveExecution(executionId);
   }
-  async function handleDeny(approvalId: string) {
-    await rejectExecution(approvalId);
+  async function handleDeny(executionId: string) {
+    await rejectExecution(executionId);
   }
 
   const mutation = useMutation({
@@ -294,7 +300,10 @@ export default function ChatView({ chatId }: ChatViewProps) {
     ]);
     if (scopedTypes.has(event.type)) {
       const eventSessionId = typeof event.sessionId === 'string' ? event.sessionId : null;
-      if (eventSessionId !== chatId) return;
+      // approval_requested with null sessionId may still belong to this chat (tool ran without
+      // a message context); don't drop it — the handler below will decide what to do with it.
+      if (eventSessionId !== null && eventSessionId !== chatId) return;
+      if (eventSessionId === null && event.type !== 'approval_requested') return;
     }
 
     if (event.type === 'agent_error') {
@@ -386,9 +395,9 @@ export default function ChatView({ chatId }: ChatViewProps) {
           [ev.messageId!]: [...(prev[ev.messageId!] ?? []), newExec],
         }));
       } else {
-        // Update to existing execution
+        // Update to existing execution (including orphans with no messageId)
         setExecutions(prev => {
-          const msgId = execToMsgRef.current[ev.executionId];
+          const msgId = execToMsgRef.current[ev.executionId] ?? (prev.__orphan__?.some(e => e.executionId === ev.executionId) ? '__orphan__' : null);
           if (!msgId) return prev;
           const list = prev[msgId] ?? [];
           const existing = list.find(e => e.executionId === ev.executionId);
@@ -414,7 +423,6 @@ export default function ChatView({ chatId }: ChatViewProps) {
     if (event.type === 'approval_requested') {
       const ev = event as WSApprovalRequested;
       setExecutions(prev => {
-        // Find or create the execution entry
         for (const [msgId, list] of Object.entries(prev)) {
           const existing = list.find(e => e.executionId === ev.executionId);
           if (existing) {
@@ -422,7 +430,21 @@ export default function ChatView({ chatId }: ChatViewProps) {
             return { ...prev, [msgId]: list.map(e => e.executionId === ev.executionId ? updated : e) };
           }
         }
-        return prev;
+        // Execution has no message (e.g. browser_restart_chrome) — park under __orphan__
+        // so pendingApproval is detected and the approval banner shows in this chat.
+        const orphanEntry: InlineExecution = {
+          executionId: ev.executionId,
+          tool: 'browser_restart_chrome',
+          status: 'awaiting_approval',
+          outputLog: '',
+          result: null,
+          createdAt: Math.floor(Date.now() / 1000),
+          needsApproval: true,
+          approvalId: ev.approvalId,
+          action: ev.action,
+          payload: ev.payload,
+        };
+        return { ...prev, __orphan__: [...(prev.__orphan__ ?? []).filter(e => e.executionId !== ev.executionId), orphanEntry] };
       });
     }
 
@@ -521,65 +543,71 @@ export default function ChatView({ chatId }: ChatViewProps) {
         </div>
       )}
       <div className="relative flex min-w-0 flex-1 flex-col">
-      <PageHeader
-        title={(
-          <div className="flex min-w-0 items-center gap-1">
-            <EditableTitle title={chat?.title ?? 'Untitled chat'} onSave={(t) => configMutation.mutate({ title: t })} />
-            <DropdownMenu>
-              <DropdownMenuTrigger asChild>
-                <button
-                  type="button"
-                  aria-label="Chat settings"
-                  className="flex shrink-0 items-center justify-center rounded-md p-1 text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
-                >
-                  <ChevronDown size={14} />
-                </button>
-              </DropdownMenuTrigger>
-              <DropdownMenuContent align="start" className="w-56">
-                <ScopePopover
-                  projects={projects}
-                  pinnedProject={pinnedProject}
-                  agentActive={agentActive}
-                  onScopeChange={(projectId) => configMutation.mutate({ pinned_space_id: projectId })}
-                />
-                {worktree && (
-                  <DropdownMenuItem onSelect={() => setDiffOpen(true)}>
-                    <GitBranch size={14} className="shrink-0" />
-                    <span className="flex-1 truncate font-mono text-xs">{worktree.branch}</span>
-                    {worktree.files_changed > 0 && (
-                      <span className="text-warning">{worktree.files_changed} changed</span>
-                    )}
-                  </DropdownMenuItem>
-                )}
-              </DropdownMenuContent>
-            </DropdownMenu>
-          </div>
-        )}
-        className="border-0 px-5 py-2.5"
-        description={lastInputTokens !== null ? <ContextBar inputTokens={lastInputTokens} /> : undefined}
-        actions={
-          <div className="flex items-center gap-2">
+      <header className="flex h-11 shrink-0 items-center gap-2 border-b border-border-soft px-4 sm:px-5">
+        {/* Title + settings dropdown */}
+        <div className="flex min-w-0 flex-1 items-center gap-0.5">
+          <EditableTitle title={chat?.title ?? 'Untitled chat'} onSave={(t) => configMutation.mutate({ title: t })} />
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <button
+                type="button"
+                aria-label="Chat settings"
+                className="flex shrink-0 items-center justify-center rounded-md p-1 text-muted-foreground/60 transition-colors hover:bg-muted hover:text-foreground"
+              >
+                <ChevronDown size={13} />
+              </button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="start" className="w-56">
+              <ScopePopover
+                projects={projects}
+                pinnedProject={pinnedProject}
+                agentActive={agentActive}
+                onScopeChange={(projectId) => configMutation.mutate({ pinned_space_id: projectId })}
+              />
+              {worktree && (
+                <DropdownMenuItem onSelect={() => setDiffOpen(true)}>
+                  <GitBranch size={14} className="shrink-0" />
+                  <span className="flex-1 truncate font-mono text-xs">{worktree.branch}</span>
+                  {worktree.files_changed > 0 && (
+                    <span className="text-warning">{worktree.files_changed} changed</span>
+                  )}
+                </DropdownMenuItem>
+              )}
+            </DropdownMenuContent>
+          </DropdownMenu>
+        </div>
+
+        {/* Right-side actions */}
+        <div className="flex shrink-0 items-center gap-2">
+          {pinnedProject && (
+            <span className="hidden items-center gap-1.5 rounded-full border border-border-soft bg-muted px-2.5 py-0.5 text-[11px] text-muted-foreground sm:flex">
+              <span className="size-1.5 rounded-full bg-primary/50" />
+              {pinnedProject.name}
+            </span>
+          )}
+          {lastInputTokens !== null && <ContextBar inputTokens={lastInputTokens} />}
+          {(pinnedProject || worktree || pendingApproval) && (
             <button
               type="button"
               onClick={toggleCtx}
               aria-pressed={ctxOpen}
               title={ctxOpen ? 'Hide context' : 'Show context'}
               className={cn(
-                'flex items-center gap-1.5 rounded-lg border px-2.5 py-1.5 text-xs font-medium transition-colors',
+                'flex h-7 items-center gap-1.5 rounded-md border px-2 text-xs font-medium transition-colors',
                 ctxOpen
                   ? 'border-transparent bg-accent-tint text-on-accent-soft'
-                  : 'border-border-soft bg-muted text-muted-foreground hover:border-muted-foreground',
+                  : 'border-border-soft bg-transparent text-muted-foreground hover:bg-muted hover:text-foreground',
               )}
             >
-              <PanelRight size={14} strokeWidth={1.75} />
-              Context
+              <PanelRight size={13} strokeWidth={1.75} />
+              <span className="hidden sm:inline">Context</span>
               {!ctxOpen && pendingApproval && (
                 <span className="size-1.5 rounded-full bg-warning" />
               )}
             </button>
-          </div>
-        }
-      />
+          )}
+        </div>
+      </header>
 
       {messages.length === 0 ? (
         <EmptyChatState
@@ -603,6 +631,7 @@ export default function ChatView({ chatId }: ChatViewProps) {
           canEdit={!agentActive}
           events={chatEvents}
           failedMessageId={failedMessageId}
+          agentThinking={agentStarting || sending}
           onRetryFailedMessage={() => {
             const lastUserContent = [...messages].reverse().find(m => m.role === 'user')?.content ?? null;
             if (lastUserContent) sendPrompt(lastUserContent);

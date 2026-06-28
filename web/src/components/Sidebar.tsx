@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { useCommandPalette } from './CommandPalette.js';
 import { Link, useLocation, useNavigate, useParams } from 'react-router-dom';
 import {
   ArrowLeft,
@@ -140,18 +141,19 @@ function GlobalNav({ expanded, pathname, onNavigate }: { expanded: boolean; path
 }
 
 function QuickSearch({ expanded, onNavigate }: { expanded: boolean; onNavigate?: () => void }) {
-  const navigate = useNavigate();
-  const goToSearch = () => {
-    navigate('/chats');
+  const { open } = useCommandPalette();
+
+  function handleClick() {
+    open();
     onNavigate?.();
-  };
+  }
 
   if (!expanded) {
     return (
       <button
         type="button"
-        title="Quick search"
-        onClick={goToSearch}
+        title="Quick search (⌘K)"
+        onClick={handleClick}
         className="flex h-9 items-center justify-center rounded-md mx-1 mb-1 text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
       >
         <Search size={16} strokeWidth={1.75} />
@@ -162,7 +164,7 @@ function QuickSearch({ expanded, onNavigate }: { expanded: boolean; onNavigate?:
   return (
     <button
       type="button"
-      onClick={goToSearch}
+      onClick={handleClick}
       className="mx-2 mb-2 flex items-center gap-2 rounded-md border border-border-soft bg-muted/40 px-2.5 py-1.5 text-left text-[13px] text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
     >
       <Search size={13} className="shrink-0" />
@@ -284,6 +286,7 @@ function ProjectNav({ projectId, expanded, pathname, onNavigate }: { projectId: 
       <div className="my-1 border-t border-border-soft" />
       <NavItem icon={<LayoutDashboard size={16} strokeWidth={1.75} />} label="Overview" href={base} active={pathname === base} expanded={expanded} onNavigate={onNavigate} />
       <NavItem icon={<Files size={16} strokeWidth={1.75} />} label="Files" href={`${base}/files`} active={pathname.startsWith(`${base}/files`)} expanded={expanded} onNavigate={onNavigate} />
+      <NavItem icon={<MessageSquare size={16} strokeWidth={1.75} />} label="Chats" href={`${base}/chats`} active={pathname.startsWith(`${base}/chats`)} expanded={expanded} onNavigate={onNavigate} />
     </>
   );
 }

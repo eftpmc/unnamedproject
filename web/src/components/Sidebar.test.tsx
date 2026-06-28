@@ -3,10 +3,15 @@ import { render, screen } from '@testing-library/react';
 import { MemoryRouter } from 'react-router-dom';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import AppSidebar from './Sidebar.js';
+import { CommandPaletteProvider } from './CommandPalette.js';
 
 const qc = new QueryClient({ defaultOptions: { queries: { retry: false } } });
 const wrap = (ui: React.ReactElement) => (
-  <QueryClientProvider client={qc}><MemoryRouter>{ui}</MemoryRouter></QueryClientProvider>
+  <QueryClientProvider client={qc}>
+    <MemoryRouter>
+      <CommandPaletteProvider>{ui}</CommandPaletteProvider>
+    </MemoryRouter>
+  </QueryClientProvider>
 );
 
 describe('AppSidebar', () => {

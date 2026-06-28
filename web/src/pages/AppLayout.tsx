@@ -8,6 +8,7 @@ import EmptyState from '../components/EmptyState.js';
 import InboxPanel from '../components/InboxPanel.js';
 import ErrorBoundary from '../components/ErrorBoundary.js';
 import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle } from '@/components/ui/sheet';
+import { CommandPaletteProvider } from '../components/CommandPalette.js';
 import { getAgentProviders } from '../lib/api.js';
 import { connect, disconnect, subscribe } from '../lib/ws.js';
 import type { AgentProvider, Session, WSApprovalRequested, WSExecutionUpdate, WSTurnComplete } from '../types.js';
@@ -22,7 +23,7 @@ export default function AppLayout() {
 
   const [sidebarPinned, setSidebarPinned] = useState(false);
   const [mobileSidebarOpen, setMobileSidebarOpen] = useState(false);
-  const [pendingApprovals, setPendingApprovals] = useState<Map<string, string>>(new Map());
+  const [pendingApprovals, setPendingApprovals] = useState<Map<string, { approvalId: string; action: string; payload: Record<string, unknown> }>>(new Map());
   const [inboxOpen, setInboxOpen] = useState(false);
 
   const chatIdRef = useRef(chatId);
@@ -37,7 +38,7 @@ export default function AppLayout() {
     const unsub = subscribe(event => {
       if (event.type === 'approval_requested') {
         const e = event as unknown as WSApprovalRequested;
-        setPendingApprovals(prev => new Map(prev).set(e.executionId, e.approvalId));
+        setPendingApprovals(prev => new Map(prev).set(e.executionId, { approvalId: e.approvalId, action: e.action, payload: e.payload ?? {} }));
         if ('Notification' in window) {
           const isCurrentChat = e.sessionId ? chatIdRef.current === e.sessionId : false;
           if (!isCurrentChat || document.visibilityState !== 'visible') {
@@ -84,6 +85,7 @@ export default function AppLayout() {
       : <EmptyState hasLeadAgent={hasLeadAgent} />;
 
   return (
+    <CommandPaletteProvider>
     <div className="relative flex h-screen overflow-hidden bg-background text-foreground">
       <div className="hidden sm:block">
         <AppSidebar pinned={sidebarPinned} onTogglePin={() => setSidebarPinned(v => !v)} />
@@ -126,5 +128,6 @@ export default function AppLayout() {
         onApprovalResolved={handleApprovalResolved}
       />
     </div>
+    </CommandPaletteProvider>
   );
 }

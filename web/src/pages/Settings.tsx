@@ -19,6 +19,9 @@ import {
   deleteAgentProvider,
   deleteScheduledTask,
   disconnectGoogle,
+  enableChrome,
+  disableChrome,
+  getChromeStatus,
   getConnections,
   getAgentProviders,
   getGoogleAuthUrl,
@@ -151,6 +154,79 @@ function SettingRow({ children, className }: { children: React.ReactNode; classN
   return (
     <div className={cn('flex flex-col gap-3 rounded-lg border border-border-soft bg-card p-4 sm:flex-row sm:items-center sm:justify-between sm:gap-4', className)}>
       {children}
+    </div>
+  );
+}
+
+function ChromeBrowserSection({ connections, onConnectionsChanged }: { connections: Connection[]; onConnectionsChanged: () => void }) {
+  const qc = useQueryClient();
+  const chromeConn = connections.find(c => c.type === 'chrome');
+
+  const { data: status, refetch: refetchStatus } = useQuery({
+    queryKey: ['chrome-status'],
+    queryFn: getChromeStatus,
+    refetchInterval: chromeConn ? 8000 : false,
+    staleTime: 5000,
+  });
+
+  const enableMutation = useMutation({
+    mutationFn: enableChrome,
+    onSuccess: () => { qc.invalidateQueries({ queryKey: ['connections'] }); onConnectionsChanged(); refetchStatus(); },
+  });
+
+  const disableMutation = useMutation({
+    mutationFn: () => disableChrome(chromeConn!.id),
+    onSuccess: () => { qc.invalidateQueries({ queryKey: ['connections'] }); onConnectionsChanged(); refetchStatus(); },
+  });
+
+  const statusLabel = !chromeConn
+    ? null
+    : status?.debugPortOpen
+      ? 'Connected via CDP'
+      : status?.chromeRunning
+        ? 'Chrome running — no debug port'
+        : 'Chrome not running';
+
+  const statusColor = !chromeConn
+    ? null
+    : status?.debugPortOpen
+      ? 'text-success'
+      : status?.chromeRunning
+        ? 'text-warning'
+        : 'text-muted-foreground';
+
+  return (
+    <div>
+      <SectionLabel>Chrome Browser</SectionLabel>
+      <SettingRow>
+        <div className="min-w-0">
+          <SettingRowInfo title="Chrome Browser" description={chromeConn ? (statusLabel ?? 'Checking…') : 'Control your real Chrome browser with all your sign-ins and cookies.'} />
+          {chromeConn && statusLabel && (
+            <div className={`mt-1 text-xs ${statusColor ?? ''}`}>{statusLabel}</div>
+          )}
+          {chromeConn && status?.chromeRunning && !status.debugPortOpen && (
+            <div className="mt-1 text-xs text-muted-foreground/70">
+              The agent will ask to restart Chrome when it needs browser access.
+            </div>
+          )}
+        </div>
+        <div className="flex shrink-0 items-center gap-2 self-start sm:self-center">
+          {chromeConn && <ConnectedBadge />}
+          {chromeConn ? (
+            <Button size="sm" variant="ghost" onClick={() => disableMutation.mutate()} disabled={disableMutation.isPending}>
+              Disable
+            </Button>
+          ) : (
+            <Button size="sm" onClick={() => enableMutation.mutate()} disabled={enableMutation.isPending}>
+              Enable
+            </Button>
+          )}
+        </div>
+      </SettingRow>
+      <HintText>
+        Tries to attach to Chrome on port 9222 first (CDP). If Chrome is not running, launches it with your real profile.
+        If Chrome is already running without a debug port, the agent will ask permission before restarting it.
+      </HintText>
     </div>
   );
 }
@@ -643,6 +719,9 @@ export default function Settings() {
           {/* ── MCP ────────────────────────────────────── */}
           {section === 'mcp' && (
             <div className="flex flex-col gap-6">
+
+              {/* Chrome Browser */}
+              <ChromeBrowserSection connections={connections} onConnectionsChanged={() => qc.invalidateQueries({ queryKey: ['connections'] })} />
 
               {/* Google services */}
               <div>

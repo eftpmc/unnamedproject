@@ -66,6 +66,22 @@ router.post('/', (req, res) => {
   }));
 });
 
+// Toggle enabled state
+router.patch('/:id', (req, res) => {
+  const { userId } = req as unknown as AuthedRequest;
+  const { enabled } = req.body as { enabled?: boolean };
+  if (typeof enabled !== 'boolean') { res.status(400).json({ error: 'enabled (boolean) required' }); return; }
+  const row = getDb().prepare(`
+    SELECT t.id FROM triggers t
+    JOIN spaces s ON t.space_id = s.id
+    WHERE t.id = ? AND s.user_id = ?
+  `).get(req.params.id, userId) as { id: string } | undefined;
+  if (!row) { res.status(404).json({ error: 'Trigger not found' }); return; }
+  getDb().prepare('UPDATE triggers SET enabled = ? WHERE id = ?').run(enabled ? 1 : 0, row.id);
+  const updated = getDb().prepare('SELECT * FROM triggers WHERE id = ?').get(row.id);
+  res.json(updated);
+});
+
 // Delete a trigger (auth: must be in user's space)
 router.delete('/:id', (req, res) => {
   const { userId } = req as unknown as AuthedRequest;

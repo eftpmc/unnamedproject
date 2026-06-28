@@ -1,14 +1,15 @@
-import { useState } from 'react';
+import { useRef, useState } from 'react';
 import { Link } from 'react-router-dom';
-import { useQuery } from '@tanstack/react-query';
-import { Clipboard, MoreHorizontal, Search } from 'lucide-react';
-import { getAllDocuments } from '../lib/api.js';
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { Clipboard, MoreHorizontal, Pencil, Search, Trash2 } from 'lucide-react';
+import { getAllDocuments, updateDocumentById, deleteDocumentById } from '../lib/api.js';
 import { usePageTitle } from '../lib/usePageTitle.js';
 import { timeAgo } from '../lib/utils.js';
 import { Input } from '@/components/ui/input';
 import { CenteredEmptyState, ContentColumn, EmptyPanel, PageBody, PageHeader, PageLoading, PageShell } from '@/components/ui/app-layout';
 import { DataTable, DataTableBody, DataTableHeader, DataTableRow } from '@/components/ui/data-table';
-import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
+import { ConfirmDialog } from '@/components/ui/confirm-dialog';
 import { FilterStrip } from '@/components/ui/filter-strip';
 import type { Document } from '../types.js';
 
@@ -20,12 +21,33 @@ function documentKind(doc: Document): string {
 
 export default function DocumentsPage() {
   usePageTitle('Documents');
+  const queryClient = useQueryClient();
   const [search, setSearch] = useState('');
   const [filter, setFilter] = useState('all');
+  const [pendingDelete, setPendingDelete] = useState<string | null>(null);
+  const [renaming, setRenaming] = useState<{ id: string; value: string } | null>(null);
+  const renameInputRef = useRef<HTMLInputElement>(null);
 
   const { data: documents = [], isLoading } = useQuery<Document[]>({
     queryKey: ['documents-global'],
     queryFn: () => getAllDocuments(),
+  });
+
+  const renameMutation = useMutation({
+    mutationFn: ({ id, title }: { id: string; title: string }) => updateDocumentById(id, { title }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['documents-global'] });
+      setRenaming(null);
+    },
+  });
+
+  const deleteMutation = useMutation({
+    mutationFn: (id: string) => deleteDocumentById(id),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['documents-global'] });
+      setPendingDelete(null);
+    },
+    onError: () => setPendingDelete(null),
   });
 
   const filters = [
@@ -46,6 +68,20 @@ export default function DocumentsPage() {
 
   function copyPath(path: string) {
     void navigator.clipboard?.writeText(path);
+  }
+
+  function startRename(doc: Document) {
+    setRenaming({ id: doc.id, value: doc.title });
+    setTimeout(() => renameInputRef.current?.select(), 0);
+  }
+
+  function commitRename() {
+    if (!renaming) return;
+    const trimmed = renaming.value.trim();
+    if (!trimmed) { setRenaming(null); return; }
+    const original = documents.find(d => d.id === renaming.id)?.title;
+    if (trimmed === original) { setRenaming(null); return; }
+    renameMutation.mutate({ id: renaming.id, title: trimmed });
   }
 
   return (
@@ -94,14 +130,30 @@ export default function DocumentsPage() {
                       className="grid-cols-[minmax(0,1fr)_1.75rem] sm:grid-cols-[minmax(0,1fr)_8rem_6rem_1.75rem]"
                     >
                       <div className="min-w-0">
-                        <Link to={`/documents/${doc.id}`} className="block truncate text-sm font-medium text-foreground underline-offset-2 hover:underline">
-                          {doc.title}
-                        </Link>
-                        <div className="mt-0.5 flex gap-2 text-[11px] text-faint-fg sm:hidden">
-                          <span className="truncate">{documentKind(doc)}</span>
-                          <span className="shrink-0">·</span>
-                          <span className="shrink-0">{timeAgo(doc.updated_at)}</span>
-                        </div>
+                        {renaming?.id === doc.id ? (
+                          <input
+                            ref={renameInputRef}
+                            className="w-full rounded border border-ring bg-background px-1 text-sm font-medium text-foreground outline-none focus:ring-2 focus:ring-ring/50"
+                            value={renaming.value}
+                            onChange={e => setRenaming(r => r ? { ...r, value: e.target.value } : r)}
+                            onKeyDown={e => {
+                              if (e.key === 'Enter') { e.preventDefault(); commitRename(); }
+                              if (e.key === 'Escape') { e.preventDefault(); setRenaming(null); }
+                            }}
+                            onBlur={commitRename}
+                          />
+                        ) : (
+                          <>
+                            <Link to={`/documents/${doc.id}`} className="block truncate text-sm font-medium text-foreground underline-offset-2 hover:underline">
+                              {doc.title}
+                            </Link>
+                            <div className="mt-0.5 flex gap-2 text-[11px] text-faint-fg sm:hidden">
+                              <span className="truncate">{documentKind(doc)}</span>
+                              <span className="shrink-0">·</span>
+                              <span className="shrink-0">{timeAgo(doc.updated_at)}</span>
+                            </div>
+                          </>
+                        )}
                       </div>
                       <span className="hidden truncate text-xs text-muted-foreground sm:block">{documentKind(doc)}</span>
                       <span className="hidden justify-self-end whitespace-nowrap text-[11px] text-faint-fg sm:block">{timeAgo(doc.updated_at)}</span>
@@ -115,10 +167,19 @@ export default function DocumentsPage() {
                             <MoreHorizontal size={14} />
                           </button>
                         </DropdownMenuTrigger>
-                        <DropdownMenuContent align="end" className="w-36">
+                        <DropdownMenuContent align="end" className="w-40">
+                          <DropdownMenuItem onSelect={() => startRename(doc)}>
+                            <Pencil size={14} />
+                            Rename
+                          </DropdownMenuItem>
                           <DropdownMenuItem onSelect={() => copyPath(doc.path)}>
                             <Clipboard size={14} />
                             Copy path
+                          </DropdownMenuItem>
+                          <DropdownMenuSeparator />
+                          <DropdownMenuItem variant="destructive" onSelect={() => setPendingDelete(doc.id)}>
+                            <Trash2 size={14} />
+                            Delete
                           </DropdownMenuItem>
                         </DropdownMenuContent>
                       </DropdownMenu>
@@ -129,6 +190,16 @@ export default function DocumentsPage() {
             )}
           </ContentColumn>
         </PageBody>
+      )}
+
+      {pendingDelete && (
+        <ConfirmDialog
+          title="Delete document?"
+          description="This will permanently delete the document. This action cannot be undone."
+          confirmLabel="Delete"
+          onConfirm={() => deleteMutation.mutate(pendingDelete)}
+          onCancel={() => setPendingDelete(null)}
+        />
       )}
     </PageShell>
   );

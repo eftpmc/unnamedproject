@@ -32,7 +32,7 @@ export default function ScopePopover({
         )}
         <span className="truncate">Pinned · {triggerLabel}</span>
       </DropdownMenuSubTrigger>
-      <DropdownMenuSubContent className="w-72 p-2">
+      <DropdownMenuSubContent className="w-56 p-2">
         <div className="px-2 pb-1.5 pt-1 text-[11px] font-semibold text-faint-fg">
           Pinned project
         </div>

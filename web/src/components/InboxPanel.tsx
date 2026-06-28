@@ -7,7 +7,7 @@ import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle } from '
 interface Props {
   open: boolean;
   onOpenChange: (open: boolean) => void;
-  pendingApprovals: Map<string, string>;
+  pendingApprovals: Map<string, { approvalId: string; action: string; payload: Record<string, unknown> }>;
   onApprovalResolved: (executionId: string) => void;
 }
 
@@ -137,7 +137,7 @@ export default function InboxPanel({ open, onOpenChange, pendingApprovals, onApp
     ...storedApprovals.map(a => ({ execution_id: a.execution_id, action: a.action, payload: a.payload })),
     ...[...pendingApprovals.entries()]
       .filter(([execId]) => !storedApprovals.some(a => a.execution_id === execId))
-      .map(([execId]) => ({ execution_id: execId, action: 'Awaiting approval', payload: undefined })),
+      .map(([execId, info]) => ({ execution_id: execId, action: info.action, payload: info.payload })),
   ];
 
   return (

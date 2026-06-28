@@ -115,6 +115,7 @@ interface MessageListProps {
   events?: SessionEvent[];
   failedMessageId?: string | null;
   onRetryFailedMessage?: () => void;
+  agentThinking?: boolean;
 }
 
 function extractTextContent(node: React.ReactNode): string {
@@ -286,7 +287,7 @@ const TEMPLATE_LABELS: Record<string, string> = {
   document: 'Item', note: 'Item', tpl_blank: 'Item', tpl_document: 'Item', tpl_spec: 'Spec', tpl_kanban: 'Kanban', tpl_report: 'Report', tpl_note: 'Item',
 };
 
-export default function MessageList({ messages, executions, streamingIds, sessionId, onEditMessage, canEdit, events = [], failedMessageId, onRetryFailedMessage }: MessageListProps) {
+export default function MessageList({ messages, executions, streamingIds, sessionId, onEditMessage, canEdit, events = [], failedMessageId, onRetryFailedMessage, agentThinking }: MessageListProps) {
   const lastUserMessageId = [...messages].reverse().find(m => m.role === 'user')?.id ?? null;
   const bottomRef = useRef<HTMLDivElement>(null);
   const scrollContainerRef = useRef<HTMLDivElement>(null);
@@ -410,12 +411,21 @@ export default function MessageList({ messages, executions, streamingIds, sessio
           )}
         </button>
       )}
-      <div role="log" aria-live="polite" aria-relevant="additions text" className="mx-auto flex w-full max-w-[46rem] flex-col gap-6 px-4 pb-48 pt-7 sm:px-6 sm:pb-52 sm:pt-8">
-        {renderItems.map(item => {
+      <div role="log" aria-live="polite" aria-relevant="additions text" className="mx-auto flex w-full max-w-[46rem] flex-col px-4 pb-48 pt-7 sm:px-6 sm:pb-52 sm:pt-8">
+        {renderItems.map((item, idx) => {
+          // Compute top margin: tight within a run of the same role, spacious at turn changes
+          const prevItem = renderItems[idx - 1];
+          const currRole = item.type === 'message' ? item.message.role : null;
+          const prevRole = prevItem?.type === 'message' ? prevItem.message.role : null;
+          const marginTop = idx === 0 ? 0
+            : item.type !== 'message' ? 12
+            : currRole === prevRole && prevRole !== null ? 8
+            : 32;
+
           if (item.type === 'execution-group') {
             const firstId = item.executions[0].executionId;
             return (
-              <div key={`exec-group-${firstId}`} className="flex max-w-[94%] flex-col sm:max-w-[86%]">
+              <div key={`exec-group-${firstId}`} style={{ marginTop }} className="flex max-w-[94%] flex-col sm:max-w-[86%]">
                 <ExecutionGroup executions={item.executions} />
               </div>
             );
@@ -424,7 +434,7 @@ export default function MessageList({ messages, executions, streamingIds, sessio
           if (item.type === 'event') {
             if (item.event.type === 'mcp_required') {
               return (
-                <div key={`event-${item.event.id}`} className="flex items-start gap-3 rounded-lg border border-border-soft bg-muted/40 p-3.5">
+                <div key={`event-${item.event.id}`} style={{ marginTop }} className="flex items-start gap-3 rounded-lg border border-border-soft bg-muted/40 p-3.5">
                   <span className="mt-0.5 grid size-6 shrink-0 place-items-center rounded-md bg-muted text-muted-foreground">
                     <Plug size={13} />
                   </span>
@@ -464,7 +474,7 @@ export default function MessageList({ messages, executions, streamingIds, sessio
             }
             if (item.event.type === 'scope_changed') {
               return (
-                <div key={`event-${item.event.id}`} className="flex items-center gap-3 py-1">
+                <div key={`event-${item.event.id}`} style={{ marginTop }} className="flex items-center gap-3 py-1">
                   <div className="h-px flex-1 bg-border-soft" />
                   <span className="flex shrink-0 items-center gap-1.5 rounded-full border border-border-soft bg-muted px-2.5 py-1 text-[11px] text-muted-foreground">
                     <Target size={10} strokeWidth={1.85} />
@@ -476,7 +486,7 @@ export default function MessageList({ messages, executions, streamingIds, sessio
             }
             const Icon = eventIcon(item.event.type);
             return (
-              <div key={`event-${item.event.id}`} className="flex items-center gap-2 text-xs text-muted-foreground">
+              <div key={`event-${item.event.id}`} style={{ marginTop }} className="flex items-center gap-2 text-xs text-muted-foreground">
                 <span className="grid size-6 shrink-0 place-items-center rounded-full bg-muted text-muted-foreground">
                   <Icon size={12} />
                 </span>
@@ -490,7 +500,7 @@ export default function MessageList({ messages, executions, streamingIds, sessio
 
           if (item.type === 'execution') {
             return (
-              <div key={`exec-${item.execution.executionId}`} data-execution-id={item.execution.executionId} className="flex max-w-[94%] flex-col sm:max-w-[86%]">
+              <div key={`exec-${item.execution.executionId}`} data-execution-id={item.execution.executionId} style={{ marginTop }} className="flex max-w-[94%] flex-col sm:max-w-[86%]">
                 {renderExecutionCard(item.execution)}
               </div>
             );
@@ -508,7 +518,7 @@ export default function MessageList({ messages, executions, streamingIds, sessio
             month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit',
           });
           return (
-          <div key={msg.id}>
+          <div key={msg.id} style={{ marginTop }}>
             {msg.role === 'user' ? (
               <div className="group flex flex-col items-end">
                 <div className="flex items-end gap-2 justify-end">
@@ -529,7 +539,7 @@ export default function MessageList({ messages, executions, streamingIds, sessio
                   )}
                   <div
                     title={timestamp}
-                    className="max-w-[88%] rounded-[18px] rounded-tr-md bg-muted px-4 py-2.5 text-[15px] leading-relaxed text-foreground sm:max-w-[80%]"
+                    className="max-w-[88%] rounded-[18px] rounded-tr-md border border-primary/[0.11] bg-primary/[0.08] px-4 py-2.5 text-[15px] leading-relaxed text-foreground sm:max-w-[80%]"
                   >
                     {msg.content && (
                       <div className="[&_p:last-child]:mb-0">
@@ -584,6 +594,13 @@ export default function MessageList({ messages, executions, streamingIds, sessio
           </div>
           );
         })}
+        {agentThinking && (
+          <div style={{ marginTop: 32 }} className="flex max-w-[86%] items-center gap-1.5 pb-1">
+            <span className="size-1.5 animate-bounce rounded-full bg-foreground/25 [animation-delay:-0.3s]" />
+            <span className="size-1.5 animate-bounce rounded-full bg-foreground/25 [animation-delay:-0.15s]" />
+            <span className="size-1.5 animate-bounce rounded-full bg-foreground/25" />
+          </div>
+        )}
         <div ref={bottomRef} />
       </div>
     </div>

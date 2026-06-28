@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { MoreHorizontal, Plus, Search, Trash2, X } from 'lucide-react';
+import { ChevronDown, MoreHorizontal, Plus, Search, Trash2, X } from 'lucide-react';
 import { getChats, deleteChat, searchChats, getSpaces } from '../lib/api.js';
 import { cn, timeAgo } from '../lib/utils.js';
 import { usePageTitle } from '../lib/usePageTitle.js';
@@ -10,7 +10,6 @@ import { Button } from '@/components/ui/button';
 import { DataTable, DataTableBody, DataTableHeader, DataTableRow } from '@/components/ui/data-table';
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
 import { ContentColumn, EmptyPanel, PageBody, PageHeader, PageLoading, PageShell } from '@/components/ui/app-layout';
-import { FilterStrip } from '@/components/ui/filter-strip';
 import type { Space, Session } from '../types.js';
 import { useDebounce } from '../lib/useDebounce.js';
 
@@ -80,10 +79,6 @@ export default function ChatsPage() {
     staleTime: 60_000,
   });
   const projectById = Object.fromEntries(projects.map(p => [p.id, p]));
-  const projectFilterItems = [
-    { value: 'all', label: 'All' },
-    ...projects.map(project => ({ value: project.id, label: project.name })),
-  ];
 
   const { data: searchResults, isFetching: isSearching } = useQuery<Session[]>({
     queryKey: ['chats-search', debouncedQuery],
@@ -107,6 +102,9 @@ export default function ChatsPage() {
   const displayedChats = projectFilter
     ? baseChats.filter(c => c.pinned_space_id === projectFilter)
     : baseChats;
+
+  // Only show projects that actually have chats pinned to them
+  const projectsWithChats = projects.filter(p => chats.some(c => c.pinned_space_id === p.id));
 
   function updateProjectFilter(projectId: string | null) {
     const next = new URLSearchParams(searchParams);
@@ -152,11 +150,45 @@ export default function ChatsPage() {
                   </button>
                 )}
               </div>
-              <FilterStrip
-                value={projectFilter ?? 'all'}
-                items={projectFilterItems}
-                onValueChange={value => updateProjectFilter(value === 'all' ? null : value)}
-              />
+              <div className="flex shrink-0 items-center gap-1">
+                <button
+                  type="button"
+                  onClick={() => updateProjectFilter(null)}
+                  className={cn(
+                    'h-8 rounded-lg px-2.5 text-sm transition-colors',
+                    !projectFilter ? 'bg-muted text-foreground' : 'text-muted-foreground hover:bg-muted/60 hover:text-foreground',
+                  )}
+                >
+                  All
+                </button>
+                {projectsWithChats.length > 0 && (
+                  <DropdownMenu>
+                    <DropdownMenuTrigger asChild>
+                      <button
+                        type="button"
+                        className={cn(
+                          'flex h-8 items-center gap-1 rounded-lg px-2.5 text-sm transition-colors',
+                          projectFilter ? 'bg-muted text-foreground' : 'text-muted-foreground hover:bg-muted/60 hover:text-foreground',
+                        )}
+                      >
+                        {projectFilter ? (projectById[projectFilter]?.name ?? 'Project') : 'Project'}
+                        <ChevronDown size={12} />
+                      </button>
+                    </DropdownMenuTrigger>
+                    <DropdownMenuContent align="end" className="w-48">
+                      {projectsWithChats.map(project => (
+                        <DropdownMenuItem
+                          key={project.id}
+                          onSelect={() => updateProjectFilter(project.id === projectFilter ? null : project.id)}
+                          className={cn(projectFilter === project.id && 'font-medium')}
+                        >
+                          {project.name}
+                        </DropdownMenuItem>
+                      ))}
+                    </DropdownMenuContent>
+                  </DropdownMenu>
+                )}
+              </div>
             </div>
 
             {isSearchActive && (

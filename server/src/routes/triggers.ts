@@ -3,6 +3,7 @@ import { getDb } from '../db/index.js';
 import { requireAuthHeaderOrQuery, type AuthedRequest } from '../middleware/auth.js';
 import { listTriggers, createTrigger, deleteTrigger, type TriggerRecord } from '../services/triggers.js';
 import { nextCronRun } from '../lib/cron.js';
+import { fireTrigger } from '../services/triggerRunner.js';
 
 const router = Router();
 router.use(requireAuthHeaderOrQuery);
@@ -64,6 +65,19 @@ router.post('/', (req, res) => {
     playbook_id: playbook_id ?? null,
     next_run_at,
   }));
+});
+
+// Fire a trigger immediately (responds before the agent turn completes)
+router.post('/:id/fire', (req, res) => {
+  const { userId } = req as unknown as AuthedRequest;
+  const row = getDb().prepare(`
+    SELECT t.id FROM triggers t
+    JOIN spaces s ON t.space_id = s.id
+    WHERE t.id = ? AND s.user_id = ?
+  `).get(req.params.id, userId) as { id: string } | undefined;
+  if (!row) { res.status(404).json({ error: 'Trigger not found' }); return; }
+  res.json({ status: 'firing' });
+  fireTrigger(row.id).catch(err => console.error('[trigger/fire]', err));
 });
 
 // Toggle enabled state

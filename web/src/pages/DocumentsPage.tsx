@@ -1,17 +1,19 @@
 import { useRef, useState } from 'react';
-import { Link } from 'react-router-dom';
+import { Link, useNavigate } from 'react-router-dom';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { Clipboard, MoreHorizontal, Pencil, Search, Trash2 } from 'lucide-react';
-import { getAllDocuments, updateDocumentById, deleteDocumentById } from '../lib/api.js';
+import { Clipboard, MoreHorizontal, Pencil, Plus, Search, Trash2 } from 'lucide-react';
+import { getAllDocuments, updateDocumentById, deleteDocumentById, createGlobalDocument, getProjects } from '../lib/api.js';
 import { usePageTitle } from '../lib/usePageTitle.js';
 import { timeAgo } from '../lib/utils.js';
+import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { CenteredEmptyState, ContentColumn, EmptyPanel, PageBody, PageHeader, PageLoading, PageShell } from '@/components/ui/app-layout';
 import { DataTable, DataTableBody, DataTableHeader, DataTableRow } from '@/components/ui/data-table';
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
+import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { ConfirmDialog } from '@/components/ui/confirm-dialog';
 import { FilterStrip } from '@/components/ui/filter-strip';
-import type { Document } from '../types.js';
+import type { Document, Project } from '../types.js';
 
 function documentKind(doc: Document): string {
   if (doc.type) return doc.type;
@@ -21,17 +23,52 @@ function documentKind(doc: Document): string {
 
 export default function DocumentsPage() {
   usePageTitle('Documents');
+  const navigate = useNavigate();
   const queryClient = useQueryClient();
   const [search, setSearch] = useState('');
   const [filter, setFilter] = useState('all');
   const [pendingDelete, setPendingDelete] = useState<string | null>(null);
   const [renaming, setRenaming] = useState<{ id: string; value: string } | null>(null);
   const renameInputRef = useRef<HTMLInputElement>(null);
+  const [createOpen, setCreateOpen] = useState(false);
+  const [newTitle, setNewTitle] = useState('');
+  const [newProjectId, setNewProjectId] = useState('');
 
   const { data: documents = [], isLoading } = useQuery<Document[]>({
     queryKey: ['documents-global'],
     queryFn: () => getAllDocuments(),
   });
+
+  const { data: projects = [] } = useQuery<Project[]>({
+    queryKey: ['projects'],
+    queryFn: getProjects,
+    staleTime: 60_000,
+  });
+
+  const createMutation = useMutation({
+    mutationFn: ({ title, spaceId }: { title: string; spaceId: string }) =>
+      createGlobalDocument({ title, space_id: spaceId }),
+    onSuccess: (doc) => {
+      queryClient.invalidateQueries({ queryKey: ['documents-global'] });
+      setCreateOpen(false);
+      setNewTitle('');
+      setNewProjectId('');
+      navigate(`/documents/${doc.id}`);
+    },
+  });
+
+  function openCreateDialog() {
+    setNewTitle('');
+    setNewProjectId(projects[0]?.id ?? '');
+    setCreateOpen(true);
+  }
+
+  function submitCreate() {
+    const title = newTitle.trim();
+    const project = projects.find(p => p.id === newProjectId);
+    if (!title || !project) return;
+    createMutation.mutate({ title, spaceId: project.space_id! });
+  }
 
   const renameMutation = useMutation({
     mutationFn: ({ id, title }: { id: string; title: string }) => updateDocumentById(id, { title }),
@@ -91,6 +128,17 @@ export default function DocumentsPage() {
         className="px-4 pt-6 sm:px-8 sm:pt-10"
         contentClassName="max-w-7xl"
         titleClassName="text-2xl sm:text-3xl"
+        actions={
+          <Button
+            size="lg"
+            className="h-9 gap-2 rounded-lg px-3 text-sm shadow-sm"
+            onClick={openCreateDialog}
+            disabled={projects.length === 0}
+            title={projects.length === 0 ? 'Create a project first' : 'New document'}
+          >
+            <Plus size={16} />New document
+          </Button>
+        }
       />
 
       {isLoading ? <PageLoading rows={4} /> : documents.length === 0 ? (
@@ -201,6 +249,51 @@ export default function DocumentsPage() {
           onCancel={() => setPendingDelete(null)}
         />
       )}
+
+      <Dialog open={createOpen} onOpenChange={setCreateOpen}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>New document</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-3 py-1">
+            <label className="block">
+              <span className="mb-1 block text-xs font-medium text-muted-foreground">Title</span>
+              <Input
+                autoFocus
+                value={newTitle}
+                onChange={e => setNewTitle(e.target.value)}
+                placeholder="Untitled document"
+                onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); submitCreate(); } }}
+              />
+            </label>
+            {projects.length > 1 && (
+              <label className="block">
+                <span className="mb-1 block text-xs font-medium text-muted-foreground">Project</span>
+                <select
+                  value={newProjectId}
+                  onChange={e => setNewProjectId(e.target.value)}
+                  className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm text-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
+                >
+                  {projects.map(p => (
+                    <option key={p.id} value={p.id}>{p.name}</option>
+                  ))}
+                </select>
+              </label>
+            )}
+          </div>
+          <DialogFooter>
+            <Button variant="ghost" onClick={() => setCreateOpen(false)} disabled={createMutation.isPending}>
+              Cancel
+            </Button>
+            <Button
+              onClick={submitCreate}
+              disabled={!newTitle.trim() || !newProjectId || createMutation.isPending}
+            >
+              {createMutation.isPending ? 'Creating…' : 'Create'}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </PageShell>
   );
 }

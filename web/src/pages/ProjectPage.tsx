@@ -1,8 +1,8 @@
 import type React from 'react';
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { Link, useNavigate, useParams, useLocation } from 'react-router-dom';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { ArrowRight, FileText, GitBranch, MessageSquare, MoreHorizontal, Plus, Trash2 } from 'lucide-react';
+import { ArrowRight, FileText, GitBranch, MessageSquare, MoreHorizontal, Pencil, Plus, Trash2 } from 'lucide-react';
 import {
   getProject, updateProject, deleteTopLevelProject,
   getConnections, updateSpace, getSpaces, getChats, deleteChat, createChat, updateChatConfig,
@@ -14,7 +14,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { ConfirmDialog } from '@/components/ui/confirm-dialog';
 import { PageBody, PageHeader, PageLoading, PageShell } from '@/components/ui/app-layout';
-import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
 import { DataTable, DataTableBody, DataTableHeader, DataTableRow } from '@/components/ui/data-table';
 import FileBrowser from '../components/FileBrowser.js';
 import type { Connection, Document, Project, Session, Space } from '../types.js';
@@ -78,6 +78,8 @@ function ProjectChatsView({ project }: { project: Project }) {
   const navigate = useNavigate();
   const queryClient = useQueryClient();
   const [pendingDelete, setPendingDelete] = useState<string | null>(null);
+  const [renaming, setRenaming] = useState<{ id: string; value: string } | null>(null);
+  const renameInputRef = useRef<HTMLInputElement>(null);
 
   const { data: allChats = [], isLoading } = useQuery<Session[]>({
     queryKey: ['chats'],
@@ -94,6 +96,27 @@ function ProjectChatsView({ project }: { project: Project }) {
     },
     onError: () => setPendingDelete(null),
   });
+
+  const renameMutation = useMutation({
+    mutationFn: ({ id, title }: { id: string; title: string }) => updateChatConfig(id, { title }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['chats'] });
+      setRenaming(null);
+    },
+  });
+
+  function startRename(chat: Session) {
+    setRenaming({ id: chat.id, value: chat.title ?? '' });
+    setTimeout(() => renameInputRef.current?.select(), 0);
+  }
+
+  function commitRename() {
+    if (!renaming) return;
+    const trimmed = renaming.value.trim();
+    const original = chats.find(c => c.id === renaming.id)?.title ?? '';
+    if (!trimmed || trimmed === original) { setRenaming(null); return; }
+    renameMutation.mutate({ id: renaming.id, title: trimmed });
+  }
 
   const newChatMutation = useMutation({
     mutationFn: async () => {
@@ -142,17 +165,31 @@ function ProjectChatsView({ project }: { project: Project }) {
               <DataTableBody>
                 {chats.map(chat => (
                   <DataTableRow key={chat.id} className="grid-cols-[minmax(0,1fr)_6rem_1.75rem]">
-                    <div
-                      role="button"
-                      tabIndex={0}
-                      aria-label={`Open chat: ${chat.title ?? 'Untitled chat'}`}
-                      className="min-w-0 cursor-pointer"
-                      onClick={() => navigate(`/c/${chat.id}`)}
-                      onKeyDown={e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); navigate(`/c/${chat.id}`); } }}
-                    >
-                      <div className="truncate text-sm font-medium text-foreground underline-offset-2 hover:underline">
-                        {chat.title ?? 'Untitled chat'}
-                      </div>
+                    <div className="min-w-0">
+                      {renaming?.id === chat.id ? (
+                        <input
+                          ref={renameInputRef}
+                          className="w-full rounded border border-ring bg-background px-1 text-sm font-medium text-foreground outline-none focus:ring-2 focus:ring-ring/50"
+                          value={renaming.value}
+                          onChange={e => setRenaming(r => r ? { ...r, value: e.target.value } : r)}
+                          onKeyDown={e => {
+                            if (e.key === 'Enter') { e.preventDefault(); commitRename(); }
+                            if (e.key === 'Escape') { e.preventDefault(); setRenaming(null); }
+                          }}
+                          onBlur={commitRename}
+                        />
+                      ) : (
+                        <div
+                          role="button"
+                          tabIndex={0}
+                          aria-label={`Open chat: ${chat.title ?? 'Untitled chat'}`}
+                          className="cursor-pointer truncate text-sm font-medium text-foreground underline-offset-2 hover:underline"
+                          onClick={() => navigate(`/c/${chat.id}`)}
+                          onKeyDown={e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); navigate(`/c/${chat.id}`); } }}
+                        >
+                          {chat.title ?? 'Untitled chat'}
+                        </div>
+                      )}
                     </div>
                     <span className="justify-self-end whitespace-nowrap text-[11px] text-faint-fg">{timeAgo(chat.updated_at)}</span>
                     <DropdownMenu>
@@ -166,6 +203,10 @@ function ProjectChatsView({ project }: { project: Project }) {
                         </button>
                       </DropdownMenuTrigger>
                       <DropdownMenuContent align="end" className="w-36">
+                        <DropdownMenuItem onSelect={() => startRename(chat)}>
+                          <Pencil size={14} />Rename
+                        </DropdownMenuItem>
+                        <DropdownMenuSeparator />
                         <DropdownMenuItem variant="destructive" onSelect={() => setPendingDelete(chat.id)}>
                           <Trash2 size={14} />Delete
                         </DropdownMenuItem>

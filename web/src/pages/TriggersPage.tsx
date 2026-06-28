@@ -1,13 +1,13 @@
 import { useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { MoreHorizontal, Trash2 } from 'lucide-react';
-import { getAllTriggers, updateGlobalTrigger, deleteGlobalTrigger } from '../lib/api.js';
+import { MoreHorizontal, Play, Trash2 } from 'lucide-react';
+import { getAllTriggers, updateGlobalTrigger, deleteGlobalTrigger, runTriggerNow } from '../lib/api.js';
 import { usePageTitle } from '../lib/usePageTitle.js';
 import { timeAgo } from '../lib/utils.js';
 import { ConfirmDialog } from '@/components/ui/confirm-dialog';
 import { CenteredEmptyState, ContentColumn, PageBody, PageHeader, PageLoading, PageShell } from '@/components/ui/app-layout';
 import { DataTable, DataTableBody, DataTableHeader, DataTableRow } from '@/components/ui/data-table';
-import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
 import type { Trigger } from '../types.js';
 
 export default function TriggersPage() {
@@ -29,6 +29,13 @@ export default function TriggersPage() {
     mutationFn: (id: string) => deleteGlobalTrigger(id),
     onSuccess: () => { qc.invalidateQueries({ queryKey: ['triggers-global'] }); setPendingDelete(null); },
     onError: () => setPendingDelete(null),
+  });
+
+  const [runningId, setRunningId] = useState<string | null>(null);
+  const runMutation = useMutation({
+    mutationFn: (id: string) => runTriggerNow(id),
+    onMutate: (id) => setRunningId(id),
+    onSettled: () => setRunningId(null),
   });
 
   return (
@@ -88,7 +95,15 @@ export default function TriggersPage() {
                             <MoreHorizontal size={14} />
                           </button>
                         </DropdownMenuTrigger>
-                        <DropdownMenuContent align="end" className="w-32">
+                        <DropdownMenuContent align="end" className="w-36">
+                          <DropdownMenuItem
+                            onSelect={() => runMutation.mutate(t.id)}
+                            disabled={runningId === t.id}
+                          >
+                            <Play size={14} />
+                            {runningId === t.id ? 'Running…' : 'Run now'}
+                          </DropdownMenuItem>
+                          <DropdownMenuSeparator />
                           <DropdownMenuItem variant="destructive" onSelect={() => setPendingDelete(t)}>
                             <Trash2 size={14} />
                             Delete

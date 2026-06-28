@@ -181,6 +181,10 @@ export function deleteDocument(spaceId: string, docId: string): Promise<void> {
   return request(`/spaces/${spaceId}/documents/${docId}`, { method: 'DELETE' });
 }
 
+export function createGlobalDocument(body: { title: string; space_id: string }): Promise<Document> {
+  return request('/documents', { method: 'POST', body: JSON.stringify(body) });
+}
+
 export function getAllDocuments(params?: { type?: string }): Promise<Document[]> {
   const q = params?.type ? `?type=${encodeURIComponent(params.type)}` : '';
   return request(`/documents${q}`);
@@ -284,6 +288,10 @@ export function deleteGlobalTrigger(id: string): Promise<void> {
 
 export function updateGlobalTrigger(id: string, body: { enabled: boolean }): Promise<Trigger> {
   return request(`/triggers/${id}`, { method: 'PATCH', body: JSON.stringify(body) });
+}
+
+export function runTriggerNow(id: string): Promise<{ status: string }> {
+  return request(`/triggers/${id}/fire`, { method: 'POST' });
 }
 
 export function getSettings(): Promise<UserSettings> {

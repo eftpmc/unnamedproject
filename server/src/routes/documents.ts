@@ -6,6 +6,43 @@ import { writeDocument, readDocument, patchFrontmatter, deleteDocument } from '.
 const router = Router();
 router.use(requireAuthHeaderOrQuery);
 
+// Create a new document
+router.post('/', async (req, res) => {
+  const { userId } = req as unknown as AuthedRequest;
+  const { title, body = '', frontmatter, space_id } = req.body as {
+    title?: string;
+    body?: string;
+    frontmatter?: Record<string, unknown>;
+    space_id?: string;
+  };
+
+  // Validate required fields
+  if (!title || !space_id) {
+    res.status(400).json({ error: 'title and space_id are required' });
+    return;
+  }
+
+  // Verify space belongs to user
+  const space = getDb().prepare('SELECT id FROM spaces WHERE id = ? AND user_id = ?').get(space_id, userId);
+  if (!space) {
+    res.status(404).json({ error: 'Space not found' });
+    return;
+  }
+
+  // Generate path from title
+  const path = `${title.toLowerCase().replace(/\s+/g, '-').replace(/[^\w-]/g, '')}.md`;
+
+  const doc = await writeDocument({
+    space_id,
+    path,
+    title,
+    frontmatter,
+    body,
+  });
+
+  res.status(201).json(doc);
+});
+
 // List all documents for this user across all their spaces
 router.get('/', (req, res) => {
   const { userId } = req as unknown as AuthedRequest;

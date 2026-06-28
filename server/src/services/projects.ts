@@ -57,3 +57,22 @@ export function getProject(id: string): ProjectRecord | undefined {
 export function deleteProject(id: string): boolean {
   return getDb().prepare('DELETE FROM projects WHERE id = ?').run(id).changes > 0;
 }
+
+export function listProjectsForUser(userId: string): ProjectRecord[] {
+  return getDb().prepare(`
+    SELECT p.*
+    FROM projects p
+    JOIN spaces s ON p.space_id = s.id
+    WHERE s.user_id = ?
+    ORDER BY p.created_at DESC
+  `).all(userId) as ProjectRecord[];
+}
+
+export function getProjectForUser(projectId: string, userId: string): ProjectRecord | undefined {
+  return getDb().prepare(`
+    SELECT p.*
+    FROM projects p
+    JOIN spaces s ON p.space_id = s.id
+    WHERE p.id = ? AND s.user_id = ?
+  `).get(projectId, userId) as ProjectRecord | undefined;
+}

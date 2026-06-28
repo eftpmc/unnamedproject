@@ -45,13 +45,15 @@ export default function UserMenu() {
         <DropdownMenuTrigger asChild>
           <button
             aria-label="Account menu"
-            className="flex items-center gap-2 rounded-md px-2 py-1.5 transition-colors hover:bg-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+            className="flex size-8 items-center justify-center rounded-md transition-colors hover:bg-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring sm:h-auto sm:w-auto sm:gap-2 sm:px-2 sm:py-1.5"
           >
             <div className="grid size-7 shrink-0 place-items-center rounded-full bg-accent-tint text-[11px] font-semibold text-on-accent-soft">
               {initial}
             </div>
-            <span className="max-w-28 truncate text-[13px] font-medium text-foreground">{label}</span>
-            <ChevronDown size={13} className="shrink-0 text-faint-fg" />
+            <span className="hidden max-w-28 truncate text-[13px] font-medium text-foreground sm:inline">
+              {label}
+            </span>
+            <ChevronDown size={13} className="hidden shrink-0 text-faint-fg sm:block" />
           </button>
         </DropdownMenuTrigger>
 

@@ -22,10 +22,10 @@ function baseBlock(intent: Intent): string {
 - After finishing any coding work: run git_op add then git_op commit via the app MCP tools. This is mandatory for changes to be visible. Never ask "should I commit?" — commit first, summarize after.
 
 ## State awareness
-Before starting work in the active Space, check what already exists there:
+Before starting work in the active project, check what already exists there:
 - Call list_documents with the active space_id — see what's already present before generating a new report or research output.
-Only check other Spaces when the user's request explicitly involves them.
-If no Space is active and you need a space_id, call list_spaces first — never guess one (e.g. "default"). If list_spaces comes back empty, call create_space to create one, then immediately call pin_space with the new space's id so it becomes the active context for this session. If spaces exist but none is pinned, pick the most relevant one and call pin_space.
+Only check other projects when the user's request explicitly involves them.
+If no project is active and you need a space_id, call list_spaces to see available projects — never guess one. If list_spaces comes back empty, call create_space to create a project, then immediately call pin_space with its id so it becomes the active context for this session. If projects exist but none is pinned, pick the most relevant one and call pin_space.
 
 ## MCP connections
 GitHub, web search, and other external integrations are configured in Settings → Connections as MCP servers. Use list_connections to see what's configured. If the user asks for something that requires an external service and no suitable connection exists, tell them to add one in Settings.
@@ -114,11 +114,11 @@ Suggested order: research → setup → implementation → verification → git 
 function projectContextBlock(space: DbSpace, _userId: string): string {
   const projects = listProjects(space.id);
   const docs = listDocuments(space.id);
-  const header = `## Active space: **${space.name}** (id: ${space.id})${space.description ? ' — ' + space.description : ''}`;
+  const header = `## Active project: **${space.name}** (space_id: ${space.id})${space.description ? ' — ' + space.description : ''}`;
 
   const projectLine = projects.length > 0
-    ? `\nProjects (git repos) in this space: ${projects.map(p => `${p.name} (project_id: ${p.id}, path: ${p.repo_path})`).join('; ')}. Use code tools with the selected project_id.`
-    : `\nNo projects (git repos) in this space yet. Create one with create_project, or work in documents.`;
+    ? `\nGit repos in this project: ${projects.map(p => `${p.name} (project_id: ${p.id}, path: ${p.repo_path})`).join('; ')}. Pass project_id to code tools.`
+    : `\nNo git repos in this project yet. Create one with create_project, or work in documents.`;
 
   const docTypes = [...new Set(docs.map(d => d.type).filter(Boolean))];
   const docLine = docs.length > 0
@@ -151,11 +151,16 @@ function recentChatsBlock(userId: string, sessionId: string): string {
 }
 
 function projectsListBlock(userId: string): string {
-  const spaces = getDb()
-    .prepare('SELECT id, name, description FROM spaces WHERE user_id = ?')
-    .all(userId) as Array<{ id: string; name: string; description: string | null }>;
-  if (spaces.length === 0) return 'No spaces yet.';
-  return `Available Spaces:\n${spaces.map(p => `- ${p.name} (id: ${p.id})${p.description ? ': ' + p.description : ''}`).join('\n')}`;
+  const rows = getDb()
+    .prepare(`
+      SELECT p.id, p.name, s.id AS space_id, s.description
+      FROM projects p JOIN spaces s ON p.space_id = s.id
+      WHERE s.user_id = ?
+      ORDER BY p.created_at DESC
+    `)
+    .all(userId) as Array<{ id: string; name: string; space_id: string; description: string | null }>;
+  if (rows.length === 0) return 'No projects yet. Create one with create_project.';
+  return `Available projects:\n${rows.map(p => `- ${p.name} (space_id: ${p.space_id}${p.description ? ', ' + p.description : ''})`).join('\n')}`;
 }
 
 function sessionSummaryBlock(sessionId: string): string {

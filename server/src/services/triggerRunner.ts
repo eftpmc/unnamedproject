@@ -16,9 +16,9 @@ export async function fireTrigger(triggerId: string): Promise<void> {
 
   const playbook = trigger.playbook_id ? await readDocument(trigger.playbook_id) : undefined;
   const prompt = playbook
-    ? `Run this playbook for space ${trigger.space_id}:\n\n${playbook.body}`
-    : `Scheduled run for space ${trigger.space_id}.`;
-  const title = `${playbook?.title ?? 'Scheduled run'} — ${new Date().toISOString().slice(0, 10)}`;
+    ? `Run this playbook:\n\n${playbook.body}`
+    : `Trigger fired. No playbook is set — check the workspace and summarise what has changed since the last run.`;
+  const title = `${playbook?.title ?? 'Trigger run'} — ${new Date().toISOString().slice(0, 10)}`;
 
   const db = getDb();
   const sessionId = newId();

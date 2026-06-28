@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { Link, useParams } from 'react-router-dom';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import ReactMarkdown from 'react-markdown';
@@ -17,7 +17,9 @@ export default function DocumentPage() {
   const { documentId } = useParams<{ documentId: string }>();
   const qc = useQueryClient();
   const [editing, setEditing] = useState(false);
-  const [draft, setDraft] = useState('');
+  const [draftBody, setDraftBody] = useState('');
+  const [draftTitle, setDraftTitle] = useState('');
+  const bodyRef = useRef<HTMLTextAreaElement>(null);
 
   const { data: document, isLoading, isError } = useQuery<DocumentWithBody>({
     queryKey: ['document', documentId],
@@ -26,9 +28,11 @@ export default function DocumentPage() {
   });
 
   const saveMutation = useMutation({
-    mutationFn: (body: string) => updateDocumentById(documentId!, { body }),
+    mutationFn: ({ title, body }: { title: string; body: string }) =>
+      updateDocumentById(documentId!, { title: title.trim() || document?.title, body }),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['document', documentId] });
+      qc.invalidateQueries({ queryKey: ['documents-global'] });
       setEditing(false);
     },
   });
@@ -36,9 +40,27 @@ export default function DocumentPage() {
   usePageTitle(document?.title ?? 'Document');
 
   function startEdit() {
-    setDraft(document?.body ?? '');
+    setDraftTitle(document?.title ?? '');
+    setDraftBody(document?.body ?? '');
     setEditing(true);
   }
+
+  function cancel() {
+    setEditing(false);
+  }
+
+  function save() {
+    saveMutation.mutate({ title: draftTitle, body: draftBody });
+  }
+
+  // Auto-grow textarea
+  useEffect(() => {
+    if (editing && bodyRef.current) {
+      const el = bodyRef.current;
+      el.style.height = 'auto';
+      el.style.height = `${el.scrollHeight}px`;
+    }
+  }, [editing, draftBody]);
 
   if (isLoading) return <PageShell><PageLoading rows={4} /></PageShell>;
 
@@ -81,10 +103,10 @@ export default function DocumentPage() {
         actions={
           editing ? (
             <div className="flex items-center gap-2">
-              <Button size="sm" variant="ghost" onClick={() => setEditing(false)} disabled={saveMutation.isPending}>
+              <Button size="sm" variant="ghost" onClick={cancel} disabled={saveMutation.isPending}>
                 <X size={14} className="mr-1" />Cancel
               </Button>
-              <Button size="sm" onClick={() => saveMutation.mutate(draft)} disabled={saveMutation.isPending}>
+              <Button size="sm" onClick={save} disabled={saveMutation.isPending}>
                 <Check size={14} className="mr-1" />{saveMutation.isPending ? 'Saving…' : 'Save'}
               </Button>
             </div>
@@ -101,17 +123,31 @@ export default function DocumentPage() {
             <div className="truncate font-mono text-xs text-muted-foreground">{document.path}</div>
           </div>
           {editing ? (
-            <textarea
-              value={draft}
-              onChange={e => setDraft(e.target.value)}
-              onKeyDown={e => {
-                if ((e.metaKey || e.ctrlKey) && e.key === 's') { e.preventDefault(); saveMutation.mutate(draft); }
-                if (e.key === 'Escape') setEditing(false);
-              }}
-              className="w-full resize-none bg-transparent px-5 py-4 font-mono text-sm text-foreground outline-none"
-              style={{ minHeight: '60vh' }}
-              autoFocus
-            />
+            <div className="flex flex-col">
+              <input
+                value={draftTitle}
+                onChange={e => setDraftTitle(e.target.value)}
+                onKeyDown={e => { if (e.key === 'Escape') cancel(); }}
+                placeholder="Document title"
+                className="border-b border-border-soft bg-transparent px-5 py-3 text-lg font-semibold text-foreground outline-none placeholder:text-muted-foreground"
+                autoFocus
+              />
+              <textarea
+                ref={bodyRef}
+                value={draftBody}
+                onChange={e => {
+                  setDraftBody(e.target.value);
+                  e.target.style.height = 'auto';
+                  e.target.style.height = `${e.target.scrollHeight}px`;
+                }}
+                onKeyDown={e => {
+                  if ((e.metaKey || e.ctrlKey) && e.key === 's') { e.preventDefault(); save(); }
+                  if (e.key === 'Escape') cancel();
+                }}
+                className="w-full resize-none overflow-hidden bg-transparent px-5 py-4 font-mono text-sm text-foreground outline-none"
+                style={{ minHeight: '60vh' }}
+              />
+            </div>
           ) : (
             <div className={`px-5 py-4 ${PROSE}`}>
               <ReactMarkdown remarkPlugins={[remarkGfm]}>{document.body || '_No content yet._'}</ReactMarkdown>

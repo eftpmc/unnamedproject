@@ -948,6 +948,81 @@ export const migrations: Migration[] = [
     }
     db.pragma('foreign_keys = ON');
   }},
+  // v28: extract agent runtimes (claude_code/codex) from connections into agent_providers;
+  //      add `service` column to connections for multi-account Google.
+  { version: 28, name: 'agent-providers-table', noTransaction: true, up: (db) => {
+    db.pragma('foreign_keys = OFF');
+
+    // 1. Create agent_providers if it doesn't exist
+    db.exec(`CREATE TABLE IF NOT EXISTS agent_providers (
+      id TEXT PRIMARY KEY,
+      user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+      name TEXT NOT NULL,
+      type TEXT NOT NULL CHECK(type IN ('claude_code','codex')),
+      encrypted_config TEXT NOT NULL DEFAULT '',
+      created_at INTEGER NOT NULL DEFAULT (unixepoch()),
+      UNIQUE(user_id, name)
+    )`);
+
+    // 2. Migrate existing claude_code/codex rows → agent_providers
+    db.exec(`INSERT OR IGNORE INTO agent_providers (id, user_id, name, type, encrypted_config, created_at)
+      SELECT id, user_id, name, type, encrypted_config, created_at
+      FROM connections WHERE type IN ('claude_code','codex')`);
+
+    // 3. Rebuild connections: drop claude_code/codex from CHECK constraints, add service column
+    const connSql = (db.prepare("SELECT sql FROM sqlite_master WHERE type='table' AND name='connections'").get() as { sql: string } | undefined)?.sql;
+    const needsRebuild = connSql && (connSql.includes("'claude_code'") || !connSql.includes('service'));
+    if (needsRebuild) {
+      const tmp = '_connections_v28_tmp';
+      db.exec(`ALTER TABLE connections RENAME TO "${tmp}"`);
+      db.exec(`CREATE TABLE connections (
+        id TEXT PRIMARY KEY,
+        user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+        name TEXT NOT NULL,
+        type TEXT NOT NULL CHECK(type IN ('anthropic','openai','github','mcp','local','oauth','browser','google')),
+        purpose TEXT NOT NULL DEFAULT 'tool' CHECK(purpose IN ('github','mcp','tool','google')),
+        service TEXT,
+        encrypted_config TEXT NOT NULL DEFAULT '',
+        created_at INTEGER NOT NULL DEFAULT (unixepoch()),
+        UNIQUE(user_id, name)
+      )`);
+      db.exec(`INSERT INTO connections (id, user_id, name, type, purpose, encrypted_config, created_at)
+        SELECT id, user_id, name, type, purpose, encrypted_config, created_at
+        FROM "${tmp}" WHERE type NOT IN ('claude_code','codex')`);
+      // Back-fill service for Google connections (name was the service name)
+      db.exec(`UPDATE connections SET service = name WHERE type = 'google'`);
+      db.exec(`DROP TABLE "${tmp}"`);
+    }
+
+    db.pragma('foreign_keys = ON');
+  }},
+  // v29: remove anthropic/openai/local connection types — agent access is only via agent_providers.
+  //      Drop any orphaned rows and tighten the type CHECK constraint.
+  { version: 29, name: 'connections-drop-legacy-ai-types', noTransaction: true, up: (db) => {
+    db.pragma('foreign_keys = OFF');
+    db.exec(`DELETE FROM connections WHERE type IN ('anthropic','openai','local')`);
+    const connSql = (db.prepare("SELECT sql FROM sqlite_master WHERE type='table' AND name='connections'").get() as { sql: string } | undefined)?.sql;
+    if (connSql && (connSql.includes("'anthropic'") || connSql.includes("'openai'") || connSql.includes("'local'"))) {
+      const tmp = '_connections_v29_tmp';
+      db.exec(`ALTER TABLE connections RENAME TO "${tmp}"`);
+      db.exec(`CREATE TABLE connections (
+        id TEXT PRIMARY KEY,
+        user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+        name TEXT NOT NULL,
+        type TEXT NOT NULL CHECK(type IN ('github','mcp','google')),
+        purpose TEXT NOT NULL DEFAULT 'tool' CHECK(purpose IN ('github','mcp','tool','google')),
+        service TEXT,
+        encrypted_config TEXT NOT NULL DEFAULT '',
+        created_at INTEGER NOT NULL DEFAULT (unixepoch()),
+        UNIQUE(user_id, name)
+      )`);
+      db.exec(`INSERT INTO connections (id, user_id, name, type, purpose, service, encrypted_config, created_at)
+        SELECT id, user_id, name, type, purpose, service, encrypted_config, created_at
+        FROM "${tmp}" WHERE type IN ('github','mcp','google')`);
+      db.exec(`DROP TABLE "${tmp}"`);
+    }
+    db.pragma('foreign_keys = ON');
+  }},
 ];
 
 function tableSql(database: Database.Database, name: string): string | undefined {

@@ -11,6 +11,7 @@ import { initSocket } from './services/socket.js';
 import { startScheduler } from './services/scheduler.js';
 import authRoutes from './routes/auth.js';
 import connectionsRoutes from './routes/connections.js';
+import agentProvidersRoutes from './routes/agent-providers.js';
 import spacesRoutes from './routes/spaces.js';
 import settingsRoutes from './routes/settings.js';
 import sessionsRoutes from './routes/sessions.js';
@@ -91,6 +92,7 @@ reconcileOrphanedExecutions();
 // (Express 4 does not do this on its own).
 app.use('/auth', authLimiter, wrapAsyncErrors(authRoutes));
 app.use('/connections', wrapAsyncErrors(connectionsRoutes));
+app.use('/agent-providers', wrapAsyncErrors(agentProvidersRoutes));
 app.use('/spaces', wrapAsyncErrors(spacesRoutes));
 app.use('/projects', wrapAsyncErrors(projectsRoutes));
 app.use('/settings', wrapAsyncErrors(settingsRoutes));

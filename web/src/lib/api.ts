@@ -1,5 +1,5 @@
 import { getToken, setToken, clearToken } from './auth.js';
-import type { Session, Message, Space, Connection, EffortLevel, UserSettings, Memory, ScheduledTask, SessionWorktree, PermissionProfile, SessionEvent, Document, DocumentWithBody, Project, Trigger, FileEntry } from '../types.js';
+import type { Session, Message, Space, Connection, AgentProvider, GoogleAccount, EffortLevel, UserSettings, Memory, ScheduledTask, SessionWorktree, PermissionProfile, SessionEvent, Document, DocumentWithBody, Project, Trigger, FileEntry } from '../types.js';
 
 async function request<T>(path: string, init: RequestInit = {}): Promise<T> {
   const token = getToken();
@@ -286,10 +286,6 @@ export function getConnections(): Promise<Connection[]> {
   return request('/connections');
 }
 
-export function getAgentProviders(): Promise<import('../types.js').AgentProvider[]> {
-  return request('/agent-providers');
-}
-
 export function createConnection(body: { name: string; type: string; purpose?: string; config: Record<string, unknown> }): Promise<{ id: string }> {
   return request('/connections', { method: 'POST', body: JSON.stringify(body) });
 }
@@ -318,16 +314,34 @@ export function runScheduledTask(id: string): Promise<void> {
   return request(`/scheduled-tasks/${id}/run`, { method: 'POST' });
 }
 
-export function getGoogleStatus(): Promise<Record<string, { email: string }>> {
+export function getGoogleStatus(): Promise<Record<string, GoogleAccount[]>> {
   return request('/auth/google/status');
 }
 
-export function getGoogleAuthUrl(service: string): Promise<{ url: string }> {
-  return request(`/auth/google/url?service=${service}`);
+export function getGoogleAuthUrl(service: string, label?: string): Promise<{ url: string }> {
+  const params = new URLSearchParams({ service });
+  if (label) params.set('label', label);
+  return request(`/auth/google/url?${params}`);
 }
 
-export function disconnectGoogle(service: string): Promise<void> {
-  return request(`/auth/google/${service}`, { method: 'DELETE' });
+export function disconnectGoogle(id: string): Promise<void> {
+  return request(`/auth/google/${id}`, { method: 'DELETE' });
+}
+
+export function getAgentProviders(): Promise<AgentProvider[]> {
+  return request('/agent-providers');
+}
+
+export function createAgentProvider(body: { name: string; type: string; config: Record<string, unknown> }): Promise<{ id: string; name: string; type: string }> {
+  return request('/agent-providers', { method: 'POST', body: JSON.stringify(body) });
+}
+
+export function deleteAgentProvider(id: string): Promise<void> {
+  return request(`/agent-providers/${id}`, { method: 'DELETE' });
+}
+
+export function testAgentProvider(id: string): Promise<{ ok: boolean | null; latencyMs?: number; error?: string }> {
+  return request(`/agent-providers/${id}/test`);
 }
 
 

@@ -20,7 +20,7 @@ export function registerConnectionHandlers(): void {
 
   registerTool({
     name: 'create_connection',
-    description: 'Create a new connection (anthropic, openai, mcp, claude_code, codex, etc.)',
+    description: 'Create a new connection (github, mcp, google)',
     inputSchema: {
       type: 'object',
       properties: {

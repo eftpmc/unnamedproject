@@ -9,12 +9,16 @@ interface GmailConfig {
   email: string;
 }
 
-export async function getGmailClient(userId: string): Promise<{ gmail: gmail_v1.Gmail; email: string }> {
-  const row = getDb()
-    .prepare("SELECT id, encrypted_config FROM connections WHERE user_id = ? AND type = 'google' AND name = 'gmail'")
-    .get(userId) as { id: string; encrypted_config: string } | undefined;
+export async function getGmailClient(userId: string, account?: string): Promise<{ gmail: gmail_v1.Gmail; email: string }> {
+  const row = account
+    ? (getDb()
+        .prepare("SELECT id, encrypted_config FROM connections WHERE user_id = ? AND type = 'google' AND service = 'gmail' AND name = ?")
+        .get(userId, account) as { id: string; encrypted_config: string } | undefined)
+    : (getDb()
+        .prepare("SELECT id, encrypted_config FROM connections WHERE user_id = ? AND type = 'google' AND service = 'gmail' ORDER BY created_at LIMIT 1")
+        .get(userId) as { id: string; encrypted_config: string } | undefined);
 
-  if (!row) throw new Error('Gmail not connected — connect it in Settings.');
+  if (!row) throw new Error(account ? `Gmail account '${account}' not found.` : 'Gmail not connected — connect it in Settings.');
 
   const cfg = JSON.parse(decrypt(row.encrypted_config, deriveKey())) as GmailConfig;
 
@@ -26,6 +30,7 @@ export async function getGmailClient(userId: string): Promise<{ gmail: gmail_v1.
     const updated: GmailConfig = {
       ...cfg,
       access_token: credentials.access_token ?? cfg.access_token,
+      refresh_token: credentials.refresh_token ?? cfg.refresh_token,
       expiry_date: credentials.expiry_date ?? cfg.expiry_date,
     };
     getDb()
@@ -63,8 +68,8 @@ function buildRaw(from: string, to: string, subject: string, body: string, inRep
   return Buffer.from(lines.join('\r\n')).toString('base64url');
 }
 
-export async function searchThreads(userId: string, query: string, maxResults: number): Promise<string> {
-  const { gmail } = await getGmailClient(userId);
+export async function searchThreads(userId: string, query: string, maxResults: number, account?: string): Promise<string> {
+  const { gmail } = await getGmailClient(userId, account);
   const { data } = await gmail.users.threads.list({ userId: 'me', q: query, maxResults: Math.min(maxResults, 25) });
   const threads = data.threads ?? [];
   if (threads.length === 0) return 'No threads found.';
@@ -80,8 +85,8 @@ export async function searchThreads(userId: string, query: string, maxResults: n
   }).join('\n\n');
 }
 
-export async function getThread(userId: string, threadId: string): Promise<string> {
-  const { gmail } = await getGmailClient(userId);
+export async function getThread(userId: string, threadId: string, account?: string): Promise<string> {
+  const { gmail } = await getGmailClient(userId, account);
   const { data: t } = await gmail.users.threads.get({ userId: 'me', id: threadId, format: 'full' });
   return (t.messages ?? []).map(msg => {
     const h = msg.payload?.headers ?? [];
@@ -90,44 +95,44 @@ export async function getThread(userId: string, threadId: string): Promise<strin
   }).join('\n\n---\n\n');
 }
 
-export async function listLabels(userId: string): Promise<string> {
-  const { gmail } = await getGmailClient(userId);
+export async function listLabels(userId: string, account?: string): Promise<string> {
+  const { gmail } = await getGmailClient(userId, account);
   const { data } = await gmail.users.labels.list({ userId: 'me' });
   return (data.labels ?? []).map(l => `${l.id}: ${l.name}`).join('\n');
 }
 
-export async function createDraft(userId: string, to: string, subject: string, body: string, inReplyTo?: string): Promise<string> {
-  const { gmail, email } = await getGmailClient(userId);
+export async function createDraft(userId: string, to: string, subject: string, body: string, inReplyTo?: string, account?: string): Promise<string> {
+  const { gmail, email } = await getGmailClient(userId, account);
   const { data } = await gmail.users.drafts.create({ userId: 'me', requestBody: { message: { raw: buildRaw(email, to, subject, body, inReplyTo) } } });
   return `Draft created (ID: ${data.id}).`;
 }
 
-export async function sendMessage(userId: string, to: string, subject: string, body: string, inReplyTo?: string): Promise<string> {
-  const { gmail, email } = await getGmailClient(userId);
+export async function sendMessage(userId: string, to: string, subject: string, body: string, inReplyTo?: string, account?: string): Promise<string> {
+  const { gmail, email } = await getGmailClient(userId, account);
   const { data } = await gmail.users.messages.send({ userId: 'me', requestBody: { raw: buildRaw(email, to, subject, body, inReplyTo) } });
   return `Message sent (ID: ${data.id}).`;
 }
 
-export async function sendDraft(userId: string, draftId: string): Promise<string> {
-  const { gmail } = await getGmailClient(userId);
+export async function sendDraft(userId: string, draftId: string, account?: string): Promise<string> {
+  const { gmail } = await getGmailClient(userId, account);
   const { data } = await gmail.users.drafts.send({ userId: 'me', requestBody: { id: draftId } });
   return `Draft sent (message ID: ${data.id}).`;
 }
 
-export async function trashThreads(userId: string, threadIds: string[]): Promise<string> {
-  const { gmail } = await getGmailClient(userId);
+export async function trashThreads(userId: string, threadIds: string[], account?: string): Promise<string> {
+  const { gmail } = await getGmailClient(userId, account);
   await Promise.all(threadIds.map(id => gmail.users.threads.trash({ userId: 'me', id })));
   return `Trashed ${threadIds.length} thread(s).`;
 }
 
-export async function archiveThreads(userId: string, threadIds: string[]): Promise<string> {
-  const { gmail } = await getGmailClient(userId);
+export async function archiveThreads(userId: string, threadIds: string[], account?: string): Promise<string> {
+  const { gmail } = await getGmailClient(userId, account);
   await Promise.all(threadIds.map(id => gmail.users.threads.modify({ userId: 'me', id, requestBody: { removeLabelIds: ['INBOX'] } })));
   return `Archived ${threadIds.length} thread(s).`;
 }
 
-export async function modifyLabels(userId: string, threadIds: string[], addLabelIds: string[], removeLabelIds: string[]): Promise<string> {
-  const { gmail } = await getGmailClient(userId);
+export async function modifyLabels(userId: string, threadIds: string[], addLabelIds: string[], removeLabelIds: string[], account?: string): Promise<string> {
+  const { gmail } = await getGmailClient(userId, account);
   await Promise.all(threadIds.map(id => gmail.users.threads.modify({ userId: 'me', id, requestBody: { addLabelIds, removeLabelIds } })));
   return `Modified labels on ${threadIds.length} thread(s).`;
 }

@@ -140,9 +140,23 @@ export interface UserSettings {
 export interface Connection {
   id: string;
   name: string;
-  type: 'anthropic' | 'openai' | 'github' | 'mcp' | 'local' | 'claude_code' | 'codex';
-  purpose: 'claude_code' | 'codex' | 'github' | 'mcp' | 'tool';
+  type: 'github' | 'mcp' | 'google';
+  purpose: 'github' | 'mcp' | 'tool' | 'google';
+  service?: string;
   created_at: number;
+}
+
+export interface AgentProvider {
+  id: string;
+  name: string;
+  type: 'claude_code' | 'codex';
+  created_at: number;
+}
+
+export interface GoogleAccount {
+  id: string;
+  name: string;
+  email: string;
 }
 
 export interface WSEvent {

@@ -16,10 +16,13 @@ import { TabStrip } from '@/components/ui/tab-strip';
 import { cn } from '@/lib/utils';
 import {
   createConnection,
+  createAgentProvider,
   deleteConnection,
+  deleteAgentProvider,
   deleteScheduledTask,
   disconnectGoogle,
   getConnections,
+  getAgentProviders,
   getGoogleAuthUrl,
   getGoogleStatus,
   getMemory,
@@ -27,6 +30,7 @@ import {
   getScheduledTasks,
   getSettings,
   runScheduledTask,
+  testAgentProvider,
   testConnection,
   updateSettings,
 } from '../lib/api.js';
@@ -35,7 +39,7 @@ import { usePageTitle } from '../lib/usePageTitle.js';
 import { useTheme } from '../lib/useTheme.js';
 import { useAccent } from '../lib/useAccent.js';
 import { ACCENT_PRESETS, DEFAULT_ACCENT } from '../lib/accent.js';
-import type { Connection, Memory, PermissionProfile, Space, ScheduledTask, UserSettings } from '../types.js';
+import type { AgentProvider, Connection, GoogleAccount, Memory, PermissionProfile, Space, ScheduledTask, UserSettings } from '../types.js';
 
 type Tab = 'tools' | 'mcp' | 'workspace' | 'memory' | 'account';
 
@@ -49,11 +53,7 @@ const TABS: { id: Tab; label: string }[] = [
 
 type SetupKind = 'claude_code' | 'codex' | 'mcp';
 
-const SETUP_META: Record<SetupKind, {
-  title: string;
-  description: string;
-  type: Connection['type'];
-}> = {
+const SETUP_META: Record<SetupKind, { title: string; description: string; type: string }> = {
   claude_code: {
     title: 'Claude Code',
     description: 'Powers your conversations. Handles all tasks — coding, research, orchestration.',
@@ -268,27 +268,27 @@ function ConnectMobileSection() {
   );
 }
 
-function ConnectionRow({
+function ProviderRow({
   kind,
-  connections,
+  providers,
   onOpenSetup,
   onRequestDelete,
 }: {
-  kind: SetupKind;
-  connections: Connection[];
+  kind: 'claude_code' | 'codex';
+  providers: AgentProvider[];
   onOpenSetup: (kind: SetupKind) => void;
   onRequestDelete: (id: string) => void;
 }) {
   const meta = SETUP_META[kind];
-  const connection = connections.find(c => c.purpose === kind);
+  const provider = providers.find(p => p.type === kind);
   const { data: health } = useQuery({
-    queryKey: ['connection-health', connection?.id],
-    queryFn: () => testConnection(connection!.id),
-    enabled: !!connection && connection.type !== 'mcp',
+    queryKey: ['provider-health', provider?.id],
+    queryFn: () => testAgentProvider(provider!.id),
+    enabled: !!provider,
     staleTime: 60_000,
     retry: false,
   });
-  const healthDot = connection && health !== undefined
+  const healthDot = provider && health !== undefined
     ? health.ok === true ? 'bg-success' : health.ok === false ? 'bg-destructive' : null
     : null;
   const healthTitle = health?.ok === true
@@ -298,24 +298,16 @@ function ConnectionRow({
   return (
     <SettingRow>
       <div className="min-w-0">
-        <SettingRowInfo title={meta.title} description={connection ? connection.name : meta.description} />
-        {health?.ok === false && (
-          <div className="mt-1 text-xs text-destructive">Error: {health.error}</div>
-        )}
+        <SettingRowInfo title={meta.title} description={provider ? provider.name : meta.description} />
+        {health?.ok === false && <div className="mt-1 text-xs text-destructive">Error: {health.error}</div>}
       </div>
       <div className="flex items-center gap-2 shrink-0">
-        {healthDot && (
-          <span title={healthTitle} className={cn('size-2 shrink-0 rounded-full', healthDot)} />
-        )}
-        {connection ? (
-          <div className="flex items-center gap-2">
-            {health?.ok === false ? <ConnectionErrorBadge /> : <ConnectedBadge />}
-          </div>
-        ) : <NotSetBadge />}
-        <Button size="sm" variant={connection ? 'ghost' : 'default'} onClick={() => onOpenSetup(kind)}>
-          {connection ? 'Edit' : 'Connect'}
+        {healthDot && <span title={healthTitle} className={cn('size-2 shrink-0 rounded-full', healthDot)} />}
+        {provider ? (health?.ok === false ? <ConnectionErrorBadge /> : <ConnectedBadge />) : <NotSetBadge />}
+        <Button size="sm" variant={provider ? 'ghost' : 'default'} onClick={() => onOpenSetup(kind)}>
+          {provider ? 'Edit' : 'Connect'}
         </Button>
-        {connection && <DeleteBtn onClick={() => onRequestDelete(connection.id)} />}
+        {provider && <DeleteBtn onClick={() => onRequestDelete(provider.id)} />}
       </div>
     </SettingRow>
   );
@@ -323,6 +315,7 @@ function ConnectionRow({
 
 function SetupModal({
   activeSetup,
+  providers,
   connections,
   form,
   updateForm,
@@ -332,6 +325,7 @@ function SetupModal({
   onDelete,
 }: {
   activeSetup: SetupKind | null;
+  providers: AgentProvider[];
   connections: Connection[];
   form: SetupFormState;
   updateForm: (patch: Partial<SetupFormState>) => void;
@@ -342,7 +336,9 @@ function SetupModal({
 }) {
   if (!activeSetup) return null;
   const meta = SETUP_META[activeSetup];
-  const existing = connections.find(c => c.purpose === activeSetup);
+  const existing = activeSetup === 'mcp'
+    ? connections.find(c => c.purpose === activeSetup)
+    : providers.find(p => p.type === activeSetup);
   const { setupName, mcpCommand, mcpArgs, mcpEnv, mcpPreset, mcpExtraArg, mcpEnvValues, providerModel, providerPermissionProfile } = form;
 
   const selectedPreset = activeSetup === 'mcp' && mcpPreset !== 'custom'
@@ -458,6 +454,7 @@ export default function Settings() {
   const [tab, setTab] = useState<Tab>('tools');
 
   const { data: connections = [] } = useQuery<Connection[]>({ queryKey: ['connections'], queryFn: getConnections });
+  const { data: agentProviders = [] } = useQuery<AgentProvider[]>({ queryKey: ['agent-providers'], queryFn: getAgentProviders });
   const { data: spaces = [] } = useQuery<Space[]>({ queryKey: ['spaces'], queryFn: getSpaces });
   const { data: memory = [] } = useQuery<Memory[]>({ queryKey: ['memory'], queryFn: getMemory });
   const { data: scheduledTasks = [] } = useQuery<ScheduledTask[]>({ queryKey: ['scheduledTasks'], queryFn: getScheduledTasks });
@@ -472,15 +469,18 @@ export default function Settings() {
   const [pendingDelete, setPendingDelete] = useState<{ id: string } | null>(null);
   const [projectsRootError, setProjectsRootError] = useState('');
 
+  // Google connect dialog state
+  const [googleConnectDialog, setGoogleConnectDialog] = useState<{ service: string; label: string } | null>(null);
+
   const mcpConnections = connections.filter(c => c.purpose === 'mcp');
 
-  const { data: googleStatus = {} } = useQuery<Record<string, { email: string }>>({
+  const { data: googleStatus = {} } = useQuery<Record<string, GoogleAccount[]>>({
     queryKey: ['google-status'],
     queryFn: getGoogleStatus,
   });
 
   const disconnectGoogleMutation = useMutation({
-    mutationFn: (service: string) => disconnectGoogle(service),
+    mutationFn: (id: string) => disconnectGoogle(id),
     onSuccess: () => qc.invalidateQueries({ queryKey: ['google-status'] }),
   });
 
@@ -513,50 +513,60 @@ export default function Settings() {
       if (!activeSetup) throw new Error('Pick what you want to set up');
       const meta = SETUP_META[activeSetup];
       const { setupName, mcpCommand, mcpArgs, mcpEnv, mcpPreset, mcpExtraArg, mcpEnvValues, providerModel, providerPermissionProfile } = form;
-      let config: Record<string, unknown>;
 
-      if (activeSetup === 'mcp') {
-        const preset = MCP_PRESETS.find(p => p.id === mcpPreset);
-        if (preset) {
-          const args = [...preset.args];
-          if (preset.extraArgLabel) {
-            if (!mcpExtraArg.trim()) throw new Error(`${preset.extraArgLabel} required`);
-            args.push(mcpExtraArg.trim());
-          }
-          const env: Record<string, string> = {};
-          for (const v of preset.envVars ?? []) {
-            if (!mcpEnvValues[v.key]?.trim()) throw new Error(`${v.label} required`);
-            env[v.key] = mcpEnvValues[v.key].trim();
-          }
-          config = { command: preset.command, args: JSON.stringify(args), env: JSON.stringify(env) };
-        } else {
-          if (!mcpCommand.trim()) throw new Error('Command required');
-          try {
-            if (mcpArgs.trim()) JSON.parse(mcpArgs);
-            JSON.parse(mcpEnv);
-          } catch {
-            throw new Error('MCP args and env must be valid JSON');
-          }
-          config = { command: mcpCommand.trim(), args: mcpArgs.trim() || '[]', env: mcpEnv.trim() || '{}' };
-        }
-      } else {
+      if (activeSetup === 'claude_code' || activeSetup === 'codex') {
         const defaultModel = activeSetup === 'claude_code' ? 'claude-sonnet-4-6' : 'codex-mini-latest';
-        config = {
-          model: providerModel.trim() || defaultModel,
-          permissionProfile: providerPermissionProfile,
-        };
-        return createConnection({ name: setupName.trim() || meta.title, type: meta.type, config });
+        return createAgentProvider({
+          name: setupName.trim() || meta.title,
+          type: activeSetup,
+          config: { model: providerModel.trim() || defaultModel, permissionProfile: providerPermissionProfile },
+        });
       }
 
+      const preset = MCP_PRESETS.find(p => p.id === mcpPreset);
+      let config: Record<string, unknown>;
+      if (preset) {
+        const args = [...preset.args];
+        if (preset.extraArgLabel) {
+          if (!mcpExtraArg.trim()) throw new Error(`${preset.extraArgLabel} required`);
+          args.push(mcpExtraArg.trim());
+        }
+        const env: Record<string, string> = {};
+        for (const v of preset.envVars ?? []) {
+          if (!mcpEnvValues[v.key]?.trim()) throw new Error(`${v.label} required`);
+          env[v.key] = mcpEnvValues[v.key].trim();
+        }
+        config = { command: preset.command, args: JSON.stringify(args), env: JSON.stringify(env) };
+      } else {
+        if (!mcpCommand.trim()) throw new Error('Command required');
+        try {
+          if (mcpArgs.trim()) JSON.parse(mcpArgs);
+          JSON.parse(mcpEnv);
+        } catch {
+          throw new Error('MCP args and env must be valid JSON');
+        }
+        config = { command: mcpCommand.trim(), args: mcpArgs.trim() || '[]', env: mcpEnv.trim() || '{}' };
+      }
       return createConnection({ name: setupName.trim() || meta.title, type: meta.type, purpose: activeSetup, config });
     },
-    onSuccess: () => { qc.invalidateQueries({ queryKey: ['connections'] }); closeSetupModal(); },
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['connections'] });
+      qc.invalidateQueries({ queryKey: ['agent-providers'] });
+      closeSetupModal();
+    },
     onError: (e: Error) => setSetupError(e.message),
   });
 
   const deleteConnMutation = useMutation({
-    mutationFn: deleteConnection,
-    onSuccess: () => qc.invalidateQueries({ queryKey: ['connections'] }),
+    mutationFn: (id: string) => {
+      // Determine if this is a provider or connection by checking both lists
+      const isProvider = agentProviders.some(p => p.id === id);
+      return isProvider ? deleteAgentProvider(id) : deleteConnection(id);
+    },
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['connections'] });
+      qc.invalidateQueries({ queryKey: ['agent-providers'] });
+    },
   });
 
   const updateSettingsMutation = useMutation({
@@ -643,8 +653,8 @@ export default function Settings() {
               <div>
                 <SectionLabel>Coding tools</SectionLabel>
                 <div className="flex flex-col gap-3">
-                  <ConnectionRow kind="claude_code" connections={connections} onOpenSetup={openSetupModal} onRequestDelete={id => setPendingDelete({ id })} />
-                  <ConnectionRow kind="codex" connections={connections} onOpenSetup={openSetupModal} onRequestDelete={id => setPendingDelete({ id })} />
+                  <ProviderRow kind="claude_code" providers={agentProviders} onOpenSetup={openSetupModal} onRequestDelete={id => setPendingDelete({ id })} />
+                  <ProviderRow kind="codex" providers={agentProviders} onOpenSetup={openSetupModal} onRequestDelete={id => setPendingDelete({ id })} />
                 </div>
               </div>
               <div>
@@ -691,23 +701,41 @@ export default function Settings() {
                 <SectionLabel>Google</SectionLabel>
                 {googleError && <p className="mb-2 text-xs text-destructive">{googleError}</p>}
                 <div className="flex flex-col gap-3">
-                  <SettingRow>
-                    <SettingRowInfo title="Gmail" description="Read, send, and search email" />
-                    <div className="flex items-center gap-2 shrink-0">
-                      {googleStatus['gmail'] ? (
-                        <>
-                          <span className="text-xs text-muted-foreground">{googleStatus['gmail'].email}</span>
-                          <ConnectedBadge />
-                          <DeleteBtn onClick={() => disconnectGoogleMutation.mutate('gmail')} />
-                        </>
-                      ) : (
-                        <Button size="sm" onClick={async () => {
-                          const { url } = await getGoogleAuthUrl('gmail');
-                          window.location.href = url;
-                        }}>Connect</Button>
-                      )}
-                    </div>
-                  </SettingRow>
+                  {(['gmail', 'drive'] as const).map(svc => {
+                    const accounts: GoogleAccount[] = googleStatus[svc] ?? [];
+                    const label = svc === 'gmail' ? 'Gmail' : 'Google Drive';
+                    const description = svc === 'gmail' ? 'Read, send, and search email' : 'List, read, and create files';
+                    return (
+                      <div key={svc} className="flex flex-col gap-2">
+                        {accounts.length > 0 ? accounts.map(acct => (
+                          <SettingRow key={acct.id}>
+                            <div className="min-w-0">
+                              <div className="text-sm font-medium text-foreground">{label}</div>
+                              <div className="text-xs text-muted-foreground">{acct.email}{acct.name !== svc ? ` · ${acct.name}` : ''}</div>
+                            </div>
+                            <div className="flex items-center gap-2 shrink-0">
+                              <ConnectedBadge />
+                              <DeleteBtn onClick={() => disconnectGoogleMutation.mutate(acct.id)} />
+                            </div>
+                          </SettingRow>
+                        )) : (
+                          <SettingRow>
+                            <SettingRowInfo title={label} description={description} />
+                            <div className="shrink-0">
+                              <Button size="sm" onClick={() => setGoogleConnectDialog({ service: svc, label: svc })}>Connect</Button>
+                            </div>
+                          </SettingRow>
+                        )}
+                        {accounts.length > 0 && (
+                          <div className="flex justify-end">
+                            <Button size="sm" variant="ghost" onClick={() => setGoogleConnectDialog({ service: svc, label: '' })}>
+                              <Plus size={13} className="mr-1" />Add account
+                            </Button>
+                          </div>
+                        )}
+                      </div>
+                    );
+                  })}
                 </div>
                 <HintText>Requires <code className="text-xs">GOOGLE_CLIENT_ID</code> and <code className="text-xs">GOOGLE_CLIENT_SECRET</code> in your server .env.</HintText>
               </div>
@@ -896,7 +924,38 @@ export default function Settings() {
           onCancel={() => setPendingDelete(null)}
         />
       )}
-      <SetupModal activeSetup={activeSetup} connections={connections} form={form} updateForm={updateForm} setupError={setupError} onClose={closeSetupModal} onSave={() => createConnMutation.mutate()} onDelete={id => { setPendingDelete({ id }); closeSetupModal(); }} />
+      <SetupModal activeSetup={activeSetup} providers={agentProviders} connections={connections} form={form} updateForm={updateForm} setupError={setupError} onClose={closeSetupModal} onSave={() => createConnMutation.mutate()} onDelete={id => { setPendingDelete({ id }); closeSetupModal(); }} />
+
+      {/* Google connect dialog */}
+      {googleConnectDialog && (
+        <Dialog open onOpenChange={open => { if (!open) setGoogleConnectDialog(null); }}>
+          <DialogContent className="sm:max-w-sm">
+            <DialogHeader>
+              <DialogTitle>Connect {googleConnectDialog.service === 'gmail' ? 'Gmail' : 'Google Drive'}</DialogTitle>
+              <DialogDescription>Choose a label to identify this account.</DialogDescription>
+            </DialogHeader>
+            <div>
+              <Label>Label</Label>
+              <Input
+                placeholder={googleConnectDialog.service}
+                value={googleConnectDialog.label}
+                onChange={e => setGoogleConnectDialog(d => d ? { ...d, label: e.target.value } : null)}
+                className="mt-1 text-sm"
+              />
+            </div>
+            <DialogFooter>
+              <Button variant="ghost" onClick={() => setGoogleConnectDialog(null)}>Cancel</Button>
+              <Button onClick={async () => {
+                const { service, label } = googleConnectDialog;
+                const resolvedLabel = label.trim() || service;
+                setGoogleConnectDialog(null);
+                const { url } = await getGoogleAuthUrl(service, resolvedLabel);
+                window.location.href = url;
+              }}>Connect</Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
+      )}
     </PageShell>
   );
 }

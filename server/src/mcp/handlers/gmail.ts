@@ -51,12 +51,13 @@ export function registerGmailHandlers(): void {
       properties: {
         query: { type: 'string', description: 'Gmail search query (e.g. "from:foo@bar.com is:unread")' },
         max_results: { type: 'number', description: 'Max threads to return (1-25, default 10)' },
+        account: { type: 'string', description: 'Gmail account label to use (defaults to first connected account)' },
       },
       required: ['query'],
     },
     handler: async (args, userId) => {
       try {
-        return await Gmail.searchThreads(userId, args.query as string, (args.max_results as number | undefined) ?? 10);
+        return await Gmail.searchThreads(userId, args.query as string, (args.max_results as number | undefined) ?? 10, args.account as string | undefined);
       } catch (e) { return `Error: ${(e as Error).message}`; }
     },
   });
@@ -68,12 +69,13 @@ export function registerGmailHandlers(): void {
       type: 'object',
       properties: {
         thread_id: { type: 'string' },
+        account: { type: 'string', description: 'Gmail account label (defaults to first connected)' },
       },
       required: ['thread_id'],
     },
     handler: async (args, userId) => {
       try {
-        return await Gmail.getThread(userId, args.thread_id as string);
+        return await Gmail.getThread(userId, args.thread_id as string, args.account as string | undefined);
       } catch (e) { return `Error: ${(e as Error).message}`; }
     },
   });
@@ -81,10 +83,10 @@ export function registerGmailHandlers(): void {
   registerTool({
     name: 'gmail_list_labels',
     description: 'List all Gmail labels for the connected account.',
-    inputSchema: { type: 'object', properties: {}, required: [] },
+    inputSchema: { type: 'object', properties: { account: { type: 'string', description: 'Gmail account label (defaults to first connected)' } } },
     handler: async (args, userId) => {
       try {
-        return await Gmail.listLabels(userId);
+        return await Gmail.listLabels(userId, args.account as string | undefined);
       } catch (e) { return `Error: ${(e as Error).message}`; }
     },
   });
@@ -99,12 +101,13 @@ export function registerGmailHandlers(): void {
         subject: { type: 'string' },
         body: { type: 'string' },
         in_reply_to: { type: 'string', description: 'Message-ID header of the message being replied to' },
+        account: { type: 'string', description: 'Gmail account label (defaults to first connected)' },
       },
       required: ['to', 'subject', 'body'],
     },
     handler: async (args, userId) => {
       try {
-        return await Gmail.createDraft(userId, args.to as string, args.subject as string, args.body as string, args.in_reply_to as string | undefined);
+        return await Gmail.createDraft(userId, args.to as string, args.subject as string, args.body as string, args.in_reply_to as string | undefined, args.account as string | undefined);
       } catch (e) { return `Error: ${(e as Error).message}`; }
     },
   });
@@ -119,6 +122,7 @@ export function registerGmailHandlers(): void {
         subject: { type: 'string' },
         body: { type: 'string' },
         in_reply_to: { type: 'string' },
+        account: { type: 'string', description: 'Gmail account label (defaults to first connected)' },
       },
       required: ['to', 'subject', 'body'],
     },
@@ -128,7 +132,7 @@ export function registerGmailHandlers(): void {
       return withApproval(userId, 'gmail_send_message', 'Send email', {
         to: args.to, subject: args.subject, preview: (args.body as string).slice(0, 300),
       }, async () => {
-        const result = await Gmail.sendMessage(userId, args.to as string, args.subject as string, args.body as string, args.in_reply_to as string | undefined);
+        const result = await Gmail.sendMessage(userId, args.to as string, args.subject as string, args.body as string, args.in_reply_to as string | undefined, args.account as string | undefined);
         incrementSends(sessionId);
         return result;
       });
@@ -142,6 +146,7 @@ export function registerGmailHandlers(): void {
       type: 'object',
       properties: {
         draft_id: { type: 'string' },
+        account: { type: 'string', description: 'Gmail account label (defaults to first connected)' },
       },
       required: ['draft_id'],
     },
@@ -149,7 +154,7 @@ export function registerGmailHandlers(): void {
       const capErr = sendCapError(sessionId);
       if (capErr) return capErr;
       return withApproval(userId, 'gmail_send_draft', 'Send draft', { draft_id: args.draft_id }, async () => {
-        const result = await Gmail.sendDraft(userId, args.draft_id as string);
+        const result = await Gmail.sendDraft(userId, args.draft_id as string, args.account as string | undefined);
         incrementSends(sessionId);
         return result;
       });
@@ -163,6 +168,7 @@ export function registerGmailHandlers(): void {
       type: 'object',
       properties: {
         thread_ids: { type: 'array', items: { type: 'string' }, maxItems: 25 },
+        account: { type: 'string', description: 'Gmail account label (defaults to first connected)' },
       },
       required: ['thread_ids'],
     },
@@ -170,7 +176,7 @@ export function registerGmailHandlers(): void {
       const ids = args.thread_ids as string[];
       const capErr = batchCapError(ids);
       if (capErr) return capErr;
-      return withApproval(userId, 'gmail_trash_threads', `Trash ${ids.length} thread(s)`, { count: ids.length, thread_ids: ids }, () => Gmail.trashThreads(userId, ids));
+      return withApproval(userId, 'gmail_trash_threads', `Trash ${ids.length} thread(s)`, { count: ids.length, thread_ids: ids }, () => Gmail.trashThreads(userId, ids, args.account as string | undefined));
     },
   });
 
@@ -181,6 +187,7 @@ export function registerGmailHandlers(): void {
       type: 'object',
       properties: {
         thread_ids: { type: 'array', items: { type: 'string' }, maxItems: 25 },
+        account: { type: 'string', description: 'Gmail account label (defaults to first connected)' },
       },
       required: ['thread_ids'],
     },
@@ -188,7 +195,7 @@ export function registerGmailHandlers(): void {
       const ids = args.thread_ids as string[];
       const capErr = batchCapError(ids);
       if (capErr) return capErr;
-      return withApproval(userId, 'gmail_archive_threads', `Archive ${ids.length} thread(s)`, { count: ids.length, thread_ids: ids }, () => Gmail.archiveThreads(userId, ids));
+      return withApproval(userId, 'gmail_archive_threads', `Archive ${ids.length} thread(s)`, { count: ids.length, thread_ids: ids }, () => Gmail.archiveThreads(userId, ids, args.account as string | undefined));
     },
   });
 
@@ -201,6 +208,7 @@ export function registerGmailHandlers(): void {
         thread_ids: { type: 'array', items: { type: 'string' }, maxItems: 25 },
         add_label_ids: { type: 'array', items: { type: 'string' } },
         remove_label_ids: { type: 'array', items: { type: 'string' } },
+        account: { type: 'string', description: 'Gmail account label (defaults to first connected)' },
       },
       required: ['thread_ids'],
     },
@@ -212,7 +220,7 @@ export function registerGmailHandlers(): void {
       const remove = (args.remove_label_ids as string[] | undefined) ?? [];
       return withApproval(userId, 'gmail_modify_labels', `Modify labels on ${ids.length} thread(s)`, {
         count: ids.length, thread_ids: ids, add_label_ids: add, remove_label_ids: remove,
-      }, () => Gmail.modifyLabels(userId, ids, add, remove));
+      }, () => Gmail.modifyLabels(userId, ids, add, remove, args.account as string | undefined));
     },
   });
 }

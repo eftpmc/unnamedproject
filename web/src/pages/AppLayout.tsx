@@ -30,6 +30,7 @@ export default function AppLayout() {
   // Close sidebar on route change (mobile UX)
   useEffect(() => { setSidebarExpanded(false); }, [location.pathname]);
 
+
   const { data: agentProviders = [] } = useQuery<AgentProvider[]>({ queryKey: ['agent-providers'], queryFn: getAgentProviders, staleTime: 60_000 });
   const hasLeadAgent = agentProviders.length > 0;
 

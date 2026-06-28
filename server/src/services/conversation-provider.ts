@@ -1,5 +1,5 @@
 import { getDb } from '../db/index.js';
-import { getDecryptedConfig } from '../routes/connections.js';
+import { getDecryptedProviderConfig } from '../routes/agent-providers.js';
 import { ClaudeCodeProvider } from './conversation/claude-code-provider.js';
 
 export interface InvokeParams {
@@ -68,12 +68,12 @@ class FallbackProvider implements ConversationProvider {
 
 export async function getConversationProvider(userId: string): Promise<ConversationProvider> {
   const conns = getDb()
-    .prepare("SELECT id, type FROM connections WHERE user_id = ? AND type IN ('claude_code','codex') ORDER BY created_at")
+    .prepare('SELECT id, type FROM agent_providers WHERE user_id = ? ORDER BY created_at')
     .all(userId) as { id: string; type: string }[];
 
   const providers: ConversationProvider[] = [];
   for (const conn of conns) {
-    const cfg = getDecryptedConfig(conn.id, userId);
+    const cfg = getDecryptedProviderConfig(conn.id, userId);
     const model = cfg.model as string | undefined;
     const permissionProfile = (cfg.permissionProfile as string) ?? 'default';
 

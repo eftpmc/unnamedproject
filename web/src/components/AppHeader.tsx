@@ -27,17 +27,14 @@ export default function AppHeader({ onToggleSidebar, onOpenSidebar, pendingAppro
 
   return (
     <header className="flex h-12 shrink-0 items-center border-b border-border-soft bg-background">
-      {/* Mobile: explicit menu. Desktop: logo cell aligned to collapsed sidebar. */}
+      {/* Mobile: explicit menu. Desktop branding lives in the sidebar. */}
       <button
         type="button"
         onClick={onOpenSidebar ?? onToggleSidebar}
         aria-label={onOpenSidebar ? 'Open navigation' : 'Toggle navigation'}
-        className="flex h-12 w-12 shrink-0 items-center justify-center border-r border-border-soft transition-colors hover:bg-muted"
+        className="flex h-12 w-12 shrink-0 items-center justify-center border-r border-border-soft transition-colors hover:bg-muted sm:hidden"
       >
-        <Menu size={17} strokeWidth={1.85} className="text-muted-foreground sm:hidden" />
-        <div className="hidden size-7 place-items-center rounded-lg bg-primary text-xs font-semibold text-primary-foreground shadow-sm sm:grid">
-          u
-        </div>
+        <Menu size={17} strokeWidth={1.85} className="text-muted-foreground" />
       </button>
 
       {/* Center — project selector or empty */}

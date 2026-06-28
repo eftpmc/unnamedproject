@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { BookOpen, MoreHorizontal, Play, Plus, Trash2, X } from 'lucide-react';
+import { BookOpen, Clipboard, MoreHorizontal, Play, Plus, Trash2, X } from 'lucide-react';
 import { getAllTriggers, updateGlobalTrigger, deleteGlobalTrigger, runTriggerNow, createGlobalTrigger, getAllDocuments, getProjects } from '../lib/api.js';
 import { usePageTitle } from '../lib/usePageTitle.js';
 import { timeAgo } from '../lib/utils.js';
@@ -156,10 +156,15 @@ export default function TriggersPage() {
                       <div className="min-w-0">
                         <div className="truncate text-sm font-medium capitalize text-foreground">{t.kind}</div>
                         <div className="mt-0.5 truncate font-mono text-[11px] text-faint-fg sm:hidden">
-                          {t.schedule_cron ?? (playbook ? playbook.title : 'No playbook')}
+                          {t.kind === 'webhook'
+                            ? `/webhooks/trigger/${t.id}`
+                            : t.schedule_cron ?? (playbook ? playbook.title : 'No playbook')}
                         </div>
                       </div>
                       <div className="hidden min-w-0 flex-col justify-center gap-0.5 sm:flex">
+                        {t.kind === 'webhook' && (
+                          <span className="truncate font-mono text-xs text-muted-foreground">/webhooks/trigger/{t.id}</span>
+                        )}
                         {t.schedule_cron && (
                           <span className="truncate font-mono text-xs text-muted-foreground">{t.schedule_cron}</span>
                         )}
@@ -208,6 +213,14 @@ export default function TriggersPage() {
                             <Play size={14} />
                             {runningId === t.id ? 'Running…' : 'Run now'}
                           </DropdownMenuItem>
+                          {t.kind === 'webhook' && (
+                            <DropdownMenuItem
+                              onSelect={() => void navigator.clipboard?.writeText(`${window.location.origin}/webhooks/trigger/${t.id}`)}
+                            >
+                              <Clipboard size={14} />
+                              Copy webhook URL
+                            </DropdownMenuItem>
+                          )}
                           <DropdownMenuItem onSelect={() => openSetPlaybook(t)}>
                             <BookOpen size={14} />
                             Set playbook

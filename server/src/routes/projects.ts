@@ -43,7 +43,7 @@ router.post('/', async (req, res) => {
   ).run(spaceId, userId, name.trim(), '[]');
 
   const project = repo_path
-    ? linkProject({ space_id: spaceId, name: name.trim(), repo_path, default_branch })
+    ? linkProject({ space_id: spaceId, name: name.trim(), repo_path, default_branch }) // linkProject is synchronous
     : await createProject({ space_id: spaceId, name: name.trim() });
 
   res.status(201).json(project);

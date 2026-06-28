@@ -21,6 +21,8 @@ import webhooksRoutes from './routes/webhooks.js';
 import googleRoutes from './routes/google.js';
 import mcpRouter from './mcp/index.js';
 import projectsRoutes from './routes/projects.js';
+import documentsRoutes from './routes/documents.js';
+import triggersRoutes from './routes/triggers.js';
 
 const PORT = process.env.PORT ?? '3000';
 const NODE_ENV = process.env.NODE_ENV;
@@ -97,6 +99,9 @@ app.use('/executions', wrapAsyncErrors(executionsRoutes));
 app.use('/memory', wrapAsyncErrors(memoryRoutes));
 app.use('/webhooks', wrapAsyncErrors(webhooksRoutes));
 app.use('/auth/google', wrapAsyncErrors(googleRoutes));
+
+app.use('/documents', wrapAsyncErrors(documentsRoutes));
+app.use('/triggers', wrapAsyncErrors(triggersRoutes));
 
 app.use('/mcp', mcpRouter);
 

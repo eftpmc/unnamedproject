@@ -10,7 +10,11 @@ function triggerById(id: string) {
     .get(id) as { id: string; space_id: string; schedule_cron: string | null; playbook_id: string | null; user_id: string } | undefined;
 }
 
-export async function fireTrigger(triggerId: string): Promise<void> {
+/**
+ * Creates the session + message synchronously, then runs the agent turn async.
+ * Returns the sessionId immediately so callers can link to the resulting chat.
+ */
+export async function fireTrigger(triggerId: string): Promise<string> {
   const trigger = triggerById(triggerId);
   if (!trigger) throw new Error(`Trigger ${triggerId} not found`);
 
@@ -29,15 +33,14 @@ export async function fireTrigger(triggerId: string): Promise<void> {
     .run(messageId, sessionId, 'user', prompt);
 
   const next = trigger.schedule_cron ? nextCronRun(trigger.schedule_cron, Math.floor(Date.now() / 1000)) : null;
-  markTriggerRun(trigger.id, next);  // advance schedule (prevents double-fire on restart)
+  markTriggerRun(trigger.id, next);
 
-  try {
-    await runAgentTurn(trigger.user_id, sessionId, messageId);
-  } catch (err) {
+  runAgentTurn(trigger.user_id, sessionId, messageId).catch(err => {
     console.error(`[fireTrigger] runAgentTurn failed for trigger ${triggerId}:`, err);
-    // Reset next_run_at so the trigger retries next poll instead of being silently skipped
     markTriggerRun(trigger.id, Math.floor(Date.now() / 1000));
-  }
+  });
+
+  return sessionId;
 }
 
 export async function runDueTriggers(): Promise<void> {

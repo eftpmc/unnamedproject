@@ -11,7 +11,6 @@ test.describe('triggers page', () => {
   });
 
   test.afterAll(async ({ request }) => {
-    // Deleting the project cascades to its triggers
     await deleteProject(request, projectId);
   });
 
@@ -21,12 +20,14 @@ test.describe('triggers page', () => {
     await expect(page.locator('[data-slot="data-table-row"]').first()).toBeVisible();
   });
 
-  test('trigger row has options menu with delete', async ({ page }) => {
+  test('trigger row options menu has run now, set playbook, and delete', async ({ page }) => {
     await page.goto('/triggers');
     const firstRow = page.locator('[data-slot="data-table-row"]').first();
     await expect(firstRow).toBeVisible();
 
     await firstRow.getByRole('button', { name: /options/i }).click();
+    await expect(page.getByRole('menuitem', { name: 'Run now' })).toBeVisible();
+    await expect(page.getByRole('menuitem', { name: 'Set playbook' })).toBeVisible();
     await expect(page.getByRole('menuitem', { name: 'Delete' })).toBeVisible();
   });
 
@@ -54,6 +55,27 @@ test.describe('triggers page', () => {
     await expect(page.getByText('Delete trigger?')).toBeVisible();
     await page.getByRole('button', { name: /cancel/i }).click();
     await expect(page.getByText('Delete trigger?')).not.toBeVisible();
+  });
+
+  test('new trigger button opens dialog', async ({ page }) => {
+    await page.goto('/triggers');
+    await page.getByRole('button', { name: 'New trigger' }).click();
+
+    await expect(page.getByRole('dialog', { name: 'New trigger' })).toBeVisible();
+    await expect(page.getByRole('combobox').first()).toBeVisible();
+
+    await page.keyboard.press('Escape');
+    await expect(page.getByRole('dialog', { name: 'New trigger' })).not.toBeVisible();
+  });
+
+  test('run now navigates to the resulting chat session', async ({ page }) => {
+    await page.goto('/triggers');
+    const firstRow = page.locator('[data-slot="data-table-row"]').first();
+    await firstRow.getByRole('button', { name: /options/i }).click();
+    await page.getByRole('menuitem', { name: 'Run now' }).click();
+
+    // Should navigate to a chat URL
+    await expect(page).toHaveURL(/\/c\//, { timeout: 10_000 });
   });
 
   test('triggers page heading is present', async ({ page }) => {

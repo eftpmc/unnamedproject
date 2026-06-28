@@ -67,8 +67,8 @@ router.post('/', (req, res) => {
   }));
 });
 
-// Fire a trigger immediately (responds before the agent turn completes)
-router.post('/:id/fire', (req, res) => {
+// Fire a trigger immediately; returns sessionId so the UI can navigate to the resulting chat
+router.post('/:id/fire', async (req, res) => {
   const { userId } = req as unknown as AuthedRequest;
   const row = getDb().prepare(`
     SELECT t.id FROM triggers t
@@ -76,8 +76,13 @@ router.post('/:id/fire', (req, res) => {
     WHERE t.id = ? AND s.user_id = ?
   `).get(req.params.id, userId) as { id: string } | undefined;
   if (!row) { res.status(404).json({ error: 'Trigger not found' }); return; }
-  res.json({ status: 'firing' });
-  fireTrigger(row.id).catch(err => console.error('[trigger/fire]', err));
+  try {
+    const sessionId = await fireTrigger(row.id);
+    res.json({ status: 'firing', sessionId });
+  } catch (err) {
+    console.error('[trigger/fire]', err);
+    res.status(500).json({ error: 'Failed to fire trigger' });
+  }
 });
 
 // Update trigger (enabled state and/or playbook)

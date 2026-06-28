@@ -29,8 +29,14 @@ router.post('/', async (req, res) => {
     return;
   }
 
-  // Generate path from title
-  const path = `${title.toLowerCase().replace(/\s+/g, '-').replace(/[^\w-]/g, '')}.md`;
+  // Generate a unique path from title — append -2, -3 … if the path already exists
+  const base = `${title.toLowerCase().replace(/\s+/g, '-').replace(/[^\w-]/g, '') || 'document'}.md`;
+  let path = base;
+  let counter = 2;
+  while (getDb().prepare('SELECT id FROM documents WHERE space_id = ? AND path = ?').get(space_id, path)) {
+    path = base.replace('.md', `-${counter}.md`);
+    counter++;
+  }
 
   const doc = await writeDocument({
     space_id,

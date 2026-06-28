@@ -1,7 +1,7 @@
 import { useState, useRef, useEffect } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { ArrowRight, FileText, MoreHorizontal, Pencil, Plus, Trash2 } from 'lucide-react';
+import { ArrowRight, FileText, FolderOpen, MessageSquare, MoreHorizontal, Pencil, Plus, Trash2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { ConfirmDialog } from '@/components/ui/confirm-dialog';
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
@@ -121,6 +121,42 @@ export default function HomePage() {
 
       {isLoading || chatsLoading || docsLoading ? (
         <PageLoading rows={3} />
+      ) : projects.length === 0 && chats.length === 0 && documents.length === 0 ? (
+        <div className="flex flex-1 items-center justify-center px-4 py-16">
+          <div className="mx-auto w-full max-w-lg text-center">
+            <div className="mb-6 flex items-center justify-center gap-3">
+              <div className="grid size-12 place-items-center rounded-xl bg-muted">
+                <FolderOpen size={22} className="text-muted-foreground" strokeWidth={1.5} />
+              </div>
+            </div>
+            <h2 className="mb-2 text-lg font-semibold text-foreground">Welcome to unnamed</h2>
+            <p className="mb-8 text-sm leading-relaxed text-muted-foreground">
+              Create a project to give the agent a workspace, then start a chat to get things done.
+            </p>
+            <div className="flex flex-col items-center gap-3 sm:flex-row sm:justify-center">
+              <Button
+                size="lg"
+                className="h-10 w-full gap-2 rounded-lg px-5 text-sm shadow-sm sm:w-auto"
+                onClick={() => navigate('/projects/new')}
+              >
+                <FolderOpen size={16} />
+                Add a project
+              </Button>
+              <Button
+                size="lg"
+                variant="outline"
+                className="h-10 w-full gap-2 rounded-lg px-5 text-sm sm:w-auto"
+                onClick={() => navigate('/c')}
+              >
+                <MessageSquare size={16} />
+                Start a chat
+              </Button>
+            </div>
+            <p className="mt-8 text-xs text-faint-fg">
+              Or explore the sidebar — Projects, Documents, and Triggers are all there.
+            </p>
+          </div>
+        </div>
       ) : (
         <PageBody className="px-4 pt-5 sm:px-8 sm:pt-9">
           <div className="mx-auto grid w-full max-w-7xl gap-4 sm:grid-cols-2 lg:grid-cols-3">

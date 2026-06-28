@@ -290,7 +290,7 @@ export function updateGlobalTrigger(id: string, body: { enabled?: boolean; playb
   return request(`/triggers/${id}`, { method: 'PATCH', body: JSON.stringify(body) });
 }
 
-export function runTriggerNow(id: string): Promise<{ status: string }> {
+export function runTriggerNow(id: string): Promise<{ status: string; sessionId: string }> {
   return request(`/triggers/${id}/fire`, { method: 'POST' });
 }
 

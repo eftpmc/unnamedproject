@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Link } from 'react-router-dom';
+import { Link, useNavigate } from 'react-router-dom';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { BookOpen, MoreHorizontal, Play, Plus, Trash2, X } from 'lucide-react';
 import { getAllTriggers, updateGlobalTrigger, deleteGlobalTrigger, runTriggerNow, createGlobalTrigger, getAllDocuments, getProjects } from '../lib/api.js';
@@ -16,6 +16,7 @@ import type { Document, Project, Trigger } from '../types.js';
 
 export default function TriggersPage() {
   usePageTitle('Triggers');
+  const navigate = useNavigate();
   const qc = useQueryClient();
   const [pendingDelete, setPendingDelete] = useState<Trigger | null>(null);
   const [runningId, setRunningId] = useState<string | null>(null);
@@ -62,7 +63,13 @@ export default function TriggersPage() {
   const runMutation = useMutation({
     mutationFn: (id: string) => runTriggerNow(id),
     onMutate: (id) => setRunningId(id),
-    onSettled: () => setRunningId(null),
+    onSuccess: (result) => {
+      setRunningId(null);
+      qc.invalidateQueries({ queryKey: ['triggers-global'] });
+      qc.invalidateQueries({ queryKey: ['chats'] });
+      navigate(`/c/${result.sessionId}`);
+    },
+    onError: () => setRunningId(null),
   });
 
   const createMutation = useMutation({

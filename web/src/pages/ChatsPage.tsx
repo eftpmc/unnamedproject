@@ -1,4 +1,4 @@
-import { useState, useRef, useEffect } from 'react';
+import { useState, useRef } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { ChevronDown, MoreHorizontal, Pencil, Plus, Search, Trash2, X } from 'lucide-react';
@@ -48,7 +48,6 @@ export default function ChatsPage() {
   const [pendingDelete, setPendingDelete] = useState<string | null>(null);
   const [renaming, setRenaming] = useState<{ id: string; value: string } | null>(null);
   const renameInputRef = useRef<HTMLInputElement>(null);
-  useEffect(() => { if (renaming) renameInputRef.current?.focus(); }, [renaming]);
   const [searchQuery, setSearchQuery] = useState('');
   const projectFilter = searchParams.get('project');
   const debouncedQuery = useDebounce(searchQuery, 300);
@@ -318,7 +317,7 @@ export default function ChatsPage() {
                                   </DropdownMenuTrigger>
                                   <DropdownMenuContent align="end" className="w-40">
                                     <DropdownMenuItem
-                                      onSelect={() => setRenaming({ id: chat.id, value: chat.title ?? '' })}
+                                      onSelect={() => { setRenaming({ id: chat.id, value: chat.title ?? '' }); setTimeout(() => renameInputRef.current?.select(), 0); }}
                                     >
                                       <Pencil size={14} />
                                       Rename

@@ -20,6 +20,7 @@ import memoryRoutes from './routes/memory.js';
 import webhooksRoutes from './routes/webhooks.js';
 import googleRoutes from './routes/google.js';
 import mcpRouter from './mcp/index.js';
+import projectsRoutes from './routes/projects.js';
 
 const PORT = process.env.PORT ?? '3000';
 const NODE_ENV = process.env.NODE_ENV;
@@ -88,6 +89,7 @@ reconcileOrphanedExecutions();
 app.use('/auth', authLimiter, wrapAsyncErrors(authRoutes));
 app.use('/connections', wrapAsyncErrors(connectionsRoutes));
 app.use('/spaces', wrapAsyncErrors(spacesRoutes));
+app.use('/projects', wrapAsyncErrors(projectsRoutes));
 app.use('/settings', wrapAsyncErrors(settingsRoutes));
 app.use('/sessions', wrapAsyncErrors(sessionsRoutes));
 app.use('/sessions', wrapAsyncErrors(messagesRoutes));

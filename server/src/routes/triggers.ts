@@ -80,18 +80,26 @@ router.post('/:id/fire', (req, res) => {
   fireTrigger(row.id).catch(err => console.error('[trigger/fire]', err));
 });
 
-// Toggle enabled state
+// Update trigger (enabled state and/or playbook)
 router.patch('/:id', (req, res) => {
   const { userId } = req as unknown as AuthedRequest;
-  const { enabled } = req.body as { enabled?: boolean };
-  if (typeof enabled !== 'boolean') { res.status(400).json({ error: 'enabled (boolean) required' }); return; }
+  const { enabled, playbook_id } = req.body as { enabled?: boolean; playbook_id?: string | null };
+  if (enabled === undefined && playbook_id === undefined) {
+    res.status(400).json({ error: 'enabled or playbook_id required' });
+    return;
+  }
   const row = getDb().prepare(`
     SELECT t.id FROM triggers t
     JOIN spaces s ON t.space_id = s.id
     WHERE t.id = ? AND s.user_id = ?
   `).get(req.params.id, userId) as { id: string } | undefined;
   if (!row) { res.status(404).json({ error: 'Trigger not found' }); return; }
-  getDb().prepare('UPDATE triggers SET enabled = ? WHERE id = ?').run(enabled ? 1 : 0, row.id);
+  const fields: string[] = [];
+  const values: unknown[] = [];
+  if (typeof enabled === 'boolean') { fields.push('enabled = ?'); values.push(enabled ? 1 : 0); }
+  if (playbook_id !== undefined) { fields.push('playbook_id = ?'); values.push(playbook_id ?? null); }
+  values.push(row.id);
+  getDb().prepare(`UPDATE triggers SET ${fields.join(', ')} WHERE id = ?`).run(...values);
   const updated = getDb().prepare('SELECT * FROM triggers WHERE id = ?').get(row.id);
   res.json(updated);
 });

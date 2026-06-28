@@ -286,7 +286,7 @@ export function deleteGlobalTrigger(id: string): Promise<void> {
   return request(`/triggers/${id}`, { method: 'DELETE' });
 }
 
-export function updateGlobalTrigger(id: string, body: { enabled: boolean }): Promise<Trigger> {
+export function updateGlobalTrigger(id: string, body: { enabled?: boolean; playbook_id?: string | null }): Promise<Trigger> {
   return request(`/triggers/${id}`, { method: 'PATCH', body: JSON.stringify(body) });
 }
 

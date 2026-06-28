@@ -28,7 +28,7 @@ function DataTableBody({ children }: { children: React.ReactNode }) {
 
 function DataTableRow({ children, className }: { children: React.ReactNode; className?: string }) {
   return (
-    <div className={cn('grid min-h-10 items-center gap-3 px-3 py-1.5 transition-colors hover:bg-muted/40', className)}>
+    <div data-slot="data-table-row" className={cn('grid min-h-10 items-center gap-3 px-3 py-1.5 transition-colors hover:bg-muted/40', className)}>
       {children}
     </div>
   );

@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useRef, useEffect } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { ChevronDown, MoreHorizontal, Pencil, Plus, Search, Trash2, X } from 'lucide-react';
@@ -47,6 +47,8 @@ export default function ChatsPage() {
   const queryClient = useQueryClient();
   const [pendingDelete, setPendingDelete] = useState<string | null>(null);
   const [renaming, setRenaming] = useState<{ id: string; value: string } | null>(null);
+  const renameInputRef = useRef<HTMLInputElement>(null);
+  useEffect(() => { if (renaming) renameInputRef.current?.focus(); }, [renaming]);
   const [searchQuery, setSearchQuery] = useState('');
   const projectFilter = searchParams.get('project');
   const debouncedQuery = useDebounce(searchQuery, 300);
@@ -255,7 +257,7 @@ export default function ChatsPage() {
                                 <div className="min-w-0">
                                   {renaming?.id === chat.id ? (
                                     <input
-                                      autoFocus
+                                      ref={renameInputRef}
                                       className="w-full rounded border border-ring bg-background px-1 text-sm font-medium text-foreground outline-none focus:ring-2 focus:ring-ring/50"
                                       value={renaming.value}
                                       onChange={e => setRenaming(r => r ? { ...r, value: e.target.value } : r)}

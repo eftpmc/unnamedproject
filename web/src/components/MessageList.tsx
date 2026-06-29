@@ -3,7 +3,7 @@ import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import rehypeHighlight from 'rehype-highlight';
 import 'highlight.js/styles/github-dark.css';
-import { ArrowDown, ArrowRight, Check, ChevronDown, ChevronUp, Copy, FileStack, FileText, GitMerge, Image, ListChecks, Pencil, Plug, Sparkles, Target } from 'lucide-react';
+import { ArrowDown, ArrowRight, Check, ChevronDown, ChevronUp, Copy, FileStack, FileText, GitMerge, Image, ListChecks, Pencil, Plug, RotateCcw, Sparkles, Target } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import ExecutionCard from './ExecutionCard.js';
 import { StatusPill } from '@/components/ui/status-pill';
@@ -450,6 +450,20 @@ export default function MessageList({ messages, executions, streamingIds, sessio
                   <span className="flex shrink-0 items-center gap-1.5 rounded-full border border-border-soft bg-muted px-2.5 py-1 text-[11px] text-muted-foreground">
                     <Target size={10} strokeWidth={1.85} />
                     {item.event.title}
+                  </span>
+                  <div className="h-px flex-1 bg-border-soft" />
+                </div>
+              );
+            }
+            if (item.event.type === 'runtime_checkpoint') {
+              const meta = item.event.metadata as { source?: string; invocationMode?: string };
+              const label = meta.source === 'user' ? 'Context reset manually' : item.event.title;
+              return (
+                <div key={`event-${item.event.id}`} style={{ marginTop }} className="flex items-center gap-2.5 py-0.5">
+                  <div className="h-px flex-1 bg-border-soft" />
+                  <span className="flex shrink-0 items-center gap-1 text-[11px] text-faint-fg">
+                    <RotateCcw size={9} strokeWidth={2} />
+                    {label}
                   </span>
                   <div className="h-px flex-1 bg-border-soft" />
                 </div>

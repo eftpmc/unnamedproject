@@ -124,7 +124,7 @@ describe('runAgentTurn', () => {
     expect(session.provider_session_id).toBe('fresh-thread');
   });
 
-  it('starts fresh with compact context for bookkeeping in long resumed chats', async () => {
+  it('starts fresh with compact context when session cost exceeds threshold', async () => {
     const { runAgentTurn } = await import('../../src/services/agent.js');
     const db = getDb();
     mockInvoke.mockImplementationOnce(async (params) => {
@@ -133,11 +133,9 @@ describe('runAgentTurn', () => {
       return { costUsd: 0.001 };
     });
     db.prepare("INSERT INTO sessions (id, user_id, provider_type, provider_session_id, summary) VALUES ('s3','u1','codex','expensive-thread','Earlier useful facts')").run();
-    for (let i = 0; i < 12; i++) {
-      db.prepare('INSERT INTO messages (id, session_id, role, content) VALUES (?,?,?,?)')
-        .run(`s3-m${i}`, 's3', i % 2 === 0 ? 'user' : 'assistant', `old message ${i}`);
-    }
-    db.prepare("INSERT INTO messages (id, session_id, role, content) VALUES ('m3','s3','user','Update the index and be done')").run();
+    // Seed attributed cost above the $2.50 threshold so the policy goes fresh.
+    db.prepare("INSERT INTO agent_usage (id, user_id, session_id, tool, cost_usd) VALUES ('au-s3','u1','s3','codex',3.00)").run();
+    db.prepare("INSERT INTO messages (id, session_id, role, content) VALUES ('m3','s3','user','keep working on it')").run();
     db.prepare("INSERT INTO session_turns (id, session_id, user_message_id, status) VALUES ('t3','s3','m3','running')").run();
 
     await runAgentTurn('u1', 's3', 'm3');

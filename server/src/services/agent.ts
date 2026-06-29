@@ -166,11 +166,16 @@ export async function runAgentTurn(userId: string, sessionId: string, userMessag
     ? `\n\n<attachments>\n${attachments.map(a => `<file id="${a.id}" name="${a.filename}" path="${a.storagePath}" mime_type="${a.mimeType}" />`).join('\n')}\n</attachments>\n\nThe files above are available on disk. Use the Read tool to access text/code files. For binary files (PDF, images) that should be stored in an item, use attach_file_to_item with the file's path attribute.`
     : '';
 
+  const sessionCostRow = getDb()
+    .prepare('SELECT COALESCE(SUM(cost_usd), 0) as total FROM agent_usage WHERE session_id = ?')
+    .get(sessionId) as { total: number };
+
   const intent = classifyIntent(prompt);
   const invocationMode = selectInvocationMode({
     providerSessionId: session?.provider_session_id,
     prompt,
     messageCount,
+    sessionCostUsd: sessionCostRow.total,
   });
   const isResume = modeUsesProviderResume(invocationMode);
   if (turn) {

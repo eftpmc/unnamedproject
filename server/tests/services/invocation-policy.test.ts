@@ -10,27 +10,63 @@ describe('selectInvocationMode', () => {
     })).toBe('new_provider_session');
   });
 
-  it('resumes for explicit live-continuation prompts', () => {
+  it('resumes for explicit short continuation prompts', () => {
     expect(selectInvocationMode({
-      providerSessionId: 'provider-1',
+      providerSessionId: 'p1',
       prompt: 'try again',
-      messageCount: 20,
+      messageCount: 25,
     })).toBe('resume_provider_session');
   });
 
-  it('uses fresh compact context for bookkeeping in long chats', () => {
+  it('resumes for explicit browser-continuation prompts regardless of count', () => {
     expect(selectInvocationMode({
-      providerSessionId: 'provider-1',
-      prompt: 'Update the index and anything else and be done there',
-      messageCount: 29,
+      providerSessionId: 'p1',
+      prompt: 'try clicking that again',
+      messageCount: 25,
+    })).toBe('resume_provider_session');
+  });
+
+  it('goes fresh when message count exceeds threshold', () => {
+    expect(selectInvocationMode({
+      providerSessionId: 'p1',
+      prompt: 'can you clean this up',
+      messageCount: 20,
     })).toBe('fresh_with_summary');
   });
 
-  it('defaults long ambiguous chats to fresh compact context', () => {
+  it('goes fresh when session cost exceeds threshold', () => {
     expect(selectInvocationMode({
-      providerSessionId: 'provider-1',
-      prompt: 'can you clean this up',
-      messageCount: 18,
+      providerSessionId: 'p1',
+      prompt: 'keep going',
+      messageCount: 5,
+      sessionCostUsd: 3.00,
     })).toBe('fresh_with_summary');
+  });
+
+  it('resumes for short follow-up within cost/count limits', () => {
+    expect(selectInvocationMode({
+      providerSessionId: 'p1',
+      prompt: 'looks good',
+      messageCount: 10,
+      sessionCostUsd: 0.50,
+    })).toBe('resume_provider_session');
+  });
+
+  it('goes fresh for explicit fresh-request patterns', () => {
+    expect(selectInvocationMode({
+      providerSessionId: 'p1',
+      prompt: 'Update the index and be done',
+      messageCount: 3,
+      sessionCostUsd: 0.10,
+    })).toBe('fresh_with_summary');
+  });
+
+  it('does not resume just because "page" or "login" appears in a coding task', () => {
+    expect(selectInvocationMode({
+      providerSessionId: 'p1',
+      prompt: 'add a login page to the app',
+      messageCount: 8,
+      sessionCostUsd: 0.20,
+    })).toBe('resume_provider_session');
   });
 });

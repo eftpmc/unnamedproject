@@ -99,21 +99,11 @@ router.get('/:id/usage-risk', (req, res) => {
   const usageRow = getDb()
     .prepare('SELECT COALESCE(SUM(cost_usd), 0) as total FROM agent_usage WHERE session_id = ?')
     .get(req.params.id) as { total: number };
-  const executionRow = getDb()
-    .prepare(`
-      SELECT COUNT(*) as count
-      FROM executions e
-      JOIN messages m ON m.id = e.message_id
-      WHERE m.session_id = ?
-    `)
-    .get(req.params.id) as { count: number };
-
   const hasProviderSession = !!session.providerSessionId;
-  const shouldWarn = hasProviderSession && (messageRow.count >= 12 || usageRow.total >= 1 || executionRow.count >= 8);
+  const shouldWarn = hasProviderSession && (messageRow.count >= 20 || usageRow.total >= 2.50);
 
   res.json({
     messageCount: messageRow.count,
-    executionCount: executionRow.count,
     attributedCostUsd: usageRow.total,
     providerType: session.providerType,
     hasProviderSession,

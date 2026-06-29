@@ -128,6 +128,7 @@ export default function ChatView({ chatId }: ChatViewProps) {
     setAgentError(null);
     setFailedMessageId(null);
     setLastInputTokens(null);
+    riskWarnedRef.current = false;
   }, [chatId]);
 
   useEffect(() => {
@@ -183,6 +184,7 @@ export default function ChatView({ chatId }: ChatViewProps) {
   const [agentError, setAgentError] = useState<string | null>(null);
   const [failedMessageId, setFailedMessageId] = useState<string | null>(null);
   const [pendingRiskSend, setPendingRiskSend] = useState<{ content: string; attachments: File[]; costUsd: number; messageCount: number } | null>(null);
+  const riskWarnedRef = useRef(false);
   const hasActiveExecution = Object.values(executions).some(list =>
     list.some(exec => exec.status === 'running' || exec.status === 'awaiting_approval')
   );
@@ -285,7 +287,7 @@ export default function ChatView({ chatId }: ChatViewProps) {
     const content = (overrideContent ?? inputValue).trim();
     if (!content && attachments.length === 0) return false;
 
-    if (!opts.skipRiskCheck && !editingMessageId && messages.length > 0) {
+    if (!opts.skipRiskCheck && !riskWarnedRef.current && !editingMessageId && messages.length > 0) {
       try {
         const risk = await getChatUsageRisk(chatId);
         if (risk.shouldWarn) {
@@ -789,6 +791,7 @@ export default function ChatView({ chatId }: ChatViewProps) {
                 onClick={() => {
                   const pending = pendingRiskSend;
                   setPendingRiskSend(null);
+                  riskWarnedRef.current = true;
                   sendPrompt(pending.content, pending.attachments, { skipRiskCheck: true });
                 }}
               >
@@ -798,6 +801,7 @@ export default function ChatView({ chatId }: ChatViewProps) {
                 onClick={async () => {
                   const pending = pendingRiskSend;
                   setPendingRiskSend(null);
+                  riskWarnedRef.current = true;
                   await resetChatProviderSession(chatId);
                   sendPrompt(pending.content, pending.attachments, { skipRiskCheck: true });
                 }}

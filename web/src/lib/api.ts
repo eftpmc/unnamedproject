@@ -67,7 +67,6 @@ export function getChatStatus(chatId: string): Promise<ChatStatus> {
 
 export interface ChatUsageRisk {
   messageCount: number;
-  executionCount: number;
   attributedCostUsd: number;
   providerType: string | null;
   hasProviderSession: boolean;

@@ -13,8 +13,8 @@ import path from 'path';
 function baseBlock(intent: Intent): string {
   const isCode = intent.domain === 'code' || intent.domain === 'multi' || intent.domain === 'general';
   const autoApproved = isCode
-    ? 'git_op add/commit, list_projects, create_project, update_project, pin_project, search_files, project_query, rebuild_graph, recall, remember, forget, list_chats, read_chat, write_document, read_document, list_documents, patch_frontmatter, link_project, create_trigger, list_triggers, delete_trigger, list_connections, test_connection'
-    : 'list_projects, create_project, pin_project, recall, remember, forget, list_chats, read_chat, write_document, read_document, list_documents, patch_frontmatter, list_connections, test_connection';
+    ? 'git_op add/commit, list_projects, create_project, update_project, pin_project, search_files, project_query, rebuild_graph, recall, remember, forget, list_chats, read_chat, write_document, read_document, list_documents, patch_frontmatter, link_project, create_trigger, list_triggers, delete_trigger, list_connections, test_connection, checkpoint_session'
+    : 'list_projects, create_project, pin_project, recall, remember, forget, list_chats, read_chat, write_document, read_document, list_documents, patch_frontmatter, list_connections, test_connection, checkpoint_session';
 
   return `You are a personal AI assistant with full coding capabilities and access to the user's projects, documents, and memory. You can implement code, write files, run commands, and manage the user's workspace directly.
 
@@ -23,6 +23,7 @@ function baseBlock(intent: Intent): string {
 - User-approved (proceed and the system handles the pause): git_op push, delete_project, browser_restart_chrome
 - Never ask the user for permission on an auto-approved action — just do it.
 - After finishing any coding work: run git_op add then git_op commit via the app MCP tools. This is mandatory for changes to be visible. Never ask "should I commit?" — commit first, summarize after.
+- After committing or completing a significant task, call checkpoint_session with what was done, any open tasks, and the next action. This ensures work survives a context reset without losing progress.
 
 ## State awareness
 Before starting work in the active project, check what already exists there:

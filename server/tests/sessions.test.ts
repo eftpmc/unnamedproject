@@ -117,17 +117,13 @@ describe('sessions', () => {
     getDb()
       .prepare('UPDATE sessions SET provider_type = ?, provider_session_id = ? WHERE id = ?')
       .run('claude_code', 'provider-session-risk', sessionId);
-    for (let i = 0; i < 12; i++) {
-      getDb()
-        .prepare('INSERT INTO messages (id, session_id, role, content) VALUES (?,?,?,?)')
-        .run(`risk-msg-${i}`, sessionId, i % 2 === 0 ? 'user' : 'assistant', `risk message ${i}`);
-    }
     const session = getDb()
       .prepare('SELECT user_id FROM sessions WHERE id = ?')
       .get(sessionId) as { user_id: string };
+    // Seed cost above the $2.50 threshold so shouldWarn fires.
     getDb()
       .prepare('INSERT INTO agent_usage (id, user_id, session_id, tool, cost_usd) VALUES (?,?,?,?,?)')
-      .run(newId(), session.user_id, sessionId, 'claude_code', 1.25);
+      .run(newId(), session.user_id, sessionId, 'claude_code', 3.00);
 
     const res = await request(app)
       .get(`/sessions/${sessionId}/usage-risk`)
@@ -135,8 +131,7 @@ describe('sessions', () => {
 
     expect(res.status).toBe(200);
     expect(res.body.hasProviderSession).toBe(true);
-    expect(res.body.messageCount).toBeGreaterThanOrEqual(12);
-    expect(res.body.attributedCostUsd).toBe(1.25);
+    expect(res.body.attributedCostUsd).toBe(3.00);
     expect(res.body.shouldWarn).toBe(true);
   });
 

@@ -37,6 +37,37 @@ function call(app: ReturnType<typeof makeApp>, toolName: string, args: Record<st
     .send({ jsonrpc: '2.0', method: 'tools/call', params: { name: toolName, arguments: args }, id: 1 });
 }
 
+describe('checkpoint_session handler', () => {
+  it('saves structured state to the session', async () => {
+    const db = getDb();
+    db.prepare("INSERT OR IGNORE INTO sessions (id, user_id) VALUES ('s-cp','u-mcp')").run();
+    const token = generateMcpToken(userId, 's-cp');
+    const res = await call(makeApp(), 'checkpoint_session', {
+      completed: 'Implemented the login flow',
+      open_tasks: ['Write tests', 'Update docs'],
+      next_action: 'Run the test suite',
+      files_changed: ['src/auth.ts'],
+    }, token);
+    expect(res.status).toBe(200);
+    expect(res.body.error).toBeUndefined();
+    expect(res.body.result.content[0].text).toContain('checkpoint saved');
+
+    const row = db.prepare('SELECT session_state FROM sessions WHERE id = ?').get('s-cp') as { session_state: string | null };
+    const state = JSON.parse(row.session_state ?? '{}');
+    expect(state.facts).toContain('Implemented the login flow');
+    expect(state.open_tasks).toContain('Write tests');
+    expect(state.next_action).toBe('Run the test suite');
+    expect(state.files_touched).toContain('src/auth.ts');
+  });
+
+  it('returns a safe message when called without a session', async () => {
+    const token = generateMcpToken(userId);
+    const res = await call(makeApp(), 'checkpoint_session', { completed: 'Done' }, token);
+    expect(res.status).toBe(200);
+    expect(res.body.result.content[0].text).toContain('No active session');
+  });
+});
+
 describe('space handlers', () => {
   it('list_spaces returns empty array initially', async () => {
     const token = generateMcpToken(userId);

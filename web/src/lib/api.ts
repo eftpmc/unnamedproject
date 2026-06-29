@@ -304,3 +304,21 @@ export function deleteAgentProvider(id: string): Promise<void> {
 export function testAgentProvider(id: string): Promise<{ ok: boolean | null; latencyMs?: number; error?: string }> {
   return request(`/agent-providers/${id}/test`);
 }
+
+export interface VaultEntry { key: string; updated_at: number }
+
+export function getVaultEntries(): Promise<VaultEntry[]> {
+  return request('/vault');
+}
+
+export function setVaultEntry(key: string, value: string): Promise<{ key: string }> {
+  return request('/vault', { method: 'POST', body: JSON.stringify({ key, value }) });
+}
+
+export function deleteVaultEntry(key: string): Promise<void> {
+  return request(`/vault/${encodeURIComponent(key)}`, { method: 'DELETE' });
+}
+
+export function importVaultEntries(entries: { key: string; value: string }[]): Promise<{ imported: number }> {
+  return request('/vault/import', { method: 'POST', body: JSON.stringify({ entries }) });
+}

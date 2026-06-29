@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { Check, Copy, Moon, Play, Plus, Sun, Trash2 } from 'lucide-react';
+import { Check, Copy, Eye, EyeOff, KeyRound, Moon, Play, Plus, Sun, Trash2, Upload } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
@@ -31,24 +31,30 @@ import {
   getProjects,
   getScheduledTasks,
   getSettings,
+  getVaultEntries,
+  setVaultEntry,
+  deleteVaultEntry,
+  importVaultEntries,
   runScheduledTask,
   testAgentProvider,
   testConnection,
   updateSettings,
 } from '../lib/api.js';
+import type { VaultEntry } from '../lib/api.js';
 import { usePageTitle } from '../lib/usePageTitle.js';
 import { useTheme } from '../lib/useTheme.js';
 import { useAccent } from '../lib/useAccent.js';
 import { ACCENT_PRESETS, DEFAULT_ACCENT } from '../lib/accent.js';
 import type { AgentProvider, Connection, GoogleAccount, Memory, PermissionProfile, Project, ScheduledTask, UserSettings } from '../types.js';
 
-type Section = 'tools' | 'mcp' | 'workspace' | 'memory' | 'appearance';
-const SETTINGS_SECTIONS: Section[] = ['tools', 'mcp', 'workspace', 'memory', 'appearance'];
+type Section = 'tools' | 'mcp' | 'workspace' | 'memory' | 'vault' | 'appearance';
+const SETTINGS_SECTIONS: Section[] = ['tools', 'mcp', 'workspace', 'memory', 'vault', 'appearance'];
 const SECTION_TITLES: Record<Section, string> = {
   tools: 'Tools',
   mcp: 'MCP',
   workspace: 'Workspace',
   memory: 'Memory',
+  vault: 'Vault',
   appearance: 'Appearance',
 };
 
@@ -238,6 +244,198 @@ function ChromeBrowserSection({ connections, onConnectionsChanged }: { connectio
       <HintText>
         Uses an extension bridge instead of Chrome remote debugging, so it can work with your normal signed-in Chrome profile.
       </HintText>
+    </div>
+  );
+}
+
+function parseGoogleCsv(text: string): { key: string; value: string }[] {
+  const lines = text.trim().split('\n');
+  if (lines.length < 2) return [];
+  const header = lines[0].toLowerCase().split(',').map(h => h.trim().replace(/^"|"$/g, ''));
+  const nameIdx = header.indexOf('name');
+  const urlIdx = header.indexOf('url');
+  const userIdx = header.indexOf('username');
+  const passIdx = header.indexOf('password');
+  if (passIdx === -1) return [];
+  const entries: { key: string; value: string }[] = [];
+  for (let i = 1; i < lines.length; i++) {
+    const cols = lines[i].split(',').map(c => c.trim().replace(/^"|"$/g, ''));
+    const name = nameIdx !== -1 ? cols[nameIdx] : '';
+    const url = urlIdx !== -1 ? cols[urlIdx] : '';
+    const username = userIdx !== -1 ? cols[userIdx] : '';
+    const password = passIdx !== -1 ? cols[passIdx] : '';
+    if (!password) continue;
+    const rawKey = name || url || `entry_${i}`;
+    const host = (() => { try { return new URL(rawKey).hostname.replace(/^www\./, ''); } catch { return rawKey; } })();
+    const key = host.replace(/[^a-z0-9_.-]/gi, '_').toLowerCase();
+    const value = username ? `${username}:${password}` : password;
+    entries.push({ key, value });
+  }
+  return entries;
+}
+
+function parseAppleCsv(text: string): { key: string; value: string }[] {
+  const lines = text.trim().split('\n');
+  if (lines.length < 2) return [];
+  const header = lines[0].toLowerCase().split(',').map(h => h.trim().replace(/^"|"$/g, ''));
+  const titleIdx = header.findIndex(h => h === 'title');
+  const urlIdx = header.findIndex(h => h === 'url' || h === 'website');
+  const userIdx = header.findIndex(h => h === 'username');
+  const passIdx = header.findIndex(h => h === 'password');
+  if (passIdx === -1) return [];
+  const entries: { key: string; value: string }[] = [];
+  for (let i = 1; i < lines.length; i++) {
+    const cols = lines[i].split(',').map(c => c.trim().replace(/^"|"$/g, ''));
+    const title = titleIdx !== -1 ? cols[titleIdx] : '';
+    const url = urlIdx !== -1 ? cols[urlIdx] : '';
+    const username = userIdx !== -1 ? cols[userIdx] : '';
+    const password = cols[passIdx];
+    if (!password) continue;
+    const rawKey = title || url || `entry_${i}`;
+    const host = (() => { try { return new URL(rawKey).hostname.replace(/^www\./, ''); } catch { return rawKey; } })();
+    const key = host.replace(/[^a-z0-9_.-]/gi, '_').toLowerCase();
+    const value = username ? `${username}:${password}` : password;
+    entries.push({ key, value });
+  }
+  return entries;
+}
+
+function VaultSection() {
+  const qc = useQueryClient();
+  const { data: entries = [] } = useQuery<VaultEntry[]>({ queryKey: ['vault'], queryFn: getVaultEntries });
+  const [newKey, setNewKey] = useState('');
+  const [newValue, setNewValue] = useState('');
+  const [showValue, setShowValue] = useState(false);
+  const [importError, setImportError] = useState('');
+  const [importSuccess, setImportSuccess] = useState('');
+
+  const setMutation = useMutation({
+    mutationFn: () => setVaultEntry(newKey.trim(), newValue),
+    onSuccess: () => { qc.invalidateQueries({ queryKey: ['vault'] }); setNewKey(''); setNewValue(''); },
+  });
+
+  const deleteMutation = useMutation({
+    mutationFn: (key: string) => deleteVaultEntry(key),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['vault'] }),
+  });
+
+  const importMutation = useMutation({
+    mutationFn: (entries: { key: string; value: string }[]) => importVaultEntries(entries),
+    onSuccess: (data) => {
+      qc.invalidateQueries({ queryKey: ['vault'] });
+      setImportSuccess(`Imported ${data.imported} credential${data.imported === 1 ? '' : 's'}.`);
+      window.setTimeout(() => setImportSuccess(''), 3000);
+    },
+    onError: (e: Error) => setImportError(e.message),
+  });
+
+  function handleCsvFile(file: File) {
+    setImportError('');
+    setImportSuccess('');
+    const reader = new FileReader();
+    reader.onload = (e) => {
+      const text = e.target?.result as string;
+      let parsed = parseGoogleCsv(text);
+      if (parsed.length === 0) parsed = parseAppleCsv(text);
+      if (parsed.length === 0) { setImportError('No valid credentials found. Make sure this is a Google or Apple Passwords CSV export.'); return; }
+      importMutation.mutate(parsed);
+    };
+    reader.readAsText(file);
+  }
+
+  return (
+    <div className="flex flex-col gap-6">
+      <div>
+        <SectionLabel>Stored credentials</SectionLabel>
+        {entries.length === 0 ? (
+          <div className="rounded-lg border border-dashed border-border bg-muted/30 px-4 py-3 text-sm text-muted-foreground">
+            No credentials stored yet.
+          </div>
+        ) : (
+          <div className="flex flex-col gap-2">
+            {entries.map(entry => (
+              <div key={entry.key} className="flex items-center gap-3 rounded-lg border border-border-soft bg-card px-4 py-2.5">
+                <KeyRound size={14} className="shrink-0 text-muted-foreground" />
+                <span className="flex-1 font-mono text-sm text-foreground">{entry.key}</span>
+                <span className="text-xs text-faint-fg">{new Date(entry.updated_at * 1000).toLocaleDateString()}</span>
+                <DeleteBtn onClick={() => deleteMutation.mutate(entry.key)} />
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+
+      <div>
+        <SectionLabel>Add credential</SectionLabel>
+        <div className="flex flex-col gap-3 rounded-lg border border-border-soft bg-card p-4">
+          <div className="flex flex-col gap-3 sm:flex-row">
+            <div className="flex-1">
+              <Label className="text-xs">Key</Label>
+              <Input
+                placeholder="e.g. github_token, handshake"
+                value={newKey}
+                onChange={e => setNewKey(e.target.value)}
+                className="mt-1 text-sm font-mono"
+              />
+            </div>
+            <div className="flex-1">
+              <Label className="text-xs">Value</Label>
+              <div className="relative mt-1">
+                <Input
+                  type={showValue ? 'text' : 'password'}
+                  placeholder="password or username:password"
+                  value={newValue}
+                  onChange={e => setNewValue(e.target.value)}
+                  className="pr-9 text-sm"
+                  onKeyDown={e => { if (e.key === 'Enter' && newKey.trim() && newValue) setMutation.mutate(); }}
+                />
+                <button
+                  type="button"
+                  onClick={() => setShowValue(v => !v)}
+                  className="absolute right-2.5 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
+                >
+                  {showValue ? <EyeOff size={14} /> : <Eye size={14} />}
+                </button>
+              </div>
+            </div>
+          </div>
+          <div className="flex justify-end">
+            <Button
+              size="sm"
+              onClick={() => setMutation.mutate()}
+              disabled={!newKey.trim() || !newValue || setMutation.isPending}
+            >
+              <Plus size={13} className="mr-1.5" />
+              Save credential
+            </Button>
+          </div>
+        </div>
+        <HintText>
+          Values are encrypted with AES-256-GCM. Keys like <code>handshake</code> store the full value; use <code>username:password</code> format for login pairs.
+        </HintText>
+      </div>
+
+      <div>
+        <SectionLabel>Import from password manager</SectionLabel>
+        <div className="rounded-lg border border-border-soft bg-card p-4">
+          <div
+            className="flex cursor-pointer flex-col items-center gap-2 rounded-lg border-2 border-dashed border-border p-6 text-center transition-colors hover:border-border-soft hover:bg-muted/30"
+            onClick={() => { const el = document.createElement('input'); el.type = 'file'; el.accept = '.csv'; el.onchange = e => { const f = (e.target as HTMLInputElement).files?.[0]; if (f) handleCsvFile(f); }; el.click(); }}
+            onDragOver={e => e.preventDefault()}
+            onDrop={e => { e.preventDefault(); const f = e.dataTransfer.files[0]; if (f) handleCsvFile(f); }}
+          >
+            <Upload size={20} className="text-muted-foreground" />
+            <div className="text-sm font-medium text-foreground">Drop a CSV file or click to browse</div>
+            <div className="text-xs text-muted-foreground">Google Password Manager · Apple Passwords</div>
+          </div>
+          {importError && <p className="mt-2 text-xs text-destructive">{importError}</p>}
+          {importSuccess && <p className="mt-2 text-xs text-success">{importSuccess}</p>}
+        </div>
+        <HintText>
+          Export from <strong>Google:</strong> passwords.google.com → Settings → Export. <strong>Apple:</strong> Passwords app → File → Export Passwords.
+          Each entry is stored with its hostname as the key.
+        </HintText>
+      </div>
     </div>
   );
 }
@@ -932,6 +1130,9 @@ export default function Settings() {
               )}
             </div>
           )}
+
+          {/* ── Vault ──────────────────────────────────── */}
+          {section === 'vault' && <VaultSection />}
 
           {/* ── Appearance ─────────────────────────────── */}
           {section === 'appearance' && (

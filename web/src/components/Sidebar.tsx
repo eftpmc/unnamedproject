@@ -5,7 +5,6 @@ import {
   ArrowLeft,
   ChevronRight,
   Database,
-  FileText,
   FolderGit2,
   FolderOpen,
   Globe,
@@ -278,7 +277,6 @@ function ProjectNav({ projectId, expanded, pathname, onNavigate }: { projectId: 
       <NavItem icon={<LayoutDashboard size={16} strokeWidth={1.75} />} label="Overview" href={base} active={pathname === base} expanded={expanded} onNavigate={onNavigate} />
       <NavItem icon={<Files size={16} strokeWidth={1.75} />} label="Files" href={`${base}/files`} active={pathname.startsWith(`${base}/files`)} expanded={expanded} onNavigate={onNavigate} />
       <NavItem icon={<MessageSquare size={16} strokeWidth={1.75} />} label="Chats" href={`${base}/chats`} active={pathname.startsWith(`${base}/chats`)} expanded={expanded} onNavigate={onNavigate} />
-      <NavItem icon={<FileText size={16} strokeWidth={1.75} />} label="Documents" href={`${base}/documents`} active={pathname.startsWith(`${base}/documents`)} expanded={expanded} onNavigate={onNavigate} />
     </>
   );
 }

@@ -457,6 +457,16 @@ const migrations: Migration[] = [
       }
     },
   },
+  {
+    version: 11,
+    name: 'drop_frontmatter_column',
+    up: (database) => {
+      const cols = (database.prepare('PRAGMA table_info(files)').all() as { name: string }[]).map(c => c.name);
+      if (cols.includes('frontmatter')) {
+        database.exec('ALTER TABLE files DROP COLUMN frontmatter');
+      }
+    },
+  },
 ];
 
 function tableSql(database: Database.Database, name: string): string | undefined {

@@ -36,7 +36,7 @@ const router = createBrowserRouter([
       { path: 'projects/:projectId', element: <ProjectPage /> },
       { path: 'projects/:projectId/files', element: <ProjectPage /> },
       { path: 'projects/:projectId/chats', element: <ProjectPage /> },
-      { path: 'projects/:projectId/documents', element: <ProjectPage /> },
+      { path: 'projects/:projectId/documents', element: <Navigate to="/library" replace /> },
       { path: 'library', element: <DocumentsPage /> },
       { path: 'library/:documentId', element: <DocumentPage /> },
       { path: 'triggers', element: <TriggersPage /> },

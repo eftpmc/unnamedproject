@@ -1,10 +1,11 @@
 import { useEffect, useRef, useState } from 'react';
-import { Link, useParams } from 'react-router-dom';
+import { Link, useNavigate, useParams } from 'react-router-dom';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
-import { ArrowLeft, Check, Pencil, X } from 'lucide-react';
-import { getDocumentById, updateDocumentById } from '../lib/api.js';
+import { ArrowLeft, Check, Pencil, Trash2, X } from 'lucide-react';
+import { getDocumentById, updateDocumentById, deleteDocumentById } from '../lib/api.js';
+import { ConfirmDialog } from '@/components/ui/confirm-dialog';
 import { usePageTitle } from '../lib/usePageTitle.js';
 import { timeAgo } from '../lib/utils.js';
 import { Button } from '@/components/ui/button';
@@ -15,10 +16,12 @@ const PROSE = 'text-[14px] leading-relaxed text-fg-soft [&_a]:text-primary [&_a]
 
 export default function DocumentPage() {
   const { documentId } = useParams<{ documentId: string }>();
+  const navigate = useNavigate();
   const qc = useQueryClient();
   const [editing, setEditing] = useState(false);
   const [draftBody, setDraftBody] = useState('');
   const [draftTitle, setDraftTitle] = useState('');
+  const [confirmDelete, setConfirmDelete] = useState(false);
   const bodyRef = useRef<HTMLTextAreaElement>(null);
 
   const { data: document, isLoading, isError } = useQuery<DocumentWithBody>({
@@ -34,6 +37,14 @@ export default function DocumentPage() {
       qc.invalidateQueries({ queryKey: ['document', documentId] });
       qc.invalidateQueries({ queryKey: ['documents-global'] });
       setEditing(false);
+    },
+  });
+
+  const deleteMutation = useMutation({
+    mutationFn: () => deleteDocumentById(documentId!),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['documents-global'] });
+      navigate('/documents');
     },
   });
 
@@ -111,9 +122,14 @@ export default function DocumentPage() {
               </Button>
             </div>
           ) : (
-            <Button size="sm" variant="ghost" onClick={startEdit}>
-              <Pencil size={13} className="mr-1.5" />Edit
-            </Button>
+            <div className="flex items-center gap-1">
+              <Button size="sm" variant="ghost" onClick={startEdit}>
+                <Pencil size={13} className="mr-1.5" />Edit
+              </Button>
+              <Button size="sm" variant="ghost" className="text-muted-foreground hover:text-destructive" onClick={() => setConfirmDelete(true)}>
+                <Trash2 size={13} />
+              </Button>
+            </div>
           )
         }
       />
@@ -155,6 +171,16 @@ export default function DocumentPage() {
           )}
         </article>
       </PageBody>
+
+      {confirmDelete && (
+        <ConfirmDialog
+          title="Delete document?"
+          description="This will permanently delete the document. This action cannot be undone."
+          confirmLabel="Delete"
+          onConfirm={() => deleteMutation.mutate()}
+          onCancel={() => setConfirmDelete(false)}
+        />
+      )}
     </PageShell>
   );
 }

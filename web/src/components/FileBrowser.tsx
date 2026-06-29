@@ -3,31 +3,29 @@ import { useQuery } from '@tanstack/react-query';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import { ChevronRight, ChevronDown, FileText, Folder, FolderOpen, Loader2 } from 'lucide-react';
-import { getProjectTree, getProjectFile } from '../lib/api.js';
+import { getProjectTreeByProjectId, getProjectFile } from '../lib/api.js';
 import { cn } from '@/lib/utils';
 import { EmptyPanel } from '@/components/ui/app-layout';
 import type { FileEntry } from '../types.js';
 
 interface FileBrowserProps {
-  spaceId: string;
   projectId: string;
   projectName?: string;
 }
 
 interface TreeNodeProps {
   entry: FileEntry;
-  spaceId: string;
   projectId: string;
   depth: number;
   selectedPath: string | null;
   onSelect: (path: string) => void;
 }
 
-function TreeNode({ entry, spaceId, projectId, depth, selectedPath, onSelect }: TreeNodeProps) {
+function TreeNode({ entry, projectId, depth, selectedPath, onSelect }: TreeNodeProps) {
   const [open, setOpen] = useState(false);
   const { data, isFetching } = useQuery({
-    queryKey: ['project-tree', spaceId, projectId, entry.path],
-    queryFn: () => getProjectTree(spaceId, projectId, entry.path),
+    queryKey: ['project-tree', projectId, entry.path],
+    queryFn: () => getProjectTreeByProjectId(projectId, entry.path),
     enabled: entry.type === 'dir' && open,
     staleTime: 30000,
   });
@@ -69,7 +67,6 @@ function TreeNode({ entry, spaceId, projectId, depth, selectedPath, onSelect }: 
         <TreeNode
           key={child.path}
           entry={child}
-          spaceId={spaceId}
           projectId={projectId}
           depth={depth + 1}
           selectedPath={selectedPath}
@@ -92,10 +89,6 @@ function detectLanguage(filePath: string): string {
   return map[ext] ?? 'text';
 }
 
-// Currently unused by FileBrowser itself — provided for media-aware callers.
-// viewers operating on the dedicated `/media` routes. getProjectFile returns repo-tree
-// files as UTF-8 text, which would corrupt binary media; this distinction is why
-// FileBrowser doesn't use this for repo-tree files.
 export function detectFileKind(filePath: string): 'image' | 'video' | 'audio' | 'text' {
   const ext = filePath.split('.').pop()?.toLowerCase() ?? '';
   if (['png', 'jpg', 'jpeg', 'gif', 'webp', 'svg'].includes(ext)) return 'image';
@@ -104,18 +97,18 @@ export function detectFileKind(filePath: string): 'image' | 'video' | 'audio' | 
   return 'text';
 }
 
-export default function FileBrowser({ spaceId, projectId, projectName = 'Repository' }: FileBrowserProps) {
+export default function FileBrowser({ projectId, projectName = 'Repository' }: FileBrowserProps) {
   const [selectedPath, setSelectedPath] = useState<string | null>(null);
 
   const { data: rootData, isLoading } = useQuery({
-    queryKey: ['project-tree', spaceId, projectId, ''],
-    queryFn: () => getProjectTree(spaceId, projectId),
+    queryKey: ['project-tree', projectId, ''],
+    queryFn: () => getProjectTreeByProjectId(projectId),
     staleTime: 30000,
   });
 
   const { data: fileData, isLoading: fileLoading } = useQuery({
-    queryKey: ['project-file', spaceId, projectId, selectedPath],
-    queryFn: () => getProjectFile(spaceId, projectId, selectedPath!),
+    queryKey: ['project-file', projectId, selectedPath],
+    queryFn: () => getProjectFile(projectId, selectedPath!),
     enabled: !!selectedPath,
     staleTime: 10000,
   });
@@ -151,7 +144,6 @@ export default function FileBrowser({ spaceId, projectId, projectName = 'Reposit
           <TreeNode
             key={entry.path}
             entry={entry}
-            spaceId={spaceId}
             projectId={projectId}
             depth={0}
             selectedPath={selectedPath}

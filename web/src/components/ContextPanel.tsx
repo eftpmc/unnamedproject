@@ -3,7 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { X, GitMerge, Check, Bell, FileStack, ArrowRight } from 'lucide-react';
 import { getDocuments } from '../lib/api.js';
 import { cn } from '@/lib/utils';
-import type { Space, Document } from '../types.js';
+import type { Project, Document } from '../types.js';
 
 function docSnippet(doc: Document): string {
   return [doc.type, doc.status].filter(Boolean).join(' · ') || 'document';
@@ -18,7 +18,7 @@ interface Approval {
 interface ContextPanelProps {
   open: boolean;
   onClose: () => void;
-  pinnedProject: Space | null;
+  pinnedProject: Project | null;
   worktree: { branch: string; commits_ahead: number } | null;
   pendingApproval: Approval | null;
   onApprove: (approvalId: string) => void;
@@ -102,8 +102,8 @@ function PanelContent({
   const primaryProject = pinnedProject;
 
   const { data: items = [] } = useQuery({
-    queryKey: ['documents', primaryProject?.id],
-    queryFn: () => getDocuments(primaryProject!.id),
+    queryKey: ['documents', primaryProject?.space_id],
+    queryFn: () => getDocuments(primaryProject!.space_id),
     enabled: !!primaryProject,
     staleTime: 20_000,
   });
@@ -130,7 +130,7 @@ function PanelContent({
             <ProjectContextRow
               project={pinnedProject}
               label="Pinned"
-              onClick={() => navigate('/projects')}
+              onClick={() => navigate(`/projects/${pinnedProject.id}`)}
             />
           </div>
         </section>
@@ -229,7 +229,7 @@ function ProjectContextRow({
   icon,
   onClick,
 }: {
-  project: Space;
+  project: Project;
   label: string;
   icon?: React.ReactNode;
   onClick: () => void;
@@ -243,7 +243,7 @@ function ProjectContextRow({
       <span className="size-2 shrink-0 rounded-full bg-success shadow-[0_0_0_3px_color-mix(in_oklch,var(--success)_22%,transparent)]" />
       <div className="min-w-0 flex-1">
         <div className="truncate text-xs font-medium text-foreground">{project.name}</div>
-        {project.description && <div className="truncate text-[11px] text-faint-fg">{project.description}</div>}
+        {project.repo_path && <div className="truncate font-mono text-[11px] text-faint-fg">{project.repo_path}</div>}
       </div>
       <span className="flex shrink-0 items-center gap-0.5 text-[10px] text-faint-fg">
         {icon}

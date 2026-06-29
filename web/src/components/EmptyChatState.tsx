@@ -2,7 +2,7 @@ import { useEffect, useRef, useState, type ChangeEvent, type KeyboardEvent } fro
 import { ArrowUp, FileText, Folder, Paperclip, X } from 'lucide-react';
 import { Textarea } from '@/components/ui/textarea';
 import { cn } from '@/lib/utils';
-import type { Space } from '../types.js';
+import type { Project } from '../types.js';
 
 const MAX_ATTACHMENTS = 8;
 const MAX_ATTACHMENT_BYTES = 10 * 1024 * 1024;
@@ -15,7 +15,7 @@ interface EmptyChatStateProps {
   pendingFiles?: File[];
   onPendingFilesConsumed?: () => void;
   projectName?: string;
-  projects?: Space[];
+  projects?: Project[];
   onPinProject?: (projectId: string) => void;
 }
 
@@ -162,7 +162,7 @@ export default function EmptyChatState({ value, onChange, onSend, disabled, pend
                   key={project.id}
                   type="button"
                   disabled={disabled}
-                  onClick={() => onPinProject(project.id)}
+                  onClick={() => onPinProject(project.space_id)}
                   className="flex items-center gap-1.5 rounded-lg border border-border-soft bg-card px-3 py-1.5 text-xs font-medium text-muted-foreground transition-colors hover:border-border hover:text-foreground disabled:opacity-50"
                 >
                   <Folder size={12} className="shrink-0" />

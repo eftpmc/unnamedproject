@@ -6,7 +6,7 @@ import {
   DropdownMenuSubTrigger,
 } from '@/components/ui/dropdown-menu';
 import { cn } from '../lib/utils.js';
-import type { Space } from '../types.js';
+import type { Project } from '../types.js';
 
 export default function ScopePopover({
   projects,
@@ -14,10 +14,10 @@ export default function ScopePopover({
   agentActive,
   onScopeChange,
 }: {
-  projects: Space[];
-  pinnedProject: Space | null;
+  projects: Project[];
+  pinnedProject: Project | null;
   agentActive: boolean;
-  onScopeChange: (projectId: string | null) => void;
+  onScopeChange: (spaceId: string | null) => void;
 }) {
   const isAuto = !pinnedProject;
   const triggerLabel = pinnedProject?.name ?? 'No project';
@@ -52,7 +52,7 @@ export default function ScopePopover({
               icon={<Folder size={14} />}
               title={project.name}
               description="Project context"
-              onClick={() => onScopeChange(project.id)}
+              onClick={() => onScopeChange(project.space_id)}
             />
           ))}
         </div>

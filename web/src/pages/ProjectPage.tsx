@@ -6,7 +6,7 @@ import { ArrowRight, FileText, GitBranch, MessageSquare, MoreHorizontal, Pencil,
 import {
   getProject, updateProject, deleteTopLevelProject,
   getConnections, updateSpace, getSpaces, getChats, deleteChat, createChat, updateChatConfig,
-  getDocuments,
+  getDocuments, updateDocumentById, deleteDocumentById,
 } from '../lib/api.js';
 import { usePageTitle } from '../lib/usePageTitle.js';
 import { timeAgo } from '../lib/utils.js';
@@ -19,12 +19,13 @@ import { DataTable, DataTableBody, DataTableHeader, DataTableRow } from '@/compo
 import FileBrowser from '../components/FileBrowser.js';
 import type { Connection, Document, Project, Session, Space } from '../types.js';
 
-type SubRoute = 'overview' | 'files' | 'chats';
+type SubRoute = 'overview' | 'files' | 'chats' | 'documents';
 
 function subRoute(pathname: string, projectId: string): SubRoute {
   const suffix = pathname.slice(`/projects/${projectId}`.length).split('/').filter(Boolean)[0];
   if (suffix === 'files') return 'files';
   if (suffix === 'chats') return 'chats';
+  if (suffix === 'documents') return 'documents';
   return 'overview';
 }
 
@@ -57,7 +58,7 @@ export default function ProjectPage() {
         />
         <PageBody className="px-4 pt-5 sm:px-8 sm:pt-9">
           <div className="mx-auto max-w-7xl">
-            <FileBrowser spaceId={project.space_id} projectId={project.id} projectName={project.name} />
+            <FileBrowser projectId={project.id} projectName={project.name} />
           </div>
         </PageBody>
       </PageShell>
@@ -66,6 +67,10 @@ export default function ProjectPage() {
 
   if (view === 'chats') {
     return <ProjectChatsView project={project} />;
+  }
+
+  if (view === 'documents') {
+    return <ProjectDocumentsView project={project} />;
   }
 
   // Overview (default)
@@ -224,6 +229,138 @@ function ProjectChatsView({ project }: { project: Project }) {
         <ConfirmDialog
           title="Delete chat?"
           description="This will permanently delete the chat and all its messages."
+          confirmLabel="Delete"
+          onConfirm={() => deleteMutation.mutate(pendingDelete)}
+          onCancel={() => setPendingDelete(null)}
+        />
+      )}
+    </PageShell>
+  );
+}
+
+function ProjectDocumentsView({ project }: { project: Project }) {
+  const navigate = useNavigate();
+  const queryClient = useQueryClient();
+  const [pendingDelete, setPendingDelete] = useState<string | null>(null);
+  const [renaming, setRenaming] = useState<{ id: string; value: string } | null>(null);
+  const renameInputRef = useRef<HTMLInputElement>(null);
+
+  const { data: documents = [], isLoading } = useQuery<Document[]>({
+    queryKey: ['documents', project.space_id],
+    queryFn: () => getDocuments(project.space_id),
+    staleTime: 30_000,
+  });
+
+  const renameMutation = useMutation({
+    mutationFn: ({ id, title }: { id: string; title: string }) => updateDocumentById(id, { title }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['documents', project.space_id] });
+      queryClient.invalidateQueries({ queryKey: ['documents-global'] });
+      setRenaming(null);
+    },
+  });
+
+  const deleteMutation = useMutation({
+    mutationFn: (id: string) => deleteDocumentById(id),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['documents', project.space_id] });
+      queryClient.invalidateQueries({ queryKey: ['documents-global'] });
+      setPendingDelete(null);
+    },
+    onError: () => setPendingDelete(null),
+  });
+
+  function commitRename() {
+    if (!renaming) return;
+    const trimmed = renaming.value.trim();
+    const original = documents.find(d => d.id === renaming.id)?.title ?? '';
+    if (!trimmed || trimmed === original) { setRenaming(null); return; }
+    renameMutation.mutate({ id: renaming.id, title: trimmed });
+  }
+
+  return (
+    <PageShell>
+      <PageHeader
+        title={project.name}
+        breadcrumb="Documents"
+        className="px-4 pt-6 sm:px-8 sm:pt-10"
+        contentClassName="max-w-7xl"
+        titleClassName="text-2xl sm:text-3xl"
+      />
+      <PageBody className="px-4 pt-5 sm:px-8 sm:pt-9">
+        <div className="mx-auto max-w-7xl">
+          {isLoading ? (
+            <div className="py-8 text-center text-sm text-muted-foreground">Loading…</div>
+          ) : documents.length === 0 ? (
+            <div className="rounded-lg border border-border-soft bg-card px-4 py-8 text-center">
+              <p className="text-sm font-medium text-foreground">No documents yet</p>
+              <p className="mt-1 text-xs text-muted-foreground">Documents created in this project will appear here.</p>
+            </div>
+          ) : (
+            <DataTable>
+              <DataTableHeader className="grid-cols-[minmax(0,1fr)_6rem_1.75rem]">
+                <span>Title</span>
+                <span className="justify-self-end">Updated</span>
+                <span />
+              </DataTableHeader>
+              <DataTableBody>
+                {documents.map(doc => (
+                  <DataTableRow key={doc.id} className="grid-cols-[minmax(0,1fr)_6rem_1.75rem]">
+                    <div className="min-w-0">
+                      {renaming?.id === doc.id ? (
+                        <input
+                          ref={renameInputRef}
+                          className="w-full rounded border border-ring bg-background px-1 text-sm font-medium text-foreground outline-none focus:ring-2 focus:ring-ring/50"
+                          value={renaming.value}
+                          onChange={e => setRenaming(r => r ? { ...r, value: e.target.value } : r)}
+                          onKeyDown={e => {
+                            if (e.key === 'Enter') { e.preventDefault(); commitRename(); }
+                            if (e.key === 'Escape') { e.preventDefault(); setRenaming(null); }
+                          }}
+                          onBlur={commitRename}
+                        />
+                      ) : (
+                        <Link
+                          to={`/documents/${doc.id}`}
+                          className="block truncate text-sm font-medium text-foreground underline-offset-2 hover:underline"
+                        >
+                          {doc.title}
+                        </Link>
+                      )}
+                    </div>
+                    <span className="justify-self-end whitespace-nowrap text-[11px] text-faint-fg">{timeAgo(doc.updated_at)}</span>
+                    <DropdownMenu>
+                      <DropdownMenuTrigger asChild>
+                        <button
+                          type="button"
+                          aria-label={`Options for ${doc.title}`}
+                          className="grid size-7 place-items-center rounded-md text-muted-foreground transition-colors hover:bg-background hover:text-foreground"
+                        >
+                          <MoreHorizontal size={14} />
+                        </button>
+                      </DropdownMenuTrigger>
+                      <DropdownMenuContent align="end" className="w-36">
+                        <DropdownMenuItem onSelect={() => { setRenaming({ id: doc.id, value: doc.title }); setTimeout(() => renameInputRef.current?.select(), 0); }}>
+                          <Pencil size={14} />Rename
+                        </DropdownMenuItem>
+                        <DropdownMenuSeparator />
+                        <DropdownMenuItem variant="destructive" onSelect={() => setPendingDelete(doc.id)}>
+                          <Trash2 size={14} />Delete
+                        </DropdownMenuItem>
+                      </DropdownMenuContent>
+                    </DropdownMenu>
+                  </DataTableRow>
+                ))}
+              </DataTableBody>
+            </DataTable>
+          )}
+        </div>
+      </PageBody>
+
+      {pendingDelete && (
+        <ConfirmDialog
+          title="Delete document?"
+          description="This will permanently delete the document. This action cannot be undone."
           confirmLabel="Delete"
           onConfirm={() => deleteMutation.mutate(pendingDelete)}
           onCancel={() => setPendingDelete(null)}

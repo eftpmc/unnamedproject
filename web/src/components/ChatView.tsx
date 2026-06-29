@@ -17,7 +17,7 @@ import WorktreeDiff from './WorktreeDiff.js';
 import ContextBar from './ContextBar.js';
 import EmptyChatState from './EmptyChatState.js';
 import ScopePopover from './ScopePopover.js';
-import { getMessages, sendMessage, getChats, updateChatConfig, getSessionWorktree, mergeSessionBranch, getWorktreeDiff, getSpaces, getProjects, truncateMessagesFrom, approveExecution, rejectExecution, getChatEvents, getChatStatus, stopChat } from '../lib/api.js';
+import { getMessages, sendMessage, getChats, updateChatConfig, getSessionWorktree, mergeSessionBranch, getWorktreeDiff, getProjects, truncateMessagesFrom, approveExecution, rejectExecution, getChatEvents, getChatStatus, stopChat } from '../lib/api.js';
 import { subscribe } from '../lib/ws.js';
 import { cn } from '../lib/utils.js';
 import { usePageTitle } from '../lib/usePageTitle.js';
@@ -62,18 +62,12 @@ export default function ChatView({ chatId }: ChatViewProps) {
 
   usePageTitle(chat?.title);
 
-  const { data: allSpaces = [] } = useQuery({
-    queryKey: ['spaces'],
-    queryFn: getSpaces,
-  });
-  const { data: topLevelProjects = [] } = useQuery({
+  const { data: projects = [] } = useQuery({
     queryKey: ['projects'],
     queryFn: () => getProjects(),
     staleTime: 60_000,
   });
-  const validSpaceIds = new Set(topLevelProjects.map(p => p.space_id));
-  const projects = allSpaces.filter(s => validSpaceIds.has(s.id));
-  const pinnedProject = allSpaces.find(p => p.id === chat?.pinned_space_id) ?? null;
+  const pinnedProject = projects.find(p => p.space_id === chat?.pinned_space_id) ?? null;
 
   const configMutation = useMutation({
     mutationFn: (config: { effort?: EffortLevel; pinned_space_id?: string | null; title?: string }) => updateChatConfig(chatId, config),

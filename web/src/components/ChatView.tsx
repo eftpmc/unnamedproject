@@ -408,6 +408,8 @@ export default function ChatView({ chatId }: ChatViewProps) {
     if (event.type === 'turn_complete') {
       const ev = event as WSTurnComplete;
       queryClient.setQueryData(['chat-status', chatId], { active: false, turn: null, execution: null });
+      queryClient.invalidateQueries({ queryKey: ['chat-state', chatId] });
+      queryClient.invalidateQueries({ queryKey: ['chat-usage-risk', chatId] });
       if (ev.status === 'error') {
         queryClient.invalidateQueries({ queryKey: ['messages', chatId] });
         setStreamingIds(prev => {

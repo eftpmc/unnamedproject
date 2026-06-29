@@ -9,6 +9,7 @@ export function registerSessionHandlers(): void {
       type: 'object',
       properties: {
         completed: { type: 'string', description: 'What was just accomplished in this turn' },
+        current_focus: { type: 'string', description: 'What the agent is actively working on right now' },
         open_tasks: { type: 'array', items: { type: 'string' }, description: 'What still needs to be done' },
         blockers: { type: 'array', items: { type: 'string' }, description: 'What is blocked or requires user input before continuing' },
         next_action: { type: 'string', description: 'The specific next step when work resumes' },
@@ -21,6 +22,7 @@ export function registerSessionHandlers(): void {
 
       const event: Parameters<typeof recordSessionStateEvent>[1] = {};
       if (typeof args.goal === 'string' && args.goal.trim()) event.goal = args.goal;
+      if (typeof args.current_focus === 'string' && args.current_focus.trim()) event.current_focus = args.current_focus;
       if (typeof args.next_action === 'string' && args.next_action.trim()) event.next_action = args.next_action;
       if (typeof args.completed === 'string' && args.completed.trim()) event.facts = [args.completed];
       if (Array.isArray(args.open_tasks)) {

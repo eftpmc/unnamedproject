@@ -1,7 +1,7 @@
 import { useQuery } from '@tanstack/react-query';
 import { useNavigate } from 'react-router-dom';
 import { X, GitMerge, Check, Bell, FileStack, ArrowRight, AlertTriangle, ListTodo } from 'lucide-react';
-import { getDocuments, getChatSessionState } from '../lib/api.js';
+import { getDocuments, getChatSessionState, getChatUsageRisk } from '../lib/api.js';
 import { cn } from '@/lib/utils';
 import type { Project, Document, ChatSessionState } from '../types.js';
 
@@ -48,6 +48,14 @@ export default function ContextPanel({
   });
   const sessionState = stateData?.state ?? null;
 
+  const { data: riskData } = useQuery({
+    queryKey: ['chat-usage-risk', chatId],
+    queryFn: () => getChatUsageRisk(chatId),
+    enabled: open,
+    staleTime: 0,
+  });
+  const sessionCost = riskData?.attributedCostUsd ?? 0;
+
   return (
     <>
       {/* Desktop: slide-in right panel */}
@@ -68,6 +76,7 @@ export default function ContextPanel({
             onMerge={onMerge}
             mergeState={mergeState}
             sessionState={sessionState}
+            sessionCost={sessionCost}
           />
         </div>
       </aside>
@@ -91,6 +100,7 @@ export default function ContextPanel({
               onMerge={onMerge}
               mergeState={mergeState}
               sessionState={sessionState}
+              sessionCost={sessionCost}
             />
           </div>
         </div>
@@ -109,7 +119,8 @@ function PanelContent({
   onMerge,
   mergeState,
   sessionState,
-}: Omit<ContextPanelProps, 'open' | 'chatId'> & { sessionState: ChatSessionState | null }) {
+  sessionCost,
+}: Omit<ContextPanelProps, 'open' | 'chatId'> & { sessionState: ChatSessionState | null; sessionCost: number }) {
   const navigate = useNavigate();
 
   const primaryProject = pinnedProject;
@@ -239,6 +250,9 @@ function PanelContent({
           <span className="flex items-center gap-1.5 text-[11px] font-medium text-muted-foreground">
             <ListTodo size={11} />
             Session state
+            {sessionCost > 0 && (
+              <span className="ml-auto font-mono text-[10px] text-faint-fg">${sessionCost.toFixed(2)}</span>
+            )}
           </span>
           <div className="flex flex-col gap-2 rounded-lg border border-border-soft bg-card p-3">
             {sessionState.goal && (

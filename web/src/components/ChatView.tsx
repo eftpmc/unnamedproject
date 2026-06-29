@@ -78,6 +78,13 @@ export default function ChatView({ chatId }: ChatViewProps) {
     },
   });
 
+  const { data: costData } = useQuery({
+    queryKey: ['chat-usage-risk', chatId],
+    queryFn: () => getChatUsageRisk(chatId),
+    staleTime: 30_000,
+  });
+  const sessionCost = costData?.attributedCostUsd ?? 0;
+
   const { data: worktree, refetch: refetchWorktreeQuery } = useQuery({
     queryKey: ['worktree', chatId],
     queryFn: () => getSessionWorktree(chatId),
@@ -638,6 +645,14 @@ export default function ChatView({ chatId }: ChatViewProps) {
             </span>
           )}
           {lastInputTokens !== null && <ContextBar inputTokens={lastInputTokens} />}
+          {sessionCost > 0 && (
+            <span className={cn(
+              'hidden font-mono text-[11px] sm:inline',
+              sessionCost >= 2.00 ? 'text-warning' : 'text-faint-fg',
+            )}>
+              ${sessionCost.toFixed(2)}
+            </span>
+          )}
           {(pinnedProject || worktree || pendingApproval) && (
             <button
               type="button"

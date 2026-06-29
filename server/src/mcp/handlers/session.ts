@@ -4,7 +4,7 @@ import { recordSessionStateEvent } from '../../services/session-state.js';
 export function registerSessionHandlers(): void {
   registerTool({
     name: 'checkpoint_session',
-    description: 'Save structured progress to the session state so it can be recovered after a context reset. Call after completing any significant piece of work, before committing, or when hitting a blocker.',
+    description: 'Save structured progress to the session state so it survives a context reset. Call at the end of every turn where you did meaningful work — coding, research, file changes, or hitting a blocker. Do not wait for a commit.',
     inputSchema: {
       type: 'object',
       properties: {

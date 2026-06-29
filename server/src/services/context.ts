@@ -4,6 +4,7 @@ import { listDocuments } from './documents.js';
 import { recallRelevant } from './memory.js';
 import { formatEntry } from '../tools/memory_tools.js';
 import { formatSessionStateBlock } from './session-state.js';
+import { getDecryptedConfig } from '../routes/connections.js';
 import type { Intent } from './intent.js';
 import fs from 'fs';
 import path from 'path';
@@ -233,12 +234,22 @@ function projectsListBlock(userId: string): string {
   return `Available projects:\n${rows.map(p => `- ${p.name} (project_id: ${p.id}${p.description ? ', ' + p.description : ''})`).join('\n')}`;
 }
 
+function isPlaywrightConn(conn: { id: string; type: string; name: string }, userId: string): boolean {
+  if (conn.type !== 'mcp') return false;
+  if (conn.name.toLowerCase().includes('playwright')) return true;
+  try {
+    const cfg = getDecryptedConfig(conn.id, userId);
+    const args: unknown = cfg.args ? JSON.parse(cfg.args as string) : [];
+    return Array.isArray(args) && args.some(a => String(a).includes('playwright'));
+  } catch { return false; }
+}
+
 function browserToolsBlock(userId: string): string {
   const conns = getDb()
-    .prepare("SELECT type, name FROM connections WHERE user_id = ? AND type IN ('chrome', 'mcp')")
-    .all(userId) as Array<{ type: string; name: string }>;
+    .prepare("SELECT id, type, name FROM connections WHERE user_id = ? AND type IN ('chrome', 'mcp')")
+    .all(userId) as Array<{ id: string; type: string; name: string }>;
   const hasChrome = conns.some(c => c.type === 'chrome');
-  const hasPlaywright = conns.some(c => c.type === 'mcp' && c.name.toLowerCase().includes('playwright'));
+  const hasPlaywright = conns.some(c => isPlaywrightConn(c, userId));
   if (!hasChrome && !hasPlaywright) return '';
   const lines = ['## Configured browser tools'];
   if (hasPlaywright) lines.push('- Playwright MCP: configured — use for JS-heavy or dynamic public pages.');

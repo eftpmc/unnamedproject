@@ -816,6 +816,7 @@ export default function ChatView({ chatId }: ChatViewProps) {
       <ContextPanel
         open={ctxOpen}
         onClose={() => { setCtxOpen(false); localStorage.setItem('ctx_panel', 'closed'); }}
+        chatId={chatId}
         pinnedProject={pinnedProject}
         worktree={worktree ? { branch: worktree.branch, commits_ahead: worktree.ahead } : null}
         pendingApproval={pendingApproval ? {

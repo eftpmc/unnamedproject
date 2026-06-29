@@ -86,6 +86,16 @@ router.get('/:id/status', (req, res) => {
   });
 });
 
+router.get('/:id/state', (req, res) => {
+  const { userId } = req as unknown as AuthedRequest;
+  const row = getDb()
+    .prepare('SELECT session_state FROM sessions WHERE id = ? AND user_id = ?')
+    .get(req.params.id, userId) as { session_state: string | null } | undefined;
+  if (!row) { res.status(404).json({ error: 'Session not found' }); return; }
+  const state = row.session_state ? JSON.parse(row.session_state) : null;
+  res.json({ state });
+});
+
 router.get('/:id/usage-risk', (req, res) => {
   const { userId } = req as unknown as AuthedRequest;
   const session = getDb()

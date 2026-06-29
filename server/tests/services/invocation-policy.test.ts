@@ -69,4 +69,24 @@ describe('selectInvocationMode', () => {
       sessionCostUsd: 0.20,
     })).toBe('resume_provider_session');
   });
+
+  it('forces fresh when session state has a loop blocker', () => {
+    expect(selectInvocationMode({
+      providerSessionId: 'p1',
+      prompt: 'try again',
+      messageCount: 4,
+      sessionCostUsd: 0.10,
+      blockers: ['browser click action reported success without progress repeatedly. Do not retry the same browser action; switch strategy or ask for manual intervention.'],
+    })).toBe('fresh_with_summary');
+  });
+
+  it('does not force fresh for non-loop blockers', () => {
+    expect(selectInvocationMode({
+      providerSessionId: 'p1',
+      prompt: 'try again',
+      messageCount: 4,
+      sessionCostUsd: 0.10,
+      blockers: ['needs user to provide their API key'],
+    })).toBe('resume_provider_session');
+  });
 });

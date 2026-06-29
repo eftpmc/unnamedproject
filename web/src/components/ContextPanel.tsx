@@ -1,9 +1,9 @@
 import { useQuery } from '@tanstack/react-query';
 import { useNavigate } from 'react-router-dom';
-import { X, GitMerge, Check, Bell, FileStack, ArrowRight } from 'lucide-react';
-import { getDocuments } from '../lib/api.js';
+import { X, GitMerge, Check, Bell, FileStack, ArrowRight, AlertTriangle, ListTodo } from 'lucide-react';
+import { getDocuments, getChatSessionState } from '../lib/api.js';
 import { cn } from '@/lib/utils';
-import type { Project, Document } from '../types.js';
+import type { Project, Document, ChatSessionState } from '../types.js';
 
 function docSnippet(doc: Document): string {
   return [doc.type, doc.status].filter(Boolean).join(' · ') || 'document';
@@ -18,6 +18,7 @@ interface Approval {
 interface ContextPanelProps {
   open: boolean;
   onClose: () => void;
+  chatId: string;
   pinnedProject: Project | null;
   worktree: { branch: string; commits_ahead: number } | null;
   pendingApproval: Approval | null;
@@ -30,6 +31,7 @@ interface ContextPanelProps {
 export default function ContextPanel({
   open,
   onClose,
+  chatId,
   pinnedProject,
   worktree,
   pendingApproval,
@@ -38,6 +40,14 @@ export default function ContextPanel({
   onMerge,
   mergeState,
 }: ContextPanelProps) {
+  const { data: stateData } = useQuery({
+    queryKey: ['chat-state', chatId],
+    queryFn: () => getChatSessionState(chatId),
+    enabled: open,
+    staleTime: 0,
+  });
+  const sessionState = stateData?.state ?? null;
+
   return (
     <>
       {/* Desktop: slide-in right panel */}
@@ -57,6 +67,7 @@ export default function ContextPanel({
             onDeny={onDeny}
             onMerge={onMerge}
             mergeState={mergeState}
+            sessionState={sessionState}
           />
         </div>
       </aside>
@@ -79,6 +90,7 @@ export default function ContextPanel({
               onDeny={onDeny}
               onMerge={onMerge}
               mergeState={mergeState}
+              sessionState={sessionState}
             />
           </div>
         </div>
@@ -96,7 +108,8 @@ function PanelContent({
   onDeny,
   onMerge,
   mergeState,
-}: Omit<ContextPanelProps, 'open'>) {
+  sessionState,
+}: Omit<ContextPanelProps, 'open' | 'chatId'> & { sessionState: ChatSessionState | null }) {
   const navigate = useNavigate();
 
   const primaryProject = pinnedProject;
@@ -217,6 +230,53 @@ function PanelContent({
               Documents created from this chat will appear here.
             </div>
           )}
+        </section>
+      )}
+
+      {/* Session state */}
+      {sessionState && (sessionState.goal || sessionState.open_tasks.length > 0 || sessionState.blockers.length > 0 || sessionState.next_action) && (
+        <section className="flex flex-col gap-2">
+          <span className="flex items-center gap-1.5 text-[11px] font-medium text-muted-foreground">
+            <ListTodo size={11} />
+            Session state
+          </span>
+          <div className="flex flex-col gap-2 rounded-lg border border-border-soft bg-card p-3">
+            {sessionState.goal && (
+              <div>
+                <div className="mb-0.5 text-[10px] font-medium uppercase tracking-wide text-faint-fg">Goal</div>
+                <div className="text-[12px] leading-snug text-fg-soft">{sessionState.goal}</div>
+              </div>
+            )}
+            {sessionState.blockers.length > 0 && (
+              <div>
+                <div className="mb-1 flex items-center gap-1 text-[10px] font-medium uppercase tracking-wide text-destructive/70">
+                  <AlertTriangle size={9} />
+                  Blockers
+                </div>
+                <ul className="flex flex-col gap-0.5">
+                  {sessionState.blockers.map((b, i) => (
+                    <li key={i} className="text-[11px] leading-snug text-destructive/80">· {b}</li>
+                  ))}
+                </ul>
+              </div>
+            )}
+            {sessionState.open_tasks.length > 0 && (
+              <div>
+                <div className="mb-1 text-[10px] font-medium uppercase tracking-wide text-faint-fg">Open tasks</div>
+                <ul className="flex flex-col gap-0.5">
+                  {sessionState.open_tasks.map((t, i) => (
+                    <li key={i} className="text-[11px] leading-snug text-fg-soft">· {t}</li>
+                  ))}
+                </ul>
+              </div>
+            )}
+            {sessionState.next_action && (
+              <div>
+                <div className="mb-0.5 text-[10px] font-medium uppercase tracking-wide text-faint-fg">Next</div>
+                <div className="text-[12px] leading-snug text-foreground">{sessionState.next_action}</div>
+              </div>
+            )}
+          </div>
         </section>
       )}
     </div>

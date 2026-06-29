@@ -4,7 +4,7 @@ import { newId } from '../lib/ids.js';
 import { classifyIntent } from './intent.js';
 import { buildContext, buildContextUpdate } from './context.js';
 import { modeUsesProviderResume, selectInvocationMode } from './invocation-policy.js';
-import { recordSessionStateEvent, updateSessionState } from './session-state.js';
+import { getSessionState, recordSessionStateEvent, updateSessionState } from './session-state.js';
 import { generateMcpToken } from '../mcp/auth.js';
 import { getConversationProvider, isProviderLimitError } from './conversation-provider.js';
 import { getDecryptedConfig } from '../routes/connections.js';
@@ -170,12 +170,14 @@ export async function runAgentTurn(userId: string, sessionId: string, userMessag
     .prepare('SELECT COALESCE(SUM(cost_usd), 0) as total FROM agent_usage WHERE session_id = ?')
     .get(sessionId) as { total: number };
 
+  const currentState = getSessionState(sessionId);
   const intent = classifyIntent(prompt);
   const invocationMode = selectInvocationMode({
     providerSessionId: session?.provider_session_id,
     prompt,
     messageCount,
     sessionCostUsd: sessionCostRow.total,
+    blockers: currentState.blockers,
   });
   const isResume = modeUsesProviderResume(invocationMode);
   if (turn) {

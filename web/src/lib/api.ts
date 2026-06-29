@@ -77,6 +77,10 @@ export function getChatUsageRisk(chatId: string): Promise<ChatUsageRisk> {
   return request(`/sessions/${chatId}/usage-risk`);
 }
 
+export function getChatSessionState(chatId: string): Promise<{ state: import('../types.js').ChatSessionState | null }> {
+  return request(`/sessions/${chatId}/state`);
+}
+
 export function stopChat(chatId: string): Promise<{ ok: boolean; stopped: boolean }> {
   return request(`/sessions/${chatId}/stop`, { method: 'POST' });
 }

@@ -40,8 +40,20 @@ export interface CodexResult {
   costUsd: number;
 }
 
-function estimateCodexCost(_model: string | undefined, _inputTokens: number, _outputTokens: number): number {
-  return 0;
+// Per-token pricing for known Codex CLI models (USD per 1M tokens).
+// Prices reflect standard (non-cached) input rates.
+const CODEX_MODEL_PRICING: Record<string, { inputPer1M: number; outputPer1M: number }> = {
+  'o3':              { inputPer1M: 10.00, outputPer1M: 40.00 },
+  'o3-mini':         { inputPer1M:  1.10, outputPer1M:  4.40 },
+  'o4-mini':         { inputPer1M:  1.10, outputPer1M:  4.40 },
+  'codex-mini-latest': { inputPer1M: 1.10, outputPer1M:  4.40 },
+};
+const CODEX_DEFAULT_PRICING = { inputPer1M: 1.10, outputPer1M: 4.40 };
+
+function estimateCodexCost(model: string | undefined, inputTokens: number, outputTokens: number): number {
+  if (!inputTokens && !outputTokens) return 0;
+  const pricing = (model && CODEX_MODEL_PRICING[model]) ?? CODEX_DEFAULT_PRICING;
+  return (inputTokens / 1_000_000) * pricing.inputPer1M + (outputTokens / 1_000_000) * pricing.outputPer1M;
 }
 
 // codex exec has no --mcp-config flag (that's a Claude Code option) — MCP

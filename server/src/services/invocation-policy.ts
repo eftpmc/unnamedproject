@@ -5,6 +5,7 @@ interface SelectInvocationModeParams {
   prompt: string;
   messageCount: number;
   sessionCostUsd?: number;
+  blockers?: string[];
 }
 
 // Cost and message count at which hidden provider context becomes expensive
@@ -45,6 +46,13 @@ function isShortFollowUp(prompt: string): boolean {
   return prompt.trim().split(/\s+/).length <= 5;
 }
 
+// If the session state has recorded that the same browser action failed
+// repeatedly, the agent needs to see that blocker in its fresh system context
+// rather than buried in hidden provider history it might ignore.
+function hasLoopBlocker(blockers: string[]): boolean {
+  return blockers.some(b => /repeatedly|do not retry/i.test(b));
+}
+
 export function selectInvocationMode(params: SelectInvocationModeParams): InvocationMode {
   if (!params.providerSessionId) return 'new_provider_session';
 
@@ -52,6 +60,10 @@ export function selectInvocationMode(params: SelectInvocationModeParams): Invoca
 
   // Explicit fresh request always wins.
   if (FRESH_PATTERNS.some(p => p.test(prompt))) return 'fresh_with_summary';
+
+  // Loop blocker detected: the agent already tried and failed the same action
+  // repeatedly. Start fresh so the blocker appears in the system context.
+  if (params.blockers && hasLoopBlocker(params.blockers)) return 'fresh_with_summary';
 
   // Cost threshold always wins — session is too expensive to keep resuming.
   if ((params.sessionCostUsd ?? 0) >= COST_FRESH_THRESHOLD_USD) return 'fresh_with_summary';

@@ -246,6 +246,16 @@ export interface Memory {
   project_id: string | null;
 }
 
+export interface ChatSessionState {
+  goal: string | null;
+  current_focus: string | null;
+  open_tasks: string[];
+  blockers: string[];
+  next_action: string | null;
+  files_touched: string[];
+  updated_at: number;
+}
+
 export interface SessionWorktree {
   branch: string;
   project_name: string;

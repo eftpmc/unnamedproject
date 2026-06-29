@@ -10,7 +10,7 @@ import type { Intent } from './intent.js';
 function baseBlock(intent: Intent): string {
   const isCode = intent.domain === 'code' || intent.domain === 'multi' || intent.domain === 'general';
   const autoApproved = isCode
-    ? 'git_op add/commit, list_projects, create_project, update_project, pin_project, project_query, rebuild_graph, recall, remember, forget, list_chats, read_chat, write_document, read_document, list_documents, patch_frontmatter, link_project, create_trigger, list_triggers, delete_trigger, list_connections, test_connection'
+    ? 'git_op add/commit, list_projects, create_project, update_project, pin_project, search_files, project_query, rebuild_graph, recall, remember, forget, list_chats, read_chat, write_document, read_document, list_documents, patch_frontmatter, link_project, create_trigger, list_triggers, delete_trigger, list_connections, test_connection'
     : 'list_projects, create_project, pin_project, recall, remember, forget, list_chats, read_chat, write_document, read_document, list_documents, patch_frontmatter, list_connections, test_connection';
 
   return `You are a personal AI assistant with full coding capabilities and access to the user's projects, documents, and memory. You can implement code, write files, run commands, and manage the user's workspace directly.

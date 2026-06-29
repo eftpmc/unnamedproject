@@ -219,3 +219,35 @@ export async function queryGraph(question: string, repoPath: string, apiKey?: st
   const block = msg.content[0];
   return block.type === 'text' ? block.text : 'No answer produced.';
 }
+
+export async function searchGraph(query: string, repoPath: string, limit = 10): Promise<string> {
+  let index: Index | null = null;
+  try {
+    const raw = await fsPromises.readFile(indexPath(repoPath), 'utf8');
+    index = JSON.parse(raw) as Index;
+  } catch { /* no index */ }
+
+  if (!index?.files.length) {
+    return 'No index found for this project. Run rebuild_graph first, or use project_query which builds it automatically.';
+  }
+
+  const queryVec = await embed(query);
+  const queryLower = query.toLowerCase();
+
+  const ranked = index.files
+    .filter(f => f.embedding?.length > 0)
+    .map(f => {
+      const semantic = cosineSimilarity(queryVec, new Float32Array(f.embedding));
+      // Boost files whose symbol list contains an exact or partial match
+      const symbolBoost = f.symbols?.some(s => s.toLowerCase().includes(queryLower)) ? 0.15 : 0;
+      const pathBoost = f.path.toLowerCase().includes(queryLower) ? 0.1 : 0;
+      return { f, score: semantic + symbolBoost + pathBoost };
+    })
+    .sort((a, b) => b.score - a.score)
+    .slice(0, limit);
+
+  return ranked.map(({ f }) => {
+    const symbolLine = f.symbols?.length ? `symbols: ${f.symbols.join(', ')}\n` : '';
+    return `${f.path}${symbolLine ? ' — ' + symbolLine.trim() : ''}\n${f.preview}`;
+  }).join('\n\n---\n\n');
+}

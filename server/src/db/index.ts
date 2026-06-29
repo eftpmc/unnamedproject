@@ -368,6 +368,16 @@ const migrations: Migration[] = [
     },
   },
   {
+    version: 8,
+    name: 'document_mime_type',
+    up: (database) => {
+      const cols = (database.prepare("PRAGMA table_info(documents)").all() as { name: string }[]).map(c => c.name);
+      if (!cols.includes('mime_type')) {
+        database.exec("ALTER TABLE documents ADD COLUMN mime_type TEXT NOT NULL DEFAULT 'text/markdown'");
+      }
+    },
+  },
+  {
     version: 6,
     name: 'runtime_checkpoint_events',
     noTransaction: true,

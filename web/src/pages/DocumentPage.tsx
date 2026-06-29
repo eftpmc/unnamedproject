@@ -3,8 +3,8 @@ import { Link, useNavigate, useParams } from 'react-router-dom';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
-import { ArrowLeft, Check, ChevronDown, ChevronRight, Pencil, Plus, Trash2, X } from 'lucide-react';
-import { getDocumentById, updateDocumentById, deleteDocumentById } from '../lib/api.js';
+import { ArrowLeft, Check, ChevronDown, ChevronRight, Download, Pencil, Plus, Trash2, X } from 'lucide-react';
+import { getDocumentById, updateDocumentById, deleteDocumentById, getDocumentContentUrl } from '../lib/api.js';
 import { ConfirmDialog } from '@/components/ui/confirm-dialog';
 import { usePageTitle } from '../lib/usePageTitle.js';
 import { timeAgo } from '../lib/utils.js';
@@ -13,6 +13,54 @@ import { EmptyPanel, PageBody, PageHeader, PageLoading, PageShell } from '@/comp
 import type { DocumentWithBody } from '../types.js';
 
 const PROSE = 'text-[14px] leading-relaxed text-fg-soft [&_a]:text-primary [&_a]:underline-offset-2 [&_a:hover]:underline [&_blockquote]:border-l-2 [&_blockquote]:border-border [&_blockquote]:pl-3 [&_blockquote]:text-muted-foreground [&_code]:rounded [&_code]:bg-muted [&_code]:px-1.5 [&_code]:py-0.5 [&_code]:font-mono [&_code]:text-[13px] [&_h1:first-child]:mt-0 [&_h1]:mb-3 [&_h1]:mt-5 [&_h1]:text-lg [&_h1]:font-semibold [&_h1]:text-foreground [&_h2]:mb-2 [&_h2]:mt-4 [&_h2]:text-base [&_h2]:font-semibold [&_h2]:text-foreground [&_h3]:mb-2 [&_h3]:mt-3 [&_h3]:text-sm [&_h3]:font-semibold [&_h3]:text-foreground [&_hr]:my-5 [&_hr]:border-border-soft [&_li]:mb-1 [&_ol]:mb-3 [&_ol]:ml-5 [&_ol]:list-decimal [&_p:last-child]:mb-0 [&_p]:mb-3 [&_pre_code]:bg-transparent [&_pre_code]:p-0 [&_pre]:my-3 [&_pre]:overflow-x-auto [&_pre]:rounded-lg [&_pre]:border [&_pre]:border-border-soft [&_pre]:bg-muted/30 [&_pre]:p-3 [&_pre]:font-mono [&_pre]:text-[12px] [&_table]:my-3 [&_table]:w-full [&_table]:border-collapse [&_td]:border [&_td]:border-border-soft [&_td]:px-2 [&_td]:py-1 [&_th]:border [&_th]:border-border-soft [&_th]:bg-muted/30 [&_th]:px-2 [&_th]:py-1 [&_th]:text-left [&_ul]:mb-3 [&_ul]:ml-5 [&_ul]:list-disc';
+
+function isTextDoc(mimeType: string): boolean {
+  return mimeType.startsWith('text/')
+    || mimeType === 'application/json'
+    || mimeType === 'application/xml'
+    || mimeType === 'application/yaml';
+}
+
+function BinaryViewer({ document }: { document: DocumentWithBody }) {
+  const contentUrl = getDocumentContentUrl(document.id);
+  const mime = document.mime_type;
+
+  if (mime.startsWith('image/')) {
+    return (
+      <div className="flex items-center justify-center p-6">
+        <img
+          src={contentUrl}
+          alt={document.title}
+          className="max-h-[70vh] max-w-full rounded object-contain"
+        />
+      </div>
+    );
+  }
+
+  if (mime === 'application/pdf') {
+    return (
+      <iframe
+        src={contentUrl}
+        title={document.title}
+        className="h-[75vh] w-full border-0"
+      />
+    );
+  }
+
+  return (
+    <div className="flex flex-col items-center gap-4 px-5 py-12 text-center">
+      <p className="text-sm text-muted-foreground">This file type cannot be previewed.</p>
+      <a
+        href={contentUrl}
+        download={document.title}
+        className="inline-flex items-center gap-2 rounded-md bg-primary px-4 py-2 text-sm font-medium text-primary-foreground hover:bg-primary/90"
+      >
+        <Download size={14} />
+        Download
+      </a>
+    </div>
+  );
+}
 
 export default function DocumentPage() {
   const { documentId } = useParams<{ documentId: string }>();
@@ -64,7 +112,6 @@ export default function DocumentPage() {
     saveMutation.mutate({ title: draftTitle, body: draftBody });
   }
 
-  // Auto-grow textarea
   useEffect(() => {
     if (editing && bodyRef.current) {
       const el = bodyRef.current;
@@ -92,6 +139,8 @@ export default function DocumentPage() {
       </PageShell>
     );
   }
+
+  const isText = isTextDoc(document.mime_type);
 
   return (
     <PageShell>
@@ -123,9 +172,20 @@ export default function DocumentPage() {
             </div>
           ) : (
             <div className="flex items-center gap-1">
-              <Button size="sm" variant="ghost" onClick={startEdit}>
-                <Pencil size={13} className="mr-1.5" />Edit
-              </Button>
+              {isText && (
+                <Button size="sm" variant="ghost" onClick={startEdit}>
+                  <Pencil size={13} className="mr-1.5" />Edit
+                </Button>
+              )}
+              {!isText && (
+                <a
+                  href={getDocumentContentUrl(document.id)}
+                  download={document.title}
+                  className="inline-flex h-8 items-center gap-1.5 rounded-md px-3 text-sm text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
+                >
+                  <Download size={13} />Download
+                </a>
+              )}
               <Button size="sm" variant="ghost" className="text-muted-foreground hover:text-destructive" onClick={() => setConfirmDelete(true)}>
                 <Trash2 size={13} />
               </Button>
@@ -138,36 +198,40 @@ export default function DocumentPage() {
           <div className="border-b border-border-soft px-4 py-3">
             <div className="truncate font-mono text-xs text-muted-foreground">{document.path}</div>
           </div>
-          {editing ? (
-            <div className="flex flex-col">
-              <input
-                value={draftTitle}
-                onChange={e => setDraftTitle(e.target.value)}
-                onKeyDown={e => { if (e.key === 'Escape') cancel(); }}
-                placeholder="Document title"
-                className="border-b border-border-soft bg-transparent px-5 py-3 text-lg font-semibold text-foreground outline-none placeholder:text-muted-foreground"
-                autoFocus
-              />
-              <textarea
-                ref={bodyRef}
-                value={draftBody}
-                onChange={e => {
-                  setDraftBody(e.target.value);
-                  e.target.style.height = 'auto';
-                  e.target.style.height = `${e.target.scrollHeight}px`;
-                }}
-                onKeyDown={e => {
-                  if ((e.metaKey || e.ctrlKey) && e.key === 's') { e.preventDefault(); save(); }
-                  if (e.key === 'Escape') cancel();
-                }}
-                className="w-full resize-none overflow-hidden bg-transparent px-5 py-4 font-mono text-sm text-foreground outline-none"
-                style={{ minHeight: '60vh' }}
-              />
-            </div>
+          {isText ? (
+            editing ? (
+              <div className="flex flex-col">
+                <input
+                  value={draftTitle}
+                  onChange={e => setDraftTitle(e.target.value)}
+                  onKeyDown={e => { if (e.key === 'Escape') cancel(); }}
+                  placeholder="Document title"
+                  className="border-b border-border-soft bg-transparent px-5 py-3 text-lg font-semibold text-foreground outline-none placeholder:text-muted-foreground"
+                  autoFocus
+                />
+                <textarea
+                  ref={bodyRef}
+                  value={draftBody}
+                  onChange={e => {
+                    setDraftBody(e.target.value);
+                    e.target.style.height = 'auto';
+                    e.target.style.height = `${e.target.scrollHeight}px`;
+                  }}
+                  onKeyDown={e => {
+                    if ((e.metaKey || e.ctrlKey) && e.key === 's') { e.preventDefault(); save(); }
+                    if (e.key === 'Escape') cancel();
+                  }}
+                  className="w-full resize-none overflow-hidden bg-transparent px-5 py-4 font-mono text-sm text-foreground outline-none"
+                  style={{ minHeight: '60vh' }}
+                />
+              </div>
+            ) : (
+              <div className={`px-5 py-4 ${PROSE}`}>
+                <ReactMarkdown remarkPlugins={[remarkGfm]}>{document.body || '_No content yet._'}</ReactMarkdown>
+              </div>
+            )
           ) : (
-            <div className={`px-5 py-4 ${PROSE}`}>
-              <ReactMarkdown remarkPlugins={[remarkGfm]}>{document.body || '_No content yet._'}</ReactMarkdown>
-            </div>
+            <BinaryViewer document={document} />
           )}
           <FrontmatterPanel documentId={documentId!} frontmatter={document.frontmatter} onSaved={() => {
             qc.invalidateQueries({ queryKey: ['document', documentId] });
@@ -179,7 +243,7 @@ export default function DocumentPage() {
       {confirmDelete && (
         <ConfirmDialog
           title="Delete document?"
-          description="This will permanently delete the document. This action cannot be undone."
+          description="This will permanently delete the file. This action cannot be undone."
           confirmLabel="Delete"
           onConfirm={() => deleteMutation.mutate()}
           onCancel={() => setConfirmDelete(false)}
@@ -220,7 +284,6 @@ function FrontmatterPanel({ documentId, frontmatter, onSaved }: {
   }
 
   function deleteKey(key: string) {
-    // Patch with undefined removes the key server-side via spread
     const next = { ...frontmatter };
     delete next[key];
     updateDocumentById(documentId, { frontmatter: next }).then(onSaved);
@@ -241,7 +304,7 @@ function FrontmatterPanel({ documentId, frontmatter, onSaved }: {
         className="flex w-full items-center gap-2 px-5 py-3 text-left text-xs font-medium text-muted-foreground transition-colors hover:text-foreground"
       >
         {open ? <ChevronDown size={13} /> : <ChevronRight size={13} />}
-        Frontmatter
+        Metadata
         {entries.length > 0 && (
           <span className="ml-1 rounded-full bg-muted px-1.5 py-0.5 text-[10px] font-semibold tabular-nums">{entries.length}</span>
         )}

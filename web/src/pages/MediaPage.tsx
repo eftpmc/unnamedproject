@@ -11,7 +11,6 @@ import { CenteredEmptyState, ContentColumn, EmptyPanel, PageBody, PageHeader, Pa
 import { DataTable, DataTableBody, DataTableHeader, DataTableRow } from '@/components/ui/data-table';
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
 import { ConfirmDialog } from '@/components/ui/confirm-dialog';
-import { FilterStrip } from '@/components/ui/filter-strip';
 import type { MediaItem } from '../types.js';
 
 function formatBytes(bytes: number): string {
@@ -22,13 +21,9 @@ function formatBytes(bytes: number): string {
   return `${value >= 10 || index === 0 ? Math.round(value) : value.toFixed(1)} ${units[index]}`;
 }
 
-function mediaKind(mimeType: string): string {
-  if (mimeType.startsWith('image/')) return 'Image';
-  if (mimeType === 'application/pdf') return 'PDF';
-  if (mimeType.includes('json')) return 'JSON';
-  if (mimeType.includes('markdown')) return 'Markdown';
-  if (mimeType.startsWith('text/')) return 'Text';
-  return mimeType.split('/')[1]?.toUpperCase() || 'File';
+function imageLabel(mimeType: string): string {
+  const sub = mimeType.split('/')[1]?.toUpperCase() || 'Image';
+  return sub === 'JPEG' ? 'JPG' : sub;
 }
 
 async function downloadMedia(item: MediaItem) {
@@ -52,14 +47,16 @@ export default function MediaPage() {
   usePageTitle('Media');
   const queryClient = useQueryClient();
   const [search, setSearch] = useState('');
-  const [filter, setFilter] = useState('all');
   const [downloadingId, setDownloadingId] = useState<string | null>(null);
   const [pendingDelete, setPendingDelete] = useState<string | null>(null);
 
-  const { data: media = [], isLoading } = useQuery<MediaItem[]>({
+  const { data: allMedia = [], isLoading } = useQuery<MediaItem[]>({
     queryKey: ['media'],
     queryFn: getMedia,
   });
+
+  // Media = images only
+  const media = useMemo(() => allMedia.filter(item => item.mimeType.startsWith('image/')), [allMedia]);
 
   const deleteMutation = useMutation({
     mutationFn: deleteMedia,
@@ -72,20 +69,12 @@ export default function MediaPage() {
 
   const visible = useMemo(() => {
     const query = search.trim().toLowerCase();
-    return media.filter(item => {
-      const matchesFilter =
-        filter === 'all'
-        || (filter === 'image' && item.mimeType.startsWith('image/'))
-        || (filter === 'pdf' && item.mimeType === 'application/pdf')
-        || (filter === 'text' && (item.mimeType.startsWith('text/') || item.mimeType.includes('markdown')))
-        || (filter === 'code' && /\.(c|cc|cpp|css|go|h|hpp|java|js|jsx|json|kt|py|rb|rs|sh|sql|swift|toml|ts|tsx|xml|ya?ml|zsh)$/i.test(item.filename));
-      if (!matchesFilter) return false;
-      if (!query) return true;
-      return item.filename.toLowerCase().includes(query)
-        || item.mimeType.toLowerCase().includes(query)
-        || (item.sessionTitle ?? '').toLowerCase().includes(query);
-    });
-  }, [filter, media, search]);
+    if (!query) return media;
+    return media.filter(item =>
+      item.filename.toLowerCase().includes(query)
+      || (item.sessionTitle ?? '').toLowerCase().includes(query),
+    );
+  }, [media, search]);
 
   async function handleDownload(item: MediaItem) {
     setDownloadingId(item.id);
@@ -107,40 +96,29 @@ export default function MediaPage() {
 
       {isLoading ? <PageLoading rows={4} /> : media.length === 0 ? (
         <CenteredEmptyState
-          title="No media yet"
-          description="Files attached to chats will appear here."
+          title="No images yet"
+          description="Images attached to chats will appear here."
         />
       ) : (
         <PageBody className="px-4 pt-5 sm:px-8 sm:pt-9">
           <ContentColumn className="max-w-7xl">
-            <div className="mb-5 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-              <div className="relative min-w-0 flex-1">
+            <div className="mb-5">
+              <div className="relative min-w-0 max-w-sm">
                 <Search size={13} className="absolute left-3 top-1/2 -translate-y-1/2 text-faint-fg pointer-events-none" />
                 <Input
                   value={search}
                   onChange={e => setSearch(e.target.value)}
-                  placeholder="Search media…"
+                  placeholder="Search images…"
                   className="pl-8"
                 />
               </div>
-              <FilterStrip
-                value={filter}
-                onValueChange={setFilter}
-                items={[
-                  { value: 'all', label: 'All' },
-                  { value: 'image', label: 'Images' },
-                  { value: 'pdf', label: 'PDFs' },
-                  { value: 'text', label: 'Text' },
-                  { value: 'code', label: 'Code' },
-                ]}
-              />
             </div>
 
             {visible.length === 0 ? (
               <EmptyPanel title="No results" description={`Nothing matched "${search}".`} />
             ) : (
               <DataTable>
-                <DataTableHeader className="grid-cols-[minmax(0,1fr)_1.75rem] sm:grid-cols-[minmax(0,1fr)_7rem_7rem_1.75rem] lg:grid-cols-[minmax(0,1fr)_8rem_12rem_7rem_1.75rem]">
+                <DataTableHeader className="grid-cols-[minmax(0,1fr)_1.75rem] sm:grid-cols-[minmax(0,1fr)_6rem_7rem_1.75rem] lg:grid-cols-[minmax(0,1fr)_6rem_12rem_7rem_1.75rem]">
                   <span>Name</span>
                   <span className="hidden sm:block">Type</span>
                   <span className="hidden lg:block">Chat</span>
@@ -151,7 +129,7 @@ export default function MediaPage() {
                   {visible.map(item => (
                     <DataTableRow
                       key={item.id}
-                      className="grid-cols-[minmax(0,1fr)_1.75rem] sm:grid-cols-[minmax(0,1fr)_7rem_7rem_1.75rem] lg:grid-cols-[minmax(0,1fr)_8rem_12rem_7rem_1.75rem]"
+                      className="grid-cols-[minmax(0,1fr)_1.75rem] sm:grid-cols-[minmax(0,1fr)_6rem_7rem_1.75rem] lg:grid-cols-[minmax(0,1fr)_6rem_12rem_7rem_1.75rem]"
                     >
                       <div className="min-w-0">
                         <button
@@ -162,7 +140,7 @@ export default function MediaPage() {
                           {item.filename}
                         </button>
                         <div className="mt-0.5 flex min-w-0 gap-2 text-[11px] text-faint-fg sm:hidden">
-                          <span className="shrink-0">{mediaKind(item.mimeType)}</span>
+                          <span className="shrink-0">{imageLabel(item.mimeType)}</span>
                           <span className="shrink-0">·</span>
                           <span className="shrink-0">{formatBytes(item.sizeBytes)}</span>
                           <span className="shrink-0">·</span>
@@ -170,7 +148,7 @@ export default function MediaPage() {
                         </div>
                       </div>
                       <span className="hidden truncate text-xs text-muted-foreground sm:block">
-                        {mediaKind(item.mimeType)} · {formatBytes(item.sizeBytes)}
+                        {imageLabel(item.mimeType)} · {formatBytes(item.sizeBytes)}
                       </span>
                       <Link
                         to={`/c/${item.sessionId}`}
@@ -220,8 +198,8 @@ export default function MediaPage() {
 
       {pendingDelete && (
         <ConfirmDialog
-          title="Delete file?"
-          description="This will permanently remove the file. This action cannot be undone."
+          title="Delete image?"
+          description="This will permanently remove the image. This action cannot be undone."
           confirmLabel="Delete"
           onConfirm={() => deleteMutation.mutate(pendingDelete)}
           onCancel={() => setPendingDelete(null)}

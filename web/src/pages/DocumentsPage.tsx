@@ -1,8 +1,8 @@
 import { useEffect, useRef, useState } from 'react';
 import { Link, useNavigate, useLocation } from 'react-router-dom';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { Clipboard, MoreHorizontal, Pencil, Plus, Search, Trash2 } from 'lucide-react';
-import { getAllDocuments, updateDocumentById, deleteDocumentById, createGlobalDocument, getProjects } from '../lib/api.js';
+import { Clipboard, Download, MoreHorizontal, Pencil, Plus, Search, Trash2, Upload } from 'lucide-react';
+import { getAllDocuments, updateDocumentById, deleteDocumentById, createGlobalDocument, uploadDocumentFile, getProjects } from '../lib/api.js';
 import { usePageTitle } from '../lib/usePageTitle.js';
 import { timeAgo } from '../lib/utils.js';
 import { Button } from '@/components/ui/button';
@@ -15,10 +15,35 @@ import { ConfirmDialog } from '@/components/ui/confirm-dialog';
 import { FilterStrip } from '@/components/ui/filter-strip';
 import type { Document, Project } from '../types.js';
 
-function documentKind(doc: Document): string {
+type DocCategory = 'all' | 'text' | 'pdf' | 'image' | 'other';
+
+function docCategory(doc: Document): DocCategory {
+  const m = doc.mime_type || 'text/markdown';
+  if (m.startsWith('image/')) return 'image';
+  if (m === 'application/pdf') return 'pdf';
+  if (m.startsWith('text/') || m === 'application/json' || m === 'application/xml' || m === 'application/yaml') return 'text';
+  return 'other';
+}
+
+function docKindLabel(doc: Document): string {
   if (doc.type) return doc.type;
-  if (doc.path.endsWith('.md') || doc.path.endsWith('.mdx')) return 'Markdown';
-  return 'Document';
+  const m = doc.mime_type || 'text/markdown';
+  if (m === 'text/markdown') return 'Markdown';
+  if (m === 'text/plain') return 'Text';
+  if (m === 'application/pdf') return 'PDF';
+  if (m.startsWith('image/')) {
+    const sub = m.split('/')[1]?.toUpperCase() || 'Image';
+    return sub === 'JPEG' ? 'JPG' : sub;
+  }
+  if (m === 'application/json') return 'JSON';
+  if (m.includes('yaml')) return 'YAML';
+  if (m.startsWith('text/')) return 'Text';
+  return m.split('/')[1]?.toUpperCase() || 'File';
+}
+
+function isBinary(doc: Document): boolean {
+  const m = doc.mime_type || 'text/markdown';
+  return !m.startsWith('text/') && m !== 'application/json' && m !== 'application/xml' && m !== 'application/yaml';
 }
 
 export default function DocumentsPage() {
@@ -26,14 +51,17 @@ export default function DocumentsPage() {
   const navigate = useNavigate();
   const location = useLocation();
   const queryClient = useQueryClient();
+  const fileInputRef = useRef<HTMLInputElement>(null);
   const [search, setSearch] = useState('');
-  const [filter, setFilter] = useState('all');
+  const [filter, setFilter] = useState<DocCategory>('all');
   const [pendingDelete, setPendingDelete] = useState<string | null>(null);
   const [renaming, setRenaming] = useState<{ id: string; value: string } | null>(null);
   const renameInputRef = useRef<HTMLInputElement>(null);
   const [createOpen, setCreateOpen] = useState(false);
   const [newTitle, setNewTitle] = useState('');
   const [newProjectId, setNewProjectId] = useState('');
+  const [uploadProjectId, setUploadProjectId] = useState('');
+  const [uploadOpen, setUploadOpen] = useState(false);
 
   const { data: documents = [], isLoading } = useQuery<Document[]>({
     queryKey: ['documents-global'],
@@ -58,16 +86,29 @@ export default function DocumentsPage() {
     },
   });
 
+  const uploadMutation = useMutation({
+    mutationFn: ({ file, projectId }: { file: File; projectId: string }) =>
+      uploadDocumentFile(file, projectId),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['documents-global'] });
+      setUploadOpen(false);
+    },
+  });
+
   function openCreateDialog() {
     setNewTitle('');
     setNewProjectId(projects[0]?.id ?? '');
     setCreateOpen(true);
   }
 
+  function openUploadDialog() {
+    setUploadProjectId(projects[0]?.id ?? '');
+    setUploadOpen(true);
+  }
+
   useEffect(() => {
     if ((location.state as { openNew?: boolean } | null)?.openNew && projects.length > 0) {
       openCreateDialog();
-      // Clear state so a refresh doesn't re-open the dialog
       navigate(location.pathname, { replace: true, state: {} });
     }
   }, [location.state, projects.length]); // eslint-disable-line react-hooks/exhaustive-deps
@@ -77,6 +118,13 @@ export default function DocumentsPage() {
     const project = projects.find(p => p.id === newProjectId);
     if (!title || !project) return;
     createMutation.mutate({ title, projectId: project.id });
+  }
+
+  function handleFileSelected(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0];
+    if (!file || !uploadProjectId) return;
+    uploadMutation.mutate({ file, projectId: uploadProjectId });
+    e.target.value = '';
   }
 
   const renameMutation = useMutation({
@@ -96,24 +144,25 @@ export default function DocumentsPage() {
     onError: () => setPendingDelete(null),
   });
 
-  const filters = [
+  const filterItems = [
     { value: 'all', label: 'All' },
-    ...Array.from(new Set(documents.map(documentKind)))
-      .sort((a, b) => a.localeCompare(b))
-      .map(kind => ({ value: kind, label: kind })),
+    { value: 'text', label: 'Text' },
+    { value: 'pdf', label: 'PDF' },
+    { value: 'image', label: 'Images' },
+    { value: 'other', label: 'Other' },
   ];
+
   const visible = documents.filter(doc => {
     const query = search.trim().toLowerCase();
-    const kind = documentKind(doc);
-    if (filter !== 'all' && kind !== filter) return false;
+    if (filter !== 'all' && docCategory(doc) !== filter) return false;
     if (!query) return true;
     return doc.title.toLowerCase().includes(query)
       || doc.path.toLowerCase().includes(query)
-      || kind.toLowerCase().includes(query);
+      || docKindLabel(doc).toLowerCase().includes(query);
   });
 
-  function copyPath(path: string) {
-    void navigator.clipboard?.writeText(path);
+  function copyPath(p: string) {
+    void navigator.clipboard?.writeText(p);
   }
 
   function startRename(doc: Document) {
@@ -138,22 +187,34 @@ export default function DocumentsPage() {
         contentClassName="max-w-7xl"
         titleClassName="text-2xl sm:text-3xl"
         actions={
-          <Button
-            size="lg"
-            className="h-9 gap-2 rounded-lg px-3 text-sm shadow-sm"
-            onClick={openCreateDialog}
-            disabled={projects.length === 0}
-            title={projects.length === 0 ? 'Create a project first' : 'New document'}
-          >
-            <Plus size={16} />New document
-          </Button>
+          <div className="flex items-center gap-2">
+            <Button
+              size="lg"
+              variant="outline"
+              className="h-9 gap-2 rounded-lg px-3 text-sm shadow-sm"
+              onClick={openUploadDialog}
+              disabled={projects.length === 0}
+              title={projects.length === 0 ? 'Create a project first' : 'Upload file'}
+            >
+              <Upload size={15} />Upload
+            </Button>
+            <Button
+              size="lg"
+              className="h-9 gap-2 rounded-lg px-3 text-sm shadow-sm"
+              onClick={openCreateDialog}
+              disabled={projects.length === 0}
+              title={projects.length === 0 ? 'Create a project first' : 'New document'}
+            >
+              <Plus size={16} />New
+            </Button>
+          </div>
         }
       />
 
       {isLoading ? <PageLoading rows={4} /> : documents.length === 0 ? (
         <CenteredEmptyState
           title="No documents yet"
-          description="Documents created by the agent will appear here."
+          description="Documents created or uploaded to a project will appear here."
         />
       ) : (
         <PageBody className="px-4 pt-5 sm:px-8 sm:pt-9">
@@ -168,7 +229,7 @@ export default function DocumentsPage() {
                   className="pl-8"
                 />
               </div>
-              <FilterStrip value={filter} items={filters} onValueChange={setFilter} />
+              <FilterStrip value={filter} items={filterItems} onValueChange={v => setFilter(v as DocCategory)} />
             </div>
             {visible.length === 0 ? (
               <EmptyPanel title="No results" description={`Nothing matched "${search || filter}".`} />
@@ -201,18 +262,32 @@ export default function DocumentsPage() {
                           />
                         ) : (
                           <>
-                            <Link to={`/documents/${doc.id}`} className="block truncate text-sm font-medium text-foreground underline-offset-2 hover:underline">
-                              {doc.title}
-                            </Link>
+                            {isBinary(doc) ? (
+                              <a
+                                href={`/documents/${doc.id}/content`}
+                                target="_blank"
+                                rel="noreferrer"
+                                className="block truncate text-sm font-medium text-foreground underline-offset-2 hover:underline"
+                              >
+                                {doc.title}
+                              </a>
+                            ) : (
+                              <Link
+                                to={`/documents/${doc.id}`}
+                                className="block truncate text-sm font-medium text-foreground underline-offset-2 hover:underline"
+                              >
+                                {doc.title}
+                              </Link>
+                            )}
                             <div className="mt-0.5 flex gap-2 text-[11px] text-faint-fg sm:hidden">
-                              <span className="truncate">{documentKind(doc)}</span>
+                              <span className="truncate">{docKindLabel(doc)}</span>
                               <span className="shrink-0">·</span>
                               <span className="shrink-0">{timeAgo(doc.updated_at)}</span>
                             </div>
                           </>
                         )}
                       </div>
-                      <span className="hidden truncate text-xs text-muted-foreground sm:block">{documentKind(doc)}</span>
+                      <span className="hidden truncate text-xs text-muted-foreground sm:block">{docKindLabel(doc)}</span>
                       <span className="hidden justify-self-end whitespace-nowrap text-[11px] text-faint-fg sm:block">{timeAgo(doc.updated_at)}</span>
                       <DropdownMenu>
                         <DropdownMenuTrigger asChild>
@@ -225,14 +300,30 @@ export default function DocumentsPage() {
                           </button>
                         </DropdownMenuTrigger>
                         <DropdownMenuContent align="end" className="w-40">
-                          <DropdownMenuItem onSelect={() => startRename(doc)}>
-                            <Pencil size={14} />
-                            Rename
-                          </DropdownMenuItem>
+                          {!isBinary(doc) && (
+                            <DropdownMenuItem onSelect={() => startRename(doc)}>
+                              <Pencil size={14} />
+                              Rename
+                            </DropdownMenuItem>
+                          )}
+                          {isBinary(doc) && (
+                            <DropdownMenuItem onSelect={() => startRename(doc)}>
+                              <Pencil size={14} />
+                              Rename
+                            </DropdownMenuItem>
+                          )}
                           <DropdownMenuItem onSelect={() => copyPath(doc.path)}>
                             <Clipboard size={14} />
                             Copy path
                           </DropdownMenuItem>
+                          {isBinary(doc) && (
+                            <DropdownMenuItem asChild>
+                              <a href={`/documents/${doc.id}/content`} download={doc.title}>
+                                <Download size={14} />
+                                Download
+                              </a>
+                            </DropdownMenuItem>
+                          )}
                           <DropdownMenuSeparator />
                           <DropdownMenuItem variant="destructive" onSelect={() => setPendingDelete(doc.id)}>
                             <Trash2 size={14} />
@@ -252,13 +343,14 @@ export default function DocumentsPage() {
       {pendingDelete && (
         <ConfirmDialog
           title="Delete document?"
-          description="This will permanently delete the document. This action cannot be undone."
+          description="This will permanently delete the file. This action cannot be undone."
           confirmLabel="Delete"
           onConfirm={() => deleteMutation.mutate(pendingDelete)}
           onCancel={() => setPendingDelete(null)}
         />
       )}
 
+      {/* New text document dialog */}
       <Dialog open={createOpen} onOpenChange={setCreateOpen}>
         <DialogContent className="sm:max-w-md">
           <DialogHeader>
@@ -299,6 +391,53 @@ export default function DocumentsPage() {
               disabled={!newTitle.trim() || !newProjectId || createMutation.isPending}
             >
               {createMutation.isPending ? 'Creating…' : 'Create'}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Upload file dialog */}
+      <Dialog open={uploadOpen} onOpenChange={setUploadOpen}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>Upload file</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-3 py-1">
+            {projects.length > 1 && (
+              <label className="block">
+                <span className="mb-1 block text-xs font-medium text-muted-foreground">Project</span>
+                <select
+                  value={uploadProjectId}
+                  onChange={e => setUploadProjectId(e.target.value)}
+                  className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm text-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
+                >
+                  {projects.map(p => (
+                    <option key={p.id} value={p.id}>{p.name}</option>
+                  ))}
+                </select>
+              </label>
+            )}
+            <div
+              className="flex cursor-pointer flex-col items-center justify-center gap-2 rounded-lg border-2 border-dashed border-border p-8 text-center transition-colors hover:border-ring"
+              onClick={() => fileInputRef.current?.click()}
+            >
+              <Upload size={20} className="text-muted-foreground" />
+              <p className="text-sm text-muted-foreground">
+                {uploadMutation.isPending ? 'Uploading…' : 'Click to choose a file'}
+              </p>
+              <p className="text-[11px] text-faint-fg">PDF, images, text files — up to 50 MB</p>
+              <input
+                ref={fileInputRef}
+                type="file"
+                className="hidden"
+                onChange={handleFileSelected}
+                disabled={!uploadProjectId || uploadMutation.isPending}
+              />
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="ghost" onClick={() => setUploadOpen(false)} disabled={uploadMutation.isPending}>
+              Cancel
             </Button>
           </DialogFooter>
         </DialogContent>

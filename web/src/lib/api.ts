@@ -197,6 +197,19 @@ export function deleteDocumentById(id: string): Promise<void> {
   return request(`/documents/${id}`, { method: 'DELETE' });
 }
 
+export function uploadDocumentFile(file: File, projectId: string, title?: string): Promise<Document> {
+  const form = new FormData();
+  form.append('file', file);
+  form.append('project_id', projectId);
+  if (title) form.append('title', title);
+  return request('/documents', { method: 'POST', body: form });
+}
+
+export function getDocumentContentUrl(id: string): string {
+  const token = getToken();
+  return `/documents/${id}/content${token ? `?token=${encodeURIComponent(token)}` : ''}`;
+}
+
 // Projects
 export function getProjects(): Promise<Project[]> {
   return request('/projects');

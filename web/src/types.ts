@@ -91,6 +91,7 @@ export interface Document {
   title: string;
   type: string | null;
   status: string | null;
+  mime_type: string;
   frontmatter: Record<string, unknown>;
   source_session_id: string | null;
   created_at: number;
@@ -98,7 +99,7 @@ export interface Document {
 }
 
 export interface DocumentWithBody extends Document {
-  body: string;
+  body: string | null;
 }
 
 export interface Project {

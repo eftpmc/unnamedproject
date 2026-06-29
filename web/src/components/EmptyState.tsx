@@ -1,9 +1,12 @@
-import { useState } from 'react';
+import { useRef, useState, type ChangeEvent, type KeyboardEvent } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { ArrowRight, ArrowUp, KeyRound } from 'lucide-react';
+import { ArrowRight, ArrowUp, FileText, KeyRound, Paperclip, X } from 'lucide-react';
 import { Textarea } from '@/components/ui/textarea';
 import { cn } from '@/lib/utils';
 import { createChat, sendMessage } from '../lib/api.js';
+
+const MAX_ATTACHMENTS = 8;
+const MAX_ATTACHMENT_BYTES = 10 * 1024 * 1024;
 
 interface EmptyStateProps {
   hasLeadAgent: boolean;
@@ -19,6 +22,8 @@ export default function EmptyState({ hasLeadAgent }: EmptyStateProps) {
   const navigate = useNavigate();
   const [value, setValue] = useState('');
   const [sending, setSending] = useState(false);
+  const [attachments, setAttachments] = useState<File[]>([]);
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   if (!hasLeadAgent) {
     return (
@@ -49,17 +54,26 @@ export default function EmptyState({ hasLeadAgent }: EmptyStateProps) {
     );
   }
 
-  async function submit(text: string) {
-    const trimmed = text.trim();
-    if (!trimmed || sending) return;
+  async function submit(text?: string) {
+    const trimmed = (text ?? value).trim();
+    if ((!trimmed && attachments.length === 0) || sending) return;
     setSending(true);
     try {
       const { id } = await createChat();
-      await sendMessage(id, trimmed);
+      await sendMessage(id, trimmed, attachments);
       navigate(`/c/${id}`);
     } catch {
       setSending(false);
     }
+  }
+
+  function handleFilesSelected(e: ChangeEvent<HTMLInputElement>) {
+    const selected = Array.from(e.target.files ?? []);
+    if (!selected.length) return;
+    const available = MAX_ATTACHMENTS - attachments.length;
+    const accepted = selected.filter(f => f.size <= MAX_ATTACHMENT_BYTES).slice(0, Math.max(available, 0));
+    setAttachments(prev => [...prev, ...accepted]);
+    e.target.value = '';
   }
 
   return (
@@ -80,13 +94,30 @@ export default function EmptyState({ hasLeadAgent }: EmptyStateProps) {
         </div>
 
         <div className="rounded-[18px] border border-input bg-card px-3 pb-2.5 pt-2.5 shadow-sm">
+          {attachments.length > 0 && (
+            <div className="mb-2 flex flex-wrap gap-1.5">
+              {attachments.map((file, i) => (
+                <div key={i} className="flex items-center gap-1 rounded-md border border-border-soft bg-muted px-2 py-1 text-[11px] text-muted-foreground">
+                  <FileText size={11} className="shrink-0" />
+                  <span className="max-w-[120px] truncate">{file.name}</span>
+                  <button
+                    type="button"
+                    onClick={() => setAttachments(prev => prev.filter((_, idx) => idx !== i))}
+                    className="ml-0.5 text-faint-fg hover:text-foreground"
+                  >
+                    <X size={10} />
+                  </button>
+                </div>
+              ))}
+            </div>
+          )}
           <Textarea
             value={value}
             onChange={e => setValue(e.target.value)}
-            onKeyDown={e => {
+            onKeyDown={(e: KeyboardEvent<HTMLTextAreaElement>) => {
               if (e.key === 'Enter' && !e.shiftKey) {
                 e.preventDefault();
-                submit(value);
+                submit();
               }
             }}
             placeholder="What can I help with?"
@@ -95,15 +126,24 @@ export default function EmptyState({ hasLeadAgent }: EmptyStateProps) {
             autoFocus
             className="max-h-44 min-h-[1.5rem] w-full resize-none border-0 bg-transparent dark:bg-transparent px-1 py-1 text-[15px] shadow-none placeholder:text-faint-fg focus-visible:ring-0"
           />
-          <div className="mt-1.5 flex justify-end">
+          <div className="mt-1.5 flex items-center justify-between">
             <button
               type="button"
-              onClick={() => submit(value)}
-              disabled={!value.trim() || sending}
+              disabled={sending || attachments.length >= MAX_ATTACHMENTS}
+              onClick={() => fileInputRef.current?.click()}
+              title="Attach file"
+              className="grid h-8 w-8 shrink-0 place-items-center rounded-lg text-faint-fg transition-colors hover:bg-muted hover:text-muted-foreground disabled:opacity-40"
+            >
+              <Paperclip size={15} />
+            </button>
+            <button
+              type="button"
+              onClick={() => submit()}
+              disabled={(!value.trim() && attachments.length === 0) || sending}
               title="Send"
               className={cn(
                 'grid h-8 w-8 shrink-0 place-items-center rounded-lg transition-[filter,transform] active:translate-y-px',
-                value.trim() && !sending
+                (value.trim() || attachments.length > 0) && !sending
                   ? 'bg-primary text-primary-foreground hover:brightness-105'
                   : 'bg-muted text-faint-fg cursor-default',
               )}
@@ -111,6 +151,7 @@ export default function EmptyState({ hasLeadAgent }: EmptyStateProps) {
               <ArrowUp size={16} strokeWidth={2} />
             </button>
           </div>
+          <input ref={fileInputRef} type="file" multiple className="hidden" onChange={handleFilesSelected} />
         </div>
       </div>
     </div>

@@ -625,19 +625,46 @@ function _autofillForm(username, password, submit) {
     results.push('password field not found');
   }
 
-  if (submit && userEl && passEl) {
-    const form = userEl.closest('form') || passEl.closest('form');
-    const submitBtn = (form && form.querySelector('button[type="submit"], input[type="submit"], button:not([type])'))
+  if (submit && (userEl || passEl)) {
+    const activeEl = passEl || userEl;
+    const form = activeEl.closest('form');
+    const submitBtn = (form && form.querySelector('button[type="submit"], input[type="submit"]'))
       || document.querySelector('button[type="submit"]');
+
+    // 1. requestSubmit(btn) — native form submission with the submit button as submitter.
+    //    Triggers React/framework validation handlers and bypasses click-event issues.
+    if (submitBtn && form) {
+      try {
+        form.requestSubmit(submitBtn);
+        results.push('submitted via requestSubmit(btn)');
+        return results.join('; ');
+      } catch { /* submitter not part of form, fall through */ }
+    }
+
+    // 2. requestSubmit() without submitter — works on plain forms.
+    if (form) {
+      try {
+        form.requestSubmit();
+        results.push('submitted via requestSubmit()');
+        return results.join('; ');
+      } catch { /* invalid form, fall through */ }
+    }
+
+    // 3. Native click on the submit button — fallback for non-form submit patterns.
     if (submitBtn) {
       submitBtn.click();
-      results.push('clicked submit');
-    } else if (form) {
-      form.requestSubmit?.() ?? form.submit();
-      results.push('submitted form');
-    } else {
-      results.push('no submit button found');
+      results.push('clicked submit button');
+      return results.join('; ');
     }
+
+    // 4. form.submit() — last resort, bypasses validation but always works.
+    if (form) {
+      form.submit();
+      results.push('submitted via form.submit()');
+      return results.join('; ');
+    }
+
+    results.push('no form or submit button found');
   }
 
   return results.join('; ');

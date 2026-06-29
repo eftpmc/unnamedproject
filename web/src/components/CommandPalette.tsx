@@ -11,7 +11,6 @@ import {
   CommandItem,
   CommandList,
   CommandSeparator,
-  CommandShortcut,
 } from '@/components/ui/command';
 import { searchChats, getProjects, getAllDocuments, createChat } from '../lib/api.js';
 import type { Document, Project, Session } from '../types.js';
@@ -58,7 +57,7 @@ function PaletteModal({ open, onOpenChange }: { open: boolean; onOpenChange: (v:
   });
 
   const { data: documents = [] } = useQuery<Document[]>({
-    queryKey: ['documents-all'],
+    queryKey: ['documents-global'],
     queryFn: () => getAllDocuments(),
     enabled: open,
     staleTime: 30_000,
@@ -130,7 +129,6 @@ function PaletteModal({ open, onOpenChange }: { open: boolean; onOpenChange: (v:
                 <CommandItem value="new-chat" onSelect={() => newChatMutation.mutate()}>
                   <Plus className="text-muted-foreground" />
                   New chat
-                  <CommandShortcut>⌘N</CommandShortcut>
                 </CommandItem>
               </CommandGroup>
               <CommandSeparator />

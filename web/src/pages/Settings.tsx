@@ -248,6 +248,51 @@ function ChromeBrowserSection({ connections, onConnectionsChanged }: { connectio
   );
 }
 
+function PlaywrightSection({ connections, onConnectionsChanged }: { connections: Connection[]; onConnectionsChanged: () => void }) {
+  const qc = useQueryClient();
+  const playwrightConn = connections.find(c => c.type === 'mcp' && c.name.toLowerCase().includes('playwright'));
+
+  const enableMutation = useMutation({
+    mutationFn: () => createConnection({
+      name: 'Playwright',
+      type: 'mcp',
+      config: { command: 'npx', args: JSON.stringify(['-y', '@playwright/mcp@latest']), env: JSON.stringify({}) },
+    }),
+    onSuccess: () => { qc.invalidateQueries({ queryKey: ['connections'] }); onConnectionsChanged(); },
+  });
+
+  const disableMutation = useMutation({
+    mutationFn: () => deleteConnection(playwrightConn!.id),
+    onSuccess: () => { qc.invalidateQueries({ queryKey: ['connections'] }); onConnectionsChanged(); },
+  });
+
+  return (
+    <div>
+      <SectionLabel>Playwright Browser</SectionLabel>
+      <SettingRow>
+        <div className="min-w-0">
+          <SettingRowInfo title="Playwright" description="Headless browser for pages that need JavaScript. Best for public pages and scraping — does not share your login session." />
+        </div>
+        <div className="flex shrink-0 items-center gap-2 self-start sm:self-center">
+          {playwrightConn && <ConnectedBadge />}
+          {playwrightConn ? (
+            <Button size="sm" variant="ghost" onClick={() => disableMutation.mutate()} disabled={disableMutation.isPending}>
+              Disable
+            </Button>
+          ) : (
+            <Button size="sm" onClick={() => enableMutation.mutate()} disabled={enableMutation.isPending}>
+              Enable
+            </Button>
+          )}
+        </div>
+      </SettingRow>
+      <HintText>
+        Runs as a headless browser process via <code>npx @playwright/mcp</code>. Use Chrome Browser instead when the task needs your signed-in session.
+      </HintText>
+    </div>
+  );
+}
+
 function parseGoogleCsv(text: string): { key: string; value: string }[] {
   const lines = text.trim().split('\n');
   if (lines.length < 2) return [];
@@ -931,6 +976,9 @@ export default function Settings() {
 
               {/* Chrome Browser */}
               <ChromeBrowserSection connections={connections} onConnectionsChanged={() => qc.invalidateQueries({ queryKey: ['connections'] })} />
+
+              {/* Playwright Browser */}
+              <PlaywrightSection connections={connections} onConnectionsChanged={() => qc.invalidateQueries({ queryKey: ['connections'] })} />
 
               {/* Google services */}
               <div>

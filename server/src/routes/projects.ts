@@ -5,7 +5,7 @@ import { getDb } from '../db/index.js';
 import { newId } from '../lib/ids.js';
 import { requireAuthHeaderOrQuery, type AuthedRequest } from '../middleware/auth.js';
 import { listProjectsForUser, getProjectForUser, createProject, linkProject, deleteProject } from '../services/projects.js';
-import { listDocuments } from '../services/documents.js';
+import { listFiles } from '../services/files.js';
 import { buildGraph } from '../services/graphify.js';
 
 const router = Router();
@@ -117,14 +117,14 @@ router.delete('/:id', (req, res) => {
   res.status(204).end();
 });
 
-// Documents scoped to project
-router.get('/:id/documents', (req, res) => {
+// Files scoped to project
+router.get('/:id/files', (req, res) => {
   const { userId } = req as unknown as AuthedRequest;
   const project = getProjectForUser(req.params.id, userId);
   if (!project) { res.status(404).json({ error: 'Project not found' }); return; }
   const { type } = req.query as Record<string, string>;
-  const docs = listDocuments(project.space_id, type ? { type } : undefined);
-  res.json(docs);
+  const files = listFiles(project.space_id, type ? { type } : undefined);
+  res.json(files);
 });
 
 router.get('/:id/tree', async (req, res) => {

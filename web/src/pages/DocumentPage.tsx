@@ -4,13 +4,13 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import { ArrowLeft, Check, ChevronDown, ChevronRight, Download, Pencil, Plus, Trash2, X } from 'lucide-react';
-import { getDocumentById, updateDocumentById, deleteDocumentById, getDocumentContentUrl } from '../lib/api.js';
+import { getFileById, updateFileById, deleteFileById, getFileContentUrl } from '../lib/api.js';
 import { ConfirmDialog } from '@/components/ui/confirm-dialog';
 import { usePageTitle } from '../lib/usePageTitle.js';
 import { timeAgo } from '../lib/utils.js';
 import { Button } from '@/components/ui/button';
 import { EmptyPanel, PageBody, PageHeader, PageLoading, PageShell } from '@/components/ui/app-layout';
-import type { DocumentWithBody } from '../types.js';
+import type { LibraryFileWithBody } from '../types.js';
 
 const PROSE = 'text-[14px] leading-relaxed text-fg-soft [&_a]:text-primary [&_a]:underline-offset-2 [&_a:hover]:underline [&_blockquote]:border-l-2 [&_blockquote]:border-border [&_blockquote]:pl-3 [&_blockquote]:text-muted-foreground [&_code]:rounded [&_code]:bg-muted [&_code]:px-1.5 [&_code]:py-0.5 [&_code]:font-mono [&_code]:text-[13px] [&_h1:first-child]:mt-0 [&_h1]:mb-3 [&_h1]:mt-5 [&_h1]:text-lg [&_h1]:font-semibold [&_h1]:text-foreground [&_h2]:mb-2 [&_h2]:mt-4 [&_h2]:text-base [&_h2]:font-semibold [&_h2]:text-foreground [&_h3]:mb-2 [&_h3]:mt-3 [&_h3]:text-sm [&_h3]:font-semibold [&_h3]:text-foreground [&_hr]:my-5 [&_hr]:border-border-soft [&_li]:mb-1 [&_ol]:mb-3 [&_ol]:ml-5 [&_ol]:list-decimal [&_p:last-child]:mb-0 [&_p]:mb-3 [&_pre_code]:bg-transparent [&_pre_code]:p-0 [&_pre]:my-3 [&_pre]:overflow-x-auto [&_pre]:rounded-lg [&_pre]:border [&_pre]:border-border-soft [&_pre]:bg-muted/30 [&_pre]:p-3 [&_pre]:font-mono [&_pre]:text-[12px] [&_table]:my-3 [&_table]:w-full [&_table]:border-collapse [&_td]:border [&_td]:border-border-soft [&_td]:px-2 [&_td]:py-1 [&_th]:border [&_th]:border-border-soft [&_th]:bg-muted/30 [&_th]:px-2 [&_th]:py-1 [&_th]:text-left [&_ul]:mb-3 [&_ul]:ml-5 [&_ul]:list-disc';
 
@@ -21,8 +21,8 @@ function isTextDoc(mimeType: string): boolean {
     || mimeType === 'application/yaml';
 }
 
-function BinaryViewer({ document }: { document: DocumentWithBody }) {
-  const contentUrl = getDocumentContentUrl(document.id);
+function BinaryViewer({ document }: { document: LibraryFileWithBody }) {
+  const contentUrl = getFileContentUrl(document.id);
   const mime = document.mime_type;
 
   if (mime.startsWith('image/')) {
@@ -72,27 +72,27 @@ export default function DocumentPage() {
   const [confirmDelete, setConfirmDelete] = useState(false);
   const bodyRef = useRef<HTMLTextAreaElement>(null);
 
-  const { data: document, isLoading, isError } = useQuery<DocumentWithBody>({
+  const { data: document, isLoading, isError } = useQuery<LibraryFileWithBody>({
     queryKey: ['document', documentId],
-    queryFn: () => getDocumentById(documentId!),
+    queryFn: () => getFileById(documentId!),
     enabled: !!documentId,
   });
 
   const saveMutation = useMutation({
     mutationFn: ({ title, body }: { title: string; body: string }) =>
-      updateDocumentById(documentId!, { title: title.trim() || document?.title, body }),
+      updateFileById(documentId!, { title: title.trim() || document?.title, body }),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['document', documentId] });
-      qc.invalidateQueries({ queryKey: ['documents-global'] });
+      qc.invalidateQueries({ queryKey: ['library-files'] });
       setEditing(false);
     },
   });
 
   const deleteMutation = useMutation({
-    mutationFn: () => deleteDocumentById(documentId!),
+    mutationFn: () => deleteFileById(documentId!),
     onSuccess: () => {
-      qc.invalidateQueries({ queryKey: ['documents-global'] });
-      navigate('/documents');
+      qc.invalidateQueries({ queryKey: ['library-files'] });
+      navigate('/library');
     },
   });
 
@@ -150,7 +150,7 @@ export default function DocumentPage() {
         contentClassName="max-w-4xl"
         titleClassName="text-2xl sm:text-3xl"
         breadcrumb={(
-          <Link to="/documents" className="inline-flex items-center gap-1 text-sm text-muted-foreground transition-colors hover:text-foreground">
+          <Link to="/library" className="inline-flex items-center gap-1 text-sm text-muted-foreground transition-colors hover:text-foreground">
             <ArrowLeft size={14} />
             Documents
           </Link>
@@ -179,7 +179,7 @@ export default function DocumentPage() {
               )}
               {!isText && (
                 <a
-                  href={getDocumentContentUrl(document.id)}
+                  href={getFileContentUrl(document.id)}
                   download={document.title}
                   className="inline-flex h-8 items-center gap-1.5 rounded-md px-3 text-sm text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
                 >
@@ -233,9 +233,9 @@ export default function DocumentPage() {
           ) : (
             <BinaryViewer document={document} />
           )}
-          <FrontmatterPanel documentId={documentId!} frontmatter={document.frontmatter} onSaved={() => {
+          <TagsPanel documentId={documentId!} tags={document.tags} onSaved={() => {
             qc.invalidateQueries({ queryKey: ['document', documentId] });
-            qc.invalidateQueries({ queryKey: ['documents-global'] });
+            qc.invalidateQueries({ queryKey: ['library-files'] });
           }} />
         </article>
       </PageBody>
@@ -253,9 +253,9 @@ export default function DocumentPage() {
   );
 }
 
-function FrontmatterPanel({ documentId, frontmatter, onSaved }: {
+function TagsPanel({ documentId, tags, onSaved }: {
   documentId: string;
-  frontmatter: Record<string, unknown>;
+  tags: Record<string, unknown>;
   onSaved: () => void;
 }) {
   const [open, setOpen] = useState(false);
@@ -266,27 +266,27 @@ function FrontmatterPanel({ documentId, frontmatter, onSaved }: {
   const [addingNew, setAddingNew] = useState(false);
 
   const patchMutation = useMutation({
-    mutationFn: (patch: Record<string, unknown>) => updateDocumentById(documentId, { frontmatter: patch }),
+    mutationFn: (patch: Record<string, unknown>) => updateFileById(documentId, { tags: patch }),
     onSuccess: () => { setEditing(null); setAddingNew(false); setNewKey(''); setNewVal(''); onSaved(); },
   });
 
-  const entries = Object.entries(frontmatter);
+  const entries = Object.entries(tags);
 
   function startEdit(key: string) {
     setEditing(key);
-    setDraft(String(frontmatter[key] ?? ''));
+    setDraft(String(tags[key] ?? ''));
   }
 
   function commitEdit(key: string) {
     const val = draft.trim();
-    if (val === String(frontmatter[key] ?? '')) { setEditing(null); return; }
+    if (val === String(tags[key] ?? '')) { setEditing(null); return; }
     patchMutation.mutate({ [key]: val });
   }
 
   function deleteKey(key: string) {
-    const next = { ...frontmatter };
+    const next = { ...tags };
     delete next[key];
-    updateDocumentById(documentId, { frontmatter: next }).then(onSaved);
+    updateFileById(documentId, { tags: next }).then(onSaved);
   }
 
   function addField() {

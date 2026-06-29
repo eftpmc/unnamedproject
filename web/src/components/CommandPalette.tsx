@@ -12,8 +12,8 @@ import {
   CommandList,
   CommandSeparator,
 } from '@/components/ui/command';
-import { searchChats, getProjects, getAllDocuments, createChat } from '../lib/api.js';
-import type { Document, Project, Session } from '../types.js';
+import { searchChats, getProjects, getAllFiles, createChat } from '../lib/api.js';
+import type { LibraryFile, Project, Session } from '../types.js';
 
 const Ctx = createContext<{ open: () => void } | null>(null);
 export const useCommandPalette = () => useContext(Ctx)!;
@@ -56,9 +56,9 @@ function PaletteModal({ open, onOpenChange }: { open: boolean; onOpenChange: (v:
     staleTime: 30_000,
   });
 
-  const { data: documents = [] } = useQuery<Document[]>({
-    queryKey: ['documents-global'],
-    queryFn: () => getAllDocuments(),
+  const { data: documents = [] } = useQuery<LibraryFile[]>({
+    queryKey: ['files-global'],
+    queryFn: () => getAllFiles(),
     enabled: open,
     staleTime: 30_000,
   });
@@ -72,7 +72,7 @@ function PaletteModal({ open, onOpenChange }: { open: boolean; onOpenChange: (v:
 
   const lq = trimmed.toLowerCase();
   const filteredProjects = trimmed ? projects.filter(p => p.name.toLowerCase().includes(lq)).slice(0, 5) : [];
-  const filteredDocs: Document[] = trimmed ? documents.filter((d: Document) => d.title.toLowerCase().includes(lq)).slice(0, 5) : [];
+  const filteredDocs: LibraryFile[] = trimmed ? documents.filter((d: LibraryFile) => d.title.toLowerCase().includes(lq)).slice(0, 5) : [];
 
   const newChatMutation = useMutation({
     mutationFn: () => createChat(),
@@ -115,7 +115,7 @@ function PaletteModal({ open, onOpenChange }: { open: boolean; onOpenChange: (v:
               {filteredDocs.length > 0 && (
                 <CommandGroup heading="Documents">
                   {filteredDocs.map(doc => (
-                    <CommandItem key={doc.id} value={`doc-${doc.id}`} onSelect={() => run(() => navigate(`/documents/${doc.id}`))}>
+                    <CommandItem key={doc.id} value={`doc-${doc.id}`} onSelect={() => run(() => navigate(`/library/${doc.id}`))}>
                       <FileText className="text-muted-foreground" />
                       <span className="truncate">{doc.title}</span>
                     </CommandItem>
@@ -130,7 +130,7 @@ function PaletteModal({ open, onOpenChange }: { open: boolean; onOpenChange: (v:
                   <Plus className="text-muted-foreground" />
                   New chat
                 </CommandItem>
-                <CommandItem value="new-document" onSelect={() => run(() => navigate('/documents', { state: { openNew: true } }))}>
+                <CommandItem value="new-document" onSelect={() => run(() => navigate('/library', { state: { openNew: true } }))}>
                   <FileText className="text-muted-foreground" />
                   New document
                 </CommandItem>
@@ -149,7 +149,7 @@ function PaletteModal({ open, onOpenChange }: { open: boolean; onOpenChange: (v:
                   <MessageSquare className="text-muted-foreground" />
                   Chats
                 </CommandItem>
-                <CommandItem value="go-documents" onSelect={() => run(() => navigate('/documents'))}>
+                <CommandItem value="go-documents" onSelect={() => run(() => navigate('/library'))}>
                   <FileText className="text-muted-foreground" />
                   Documents
                 </CommandItem>

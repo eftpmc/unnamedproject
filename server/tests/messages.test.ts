@@ -1,6 +1,5 @@
 import { describe, it, expect, beforeAll, vi } from 'vitest';
 import request from 'supertest';
-import fs from 'fs';
 import { app } from '../src/index.js';
 import { initDb, getDb } from '../src/db/index.js';
 import { newId } from '../src/lib/ids.js';
@@ -18,18 +17,23 @@ vi.mock('../src/services/socket.js', () => ({ broadcast: vi.fn(), initSocket: vi
 
 let token: string;
 let sessionId: string;
+let projectId: string;
 
 beforeAll(async () => {
-  fs.mkdirSync(process.env.DATA_DIR!, { recursive: true });
   initDb();
   const reg = await request(app)
     .post('/auth/register')
     .send({ email: `msg-${Date.now()}@test.com`, password: 'pass' });
   token = reg.body.token;
+  const p = await request(app)
+    .post('/projects')
+    .set('Authorization', `Bearer ${token}`)
+    .send({ name: 'Test project' });
+  projectId = p.body.id;
   const s = await request(app)
     .post('/sessions')
     .set('Authorization', `Bearer ${token}`)
-    .send({ title: 'Test session' });
+    .send({ title: 'Test session', pinned_project_id: projectId });
   sessionId = s.body.id;
 });
 
@@ -54,35 +58,35 @@ describe('messages', () => {
     const roles = (res.body as { role: string }[]).map(m => m.role);
     expect(roles).toContain('assistant');
     expect(res.body.every((m: { executions: unknown[] }) => Array.isArray(m.executions))).toBe(true);
-    expect(res.body.every((m: { attachments: unknown[] }) => Array.isArray(m.attachments))).toBe(true);
+    expect(res.body.every((m: { uploads: unknown[] }) => Array.isArray(m.uploads))).toBe(true);
   });
 
-  it('stores attachments on user messages', async () => {
+  it('uploads files directly to the library as documents', async () => {
     const res = await request(app)
       .post(`/sessions/${sessionId}/messages`)
       .set('Authorization', `Bearer ${token}`)
       .field('content', 'Review this file')
-      .attach('attachments', Buffer.from('hello from an attachment'), {
+      .attach('attachments', Buffer.from('hello from the library'), {
         filename: 'notes.md',
         contentType: 'text/markdown',
       });
 
     expect(res.status).toBe(201);
-    expect(res.body.attachments).toHaveLength(1);
-    expect(res.body.attachments[0]).toMatchObject({
-      filename: 'notes.md',
+    expect(res.body.uploads).toHaveLength(1);
+    expect(res.body.uploads[0]).toMatchObject({
+      title: 'notes',
       mimeType: 'text/markdown',
-      sizeBytes: 24,
     });
+    expect(res.body.uploads[0].id).toBeTruthy();
 
     const list = await request(app)
       .get(`/sessions/${sessionId}/messages`)
       .set('Authorization', `Bearer ${token}`);
-    const message = (list.body as { id: string; attachments: unknown[] }[]).find(m => m.id === res.body.id);
-    expect(message?.attachments).toHaveLength(1);
+    const message = (list.body as { id: string; uploads: unknown[] }[]).find(m => m.id === res.body.id);
+    expect(message?.uploads).toHaveLength(1);
   });
 
-  it('rejects unsupported attachment types', async () => {
+  it('rejects unsupported file types', async () => {
     const res = await request(app)
       .post(`/sessions/${sessionId}/messages`)
       .set('Authorization', `Bearer ${token}`)
@@ -93,31 +97,21 @@ describe('messages', () => {
       });
 
     expect(res.status).toBe(415);
-    expect(res.body.error).toContain('Unsupported attachment type');
+    expect(res.body.error).toContain('Unsupported file type');
   });
 
-  it('removes attachment files when truncating messages', async () => {
-    const create = await request(app)
-      .post(`/sessions/${sessionId}/messages`)
+  it('requires a pinned project to upload files', async () => {
+    const unpinned = await request(app)
+      .post('/sessions')
       .set('Authorization', `Bearer ${token}`)
-      .field('content', 'Temporary attachment')
-      .attach('attachments', Buffer.from('delete me'), {
-        filename: 'temporary.txt',
-        contentType: 'text/plain',
-      });
-
-    expect(create.status).toBe(201);
-    const attachment = getDb()
-      .prepare('SELECT storage_path as storagePath FROM message_attachments WHERE message_id = ?')
-      .get(create.body.id) as { storagePath: string };
-    expect(fs.existsSync(attachment.storagePath)).toBe(true);
-
-    const del = await request(app)
-      .delete(`/sessions/${sessionId}/messages/from/${create.body.id}`)
-      .set('Authorization', `Bearer ${token}`);
-
-    expect(del.status).toBe(200);
-    expect(fs.existsSync(attachment.storagePath)).toBe(false);
+      .send({ title: 'No project session' });
+    const res = await request(app)
+      .post(`/sessions/${unpinned.body.id}/messages`)
+      .set('Authorization', `Bearer ${token}`)
+      .field('content', 'Upload without project')
+      .attach('attachments', Buffer.from('data'), { filename: 'file.txt', contentType: 'text/plain' });
+    expect(res.status).toBe(400);
+    expect(res.body.error).toContain('Pin a project');
   });
 
   it('embeds executions linked to a message so a reload can rehydrate tool runs', async () => {

@@ -10,7 +10,7 @@ vi.mock('./auth', () => ({
 const mockFetch = vi.fn();
 globalThis.fetch = mockFetch;
 
-const { login, getChats, createChat, getChatStatus, sendMessage, getDocuments, getProjects: getTopLevelProjects, createTopLevelProject, getAllDocuments, getAllTriggers } = await import('./api');
+const { login, getChats, createChat, getChatStatus, sendMessage, getProjectFiles, getProjects: getTopLevelProjects, createTopLevelProject, getAllFiles, getAllTriggers } = await import('./api');
 
 const mockResponse = (body: unknown, status = 200) => ({
   ok: status >= 200 && status < 300,
@@ -67,16 +67,16 @@ describe('api', () => {
     expect(opts.headers.Authorization).toBe('Bearer test-token');
   });
 
-  it('getDocuments constructs the correct URL without params', async () => {
+  it('getProjectFiles constructs the correct URL without params', async () => {
     mockFetch.mockResolvedValueOnce(mockResponse([]));
-    await getDocuments('proj-1');
-    expect(mockFetch).toHaveBeenCalledWith('/projects/proj-1/documents', expect.any(Object));
+    await getProjectFiles('proj-1');
+    expect(mockFetch).toHaveBeenCalledWith('/projects/proj-1/files', expect.any(Object));
   });
 
-  it('getDocuments appends type query param when provided', async () => {
+  it('getProjectFiles appends type query param when provided', async () => {
     mockFetch.mockResolvedValueOnce(mockResponse([]));
-    await getDocuments('proj-1', { type: 'playbook' });
-    expect(mockFetch).toHaveBeenCalledWith('/projects/proj-1/documents?type=playbook', expect.any(Object));
+    await getProjectFiles('proj-1', { type: 'playbook' });
+    expect(mockFetch).toHaveBeenCalledWith('/projects/proj-1/files?type=playbook', expect.any(Object));
   });
 
 });
@@ -100,10 +100,10 @@ describe('Top-level API functions', () => {
     });
   });
 
-  describe('getAllDocuments', () => {
+  describe('getAllFiles', () => {
     it('calls GET /documents', async () => {
       mockFetch.mockResolvedValueOnce(mockResponse([]));
-      await getAllDocuments();
+      await getAllFiles();
       expect(mockFetch).toHaveBeenCalledWith('/documents', expect.anything());
     });
   });

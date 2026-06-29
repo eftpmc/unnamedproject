@@ -6,7 +6,7 @@ import tailwindcss from '@tailwindcss/vite';
 // and API routes. Only proxy when the request is an API call (JSON accept
 // header or a known API sub-path like /media, /artifacts, /research),
 // otherwise fall through to the SPA so direct URL navigation works.
-const API_SUBPATHS = ['/media/', '/artifacts/', '/research/', '/files/'];
+const API_SUBPATHS = ['/media/', '/artifacts/', '/research/', '/files/', '/content'];
 function apiOrSpaBypass(req) {
   if (req.headers.accept?.includes('application/json')) return undefined;
   if (API_SUBPATHS.some(p => req.url?.includes(p))) return undefined;
@@ -46,7 +46,7 @@ export default defineConfig({
         target: 'http://localhost:3000',
         bypass: apiOrSpaBypass,
       },
-      '/documents': {
+      '/files': {
         target: 'http://localhost:3000',
         bypass: apiOrSpaBypass,
       },

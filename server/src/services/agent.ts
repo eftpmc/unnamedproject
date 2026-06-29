@@ -156,14 +156,14 @@ export async function runAgentTurn(userId: string, sessionId: string, userMessag
     .prepare('SELECT COUNT(*) as count FROM messages WHERE session_id = ?')
     .get(sessionId) as { count: number }).count;
 
-  const attachments = lastUserMsg
+  const uploads = lastUserMsg
     ? (getDb()
-        .prepare('SELECT id, filename, mime_type as mimeType, storage_path as storagePath FROM message_attachments WHERE message_id = ? ORDER BY created_at, filename')
-        .all(lastUserMsg.id) as { id: string; filename: string; mimeType: string; storagePath: string }[])
+        .prepare('SELECT f.id, f.title, f.mime_type as mimeType FROM message_files mf JOIN files f ON f.id = mf.document_id WHERE mf.message_id = ? ORDER BY f.created_at, f.title')
+        .all(lastUserMsg.id) as { id: string; title: string; mimeType: string }[])
     : [];
 
-  const attachmentBlock = attachments.length
-    ? `\n\n<attachments>\n${attachments.map(a => `<file id="${a.id}" name="${a.filename}" path="${a.storagePath}" mime_type="${a.mimeType}" />`).join('\n')}\n</attachments>\n\nThe files above are available on disk. Use the Read tool to access text/code files. For binary files (PDF, images) that should be stored in an item, use attach_file_to_item with the file's path attribute.`
+  const attachmentBlock = uploads.length
+    ? `\n\n<uploads>\n${uploads.map(u => `<file id="${u.id}" title="${u.title}" mime_type="${u.mimeType}" />`).join('\n')}\n</uploads>\n\nThe files above were just uploaded to the library. Use read_file to access text/code files, or tag_file to add metadata.`
     : '';
 
   const sessionCostRow = getDb()

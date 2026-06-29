@@ -12,7 +12,7 @@ import { getAgentProviders } from '../lib/api.js';
 import { connect, disconnect, subscribe } from '../lib/ws.js';
 import type { AgentProvider, Session, WSApprovalRequested, WSExecutionUpdate, WSTurnComplete } from '../types.js';
 
-const PAGE_ROUTES = ['/home', '/chats', '/projects', '/documents', '/media', '/triggers', '/settings'];
+const PAGE_ROUTES = ['/home', '/chats', '/projects', '/library', '/triggers', '/settings'];
 
 export default function AppLayout() {
   const { chatId } = useParams<{ chatId?: string }>();

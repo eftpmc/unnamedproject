@@ -1,5 +1,5 @@
 import { getToken, setToken, clearToken } from './auth.js';
-import type { Session, Message, Connection, AgentProvider, GoogleAccount, EffortLevel, UserSettings, Memory, ScheduledTask, SessionWorktree, PermissionProfile, SessionEvent, Document, DocumentWithBody, Project, Trigger, FileEntry, MediaItem } from '../types.js';
+import type { Session, Message, Connection, AgentProvider, GoogleAccount, EffortLevel, UserSettings, Memory, ScheduledTask, SessionWorktree, PermissionProfile, SessionEvent, LibraryFile, LibraryFileWithBody, Project, Trigger, FileEntry } from '../types.js';
 
 async function request<T>(path: string, init: RequestInit = {}): Promise<T> {
   const token = getToken();
@@ -146,13 +146,6 @@ export function sendMessage(sessionId: string, content: string, attachments: Fil
   return request(`/sessions/${sessionId}/messages`, { method: 'POST', body });
 }
 
-export function getMedia(): Promise<MediaItem[]> {
-  return request('/media');
-}
-
-export function deleteMedia(id: string): Promise<void> {
-  return request(`/media/${id}`, { method: 'DELETE' });
-}
 
 export function getPendingApprovals(): Promise<Array<{ approval_id: string; execution_id: string; action: string; payload: Record<string, unknown>; tool: string; created_at: number; session_id: string | null }>> {
   return request('/executions/pending-approvals');
@@ -170,44 +163,44 @@ export function cancelExecution(executionId: string): Promise<void> {
   return request(`/executions/${executionId}/cancel`, { method: 'POST' });
 }
 
-// Documents
-export function getDocuments(projectId: string, params?: { type?: string }): Promise<Document[]> {
+// Library files
+export function getProjectFiles(projectId: string, params?: { type?: string }): Promise<LibraryFile[]> {
   const q = params?.type ? `?type=${encodeURIComponent(params.type)}` : '';
-  return request(`/projects/${projectId}/documents${q}`);
+  return request(`/projects/${projectId}/files${q}`);
 }
 
-export function createGlobalDocument(body: { title: string; project_id: string }): Promise<Document> {
-  return request('/documents', { method: 'POST', body: JSON.stringify(body) });
+export function createFile(body: { title: string; project_id: string }): Promise<LibraryFile> {
+  return request('/files', { method: 'POST', body: JSON.stringify(body) });
 }
 
-export function getAllDocuments(params?: { type?: string }): Promise<Document[]> {
+export function getAllFiles(params?: { type?: string }): Promise<LibraryFile[]> {
   const q = params?.type ? `?type=${encodeURIComponent(params.type)}` : '';
-  return request(`/documents${q}`);
+  return request(`/files${q}`);
 }
 
-export function getDocumentById(id: string): Promise<DocumentWithBody> {
-  return request(`/documents/${id}`);
+export function getFileById(id: string): Promise<LibraryFileWithBody> {
+  return request(`/files/${id}`);
 }
 
-export function updateDocumentById(id: string, body: { title?: string; body?: string; frontmatter?: Record<string, unknown> }): Promise<Document> {
-  return request(`/documents/${id}`, { method: 'PATCH', body: JSON.stringify(body) });
+export function updateFileById(id: string, body: { title?: string; body?: string; tags?: Record<string, unknown> }): Promise<LibraryFile> {
+  return request(`/files/${id}`, { method: 'PATCH', body: JSON.stringify(body) });
 }
 
-export function deleteDocumentById(id: string): Promise<void> {
-  return request(`/documents/${id}`, { method: 'DELETE' });
+export function deleteFileById(id: string): Promise<void> {
+  return request(`/files/${id}`, { method: 'DELETE' });
 }
 
-export function uploadDocumentFile(file: File, projectId: string, title?: string): Promise<Document> {
+export function uploadFile(file: File, projectId: string, title?: string): Promise<LibraryFile> {
   const form = new FormData();
   form.append('file', file);
   form.append('project_id', projectId);
   if (title) form.append('title', title);
-  return request('/documents', { method: 'POST', body: form });
+  return request('/files', { method: 'POST', body: form });
 }
 
-export function getDocumentContentUrl(id: string): string {
+export function getFileContentUrl(id: string): string {
   const token = getToken();
-  return `/documents/${id}/content${token ? `?token=${encodeURIComponent(token)}` : ''}`;
+  return `/files/${id}/content${token ? `?token=${encodeURIComponent(token)}` : ''}`;
 }
 
 // Projects

@@ -4,7 +4,7 @@ import { Copy, Check } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { getAllTriggers, createGlobalTrigger, deleteGlobalTrigger, getDocuments } from '../lib/api.js';
+import { getAllTriggers, createGlobalTrigger, deleteGlobalTrigger, getProjectFiles } from '../lib/api.js';
 import { timeAgo } from '../lib/utils.js';
 import type { Trigger } from '../types.js';
 
@@ -56,7 +56,7 @@ export default function TriggersSection({ projectId }: { projectId: string }) {
   const qc = useQueryClient();
   const { data: allTriggers = [] } = useQuery<Trigger[]>({ queryKey: ['triggers'], queryFn: getAllTriggers });
   const triggers = allTriggers.filter(t => t.project_id === projectId);
-  const { data: playbooks = [] } = useQuery({ queryKey: ['documents', projectId, 'workflow'], queryFn: () => getDocuments(projectId, { type: 'workflow' }) });
+  const { data: playbooks = [] } = useQuery({ queryKey: ['files', projectId, 'workflow'], queryFn: () => getProjectFiles(projectId, { type: 'workflow' }) });
   const [cron, setCron] = useState('0 8 * * *');
   const [playbookId, setPlaybookId] = useState<string>('');
 

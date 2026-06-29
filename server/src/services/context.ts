@@ -1,6 +1,6 @@
 import { getDb, getPermissionProfile } from '../db/index.js';
 import { listProjects } from './projects.js';
-import { listDocuments } from './documents.js';
+import { listFiles } from './files.js';
 import { recallRelevant } from './memory.js';
 import { formatEntry } from '../tools/memory_tools.js';
 import { formatSessionStateBlock } from './session-state.js';
@@ -14,8 +14,8 @@ import path from 'path';
 function baseBlock(intent: Intent): string {
   const isCode = intent.domain === 'code' || intent.domain === 'multi' || intent.domain === 'general';
   const autoApproved = isCode
-    ? 'git_op add/commit, list_projects, create_project, update_project, pin_project, search_files, project_query, rebuild_graph, recall, remember, forget, list_chats, read_chat, write_document, read_document, list_documents, patch_frontmatter, delete_document, link_project, create_trigger, list_triggers, delete_trigger, list_connections, create_connection, update_connection, delete_connection, test_connection, vault_get, vault_list, checkpoint_session'
-    : 'list_projects, create_project, pin_project, recall, remember, forget, list_chats, read_chat, write_document, read_document, list_documents, patch_frontmatter, delete_document, list_connections, create_connection, update_connection, delete_connection, test_connection, vault_get, vault_list, checkpoint_session';
+    ? 'git_op add/commit, list_projects, create_project, update_project, pin_project, search_files, project_query, rebuild_graph, recall, remember, forget, list_chats, read_chat, write_file, read_file, list_files, tag_file, delete_file, link_project, create_trigger, list_triggers, delete_trigger, list_connections, create_connection, update_connection, delete_connection, test_connection, vault_get, vault_list, checkpoint_session'
+    : 'list_projects, create_project, pin_project, recall, remember, forget, list_chats, read_chat, write_file, read_file, list_files, tag_file, delete_file, list_connections, create_connection, update_connection, delete_connection, test_connection, vault_get, vault_list, checkpoint_session';
 
   return `You are a personal AI assistant with full coding capabilities and access to the user's projects, documents, and memory. You can implement code, write files, run commands, and manage the user's workspace directly.
 
@@ -28,7 +28,7 @@ function baseBlock(intent: Intent): string {
 
 ## State awareness
 Before starting work in the active project, check what already exists there:
-- Call list_documents with the active project_id — see what's already present before generating a new report or research output.
+- Call list_files with the active project_id — see what's already present before generating a new report or research output.
 Only check other projects when the user's request explicitly involves them.
 If no project is active and you need a project_id, call list_projects to see available projects — never guess one. If list_projects comes back empty, call create_project to create a project, then immediately call pin_project with its id so it becomes the active context for this session. If projects exist but none is pinned, pick the most relevant one and call pin_project.
 
@@ -58,7 +58,7 @@ Reading hierarchy (cheapest first):
 When the task is to collect structured data (job listings, profiles, search results, etc.):
 1. Navigate with browser_navigate
 2. Extract with browser_extract format=json (or format=text if json is insufficient)
-3. Immediately write the extracted data to a document with write_document — do not hold it in conversation context
+3. Immediately write the extracted data with write_file — do not hold it in conversation context
 4. Move to the next page or URL
 Do not take screenshots during a scraping workflow. Do not re-extract data you have already written to a document.
 
@@ -66,13 +66,13 @@ Do not take screenshots during a scraping workflow. Do not re-extract data you h
 Use search_files for fast codebase lookups (finding where a function is defined, tracing usages, locating config). Only fall back to project_query for broad architectural questions that need reasoning across the whole codebase.
 
 ## Documents
-A document is a markdown file in a project, the source of truth on disk. Author with write_document (project_id, path, title, frontmatter, body). Frontmatter is YAML key/values used for tracking and querying — set \`type\` (e.g. application, resume, workflow, note) and \`status\` where relevant. Query with list_documents({ project_id, type, frontmatter }); a tracker is just a query grouped by status. Update a status cheaply with patch_frontmatter — do NOT rewrite the whole file for a field change. Link documents with [[wikilinks]] in the body.
+A document is a markdown file in a project, the source of truth on disk. Author with write_file (project_id, path, title, tags, body). Tags are YAML key/values used for tracking and querying — set \`type\` (e.g. application, resume, workflow, note) and \`status\` where relevant. Query with list_files({ project_id, type, tags }); a tracker is just a query grouped by status. Update a status cheaply with tag_file — do NOT rewrite the whole file for a field change. Link files with [[wikilinks]] in the body.
 
 ## Projects
 A project is a workspace that can contain git repos and documents. Create one with create_project; link an existing repo path with link_project. Code tools (read/write/edit/bash/git) operate inside a project — pass its project_id.
 
 ## Triggers (the automation loop)
-A trigger runs a playbook document (a document with frontmatter type: workflow) on a schedule. Create with create_trigger({ kind: 'schedule', schedule_cron, playbook_id }). When it fires, a new chat starts pinned to this project seeded with the playbook body; you execute it using the project's connections and tools, writing results back as documents and frontmatter updates.`;
+A trigger runs a playbook document (a file with tags type: workflow) on a schedule. Create with create_trigger({ kind: 'schedule', schedule_cron, playbook_id }). When it fires, a new chat starts pinned to this project seeded with the playbook body; you execute it using the project's connections and tools, writing results back as files and tag updates.`;
 }
 
 function permissionBlock(userId: string): string {
@@ -115,7 +115,7 @@ Do not summarize or report done before step 3 completes.`;
 
     case 'writing':
       return `## Writing tasks
-Use write_document for output to save; respond inline for drafts the user has not asked to save.
+Use write_file for output to save; respond inline for drafts the user has not asked to save.
 Confirm path and project with the user before writing any file.
 Do not invoke coding agents for writing, documentation, or note-taking tasks.`;
 
@@ -125,11 +125,11 @@ Use list_connections to find the configured search MCP tool, then call it. Alway
 Cite sources in your response.
 Check recall first before any web search.
 
-After synthesizing findings: save them to the active project. Call list_documents — if a suitable research doc exists, use patch_frontmatter to update its status; otherwise write_document with type: research and frontmatter status: draft. Use markdown sections for narrative; link related documents with [[wikilinks]].`;
+After synthesizing findings: save them to the active project. Call list_documents — if a suitable research doc exists, use tag_file to update its status; otherwise write_file with type: research and tags status: draft. Use markdown sections for narrative; link related documents with [[wikilinks]].`;
 
     case 'creative':
       return `## Creative tasks
-Respond inline for short creative work. Use write_document when the user wants output saved.
+Respond inline for short creative work. Use write_file when the user wants output saved.
 Research often improves creative work — check for relevant context before generating.`;
 
     case 'multi':
@@ -208,17 +208,17 @@ ${bounded}`;
 
 function projectContextBlock(project: ProjectCtx, _userId: string): string {
   const repos = listProjects(project.space_id);
-  const docs = listDocuments(project.space_id);
+  const files = listFiles(project.space_id);
   const header = `## Active project: **${project.name}** (project_id: ${project.id})${project.description ? ' — ' + project.description : ''}`;
 
   const repoLine = repos.length > 0
     ? `\nGit repos: ${repos.map(p => `${p.name} (project_id: ${p.id}, path: ${p.repo_path})`).join('; ')}. Pass project_id to code tools.`
-    : `\nNo git repos in this project yet. Create one with create_project, or work in documents.`;
+    : `\nNo git repos in this project yet. Create one with create_project, or work in files.`;
 
-  const docTypes = [...new Set(docs.map(d => d.type).filter(Boolean))];
-  const docLine = docs.length > 0
-    ? `\nDocuments: ${docs.length} total${docTypes.length ? ` (types: ${docTypes.join(', ')})` : ''}. Use list_documents to query by type/status, read_document before editing.`
-    : `\nNo documents yet. Author markdown with write_document.`;
+  const fileTypes = [...new Set(files.map(f => f.type).filter(Boolean))];
+  const docLine = files.length > 0
+    ? `\nFiles: ${files.length} total${fileTypes.length ? ` (types: ${fileTypes.join(', ')})` : ''}. Use list_files to query by type/status, read_file before editing.`
+    : `\nNo files yet. Author markdown with write_file.`;
 
   return header + repoLine + docLine;
 }

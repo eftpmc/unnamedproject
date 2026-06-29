@@ -7,9 +7,8 @@ import { ArrowDown, ArrowRight, Check, ChevronDown, ChevronUp, Copy, FileStack, 
 import { Link } from 'react-router-dom';
 import ExecutionCard from './ExecutionCard.js';
 import { StatusPill } from '@/components/ui/status-pill';
-import { getToken } from '../lib/auth.js';
 import { cn } from '../lib/utils.js';
-import type { Message, MessageAttachment, SessionEvent } from '../types.js';
+import type { Message, MessageFile, SessionEvent } from '../types.js';
 
 // Cards that always stay individually visible: errors/approvals awaiting a
 // decision, and tool calls that render as a richer preview card.
@@ -504,7 +503,7 @@ export default function MessageList({ messages, executions, streamingIds, sessio
           }
 
           const isLastUser = msg.role === 'user' && msg.id === lastUserMessageId;
-          const attachments = msg.attachments ?? [];
+          const uploads = msg.uploads ?? [];
           const timestamp = new Date(msg.created_at * 1000).toLocaleString(undefined, {
             month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit',
           });
@@ -539,10 +538,10 @@ export default function MessageList({ messages, executions, streamingIds, sessio
                         </ReactMarkdown>
                       </div>
                     )}
-                    {attachments.length > 0 && (
+                    {uploads.length > 0 && (
                       <div className={msg.content ? 'mt-2 flex flex-wrap gap-1.5' : 'flex flex-wrap gap-1.5'}>
-                        {attachments.map(attachment => (
-                          <AttachmentChip key={attachment.id} attachment={attachment} />
+                        {uploads.map(doc => (
+                          <DocumentChip key={doc.id} doc={doc} />
                         ))}
                       </div>
                     )}
@@ -598,89 +597,17 @@ export default function MessageList({ messages, executions, streamingIds, sessio
   );
 }
 
-function formatFileSize(bytes: number): string {
-  if (bytes < 1024) return `${bytes} B`;
-  if (bytes < 1024 * 1024) return `${Math.round(bytes / 1024)} KB`;
-  return `${(bytes / 1024 / 1024).toFixed(1)} MB`;
-}
-
-function AttachmentChip({ attachment }: { attachment: MessageAttachment }) {
-  const [previewUrl, setPreviewUrl] = useState<string | null>(null);
-  const [previewLoading, setPreviewLoading] = useState(false);
-  const [previewFailed, setPreviewFailed] = useState(false);
-  const [downloadError, setDownloadError] = useState(false);
-  const isImage = attachment.mimeType.startsWith('image/');
+function DocumentChip({ doc }: { doc: MessageFile }) {
+  const isImage = doc.mimeType.startsWith('image/');
   const Icon = isImage ? Image : FileText;
-
-  useEffect(() => {
-    if (!isImage) return;
-    let objectUrl: string | null = null;
-    let cancelled = false;
-    setPreviewLoading(true);
-    setPreviewFailed(false);
-    const token = getToken();
-    fetch(attachment.url, {
-      headers: token ? { Authorization: `Bearer ${token}` } : {},
-    })
-      .then(res => {
-        if (!res.ok) throw new Error(`HTTP ${res.status}`);
-        return res.blob();
-      })
-      .then(blob => {
-        if (cancelled) return;
-        objectUrl = URL.createObjectURL(blob);
-        setPreviewUrl(objectUrl);
-      })
-      .catch(() => {
-        if (!cancelled) setPreviewFailed(true);
-      })
-      .finally(() => {
-        if (!cancelled) setPreviewLoading(false);
-      });
-    return () => {
-      cancelled = true;
-      if (objectUrl) URL.revokeObjectURL(objectUrl);
-    };
-  }, [attachment.url, isImage]);
-
-  async function downloadAttachment() {
-    setDownloadError(false);
-    try {
-      const token = getToken();
-      const res = await fetch(attachment.url, {
-        headers: token ? { Authorization: `Bearer ${token}` } : {},
-      });
-      if (!res.ok) throw new Error(`HTTP ${res.status}`);
-      const blob = await res.blob();
-      const objectUrl = URL.createObjectURL(blob);
-      const link = document.createElement('a');
-      link.href = objectUrl;
-      link.download = attachment.filename;
-      document.body.appendChild(link);
-      link.click();
-      link.remove();
-      URL.revokeObjectURL(objectUrl);
-    } catch {
-      setDownloadError(true);
-    }
-  }
-
   return (
-    <button
-      type="button"
-      onClick={downloadAttachment}
-      className="flex max-w-full items-center gap-1.5 rounded-lg border border-border-soft bg-background/70 px-2 py-1 text-left text-xs text-muted-foreground transition-colors hover:border-border hover:bg-background hover:text-foreground"
-      title={downloadError ? `Could not download ${attachment.filename}` : previewFailed ? `Could not load preview for ${attachment.filename}` : `Download ${attachment.filename}`}
+    <a
+      href={`/library/${doc.id}`}
+      className="flex max-w-full items-center gap-1.5 rounded-lg border border-border-soft bg-background/70 px-2 py-1 text-xs text-muted-foreground transition-colors hover:border-border hover:bg-background hover:text-foreground"
+      title={`Open ${doc.title} in library`}
     >
-      {previewUrl ? (
-        <img src={previewUrl} alt="" className="size-7 shrink-0 rounded object-cover" />
-      ) : previewLoading ? (
-        <span className="size-7 shrink-0 animate-pulse rounded bg-muted" />
-      ) : (
-        <Icon size={13} className={cn('shrink-0', previewFailed && 'text-destructive/70')} />
-      )}
-      <span className="max-w-44 truncate">{attachment.filename}</span>
-      <span className="shrink-0 text-faint-fg">{formatFileSize(attachment.sizeBytes)}</span>
-    </button>
+      <Icon size={13} className="shrink-0" />
+      <span className="max-w-44 truncate">{doc.title}</span>
+    </a>
   );
 }

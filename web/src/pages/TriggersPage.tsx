@@ -2,7 +2,7 @@ import { useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { BookOpen, Clipboard, MoreHorizontal, Play, Plus, Trash2, X } from 'lucide-react';
-import { getAllTriggers, updateGlobalTrigger, deleteGlobalTrigger, runTriggerNow, createGlobalTrigger, getAllDocuments, getProjects } from '../lib/api.js';
+import { getAllTriggers, updateGlobalTrigger, deleteGlobalTrigger, runTriggerNow, createGlobalTrigger, getAllFiles, getProjects } from '../lib/api.js';
 import { usePageTitle } from '../lib/usePageTitle.js';
 import { timeAgo } from '../lib/utils.js';
 import { Button } from '@/components/ui/button';
@@ -12,7 +12,7 @@ import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from '
 import { CenteredEmptyState, ContentColumn, PageBody, PageHeader, PageLoading, PageShell } from '@/components/ui/app-layout';
 import { DataTable, DataTableBody, DataTableHeader, DataTableRow } from '@/components/ui/data-table';
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
-import type { Document, Project, Trigger } from '../types.js';
+import type { LibraryFile, Project, Trigger } from '../types.js';
 
 export default function TriggersPage() {
   usePageTitle('Triggers');
@@ -37,9 +37,9 @@ export default function TriggersPage() {
     queryFn: getAllTriggers,
   });
 
-  const { data: documents = [] } = useQuery<Document[]>({
-    queryKey: ['documents-global'],
-    queryFn: () => getAllDocuments(),
+  const { data: documents = [] } = useQuery<LibraryFile[]>({
+    queryKey: ['library-files'],
+    queryFn: () => getAllFiles(),
     staleTime: 60_000,
   });
 
@@ -170,7 +170,7 @@ export default function TriggersPage() {
                         )}
                         {playbook ? (
                           <Link
-                            to={`/documents/${playbook.id}`}
+                            to={`/library/${playbook.id}`}
                             className="flex items-center gap-1 truncate text-[11px] text-primary hover:underline"
                           >
                             <BookOpen size={10} className="shrink-0" />

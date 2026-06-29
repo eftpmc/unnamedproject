@@ -23,19 +23,10 @@ export interface MessageExecution {
   payload?: Record<string, unknown>;
 }
 
-export interface MessageAttachment {
+export interface MessageFile {
   id: string;
-  filename: string;
+  title: string;
   mimeType: string;
-  sizeBytes: number;
-  url: string;
-  createdAt: number;
-}
-
-export interface MediaItem extends MessageAttachment {
-  messageId: string;
-  sessionId: string;
-  sessionTitle: string | null;
 }
 
 export type SessionEventType =
@@ -70,7 +61,7 @@ export interface Message {
   role: 'user' | 'assistant';
   content: string;
   created_at: number;
-  attachments?: MessageAttachment[];
+  uploads?: MessageFile[];
   executions?: MessageExecution[];
 }
 
@@ -85,20 +76,21 @@ export interface Execution {
   completed_at: number | null;
 }
 
-export interface Document {
+export interface LibraryFile {
   id: string;
+  space_id: string;
   path: string;
   title: string;
   type: string | null;
   status: string | null;
   mime_type: string;
-  frontmatter: Record<string, unknown>;
+  tags: Record<string, unknown>;
   source_session_id: string | null;
   created_at: number;
   updated_at: number;
 }
 
-export interface DocumentWithBody extends Document {
+export interface LibraryFileWithBody extends LibraryFile {
   body: string | null;
 }
 

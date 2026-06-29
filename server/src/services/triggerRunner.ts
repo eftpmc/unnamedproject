@@ -1,6 +1,6 @@
 import { getDb, getDueTriggers } from '../db/index.js';
 import { newId } from '../lib/ids.js';
-import { readDocument } from './documents.js';
+import { readFile } from './files.js';
 import { markTriggerRun } from './triggers.js';
 import { nextCronRun } from '../lib/cron.js';
 import { runAgentTurn } from './agent.js';
@@ -18,7 +18,7 @@ export async function fireTrigger(triggerId: string): Promise<string> {
   const trigger = triggerById(triggerId);
   if (!trigger) throw new Error(`Trigger ${triggerId} not found`);
 
-  const playbook = trigger.playbook_id ? await readDocument(trigger.playbook_id) : undefined;
+  const playbook = trigger.playbook_id ? await readFile(trigger.playbook_id) : undefined;
   const prompt = playbook
     ? `Run this playbook:\n\n${playbook.body}`
     : `Trigger fired. No playbook is set — check the workspace and summarise what has changed since the last run.`;

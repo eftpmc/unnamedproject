@@ -71,20 +71,21 @@ function applySchema(): void {
     CREATE INDEX IF NOT EXISTS idx_projects_space ON projects(space_id);
     CREATE INDEX IF NOT EXISTS idx_projects_user ON projects(user_id);
 
-    CREATE TABLE IF NOT EXISTS documents (
+    CREATE TABLE IF NOT EXISTS files (
       id TEXT PRIMARY KEY,
       space_id TEXT NOT NULL REFERENCES spaces(id) ON DELETE CASCADE,
       path TEXT NOT NULL,
       title TEXT NOT NULL,
       type TEXT,
       status TEXT,
-      frontmatter TEXT NOT NULL DEFAULT '{}',
+      mime_type TEXT NOT NULL DEFAULT 'text/markdown',
+      tags TEXT NOT NULL DEFAULT '{}',
       source_session_id TEXT REFERENCES sessions(id) ON DELETE SET NULL,
       created_at INTEGER NOT NULL DEFAULT (unixepoch()),
       updated_at INTEGER NOT NULL DEFAULT (unixepoch()),
       UNIQUE(space_id, path)
     );
-    CREATE INDEX IF NOT EXISTS idx_documents_space_type ON documents(space_id, type);
+    CREATE INDEX IF NOT EXISTS idx_files_space_type ON files(space_id, type);
 
     CREATE TABLE IF NOT EXISTS triggers (
       id TEXT PRIMARY KEY,
@@ -151,16 +152,12 @@ function applySchema(): void {
     );
     CREATE INDEX IF NOT EXISTS idx_messages_session_id ON messages(session_id);
 
-    CREATE TABLE IF NOT EXISTS message_attachments (
-      id TEXT PRIMARY KEY,
+    CREATE TABLE IF NOT EXISTS message_files (
       message_id TEXT NOT NULL REFERENCES messages(id) ON DELETE CASCADE,
-      filename TEXT NOT NULL,
-      mime_type TEXT NOT NULL,
-      size_bytes INTEGER NOT NULL,
-      storage_path TEXT NOT NULL,
-      created_at INTEGER NOT NULL DEFAULT (unixepoch())
+      document_id TEXT NOT NULL REFERENCES documents(id) ON DELETE CASCADE,
+      PRIMARY KEY (message_id, document_id)
     );
-    CREATE INDEX IF NOT EXISTS idx_message_attachments_message_id ON message_attachments(message_id);
+    CREATE INDEX IF NOT EXISTS idx_message_files_message ON message_files(message_id);
 
     CREATE TABLE IF NOT EXISTS session_turns (
       id TEXT PRIMARY KEY,
@@ -410,6 +407,54 @@ const migrations: Migration[] = [
       database.exec('DROP TABLE _session_events_runtime_checkpoint_tmp;');
       database.exec('CREATE INDEX IF NOT EXISTS idx_session_events_session_id ON session_events(session_id);');
       database.pragma('foreign_keys = ON');
+    },
+  },
+  {
+    version: 9,
+    name: 'unify_library',
+    up: (database) => {
+      database.exec(`
+        CREATE TABLE IF NOT EXISTS message_files (
+          message_id TEXT NOT NULL REFERENCES messages(id) ON DELETE CASCADE,
+          document_id TEXT NOT NULL REFERENCES files(id) ON DELETE CASCADE,
+          PRIMARY KEY (message_id, document_id)
+        );
+        CREATE INDEX IF NOT EXISTS idx_message_files_message ON message_files(message_id);
+      `);
+      const tables = (database.prepare("SELECT name FROM sqlite_master WHERE type='table'").all() as { name: string }[]).map(t => t.name);
+      if (tables.includes('message_attachments')) {
+        database.exec('DROP TABLE message_attachments;');
+      }
+    },
+  },
+  {
+    version: 10,
+    name: 'files_rename',
+    noTransaction: true,
+    up: (database) => {
+      const tables = (database.prepare("SELECT name FROM sqlite_master WHERE type='table'").all() as { name: string }[]).map(t => t.name);
+      // Rename documents → files
+      if (tables.includes('documents') && !tables.includes('files')) {
+        database.pragma('foreign_keys = OFF');
+        // Add mime_type and tags columns if missing, then rename
+        const cols = (database.prepare('PRAGMA table_info(documents)').all() as { name: string }[]).map(c => c.name);
+        if (!cols.includes('mime_type')) database.exec("ALTER TABLE documents ADD COLUMN mime_type TEXT NOT NULL DEFAULT 'text/markdown'");
+        if (!cols.includes('tags')) {
+          if (cols.includes('frontmatter')) {
+            database.exec('ALTER TABLE documents ADD COLUMN tags TEXT NOT NULL DEFAULT \'{}\'');
+            database.exec('UPDATE documents SET tags = frontmatter');
+          } else {
+            database.exec("ALTER TABLE documents ADD COLUMN tags TEXT NOT NULL DEFAULT '{}'");
+          }
+        }
+        database.exec('ALTER TABLE documents RENAME TO files');
+        database.exec('CREATE INDEX IF NOT EXISTS idx_files_space_type ON files(space_id, type)');
+        database.pragma('foreign_keys = ON');
+      }
+      // Rename message_documents → message_files
+      if (tables.includes('message_documents') && !tables.includes('message_files')) {
+        database.exec('ALTER TABLE message_documents RENAME TO message_files');
+      }
     },
   },
 ];

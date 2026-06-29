@@ -21,9 +21,8 @@ import webhooksRoutes from './routes/webhooks.js';
 import googleRoutes from './routes/google.js';
 import mcpRouter from './mcp/index.js';
 import projectsRoutes from './routes/projects.js';
-import documentsRoutes from './routes/documents.js';
+import filesRoutes from './routes/files.js';
 import triggersRoutes from './routes/triggers.js';
-import mediaRoutes from './routes/media.js';
 import vaultRoutes from './routes/vault.js';
 
 const PORT = process.env.PORT ?? '3000';
@@ -102,8 +101,7 @@ app.use('/memory', wrapAsyncErrors(memoryRoutes));
 app.use('/webhooks', wrapAsyncErrors(webhooksRoutes));
 app.use('/auth/google', wrapAsyncErrors(googleRoutes));
 
-app.use('/documents', wrapAsyncErrors(documentsRoutes));
-app.use('/media', wrapAsyncErrors(mediaRoutes));
+app.use('/files', wrapAsyncErrors(filesRoutes));
 app.use('/triggers', wrapAsyncErrors(triggersRoutes));
 app.use('/vault', wrapAsyncErrors(vaultRoutes));
 

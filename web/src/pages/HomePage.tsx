@@ -7,12 +7,12 @@ import { ConfirmDialog } from '@/components/ui/confirm-dialog';
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
 import { PageBody, PageHeader, PageLoading, PageShell } from '@/components/ui/app-layout';
 import { ModuleCard, ModuleEmptyRow, ModuleIconButton, ModuleIconLink, ModuleRow, ModuleRowList } from '@/components/ui/module-card';
-import { deleteChat, deleteTopLevelProject, getAllDocuments, getChats, getProjects, updateChatConfig, updateProject, createGlobalDocument } from '../lib/api.js';
+import { deleteChat, deleteTopLevelProject, getAllFiles, getChats, getProjects, updateChatConfig, updateProject, createFile } from '../lib/api.js';
 import { timeAgo } from '../lib/utils.js';
 import { usePageTitle } from '../lib/usePageTitle.js';
 import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
-import type { Document, Project, Session } from '../types.js';
+import type { LibraryFile, Project, Session } from '../types.js';
 
 export default function HomePage() {
   usePageTitle('Home');
@@ -34,13 +34,13 @@ export default function HomePage() {
     queryKey: ['chats'],
     queryFn: () => getChats(),
   });
-  const { data: documents = [], isLoading: docsLoading } = useQuery<Document[]>({
-    queryKey: ['documents-global'],
-    queryFn: () => getAllDocuments(),
+  const { data: files = [], isLoading: docsLoading } = useQuery<LibraryFile[]>({
+    queryKey: ['library-files'],
+    queryFn: () => getAllFiles(),
   });
 
   const recentChats = chats.slice(0, 5);
-  const recentDocs = [...documents].sort((a, b) => b.updated_at - a.updated_at).slice(0, 5);
+  const recentDocs = [...files].sort((a, b) => b.updated_at - a.updated_at).slice(0, 5);
 
   const deleteProjectMutation = useMutation({
     mutationFn: (projectId: string) => deleteTopLevelProject(projectId),
@@ -62,11 +62,11 @@ export default function HomePage() {
 
   const createDocMutation = useMutation({
     mutationFn: ({ title, projectId }: { title: string; projectId: string }) =>
-      createGlobalDocument({ title, project_id: projectId }),
+      createFile({ title, project_id: projectId }),
     onSuccess: (doc) => {
-      queryClient.invalidateQueries({ queryKey: ['documents-global'] });
+      queryClient.invalidateQueries({ queryKey: ['library-files'] });
       setDocDialogOpen(false);
-      navigate(`/documents/${doc.id}`);
+      navigate(`/library/${doc.id}`);
     },
   });
 
@@ -121,7 +121,7 @@ export default function HomePage() {
 
       {isLoading || chatsLoading || docsLoading ? (
         <PageLoading rows={3} />
-      ) : projects.length === 0 && chats.length === 0 && documents.length === 0 ? (
+      ) : projects.length === 0 && chats.length === 0 && files.length === 0 ? (
         <div className="flex flex-1 items-center justify-center px-4 py-16">
           <div className="mx-auto w-full max-w-lg text-center">
             <div className="mb-6 flex items-center justify-center gap-3">
@@ -162,7 +162,7 @@ export default function HomePage() {
           <div className="mx-auto grid w-full max-w-7xl gap-4 sm:grid-cols-2 lg:grid-cols-3">
             <ProjectsCard projects={projects} onAddProject={() => navigate('/projects/new')} onDeleteProject={setPendingProjectDelete} />
             <RecentChatsCard chats={recentChats} totalCount={chats.length} onNewChat={() => navigate('/c')} onDeleteChat={setPendingChatDelete} />
-            <RecentDocumentsCard docs={recentDocs} totalCount={documents.length} onNewDocument={openDocDialog} hasProjects={projects.length > 0} />
+            <RecentDocumentsCard docs={recentDocs} totalCount={files.length} onNewDocument={openDocDialog} hasProjects={projects.length > 0} />
           </div>
         </PageBody>
       )}
@@ -457,7 +457,7 @@ function ChatRow({ chat, divided, onDeleteChat }: { chat: Session; divided: bool
 }
 
 function RecentDocumentsCard({ docs, totalCount, onNewDocument, hasProjects }: {
-  docs: Document[];
+  docs: LibraryFile[];
   totalCount: number;
   onNewDocument: () => void;
   hasProjects: boolean;
@@ -476,14 +476,14 @@ function RecentDocumentsCard({ docs, totalCount, onNewDocument, hasProjects }: {
           >
             <Plus size={13} />
           </ModuleIconButton>
-          <ModuleIconLink to="/documents" title="View all documents" ariaLabel="View all documents">
+          <ModuleIconLink to="/library" title="View all documents" ariaLabel="View all documents">
             <ArrowRight size={13} />
           </ModuleIconLink>
         </>
       )}
     >
       {docs.length === 0 ? (
-        <ModuleEmptyRow label="No documents yet" action="View documents" to="/documents" />
+        <ModuleEmptyRow label="No documents yet" action="View documents" to="/library" />
       ) : (
         <ModuleRowList>
           {docs.map((doc, index) => (
@@ -495,11 +495,11 @@ function RecentDocumentsCard({ docs, totalCount, onNewDocument, hasProjects }: {
   );
 }
 
-function DocumentRow({ doc, divided }: { doc: Document; divided: boolean }) {
+function DocumentRow({ doc, divided }: { doc: LibraryFile; divided: boolean }) {
   return (
     <ModuleRow divided={divided} className="grid-cols-[minmax(0,1fr)_4rem]">
       <Link
-        to={`/documents/${doc.id}`}
+        to={`/library/${doc.id}`}
         className="min-w-0 flex-1 truncate text-sm font-medium text-foreground underline-offset-2 hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/30"
       >
         {doc.title}

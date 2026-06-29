@@ -1,11 +1,11 @@
 import { useQuery } from '@tanstack/react-query';
 import { useNavigate } from 'react-router-dom';
 import { X, GitMerge, Check, Bell, FileStack, ArrowRight, AlertTriangle, ListTodo } from 'lucide-react';
-import { getDocuments, getChatSessionState, getChatUsageRisk } from '../lib/api.js';
+import { getProjectFiles, getChatSessionState, getChatUsageRisk } from '../lib/api.js';
 import { cn } from '@/lib/utils';
-import type { Project, Document, ChatSessionState } from '../types.js';
+import type { Project, LibraryFile, ChatSessionState } from '../types.js';
 
-function docSnippet(doc: Document): string {
+function docSnippet(doc: LibraryFile): string {
   return [doc.type, doc.status].filter(Boolean).join(' · ') || 'document';
 }
 
@@ -126,8 +126,8 @@ function PanelContent({
   const primaryProject = pinnedProject;
 
   const { data: items = [] } = useQuery({
-    queryKey: ['documents', primaryProject?.id],
-    queryFn: () => getDocuments(primaryProject!.id),
+    queryKey: ['files', primaryProject?.id],
+    queryFn: () => getProjectFiles(primaryProject!.id),
     enabled: !!primaryProject,
     staleTime: 20_000,
   });
@@ -218,10 +218,10 @@ function PanelContent({
           <span className="text-[11px] font-medium text-muted-foreground">Documents</span>
           {recentItems.length > 0 ? (
             <div className="flex flex-col gap-2">
-              {recentItems.map((doc: Document) => (
+              {recentItems.map((doc: LibraryFile) => (
                 <button
                   type="button"
-                  onClick={() => navigate(`/documents/${doc.id}`)}
+                  onClick={() => navigate(`/library/${doc.id}`)}
                   key={doc.id}
                   className="flex items-center gap-2.5 rounded-lg border border-border-soft bg-card p-2.5 text-left transition-colors hover:bg-muted/40"
                 >

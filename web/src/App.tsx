@@ -12,7 +12,6 @@ import ProjectPage from './pages/ProjectPage.js';
 import DocumentsPage from './pages/DocumentsPage.js';
 import DocumentPage from './pages/DocumentPage.js';
 import TriggersPage from './pages/TriggersPage.js';
-import MediaPage from './pages/MediaPage.js';
 import { TooltipProvider } from '@/components/ui/tooltip';
 
 const queryClient = new QueryClient({
@@ -38,9 +37,8 @@ const router = createBrowserRouter([
       { path: 'projects/:projectId/files', element: <ProjectPage /> },
       { path: 'projects/:projectId/chats', element: <ProjectPage /> },
       { path: 'projects/:projectId/documents', element: <ProjectPage /> },
-      { path: 'documents', element: <DocumentsPage /> },
-      { path: 'documents/:documentId', element: <DocumentPage /> },
-      { path: 'media', element: <MediaPage /> },
+      { path: 'library', element: <DocumentsPage /> },
+      { path: 'library/:documentId', element: <DocumentPage /> },
       { path: 'triggers', element: <TriggersPage /> },
       { path: 'settings', element: <Navigate to="/settings/tools" replace /> },
       { path: 'settings/:section', element: <Settings /> },

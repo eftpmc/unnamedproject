@@ -55,3 +55,446 @@
 [13159803ms] [ERROR] [vite] Failed to reload /src/pages/MediaPage.tsx. This could be due to syntax errors or importing non-existent modules. (see errors above) @ http://127.0.0.1:5173/@vite/client:881
 [13217872ms] [ERROR] [vite] Failed to reload /src/pages/DocumentsPage.tsx. This could be due to syntax errors or importing non-existent modules. (see errors above) @ http://127.0.0.1:5173/@vite/client:881
 [13276814ms] [ERROR] [vite] Failed to reload /src/pages/DocumentPage.tsx. This could be due to syntax errors or importing non-existent modules. (see errors above) @ http://127.0.0.1:5173/@vite/client:881
+[17996287ms] [LOG] [vite] server connection lost. Polling for restart... @ http://127.0.0.1:5173/@vite/client:963
+[17996298ms] [ERROR] WebSocket connection to 'ws://127.0.0.1:5173/' failed: Error in connection establishment: net::ERR_CONNECTION_REFUSED @ http://127.0.0.1:5173/@vite/client:1034
+[17998143ms] [INFO] %cDownload the React DevTools for a better development experience: https://react.dev/link/react-devtools font-weight:bold @ http://127.0.0.1:5173/node_modules/.vite/deps/react-dom_client.js?v=a1b313eb:20102
+[17998234ms] [WARNING] ⚠️ React Router Future Flag Warning: React Router will begin wrapping state updates in `React.startTransition` in v7. You can use the `v7_startTransition` future flag to opt-in early. For more information, see https://reactrouter.com/v6/upgrading/future#v7_starttransition. @ http://127.0.0.1:5173/node_modules/.vite/deps/react-router-dom.js?v=a1b313eb:4426
+[17998236ms] [WARNING] WebSocket connection to 'ws://localhost:3000/?token=eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ1c2VySWQiOiJLcWdnODctMHZ1OVRqMUpibl9lN20iLCJpYXQiOjE3ODI3NDYyMzEsImV4cCI6MTc4NTMzODIzMX0.TolwcIFdAPY_I-LHy5CC3f1i7ftzRizX4hoAB-ht9MQ' failed: WebSocket is closed before the connection is established. @ http://127.0.0.1:5173/src/lib/ws.ts:40
+[17998264ms] [WARNING] WebSocket connection to 'ws://localhost:3000/?token=eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ1c2VySWQiOiJLcWdnODctMHZ1OVRqMUpibl9lN20iLCJpYXQiOjE3ODI3NDYyMzEsImV4cCI6MTc4NTMzODIzMX0.TolwcIFdAPY_I-LHy5CC3f1i7ftzRizX4hoAB-ht9MQ' failed: WebSocket is closed before the connection is established. @ http://127.0.0.1:5173/src/lib/ws.ts:36
+[18404730ms] [ERROR] Error handled by React Router default ErrorBoundary: ReferenceError: Paperclip is not defined
+    at GlobalNav (http://127.0.0.1:5173/src/components/Sidebar.tsx?t=1782764643978:220:154)
+    at Object.react_stack_bottom_frame (http://127.0.0.1:5173/node_modules/.vite/deps/react-dom_client.js?v=a1b313eb:18509:20)
+    at renderWithHooks (http://127.0.0.1:5173/node_modules/.vite/deps/react-dom_client.js?v=a1b313eb:5654:24)
+    at updateFunctionComponent (http://127.0.0.1:5173/node_modules/.vite/deps/react-dom_client.js?v=a1b313eb:7475:21)
+    at beginWork (http://127.0.0.1:5173/node_modules/.vite/deps/react-dom_client.js?v=a1b313eb:8525:20)
+    at runWithFiberInDEV (http://127.0.0.1:5173/node_modules/.vite/deps/react-dom_client.js?v=a1b313eb:997:72)
+    at performUnitOfWork (http://127.0.0.1:5173/node_modules/.vite/deps/react-dom_client.js?v=a1b313eb:12561:98)
+    at workLoopSync (http://127.0.0.1:5173/node_modules/.vite/deps/react-dom_client.js?v=a1b313eb:12424:43)
+    at renderRootSync (http://127.0.0.1:5173/node_modules/.vite/deps/react-dom_client.js?v=a1b313eb:12408:13)
+    at performWorkOnRoot (http://127.0.0.1:5173/node_modules/.vite/deps/react-dom_client.js?v=a1b313eb:11766:189) @ http://127.0.0.1:5173/node_modules/.vite/deps/react-router-dom.js?v=a1b313eb:4063
+[18404732ms] [ERROR] Error handled by React Router default ErrorBoundary: ReferenceError: Paperclip is not defined
+    at GlobalNav (http://127.0.0.1:5173/src/components/Sidebar.tsx?t=1782764643978:220:154)
+    at Object.react_stack_bottom_frame (http://127.0.0.1:5173/node_modules/.vite/deps/react-dom_client.js?v=a1b313eb:18509:20)
+    at renderWithHooks (http://127.0.0.1:5173/node_modules/.vite/deps/react-dom_client.js?v=a1b313eb:5654:24)
+    at updateFunctionComponent (http://127.0.0.1:5173/node_modules/.vite/deps/react-dom_client.js?v=a1b313eb:7475:21)
+    at beginWork (http://127.0.0.1:5173/node_modules/.vite/deps/react-dom_client.js?v=a1b313eb:8525:20)
+    at runWithFiberInDEV (http://127.0.0.1:5173/node_modules/.vite/deps/react-dom_client.js?v=a1b313eb:997:72)
+    at performUnitOfWork (http://127.0.0.1:5173/node_modules/.vite/deps/react-dom_client.js?v=a1b313eb:12561:98)
+    at workLoopSync (http://127.0.0.1:5173/node_modules/.vite/deps/react-dom_client.js?v=a1b313eb:12424:43)
+    at renderRootSync (http://127.0.0.1:5173/node_modules/.vite/deps/react-dom_client.js?v=a1b313eb:12408:13)
+    at performWorkOnRoot (http://127.0.0.1:5173/node_modules/.vite/deps/react-dom_client.js?v=a1b313eb:11766:189) @ http://127.0.0.1:5173/node_modules/.vite/deps/react-router-dom.js?v=a1b313eb:4063
+[18404734ms] [ERROR] Error handled by React Router default ErrorBoundary: ReferenceError: Paperclip is not defined
+    at GlobalNav (http://127.0.0.1:5173/src/components/Sidebar.tsx?t=1782764643978:220:154)
+    at Object.react_stack_bottom_frame (http://127.0.0.1:5173/node_modules/.vite/deps/react-dom_client.js?v=a1b313eb:18509:20)
+    at renderWithHooks (http://127.0.0.1:5173/node_modules/.vite/deps/react-dom_client.js?v=a1b313eb:5654:24)
+    at updateFunctionComponent (http://127.0.0.1:5173/node_modules/.vite/deps/react-dom_client.js?v=a1b313eb:7475:21)
+    at beginWork (http://127.0.0.1:5173/node_modules/.vite/deps/react-dom_client.js?v=a1b313eb:8525:20)
+    at runWithFiberInDEV (http://127.0.0.1:5173/node_modules/.vite/deps/react-dom_client.js?v=a1b313eb:997:72)
+    at performUnitOfWork (http://127.0.0.1:5173/node_modules/.vite/deps/react-dom_client.js?v=a1b313eb:12561:98)
+    at workLoopSync (http://127.0.0.1:5173/node_modules/.vite/deps/react-dom_client.js?v=a1b313eb:12424:43)
+    at renderRootSync (http://127.0.0.1:5173/node_modules/.vite/deps/react-dom_client.js?v=a1b313eb:12408:13)
+    at performWorkOnRoot (http://127.0.0.1:5173/node_modules/.vite/deps/react-dom_client.js?v=a1b313eb:11827:37) @ http://127.0.0.1:5173/node_modules/.vite/deps/react-router-dom.js?v=a1b313eb:4063
+[18404734ms] [ERROR] Error handled by React Router default ErrorBoundary: ReferenceError: Paperclip is not defined
+    at GlobalNav (http://127.0.0.1:5173/src/components/Sidebar.tsx?t=1782764643978:220:154)
+    at Object.react_stack_bottom_frame (http://127.0.0.1:5173/node_modules/.vite/deps/react-dom_client.js?v=a1b313eb:18509:20)
+    at renderWithHooks (http://127.0.0.1:5173/node_modules/.vite/deps/react-dom_client.js?v=a1b313eb:5654:24)
+    at updateFunctionComponent (http://127.0.0.1:5173/node_modules/.vite/deps/react-dom_client.js?v=a1b313eb:7475:21)
+    at beginWork (http://127.0.0.1:5173/node_modules/.vite/deps/react-dom_client.js?v=a1b313eb:8525:20)
+    at runWithFiberInDEV (http://127.0.0.1:5173/node_modules/.vite/deps/react-dom_client.js?v=a1b313eb:997:72)
+    at performUnitOfWork (http://127.0.0.1:5173/node_modules/.vite/deps/react-dom_client.js?v=a1b313eb:12561:98)
+    at workLoopSync (http://127.0.0.1:5173/node_modules/.vite/deps/react-dom_client.js?v=a1b313eb:12424:43)
+    at renderRootSync (http://127.0.0.1:5173/node_modules/.vite/deps/react-dom_client.js?v=a1b313eb:12408:13)
+    at performWorkOnRoot (http://127.0.0.1:5173/node_modules/.vite/deps/react-dom_client.js?v=a1b313eb:11827:37) @ http://127.0.0.1:5173/node_modules/.vite/deps/react-router-dom.js?v=a1b313eb:4063
+[18404736ms] [ERROR] %o
+
+%s
+
+%s
+ ReferenceError: Paperclip is not defined
+    at GlobalNav (http://127.0.0.1:5173/src/components/Sidebar.tsx?t=1782764643978:220:154)
+    at Object.react_stack_bottom_frame (http://127.0.0.1:5173/node_modules/.vite/deps/react-dom_client.js?v=a1b313eb:18509:20)
+    at renderWithHooks (http://127.0.0.1:5173/node_modules/.vite/deps/react-dom_client.js?v=a1b313eb:5654:24)
+    at updateFunctionComponent (http://127.0.0.1:5173/node_modules/.vite/deps/react-dom_client.js?v=a1b313eb:7475:21)
+    at beginWork (http://127.0.0.1:5173/node_modules/.vite/deps/react-dom_client.js?v=a1b313eb:8525:20)
+    at runWithFiberInDEV (http://127.0.0.1:5173/node_modules/.vite/deps/react-dom_client.js?v=a1b313eb:997:72)
+    at performUnitOfWork (http://127.0.0.1:5173/node_modules/.vite/deps/react-dom_client.js?v=a1b313eb:12561:98)
+    at workLoopSync (http://127.0.0.1:5173/node_modules/.vite/deps/react-dom_client.js?v=a1b313eb:12424:43)
+    at renderRootSync (http://127.0.0.1:5173/node_modules/.vite/deps/react-dom_client.js?v=a1b313eb:12408:13)
+    at performWorkOnRoot (http://127.0.0.1:5173/node_modules/.vite/deps/react-dom_client.js?v=a1b313eb:11827:37) The above error occurred in the <GlobalNav> component. React will try to recreate this component tree from scratch using the error boundary you provided, RenderErrorBoundary. @ http://127.0.0.1:5173/node_modules/.vite/deps/react-dom_client.js?v=a1b313eb:7000
+[18404736ms] [ERROR] React Router caught the following error during render ReferenceError: Paperclip is not defined
+    at GlobalNav (http://127.0.0.1:5173/src/components/Sidebar.tsx?t=1782764643978:220:154)
+    at Object.react_stack_bottom_frame (http://127.0.0.1:5173/node_modules/.vite/deps/react-dom_client.js?v=a1b313eb:18509:20)
+    at renderWithHooks (http://127.0.0.1:5173/node_modules/.vite/deps/react-dom_client.js?v=a1b313eb:5654:24)
+    at updateFunctionComponent (http://127.0.0.1:5173/node_modules/.vite/deps/react-dom_client.js?v=a1b313eb:7475:21)
+    at beginWork (http://127.0.0.1:5173/node_modules/.vite/deps/react-dom_client.js?v=a1b313eb:8525:20)
+    at runWithFiberInDEV (http://127.0.0.1:5173/node_modules/.vite/deps/react-dom_client.js?v=a1b313eb:997:72)
+    at performUnitOfWork (http://127.0.0.1:5173/node_modules/.vite/deps/react-dom_client.js?v=a1b313eb:12561:98)
+    at workLoopSync (http://127.0.0.1:5173/node_modules/.vite/deps/react-dom_client.js?v=a1b313eb:12424:43)
+    at renderRootSync (http://127.0.0.1:5173/node_modules/.vite/deps/react-dom_client.js?v=a1b313eb:12408:13)
+    at performWorkOnRoot (http://127.0.0.1:5173/node_modules/.vite/deps/react-dom_client.js?v=a1b313eb:11827:37) {componentStack: 
+    at GlobalNav (http://127.0.0.1:5173/src/compo…27.0.0.1:5173/src/components/ui/tooltip.tsx:20:3)} @ http://127.0.0.1:5173/node_modules/.vite/deps/react-router-dom.js?v=a1b313eb:4108
+[19398500ms] [ERROR] WebSocket connection to 'ws://localhost:3000/?token=eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ1c2VySWQiOiJLcWdnODctMHZ1OVRqMUpibl9lN20iLCJpYXQiOjE3ODI3NDYyMzEsImV4cCI6MTc4NTMzODIzMX0.TolwcIFdAPY_I-LHy5CC3f1i7ftzRizX4hoAB-ht9MQ' failed: Error in connection establishment: net::ERR_CONNECTION_REFUSED @ http://127.0.0.1:5173/src/lib/ws.ts:14
+[19400504ms] [ERROR] WebSocket connection to 'ws://localhost:3000/?token=eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ1c2VySWQiOiJLcWdnODctMHZ1OVRqMUpibl9lN20iLCJpYXQiOjE3ODI3NDYyMzEsImV4cCI6MTc4NTMzODIzMX0.TolwcIFdAPY_I-LHy5CC3f1i7ftzRizX4hoAB-ht9MQ' failed: Error in connection establishment: net::ERR_CONNECTION_REFUSED @ http://127.0.0.1:5173/src/lib/ws.ts:14
+[19404506ms] [ERROR] WebSocket connection to 'ws://localhost:3000/?token=eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ1c2VySWQiOiJLcWdnODctMHZ1OVRqMUpibl9lN20iLCJpYXQiOjE3ODI3NDYyMzEsImV4cCI6MTc4NTMzODIzMX0.TolwcIFdAPY_I-LHy5CC3f1i7ftzRizX4hoAB-ht9MQ' failed: Error in connection establishment: net::ERR_CONNECTION_REFUSED @ http://127.0.0.1:5173/src/lib/ws.ts:14
+[19408098ms] [ERROR] Failed to load resource: the server responded with a status of 500 (Internal Server Error) @ http://127.0.0.1:5173/sessions/fsE4Pq9fJqMR4dxgp4PiZ/worktree:0
+[19409103ms] [ERROR] Failed to load resource: the server responded with a status of 500 (Internal Server Error) @ http://127.0.0.1:5173/sessions/fsE4Pq9fJqMR4dxgp4PiZ/worktree:0
+[19417023ms] [INFO] %cDownload the React DevTools for a better development experience: https://react.dev/link/react-devtools font-weight:bold @ http://127.0.0.1:5173/node_modules/.vite/deps/react-dom_client.js?v=a1b313eb:20102
+[19417090ms] [WARNING] ⚠️ React Router Future Flag Warning: React Router will begin wrapping state updates in `React.startTransition` in v7. You can use the `v7_startTransition` future flag to opt-in early. For more information, see https://reactrouter.com/v6/upgrading/future#v7_starttransition. @ http://127.0.0.1:5173/node_modules/.vite/deps/react-router-dom.js?v=a1b313eb:4426
+[19417091ms] [WARNING] WebSocket connection to 'ws://localhost:3000/?token=eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ1c2VySWQiOiJLcWdnODctMHZ1OVRqMUpibl9lN20iLCJpYXQiOjE3ODI3NDYyMzEsImV4cCI6MTc4NTMzODIzMX0.TolwcIFdAPY_I-LHy5CC3f1i7ftzRizX4hoAB-ht9MQ' failed: WebSocket is closed before the connection is established. @ http://127.0.0.1:5173/src/lib/ws.ts:40
+[19417102ms] [WARNING] WebSocket connection to 'ws://localhost:3000/?token=eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ1c2VySWQiOiJLcWdnODctMHZ1OVRqMUpibl9lN20iLCJpYXQiOjE3ODI3NDYyMzEsImV4cCI6MTc4NTMzODIzMX0.TolwcIFdAPY_I-LHy5CC3f1i7ftzRizX4hoAB-ht9MQ' failed: WebSocket is closed before the connection is established. @ http://127.0.0.1:5173/src/lib/ws.ts:36
+[19419314ms] [INFO] %cDownload the React DevTools for a better development experience: https://react.dev/link/react-devtools font-weight:bold @ http://127.0.0.1:5173/node_modules/.vite/deps/react-dom_client.js?v=a1b313eb:20102
+[19419348ms] [WARNING] ⚠️ React Router Future Flag Warning: React Router will begin wrapping state updates in `React.startTransition` in v7. You can use the `v7_startTransition` future flag to opt-in early. For more information, see https://reactrouter.com/v6/upgrading/future#v7_starttransition. @ http://127.0.0.1:5173/node_modules/.vite/deps/react-router-dom.js?v=a1b313eb:4426
+[19419349ms] [WARNING] WebSocket connection to 'ws://localhost:3000/?token=eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ1c2VySWQiOiJLcWdnODctMHZ1OVRqMUpibl9lN20iLCJpYXQiOjE3ODI3NDYyMzEsImV4cCI6MTc4NTMzODIzMX0.TolwcIFdAPY_I-LHy5CC3f1i7ftzRizX4hoAB-ht9MQ' failed: WebSocket is closed before the connection is established. @ http://127.0.0.1:5173/src/lib/ws.ts:40
+[19419359ms] [WARNING] WebSocket connection to 'ws://localhost:3000/?token=eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ1c2VySWQiOiJLcWdnODctMHZ1OVRqMUpibl9lN20iLCJpYXQiOjE3ODI3NDYyMzEsImV4cCI6MTc4NTMzODIzMX0.TolwcIFdAPY_I-LHy5CC3f1i7ftzRizX4hoAB-ht9MQ' failed: WebSocket is closed before the connection is established. @ http://127.0.0.1:5173/src/lib/ws.ts:36
+[19427222ms] [ERROR] [vite] SyntaxError: The requested module '/src/lib/api.ts?t=1782765666487' does not provide an export named 'deleteMedia' @ http://127.0.0.1:5173/@vite/client:881
+[19427222ms] [ERROR] [vite] Failed to reload /src/pages/MediaPage.tsx. This could be due to syntax errors or importing non-existent modules. (see errors above) @ http://127.0.0.1:5173/@vite/client:881
+[19433026ms] [ERROR] [vite] ReferenceError: MediaPage is not defined
+    at http://127.0.0.1:5173/src/App.tsx?t=1782765672380:121:58 @ http://127.0.0.1:5173/@vite/client:881
+[19433026ms] [ERROR] [vite] Failed to reload /src/App.tsx. This could be due to syntax errors or importing non-existent modules. (see errors above) @ http://127.0.0.1:5173/@vite/client:881
+[19468404ms] [ERROR] %o
+
+%s
+
+%s
+ ReferenceError: attachments is not defined
+    at http://127.0.0.1:5173/src/components/MessageList.tsx?t=1782765707640:853:17
+    at Array.map (<anonymous>)
+    at MessageList (http://127.0.0.1:5173/src/components/MessageList.tsx?t=1782765707640:592:19)
+    at Object.react_stack_bottom_frame (http://127.0.0.1:5173/node_modules/.vite/deps/react-dom_client.js?v=a1b313eb:18509:20)
+    at renderWithHooks (http://127.0.0.1:5173/node_modules/.vite/deps/react-dom_client.js?v=a1b313eb:5654:24)
+    at updateFunctionComponent (http://127.0.0.1:5173/node_modules/.vite/deps/react-dom_client.js?v=a1b313eb:7475:21)
+    at beginWork (http://127.0.0.1:5173/node_modules/.vite/deps/react-dom_client.js?v=a1b313eb:8525:20)
+    at runWithFiberInDEV (http://127.0.0.1:5173/node_modules/.vite/deps/react-dom_client.js?v=a1b313eb:997:72)
+    at performUnitOfWork (http://127.0.0.1:5173/node_modules/.vite/deps/react-dom_client.js?v=a1b313eb:12561:98)
+    at workLoopSync (http://127.0.0.1:5173/node_modules/.vite/deps/react-dom_client.js?v=a1b313eb:12424:43) The above error occurred in the <MessageList> component. React will try to recreate this component tree from scratch using the error boundary you provided, ErrorBoundary. @ http://127.0.0.1:5173/node_modules/.vite/deps/react-dom_client.js?v=a1b313eb:7000
+[19468404ms] [ERROR] [ErrorBoundary] ReferenceError: attachments is not defined
+    at http://127.0.0.1:5173/src/components/MessageList.tsx?t=1782765707640:853:17
+    at Array.map (<anonymous>)
+    at MessageList (http://127.0.0.1:5173/src/components/MessageList.tsx?t=1782765707640:592:19)
+    at Object.react_stack_bottom_frame (http://127.0.0.1:5173/node_modules/.vite/deps/react-dom_client.js?v=a1b313eb:18509:20)
+    at renderWithHooks (http://127.0.0.1:5173/node_modules/.vite/deps/react-dom_client.js?v=a1b313eb:5654:24)
+    at updateFunctionComponent (http://127.0.0.1:5173/node_modules/.vite/deps/react-dom_client.js?v=a1b313eb:7475:21)
+    at beginWork (http://127.0.0.1:5173/node_modules/.vite/deps/react-dom_client.js?v=a1b313eb:8525:20)
+    at runWithFiberInDEV (http://127.0.0.1:5173/node_modules/.vite/deps/react-dom_client.js?v=a1b313eb:997:72)
+    at performUnitOfWork (http://127.0.0.1:5173/node_modules/.vite/deps/react-dom_client.js?v=a1b313eb:12561:98)
+    at workLoopSync (http://127.0.0.1:5173/node_modules/.vite/deps/react-dom_client.js?v=a1b313eb:12424:43) 
+    at MessageList (http://127.0.0.1:5173/src/components/MessageList.tsx?t=1782765707640:462:39)
+    at div (<anonymous>)
+    at div (<anonymous>)
+    at ChatView (http://127.0.0.1:5173/src/components/ChatView.tsx?t=1782765666487:45:36)
+    at ErrorBoundary (http://127.0.0.1:5173/src/components/ErrorBoundary.tsx:5:16)
+    at main (<anonymous>)
+    at div (<anonymous>)
+    at div (<anonymous>)
+    at CommandPaletteProvider (http://127.0.0.1:5173/src/components/CommandPalette.tsx?t=1782765666487:39:42)
+    at AppLayout (http://127.0.0.1:5173/src/pages/AppLayout.tsx?t=1782765666487:33:22)
+    at RequireAuth (http://127.0.0.1:5173/src/components/RequireAuth.tsx:19:39)
+    at RenderedRoute (http://127.0.0.1:5173/node_modules/.vite/deps/react-router-dom.js?v=a1b313eb:4122:5)
+    at RenderErrorBoundary (http://127.0.0.1:5173/node_modules/.vite/deps/react-router-dom.js?v=a1b313eb:4082:5)
+    at DataRoutes (http://127.0.0.1:5173/node_modules/.vite/deps/react-router-dom.js?v=a1b313eb:5265:5)
+    at Router (http://127.0.0.1:5173/node_modules/.vite/deps/react-router-dom.js?v=a1b313eb:4535:15)
+    at RouterProvider (http://127.0.0.1:5173/node_modules/.vite/deps/react-router-dom.js?v=a1b313eb:5079:5)
+    at Provider (http://127.0.0.1:5173/node_modules/.vite/deps/chunk-VDYYIDU2.js?v=a1b313eb:334:15)
+    at TooltipProvider (http://127.0.0.1:5173/node_modules/.vite/deps/radix-ui.js?v=a1b313eb:13521:5)
+    at TooltipProvider (http://127.0.0.1:5173/src/components/ui/tooltip.tsx:20:3)
+    at QueryClientProvider (http://127.0.0.1:5173/node_modules/.vite/deps/@tanstack_react-query.js?v=a1b313eb:3235:3)
+    at App (<anonymous>)
+    at Provider (http://127.0.0.1:5173/node_modules/.vite/deps/chunk-VDYYIDU2.js?v=a1b313eb:334:15)
+    at TooltipProvider (http://127.0.0.1:5173/node_modules/.vite/deps/radix-ui.js?v=a1b313eb:13521:5)
+    at TooltipProvider (http://127.0.0.1:5173/src/components/ui/tooltip.tsx:20:3) @ http://127.0.0.1:5173/src/components/ErrorBoundary.tsx:10
+[19595296ms] [ERROR] Failed to load resource: the server responded with a status of 404 (Not Found) @ http://127.0.0.1:5173/src/pages/MediaPage.tsx?t=1782765834660:0
+[19595296ms] [ERROR] [vite] Failed to reload /src/pages/MediaPage.tsx. This could be due to syntax errors or importing non-existent modules. (see errors above) @ http://127.0.0.1:5173/@vite/client:881
+[19636007ms] [INFO] %cDownload the React DevTools for a better development experience: https://react.dev/link/react-devtools font-weight:bold @ http://127.0.0.1:5173/node_modules/.vite/deps/react-dom_client.js?v=a1b313eb:20102
+[19636074ms] [WARNING] ⚠️ React Router Future Flag Warning: React Router will begin wrapping state updates in `React.startTransition` in v7. You can use the `v7_startTransition` future flag to opt-in early. For more information, see https://reactrouter.com/v6/upgrading/future#v7_starttransition. @ http://127.0.0.1:5173/node_modules/.vite/deps/react-router-dom.js?v=a1b313eb:4426
+[19636076ms] [WARNING] WebSocket connection to 'ws://localhost:3000/?token=eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ1c2VySWQiOiJLcWdnODctMHZ1OVRqMUpibl9lN20iLCJpYXQiOjE3ODI3NDYyMzEsImV4cCI6MTc4NTMzODIzMX0.TolwcIFdAPY_I-LHy5CC3f1i7ftzRizX4hoAB-ht9MQ' failed: WebSocket is closed before the connection is established. @ http://127.0.0.1:5173/src/lib/ws.ts:40
+[19636104ms] [WARNING] WebSocket connection to 'ws://localhost:3000/?token=eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ1c2VySWQiOiJLcWdnODctMHZ1OVRqMUpibl9lN20iLCJpYXQiOjE3ODI3NDYyMzEsImV4cCI6MTc4NTMzODIzMX0.TolwcIFdAPY_I-LHy5CC3f1i7ftzRizX4hoAB-ht9MQ' failed: WebSocket is closed before the connection is established. @ http://127.0.0.1:5173/src/lib/ws.ts:36
+[20666883ms] [INFO] %cDownload the React DevTools for a better development experience: https://react.dev/link/react-devtools font-weight:bold @ http://127.0.0.1:5173/node_modules/.vite/deps/react-dom_client.js?v=a1b313eb:20102
+[20666922ms] [WARNING] ⚠️ React Router Future Flag Warning: React Router will begin wrapping state updates in `React.startTransition` in v7. You can use the `v7_startTransition` future flag to opt-in early. For more information, see https://reactrouter.com/v6/upgrading/future#v7_starttransition. @ http://127.0.0.1:5173/node_modules/.vite/deps/react-router-dom.js?v=a1b313eb:4426
+[20666923ms] [WARNING] WebSocket connection to 'ws://localhost:3000/?token=eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ1c2VySWQiOiJLcWdnODctMHZ1OVRqMUpibl9lN20iLCJpYXQiOjE3ODI3NDYyMzEsImV4cCI6MTc4NTMzODIzMX0.TolwcIFdAPY_I-LHy5CC3f1i7ftzRizX4hoAB-ht9MQ' failed: WebSocket is closed before the connection is established. @ http://127.0.0.1:5173/src/lib/ws.ts:40
+[20666934ms] [WARNING] WebSocket connection to 'ws://localhost:3000/?token=eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ1c2VySWQiOiJLcWdnODctMHZ1OVRqMUpibl9lN20iLCJpYXQiOjE3ODI3NDYyMzEsImV4cCI6MTc4NTMzODIzMX0.TolwcIFdAPY_I-LHy5CC3f1i7ftzRizX4hoAB-ht9MQ' failed: WebSocket is closed before the connection is established. @ http://127.0.0.1:5173/src/lib/ws.ts:36
+[21251295ms] [ERROR] WebSocket connection to 'ws://localhost:3000/?token=eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ1c2VySWQiOiJLcWdnODctMHZ1OVRqMUpibl9lN20iLCJpYXQiOjE3ODI3NDYyMzEsImV4cCI6MTc4NTMzODIzMX0.TolwcIFdAPY_I-LHy5CC3f1i7ftzRizX4hoAB-ht9MQ' failed: Error in connection establishment: net::ERR_CONNECTION_REFUSED @ http://127.0.0.1:5173/src/lib/ws.ts:14
+[21306462ms] [ERROR] WebSocket connection to 'ws://localhost:3000/?token=eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ1c2VySWQiOiJLcWdnODctMHZ1OVRqMUpibl9lN20iLCJpYXQiOjE3ODI3NDYyMzEsImV4cCI6MTc4NTMzODIzMX0.TolwcIFdAPY_I-LHy5CC3f1i7ftzRizX4hoAB-ht9MQ' failed: Error in connection establishment: net::ERR_CONNECTION_REFUSED @ http://127.0.0.1:5173/src/lib/ws.ts:14
+[21307699ms] [ERROR] Failed to load resource: the server responded with a status of 500 (Internal Server Error) @ http://127.0.0.1:5173/sessions/fsE4Pq9fJqMR4dxgp4PiZ/worktree:0
+[21308467ms] [ERROR] WebSocket connection to 'ws://localhost:3000/?token=eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ1c2VySWQiOiJLcWdnODctMHZ1OVRqMUpibl9lN20iLCJpYXQiOjE3ODI3NDYyMzEsImV4cCI6MTc4NTMzODIzMX0.TolwcIFdAPY_I-LHy5CC3f1i7ftzRizX4hoAB-ht9MQ' failed: Error in connection establishment: net::ERR_CONNECTION_REFUSED @ http://127.0.0.1:5173/src/lib/ws.ts:14
+[21308708ms] [ERROR] Failed to load resource: the server responded with a status of 500 (Internal Server Error) @ http://127.0.0.1:5173/sessions/fsE4Pq9fJqMR4dxgp4PiZ/worktree:0
+[21312473ms] [ERROR] WebSocket connection to 'ws://localhost:3000/?token=eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ1c2VySWQiOiJLcWdnODctMHZ1OVRqMUpibl9lN20iLCJpYXQiOjE3ODI3NDYyMzEsImV4cCI6MTc4NTMzODIzMX0.TolwcIFdAPY_I-LHy5CC3f1i7ftzRizX4hoAB-ht9MQ' failed: Error in connection establishment: net::ERR_CONNECTION_REFUSED @ http://127.0.0.1:5173/src/lib/ws.ts:14
+[21320477ms] [ERROR] WebSocket connection to 'ws://localhost:3000/?token=eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ1c2VySWQiOiJLcWdnODctMHZ1OVRqMUpibl9lN20iLCJpYXQiOjE3ODI3NDYyMzEsImV4cCI6MTc4NTMzODIzMX0.TolwcIFdAPY_I-LHy5CC3f1i7ftzRizX4hoAB-ht9MQ' failed: Error in connection establishment: net::ERR_CONNECTION_REFUSED @ http://127.0.0.1:5173/src/lib/ws.ts:14
+[21328716ms] [ERROR] Failed to load resource: the server responded with a status of 500 (Internal Server Error) @ http://127.0.0.1:5173/sessions/fsE4Pq9fJqMR4dxgp4PiZ/worktree:0
+[21329725ms] [ERROR] Failed to load resource: the server responded with a status of 500 (Internal Server Error) @ http://127.0.0.1:5173/sessions/fsE4Pq9fJqMR4dxgp4PiZ/worktree:0
+[21336483ms] [ERROR] WebSocket connection to 'ws://localhost:3000/?token=eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ1c2VySWQiOiJLcWdnODctMHZ1OVRqMUpibl9lN20iLCJpYXQiOjE3ODI3NDYyMzEsImV4cCI6MTc4NTMzODIzMX0.TolwcIFdAPY_I-LHy5CC3f1i7ftzRizX4hoAB-ht9MQ' failed: Error in connection establishment: net::ERR_CONNECTION_REFUSED @ http://127.0.0.1:5173/src/lib/ws.ts:14
+[21349734ms] [ERROR] Failed to load resource: the server responded with a status of 500 (Internal Server Error) @ http://127.0.0.1:5173/sessions/fsE4Pq9fJqMR4dxgp4PiZ/worktree:0
+[21350743ms] [ERROR] Failed to load resource: the server responded with a status of 500 (Internal Server Error) @ http://127.0.0.1:5173/sessions/fsE4Pq9fJqMR4dxgp4PiZ/worktree:0
+[21366488ms] [ERROR] WebSocket connection to 'ws://localhost:3000/?token=eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ1c2VySWQiOiJLcWdnODctMHZ1OVRqMUpibl9lN20iLCJpYXQiOjE3ODI3NDYyMzEsImV4cCI6MTc4NTMzODIzMX0.TolwcIFdAPY_I-LHy5CC3f1i7ftzRizX4hoAB-ht9MQ' failed: Error in connection establishment: net::ERR_CONNECTION_REFUSED @ http://127.0.0.1:5173/src/lib/ws.ts:14
+[21370753ms] [ERROR] Failed to load resource: the server responded with a status of 500 (Internal Server Error) @ http://127.0.0.1:5173/sessions/fsE4Pq9fJqMR4dxgp4PiZ/worktree:0
+[21371762ms] [ERROR] Failed to load resource: the server responded with a status of 500 (Internal Server Error) @ http://127.0.0.1:5173/sessions/fsE4Pq9fJqMR4dxgp4PiZ/worktree:0
+[21391772ms] [ERROR] Failed to load resource: the server responded with a status of 500 (Internal Server Error) @ http://127.0.0.1:5173/sessions/fsE4Pq9fJqMR4dxgp4PiZ/worktree:0
+[21392781ms] [ERROR] Failed to load resource: the server responded with a status of 500 (Internal Server Error) @ http://127.0.0.1:5173/sessions/fsE4Pq9fJqMR4dxgp4PiZ/worktree:0
+[21396491ms] [ERROR] WebSocket connection to 'ws://localhost:3000/?token=eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ1c2VySWQiOiJLcWdnODctMHZ1OVRqMUpibl9lN20iLCJpYXQiOjE3ODI3NDYyMzEsImV4cCI6MTc4NTMzODIzMX0.TolwcIFdAPY_I-LHy5CC3f1i7ftzRizX4hoAB-ht9MQ' failed: Error in connection establishment: net::ERR_CONNECTION_REFUSED @ http://127.0.0.1:5173/src/lib/ws.ts:14
+[21412792ms] [ERROR] Failed to load resource: the server responded with a status of 500 (Internal Server Error) @ http://127.0.0.1:5173/sessions/fsE4Pq9fJqMR4dxgp4PiZ/worktree:0
+[21413801ms] [ERROR] Failed to load resource: the server responded with a status of 500 (Internal Server Error) @ http://127.0.0.1:5173/sessions/fsE4Pq9fJqMR4dxgp4PiZ/worktree:0
+[21426496ms] [ERROR] WebSocket connection to 'ws://localhost:3000/?token=eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ1c2VySWQiOiJLcWdnODctMHZ1OVRqMUpibl9lN20iLCJpYXQiOjE3ODI3NDYyMzEsImV4cCI6MTc4NTMzODIzMX0.TolwcIFdAPY_I-LHy5CC3f1i7ftzRizX4hoAB-ht9MQ' failed: Error in connection establishment: net::ERR_CONNECTION_REFUSED @ http://127.0.0.1:5173/src/lib/ws.ts:14
+[21433811ms] [ERROR] Failed to load resource: the server responded with a status of 500 (Internal Server Error) @ http://127.0.0.1:5173/sessions/fsE4Pq9fJqMR4dxgp4PiZ/worktree:0
+[21434818ms] [ERROR] Failed to load resource: the server responded with a status of 500 (Internal Server Error) @ http://127.0.0.1:5173/sessions/fsE4Pq9fJqMR4dxgp4PiZ/worktree:0
+[21454828ms] [ERROR] Failed to load resource: the server responded with a status of 500 (Internal Server Error) @ http://127.0.0.1:5173/sessions/fsE4Pq9fJqMR4dxgp4PiZ/worktree:0
+[21455837ms] [ERROR] Failed to load resource: the server responded with a status of 500 (Internal Server Error) @ http://127.0.0.1:5173/sessions/fsE4Pq9fJqMR4dxgp4PiZ/worktree:0
+[21456501ms] [ERROR] WebSocket connection to 'ws://localhost:3000/?token=eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ1c2VySWQiOiJLcWdnODctMHZ1OVRqMUpibl9lN20iLCJpYXQiOjE3ODI3NDYyMzEsImV4cCI6MTc4NTMzODIzMX0.TolwcIFdAPY_I-LHy5CC3f1i7ftzRizX4hoAB-ht9MQ' failed: Error in connection establishment: net::ERR_CONNECTION_REFUSED @ http://127.0.0.1:5173/src/lib/ws.ts:14
+[21475844ms] [ERROR] Failed to load resource: the server responded with a status of 500 (Internal Server Error) @ http://127.0.0.1:5173/sessions/fsE4Pq9fJqMR4dxgp4PiZ/worktree:0
+[21476851ms] [ERROR] Failed to load resource: the server responded with a status of 500 (Internal Server Error) @ http://127.0.0.1:5173/sessions/fsE4Pq9fJqMR4dxgp4PiZ/worktree:0
+[21486507ms] [ERROR] WebSocket connection to 'ws://localhost:3000/?token=eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ1c2VySWQiOiJLcWdnODctMHZ1OVRqMUpibl9lN20iLCJpYXQiOjE3ODI3NDYyMzEsImV4cCI6MTc4NTMzODIzMX0.TolwcIFdAPY_I-LHy5CC3f1i7ftzRizX4hoAB-ht9MQ' failed: Error in connection establishment: net::ERR_CONNECTION_REFUSED @ http://127.0.0.1:5173/src/lib/ws.ts:14
+[21496861ms] [ERROR] Failed to load resource: the server responded with a status of 500 (Internal Server Error) @ http://127.0.0.1:5173/sessions/fsE4Pq9fJqMR4dxgp4PiZ/worktree:0
+[21497869ms] [ERROR] Failed to load resource: the server responded with a status of 500 (Internal Server Error) @ http://127.0.0.1:5173/sessions/fsE4Pq9fJqMR4dxgp4PiZ/worktree:0
+[21516512ms] [ERROR] WebSocket connection to 'ws://localhost:3000/?token=eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ1c2VySWQiOiJLcWdnODctMHZ1OVRqMUpibl9lN20iLCJpYXQiOjE3ODI3NDYyMzEsImV4cCI6MTc4NTMzODIzMX0.TolwcIFdAPY_I-LHy5CC3f1i7ftzRizX4hoAB-ht9MQ' failed: Error in connection establishment: net::ERR_CONNECTION_REFUSED @ http://127.0.0.1:5173/src/lib/ws.ts:14
+[21517878ms] [ERROR] Failed to load resource: the server responded with a status of 500 (Internal Server Error) @ http://127.0.0.1:5173/sessions/fsE4Pq9fJqMR4dxgp4PiZ/worktree:0
+[21518885ms] [ERROR] Failed to load resource: the server responded with a status of 500 (Internal Server Error) @ http://127.0.0.1:5173/sessions/fsE4Pq9fJqMR4dxgp4PiZ/worktree:0
+[21538898ms] [ERROR] Failed to load resource: the server responded with a status of 500 (Internal Server Error) @ http://127.0.0.1:5173/sessions/fsE4Pq9fJqMR4dxgp4PiZ/worktree:0
+[21539907ms] [ERROR] Failed to load resource: the server responded with a status of 500 (Internal Server Error) @ http://127.0.0.1:5173/sessions/fsE4Pq9fJqMR4dxgp4PiZ/worktree:0
+[21546518ms] [ERROR] WebSocket connection to 'ws://localhost:3000/?token=eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ1c2VySWQiOiJLcWdnODctMHZ1OVRqMUpibl9lN20iLCJpYXQiOjE3ODI3NDYyMzEsImV4cCI6MTc4NTMzODIzMX0.TolwcIFdAPY_I-LHy5CC3f1i7ftzRizX4hoAB-ht9MQ' failed: Error in connection establishment: net::ERR_CONNECTION_REFUSED @ http://127.0.0.1:5173/src/lib/ws.ts:14
+[21559914ms] [ERROR] Failed to load resource: the server responded with a status of 500 (Internal Server Error) @ http://127.0.0.1:5173/sessions/fsE4Pq9fJqMR4dxgp4PiZ/worktree:0
+[21560922ms] [ERROR] Failed to load resource: the server responded with a status of 500 (Internal Server Error) @ http://127.0.0.1:5173/sessions/fsE4Pq9fJqMR4dxgp4PiZ/worktree:0
+[21576522ms] [ERROR] WebSocket connection to 'ws://localhost:3000/?token=eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ1c2VySWQiOiJLcWdnODctMHZ1OVRqMUpibl9lN20iLCJpYXQiOjE3ODI3NDYyMzEsImV4cCI6MTc4NTMzODIzMX0.TolwcIFdAPY_I-LHy5CC3f1i7ftzRizX4hoAB-ht9MQ' failed: Error in connection establishment: net::ERR_CONNECTION_REFUSED @ http://127.0.0.1:5173/src/lib/ws.ts:14
+[21580930ms] [ERROR] Failed to load resource: the server responded with a status of 500 (Internal Server Error) @ http://127.0.0.1:5173/sessions/fsE4Pq9fJqMR4dxgp4PiZ/worktree:0
+[21581939ms] [ERROR] Failed to load resource: the server responded with a status of 500 (Internal Server Error) @ http://127.0.0.1:5173/sessions/fsE4Pq9fJqMR4dxgp4PiZ/worktree:0
+[21593618ms] [INFO] %cDownload the React DevTools for a better development experience: https://react.dev/link/react-devtools font-weight:bold @ http://127.0.0.1:5173/node_modules/.vite/deps/react-dom_client.js?v=a1b313eb:20102
+[21593660ms] [WARNING] ⚠️ React Router Future Flag Warning: React Router will begin wrapping state updates in `React.startTransition` in v7. You can use the `v7_startTransition` future flag to opt-in early. For more information, see https://reactrouter.com/v6/upgrading/future#v7_starttransition. @ http://127.0.0.1:5173/node_modules/.vite/deps/react-router-dom.js?v=a1b313eb:4426
+[21593660ms] [WARNING] WebSocket connection to 'ws://localhost:3000/?token=eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ1c2VySWQiOiJLcWdnODctMHZ1OVRqMUpibl9lN20iLCJpYXQiOjE3ODI3NDYyMzEsImV4cCI6MTc4NTMzODIzMX0.TolwcIFdAPY_I-LHy5CC3f1i7ftzRizX4hoAB-ht9MQ' failed: WebSocket is closed before the connection is established. @ http://127.0.0.1:5173/src/lib/ws.ts:40
+[21593672ms] [ERROR] Failed to load resource: the server responded with a status of 500 (Internal Server Error) @ http://127.0.0.1:5173/auth/me:0
+[21593672ms] [ERROR] Failed to load resource: the server responded with a status of 500 (Internal Server Error) @ http://127.0.0.1:5173/sessions/fsE4Pq9fJqMR4dxgp4PiZ/messages:0
+[21593673ms] [ERROR] Failed to load resource: the server responded with a status of 500 (Internal Server Error) @ http://127.0.0.1:5173/sessions/fsE4Pq9fJqMR4dxgp4PiZ/status:0
+[21593673ms] [ERROR] Failed to load resource: the server responded with a status of 500 (Internal Server Error) @ http://127.0.0.1:5173/sessions/fsE4Pq9fJqMR4dxgp4PiZ/events:0
+[21593673ms] [ERROR] Failed to load resource: the server responded with a status of 500 (Internal Server Error) @ http://127.0.0.1:5173/sessions:0
+[21593673ms] [ERROR] Failed to load resource: the server responded with a status of 500 (Internal Server Error) @ http://127.0.0.1:5173/projects:0
+[21593673ms] [ERROR] Failed to load resource: the server responded with a status of 500 (Internal Server Error) @ http://127.0.0.1:5173/sessions/fsE4Pq9fJqMR4dxgp4PiZ/usage-risk:0
+[21593673ms] [WARNING] WebSocket connection to 'ws://localhost:3000/?token=eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ1c2VySWQiOiJLcWdnODctMHZ1OVRqMUpibl9lN20iLCJpYXQiOjE3ODI3NDYyMzEsImV4cCI6MTc4NTMzODIzMX0.TolwcIFdAPY_I-LHy5CC3f1i7ftzRizX4hoAB-ht9MQ' failed: WebSocket is closed before the connection is established. @ http://127.0.0.1:5173/src/lib/ws.ts:36
+[21593673ms] [ERROR] Failed to load resource: the server responded with a status of 500 (Internal Server Error) @ http://127.0.0.1:5173/sessions/fsE4Pq9fJqMR4dxgp4PiZ/worktree:0
+[21593673ms] [ERROR] Failed to load resource: the server responded with a status of 500 (Internal Server Error) @ http://127.0.0.1:5173/executions/pending-approvals:0
+[21593673ms] [ERROR] Failed to load resource: the server responded with a status of 500 (Internal Server Error) @ http://127.0.0.1:5173/agent-providers:0
+[21594677ms] [ERROR] WebSocket connection to 'ws://localhost:3000/?token=eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ1c2VySWQiOiJLcWdnODctMHZ1OVRqMUpibl9lN20iLCJpYXQiOjE3ODI3NDYyMzEsImV4cCI6MTc4NTMzODIzMX0.TolwcIFdAPY_I-LHy5CC3f1i7ftzRizX4hoAB-ht9MQ' failed: Error in connection establishment: net::ERR_CONNECTION_REFUSED @ http://127.0.0.1:5173/src/lib/ws.ts:14
+[21594679ms] [ERROR] Failed to load resource: the server responded with a status of 500 (Internal Server Error) @ http://127.0.0.1:5173/auth/me:0
+[21594680ms] [ERROR] Failed to load resource: the server responded with a status of 500 (Internal Server Error) @ http://127.0.0.1:5173/sessions/fsE4Pq9fJqMR4dxgp4PiZ/messages:0
+[21594680ms] [ERROR] Failed to load resource: the server responded with a status of 500 (Internal Server Error) @ http://127.0.0.1:5173/sessions/fsE4Pq9fJqMR4dxgp4PiZ/status:0
+[21594680ms] [ERROR] Failed to load resource: the server responded with a status of 500 (Internal Server Error) @ http://127.0.0.1:5173/sessions/fsE4Pq9fJqMR4dxgp4PiZ/events:0
+[21594682ms] [ERROR] Failed to load resource: the server responded with a status of 500 (Internal Server Error) @ http://127.0.0.1:5173/sessions:0
+[21594683ms] [ERROR] Failed to load resource: the server responded with a status of 500 (Internal Server Error) @ http://127.0.0.1:5173/projects:0
+[21594683ms] [ERROR] Failed to load resource: the server responded with a status of 500 (Internal Server Error) @ http://127.0.0.1:5173/sessions/fsE4Pq9fJqMR4dxgp4PiZ/usage-risk:0
+[21594683ms] [ERROR] Failed to load resource: the server responded with a status of 500 (Internal Server Error) @ http://127.0.0.1:5173/sessions/fsE4Pq9fJqMR4dxgp4PiZ/worktree:0
+[21594683ms] [ERROR] Failed to load resource: the server responded with a status of 500 (Internal Server Error) @ http://127.0.0.1:5173/agent-providers:0
+[21595679ms] [ERROR] WebSocket connection to 'ws://localhost:3000/?token=eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ1c2VySWQiOiJLcWdnODctMHZ1OVRqMUpibl9lN20iLCJpYXQiOjE3ODI3NDYyMzEsImV4cCI6MTc4NTMzODIzMX0.TolwcIFdAPY_I-LHy5CC3f1i7ftzRizX4hoAB-ht9MQ' failed: Error in connection establishment: net::ERR_CONNECTION_REFUSED @ http://127.0.0.1:5173/src/lib/ws.ts:14
+[21597280ms] [INFO] %cDownload the React DevTools for a better development experience: https://react.dev/link/react-devtools font-weight:bold @ http://127.0.0.1:5173/node_modules/.vite/deps/react-dom_client.js?v=a1b313eb:20102
+[21597318ms] [WARNING] ⚠️ React Router Future Flag Warning: React Router will begin wrapping state updates in `React.startTransition` in v7. You can use the `v7_startTransition` future flag to opt-in early. For more information, see https://reactrouter.com/v6/upgrading/future#v7_starttransition. @ http://127.0.0.1:5173/node_modules/.vite/deps/react-router-dom.js?v=a1b313eb:4426
+[21597318ms] [WARNING] WebSocket connection to 'ws://localhost:3000/?token=eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ1c2VySWQiOiJLcWdnODctMHZ1OVRqMUpibl9lN20iLCJpYXQiOjE3ODI3NDYyMzEsImV4cCI6MTc4NTMzODIzMX0.TolwcIFdAPY_I-LHy5CC3f1i7ftzRizX4hoAB-ht9MQ' failed: WebSocket is closed before the connection is established. @ http://127.0.0.1:5173/src/lib/ws.ts:40
+[21597328ms] [ERROR] Failed to load resource: the server responded with a status of 500 (Internal Server Error) @ http://127.0.0.1:5173/auth/me:0
+[21597329ms] [ERROR] Failed to load resource: the server responded with a status of 500 (Internal Server Error) @ http://127.0.0.1:5173/sessions/fsE4Pq9fJqMR4dxgp4PiZ/messages:0
+[21597329ms] [ERROR] Failed to load resource: the server responded with a status of 500 (Internal Server Error) @ http://127.0.0.1:5173/sessions/fsE4Pq9fJqMR4dxgp4PiZ/status:0
+[21597329ms] [ERROR] Failed to load resource: the server responded with a status of 500 (Internal Server Error) @ http://127.0.0.1:5173/sessions/fsE4Pq9fJqMR4dxgp4PiZ/events:0
+[21597329ms] [ERROR] Failed to load resource: the server responded with a status of 500 (Internal Server Error) @ http://127.0.0.1:5173/sessions:0
+[21597329ms] [ERROR] Failed to load resource: the server responded with a status of 500 (Internal Server Error) @ http://127.0.0.1:5173/projects:0
+[21597329ms] [WARNING] WebSocket connection to 'ws://localhost:3000/?token=eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ1c2VySWQiOiJLcWdnODctMHZ1OVRqMUpibl9lN20iLCJpYXQiOjE3ODI3NDYyMzEsImV4cCI6MTc4NTMzODIzMX0.TolwcIFdAPY_I-LHy5CC3f1i7ftzRizX4hoAB-ht9MQ' failed: WebSocket is closed before the connection is established. @ http://127.0.0.1:5173/src/lib/ws.ts:36
+[21597329ms] [ERROR] Failed to load resource: the server responded with a status of 500 (Internal Server Error) @ http://127.0.0.1:5173/sessions/fsE4Pq9fJqMR4dxgp4PiZ/worktree:0
+[21597329ms] [ERROR] Failed to load resource: the server responded with a status of 500 (Internal Server Error) @ http://127.0.0.1:5173/sessions/fsE4Pq9fJqMR4dxgp4PiZ/usage-risk:0
+[21597329ms] [ERROR] Failed to load resource: the server responded with a status of 500 (Internal Server Error) @ http://127.0.0.1:5173/executions/pending-approvals:0
+[21597329ms] [ERROR] Failed to load resource: the server responded with a status of 500 (Internal Server Error) @ http://127.0.0.1:5173/agent-providers:0
+[21598333ms] [ERROR] WebSocket connection to 'ws://localhost:3000/?token=eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ1c2VySWQiOiJLcWdnODctMHZ1OVRqMUpibl9lN20iLCJpYXQiOjE3ODI3NDYyMzEsImV4cCI6MTc4NTMzODIzMX0.TolwcIFdAPY_I-LHy5CC3f1i7ftzRizX4hoAB-ht9MQ' failed: Error in connection establishment: net::ERR_CONNECTION_REFUSED @ http://127.0.0.1:5173/src/lib/ws.ts:14
+[21598336ms] [ERROR] Failed to load resource: the server responded with a status of 500 (Internal Server Error) @ http://127.0.0.1:5173/auth/me:0
+[21598336ms] [ERROR] Failed to load resource: the server responded with a status of 500 (Internal Server Error) @ http://127.0.0.1:5173/sessions/fsE4Pq9fJqMR4dxgp4PiZ/messages:0
+[21598336ms] [ERROR] Failed to load resource: the server responded with a status of 500 (Internal Server Error) @ http://127.0.0.1:5173/sessions/fsE4Pq9fJqMR4dxgp4PiZ/status:0
+[21598338ms] [ERROR] Failed to load resource: the server responded with a status of 500 (Internal Server Error) @ http://127.0.0.1:5173/sessions/fsE4Pq9fJqMR4dxgp4PiZ/events:0
+[21598339ms] [ERROR] Failed to load resource: the server responded with a status of 500 (Internal Server Error) @ http://127.0.0.1:5173/sessions:0
+[21598339ms] [ERROR] Failed to load resource: the server responded with a status of 500 (Internal Server Error) @ http://127.0.0.1:5173/projects:0
+[21598339ms] [ERROR] Failed to load resource: the server responded with a status of 500 (Internal Server Error) @ http://127.0.0.1:5173/sessions/fsE4Pq9fJqMR4dxgp4PiZ/worktree:0
+[21598339ms] [ERROR] Failed to load resource: the server responded with a status of 500 (Internal Server Error) @ http://127.0.0.1:5173/sessions/fsE4Pq9fJqMR4dxgp4PiZ/usage-risk:0
+[21598340ms] [ERROR] Failed to load resource: the server responded with a status of 500 (Internal Server Error) @ http://127.0.0.1:5173/agent-providers:0
+[21599335ms] [ERROR] WebSocket connection to 'ws://localhost:3000/?token=eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ1c2VySWQiOiJLcWdnODctMHZ1OVRqMUpibl9lN20iLCJpYXQiOjE3ODI3NDYyMzEsImV4cCI6MTc4NTMzODIzMX0.TolwcIFdAPY_I-LHy5CC3f1i7ftzRizX4hoAB-ht9MQ' failed: Error in connection establishment: net::ERR_CONNECTION_REFUSED @ http://127.0.0.1:5173/src/lib/ws.ts:14
+[21599582ms] [INFO] %cDownload the React DevTools for a better development experience: https://react.dev/link/react-devtools font-weight:bold @ http://127.0.0.1:5173/node_modules/.vite/deps/react-dom_client.js?v=a1b313eb:20102
+[21599625ms] [WARNING] ⚠️ React Router Future Flag Warning: React Router will begin wrapping state updates in `React.startTransition` in v7. You can use the `v7_startTransition` future flag to opt-in early. For more information, see https://reactrouter.com/v6/upgrading/future#v7_starttransition. @ http://127.0.0.1:5173/node_modules/.vite/deps/react-router-dom.js?v=a1b313eb:4426
+[21599625ms] [WARNING] WebSocket connection to 'ws://localhost:3000/?token=eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ1c2VySWQiOiJLcWdnODctMHZ1OVRqMUpibl9lN20iLCJpYXQiOjE3ODI3NDYyMzEsImV4cCI6MTc4NTMzODIzMX0.TolwcIFdAPY_I-LHy5CC3f1i7ftzRizX4hoAB-ht9MQ' failed: WebSocket is closed before the connection is established. @ http://127.0.0.1:5173/src/lib/ws.ts:40
+[21599635ms] [ERROR] Failed to load resource: the server responded with a status of 500 (Internal Server Error) @ http://127.0.0.1:5173/auth/me:0
+[21599635ms] [ERROR] Failed to load resource: the server responded with a status of 500 (Internal Server Error) @ http://127.0.0.1:5173/sessions/fsE4Pq9fJqMR4dxgp4PiZ/messages:0
+[21599636ms] [ERROR] Failed to load resource: the server responded with a status of 500 (Internal Server Error) @ http://127.0.0.1:5173/sessions/fsE4Pq9fJqMR4dxgp4PiZ/status:0
+[21599636ms] [ERROR] Failed to load resource: the server responded with a status of 500 (Internal Server Error) @ http://127.0.0.1:5173/sessions/fsE4Pq9fJqMR4dxgp4PiZ/events:0
+[21599636ms] [ERROR] Failed to load resource: the server responded with a status of 500 (Internal Server Error) @ http://127.0.0.1:5173/sessions:0
+[21599636ms] [ERROR] Failed to load resource: the server responded with a status of 500 (Internal Server Error) @ http://127.0.0.1:5173/projects:0
+[21599636ms] [ERROR] Failed to load resource: the server responded with a status of 500 (Internal Server Error) @ http://127.0.0.1:5173/sessions/fsE4Pq9fJqMR4dxgp4PiZ/usage-risk:0
+[21599636ms] [WARNING] WebSocket connection to 'ws://localhost:3000/?token=eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ1c2VySWQiOiJLcWdnODctMHZ1OVRqMUpibl9lN20iLCJpYXQiOjE3ODI3NDYyMzEsImV4cCI6MTc4NTMzODIzMX0.TolwcIFdAPY_I-LHy5CC3f1i7ftzRizX4hoAB-ht9MQ' failed: WebSocket is closed before the connection is established. @ http://127.0.0.1:5173/src/lib/ws.ts:36
+[21599636ms] [ERROR] Failed to load resource: the server responded with a status of 500 (Internal Server Error) @ http://127.0.0.1:5173/sessions/fsE4Pq9fJqMR4dxgp4PiZ/worktree:0
+[21599636ms] [ERROR] Failed to load resource: the server responded with a status of 500 (Internal Server Error) @ http://127.0.0.1:5173/executions/pending-approvals:0
+[21599636ms] [ERROR] Failed to load resource: the server responded with a status of 500 (Internal Server Error) @ http://127.0.0.1:5173/agent-providers:0
+[21600638ms] [ERROR] WebSocket connection to 'ws://localhost:3000/?token=eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ1c2VySWQiOiJLcWdnODctMHZ1OVRqMUpibl9lN20iLCJpYXQiOjE3ODI3NDYyMzEsImV4cCI6MTc4NTMzODIzMX0.TolwcIFdAPY_I-LHy5CC3f1i7ftzRizX4hoAB-ht9MQ' failed: Error in connection establishment: net::ERR_CONNECTION_REFUSED @ http://127.0.0.1:5173/src/lib/ws.ts:14
+[21600641ms] [ERROR] Failed to load resource: the server responded with a status of 500 (Internal Server Error) @ http://127.0.0.1:5173/auth/me:0
+[21600641ms] [ERROR] Failed to load resource: the server responded with a status of 500 (Internal Server Error) @ http://127.0.0.1:5173/sessions/fsE4Pq9fJqMR4dxgp4PiZ/messages:0
+[21600641ms] [ERROR] Failed to load resource: the server responded with a status of 500 (Internal Server Error) @ http://127.0.0.1:5173/sessions/fsE4Pq9fJqMR4dxgp4PiZ/status:0
+[21600641ms] [ERROR] Failed to load resource: the server responded with a status of 500 (Internal Server Error) @ http://127.0.0.1:5173/sessions/fsE4Pq9fJqMR4dxgp4PiZ/events:0
+[21600643ms] [ERROR] Failed to load resource: the server responded with a status of 500 (Internal Server Error) @ http://127.0.0.1:5173/sessions:0
+[21600643ms] [ERROR] Failed to load resource: the server responded with a status of 500 (Internal Server Error) @ http://127.0.0.1:5173/projects:0
+[21600644ms] [ERROR] Failed to load resource: the server responded with a status of 500 (Internal Server Error) @ http://127.0.0.1:5173/sessions/fsE4Pq9fJqMR4dxgp4PiZ/usage-risk:0
+[21600644ms] [ERROR] Failed to load resource: the server responded with a status of 500 (Internal Server Error) @ http://127.0.0.1:5173/sessions/fsE4Pq9fJqMR4dxgp4PiZ/worktree:0
+[21600645ms] [ERROR] Failed to load resource: the server responded with a status of 500 (Internal Server Error) @ http://127.0.0.1:5173/agent-providers:0
+[21601645ms] [ERROR] WebSocket connection to 'ws://localhost:3000/?token=eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ1c2VySWQiOiJLcWdnODctMHZ1OVRqMUpibl9lN20iLCJpYXQiOjE3ODI3NDYyMzEsImV4cCI6MTc4NTMzODIzMX0.TolwcIFdAPY_I-LHy5CC3f1i7ftzRizX4hoAB-ht9MQ' failed: Error in connection establishment: net::ERR_CONNECTION_REFUSED @ http://127.0.0.1:5173/src/lib/ws.ts:14
+[21604642ms] [ERROR] WebSocket connection to 'ws://localhost:3000/?token=eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ1c2VySWQiOiJLcWdnODctMHZ1OVRqMUpibl9lN20iLCJpYXQiOjE3ODI3NDYyMzEsImV4cCI6MTc4NTMzODIzMX0.TolwcIFdAPY_I-LHy5CC3f1i7ftzRizX4hoAB-ht9MQ' failed: Error in connection establishment: net::ERR_CONNECTION_REFUSED @ http://127.0.0.1:5173/src/lib/ws.ts:14
+[21604848ms] [ERROR] Failed to load resource: the server responded with a status of 500 (Internal Server Error) @ http://127.0.0.1:5173/auth/me:0
+[21604849ms] [ERROR] Failed to load resource: the server responded with a status of 500 (Internal Server Error) @ http://127.0.0.1:5173/sessions/fsE4Pq9fJqMR4dxgp4PiZ/messages:0
+[21604849ms] [ERROR] Failed to load resource: the server responded with a status of 500 (Internal Server Error) @ http://127.0.0.1:5173/sessions/fsE4Pq9fJqMR4dxgp4PiZ/status:0
+[21604849ms] [ERROR] Failed to load resource: the server responded with a status of 500 (Internal Server Error) @ http://127.0.0.1:5173/sessions/fsE4Pq9fJqMR4dxgp4PiZ/events:0
+[21604849ms] [ERROR] Failed to load resource: the server responded with a status of 500 (Internal Server Error) @ http://127.0.0.1:5173/sessions:0
+[21604849ms] [ERROR] Failed to load resource: the server responded with a status of 500 (Internal Server Error) @ http://127.0.0.1:5173/projects:0
+[21604850ms] [ERROR] Failed to load resource: the server responded with a status of 500 (Internal Server Error) @ http://127.0.0.1:5173/sessions/fsE4Pq9fJqMR4dxgp4PiZ/usage-risk:0
+[21604850ms] [ERROR] Failed to load resource: the server responded with a status of 500 (Internal Server Error) @ http://127.0.0.1:5173/sessions/fsE4Pq9fJqMR4dxgp4PiZ/worktree:0
+[21604850ms] [ERROR] Failed to load resource: the server responded with a status of 500 (Internal Server Error) @ http://127.0.0.1:5173/executions/pending-approvals:0
+[21604850ms] [ERROR] Failed to load resource: the server responded with a status of 500 (Internal Server Error) @ http://127.0.0.1:5173/agent-providers:0
+[21604850ms] [ERROR] WebSocket connection to 'ws://localhost:3000/?token=eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ1c2VySWQiOiJLcWdnODctMHZ1OVRqMUpibl9lN20iLCJpYXQiOjE3ODI3NDYyMzEsImV4cCI6MTc4NTMzODIzMX0.TolwcIFdAPY_I-LHy5CC3f1i7ftzRizX4hoAB-ht9MQ' failed: Error in connection establishment: net::ERR_CONNECTION_REFUSED @ http://127.0.0.1:5173/src/lib/ws.ts:14
+[21605854ms] [ERROR] Failed to load resource: the server responded with a status of 500 (Internal Server Error) @ http://127.0.0.1:5173/auth/me:0
+[21605854ms] [ERROR] Failed to load resource: the server responded with a status of 500 (Internal Server Error) @ http://127.0.0.1:5173/sessions/fsE4Pq9fJqMR4dxgp4PiZ/messages:0
+[21605854ms] [ERROR] Failed to load resource: the server responded with a status of 500 (Internal Server Error) @ http://127.0.0.1:5173/sessions/fsE4Pq9fJqMR4dxgp4PiZ/status:0
+[21605856ms] [ERROR] Failed to load resource: the server responded with a status of 500 (Internal Server Error) @ http://127.0.0.1:5173/sessions/fsE4Pq9fJqMR4dxgp4PiZ/events:0
+[21605856ms] [ERROR] Failed to load resource: the server responded with a status of 500 (Internal Server Error) @ http://127.0.0.1:5173/sessions:0
+[21605856ms] [ERROR] Failed to load resource: the server responded with a status of 500 (Internal Server Error) @ http://127.0.0.1:5173/projects:0
+[21605857ms] [ERROR] Failed to load resource: the server responded with a status of 500 (Internal Server Error) @ http://127.0.0.1:5173/sessions/fsE4Pq9fJqMR4dxgp4PiZ/usage-risk:0
+[21605857ms] [ERROR] Failed to load resource: the server responded with a status of 500 (Internal Server Error) @ http://127.0.0.1:5173/sessions/fsE4Pq9fJqMR4dxgp4PiZ/worktree:0
+[21605857ms] [ERROR] Failed to load resource: the server responded with a status of 500 (Internal Server Error) @ http://127.0.0.1:5173/agent-providers:0
+[21609651ms] [ERROR] WebSocket connection to 'ws://localhost:3000/?token=eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ1c2VySWQiOiJLcWdnODctMHZ1OVRqMUpibl9lN20iLCJpYXQiOjE3ODI3NDYyMzEsImV4cCI6MTc4NTMzODIzMX0.TolwcIFdAPY_I-LHy5CC3f1i7ftzRizX4hoAB-ht9MQ' failed: Error in connection establishment: net::ERR_CONNECTION_REFUSED @ http://127.0.0.1:5173/src/lib/ws.ts:14
+[21614816ms] [ERROR] [vite] SyntaxError: The requested module '/src/lib/api.ts?t=1782767854104' does not provide an export named 'deleteDocumentById' @ http://127.0.0.1:5173/@vite/client:881
+[21614816ms] [ERROR] [vite] Failed to reload /src/pages/DocumentPage.tsx. This could be due to syntax errors or importing non-existent modules. (see errors above) @ http://127.0.0.1:5173/@vite/client:881
+[21614816ms] [ERROR] [vite] SyntaxError: The requested module '/src/lib/api.ts?t=1782767854104' does not provide an export named 'getAllDocuments' @ http://127.0.0.1:5173/@vite/client:881
+[21614816ms] [ERROR] [vite] Failed to reload /src/pages/TriggersPage.tsx. This could be due to syntax errors or importing non-existent modules. (see errors above) @ http://127.0.0.1:5173/@vite/client:881
+[21614816ms] [ERROR] [vite] SyntaxError: The requested module '/src/lib/api.ts?t=1782767854104' does not provide an export named 'getAllDocuments' @ http://127.0.0.1:5173/@vite/client:881
+[21614817ms] [ERROR] [vite] Failed to reload /src/components/CommandPalette.tsx. This could be due to syntax errors or importing non-existent modules. (see errors above) @ http://127.0.0.1:5173/@vite/client:881
+[21614817ms] [ERROR] [vite] SyntaxError: The requested module '/src/lib/api.ts?t=1782767854104' does not provide an export named 'createGlobalDocument' @ http://127.0.0.1:5173/@vite/client:881
+[21614817ms] [ERROR] [vite] Failed to reload /src/pages/HomePage.tsx. This could be due to syntax errors or importing non-existent modules. (see errors above) @ http://127.0.0.1:5173/@vite/client:881
+[21614817ms] [ERROR] [vite] SyntaxError: The requested module '/src/lib/api.ts?t=1782767854104' does not provide an export named 'getDocuments' @ http://127.0.0.1:5173/@vite/client:881
+[21614817ms] [ERROR] [vite] Failed to reload /src/components/TriggersSection.tsx. This could be due to syntax errors or importing non-existent modules. (see errors above) @ http://127.0.0.1:5173/@vite/client:881
+[21614817ms] [ERROR] [vite] SyntaxError: The requested module '/src/lib/api.ts?t=1782767854104' does not provide an export named 'deleteDocumentById' @ http://127.0.0.1:5173/@vite/client:881
+[21614817ms] [ERROR] [vite] Failed to reload /src/pages/DocumentsPage.tsx. This could be due to syntax errors or importing non-existent modules. (see errors above) @ http://127.0.0.1:5173/@vite/client:881
+[21614818ms] [ERROR] [vite] SyntaxError: The requested module '/src/lib/api.ts?t=1782767854104' does not provide an export named 'getDocuments' @ http://127.0.0.1:5173/@vite/client:881
+[21614818ms] [ERROR] [vite] Failed to reload /src/components/ContextPanel.tsx. This could be due to syntax errors or importing non-existent modules. (see errors above) @ http://127.0.0.1:5173/@vite/client:881
+[21614823ms] [ERROR] [vite] SyntaxError: The requested module '/src/lib/api.ts?t=1782767854104' does not provide an export named 'getDocuments' @ http://127.0.0.1:5173/@vite/client:881
+[21614823ms] [ERROR] [vite] Failed to reload /src/components/ChatView.tsx. This could be due to syntax errors or importing non-existent modules. (see errors above) @ http://127.0.0.1:5173/@vite/client:881
+[21614842ms] [ERROR] [vite] SyntaxError: The requested module '/src/lib/api.ts?t=1782767854104' does not provide an export named 'getDocuments' @ http://127.0.0.1:5173/@vite/client:881
+[21614842ms] [ERROR] [vite] Failed to reload /src/pages/ProjectPage.tsx. This could be due to syntax errors or importing non-existent modules. (see errors above) @ http://127.0.0.1:5173/@vite/client:881
+[21614844ms] [ERROR] [vite] SyntaxError: The requested module '/src/lib/api.ts?t=1782767854104' does not provide an export named 'getAllDocuments' @ http://127.0.0.1:5173/@vite/client:881
+[21614844ms] [ERROR] [vite] Failed to reload /src/pages/AppLayout.tsx. This could be due to syntax errors or importing non-existent modules. (see errors above) @ http://127.0.0.1:5173/@vite/client:881
+[21614846ms] [ERROR] [vite] SyntaxError: The requested module '/src/lib/api.ts?t=1782767854104' does not provide an export named 'getDocuments' @ http://127.0.0.1:5173/@vite/client:881
+[21614846ms] [ERROR] [vite] Failed to reload /src/pages/ProjectPage.tsx. This could be due to syntax errors or importing non-existent modules. (see errors above) @ http://127.0.0.1:5173/@vite/client:881
+[21614879ms] [ERROR] Failed to load resource: the server responded with a status of 500 (Internal Server Error) @ http://127.0.0.1:5173/auth/me:0
+[21615884ms] [ERROR] Failed to load resource: the server responded with a status of 500 (Internal Server Error) @ http://127.0.0.1:5173/auth/me:0
+[21620648ms] [ERROR] WebSocket connection to 'ws://localhost:3000/?token=eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ1c2VySWQiOiJLcWdnODctMHZ1OVRqMUpibl9lN20iLCJpYXQiOjE3ODI3NDYyMzEsImV4cCI6MTc4NTMzODIzMX0.TolwcIFdAPY_I-LHy5CC3f1i7ftzRizX4hoAB-ht9MQ' failed: Error in connection establishment: net::ERR_CONNECTION_REFUSED @ http://127.0.0.1:5173/src/lib/ws.ts:14
+[21625865ms] [ERROR] Failed to load resource: the server responded with a status of 500 (Internal Server Error) @ http://127.0.0.1:5173/sessions/fsE4Pq9fJqMR4dxgp4PiZ/worktree:0
+[21626873ms] [ERROR] Failed to load resource: the server responded with a status of 500 (Internal Server Error) @ http://127.0.0.1:5173/sessions/fsE4Pq9fJqMR4dxgp4PiZ/worktree:0
+[21634858ms] [ERROR] WebSocket connection to 'ws://localhost:3000/?token=eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ1c2VySWQiOiJLcWdnODctMHZ1OVRqMUpibl9lN20iLCJpYXQiOjE3ODI3NDYyMzEsImV4cCI6MTc4NTMzODIzMX0.TolwcIFdAPY_I-LHy5CC3f1i7ftzRizX4hoAB-ht9MQ' failed: Error in connection establishment: net::ERR_CONNECTION_REFUSED @ http://127.0.0.1:5173/src/lib/ws.ts:14
+[21639660ms] [ERROR] WebSocket connection to 'ws://localhost:3000/?token=eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ1c2VySWQiOiJLcWdnODctMHZ1OVRqMUpibl9lN20iLCJpYXQiOjE3ODI3NDYyMzEsImV4cCI6MTc4NTMzODIzMX0.TolwcIFdAPY_I-LHy5CC3f1i7ftzRizX4hoAB-ht9MQ' failed: Error in connection establishment: net::ERR_CONNECTION_REFUSED @ http://127.0.0.1:5173/src/lib/ws.ts:14
+[21646883ms] [ERROR] Failed to load resource: the server responded with a status of 500 (Internal Server Error) @ http://127.0.0.1:5173/sessions/fsE4Pq9fJqMR4dxgp4PiZ/worktree:0
+[21647891ms] [ERROR] Failed to load resource: the server responded with a status of 500 (Internal Server Error) @ http://127.0.0.1:5173/sessions/fsE4Pq9fJqMR4dxgp4PiZ/worktree:0
+[21650657ms] [ERROR] WebSocket connection to 'ws://localhost:3000/?token=eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ1c2VySWQiOiJLcWdnODctMHZ1OVRqMUpibl9lN20iLCJpYXQiOjE3ODI3NDYyMzEsImV4cCI6MTc4NTMzODIzMX0.TolwcIFdAPY_I-LHy5CC3f1i7ftzRizX4hoAB-ht9MQ' failed: Error in connection establishment: net::ERR_CONNECTION_REFUSED @ http://127.0.0.1:5173/src/lib/ws.ts:14
+[21664868ms] [ERROR] WebSocket connection to 'ws://localhost:3000/?token=eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ1c2VySWQiOiJLcWdnODctMHZ1OVRqMUpibl9lN20iLCJpYXQiOjE3ODI3NDYyMzEsImV4cCI6MTc4NTMzODIzMX0.TolwcIFdAPY_I-LHy5CC3f1i7ftzRizX4hoAB-ht9MQ' failed: Error in connection establishment: net::ERR_CONNECTION_REFUSED @ http://127.0.0.1:5173/src/lib/ws.ts:14
+[21667897ms] [ERROR] Failed to load resource: the server responded with a status of 500 (Internal Server Error) @ http://127.0.0.1:5173/sessions/fsE4Pq9fJqMR4dxgp4PiZ/worktree:0
+[21668906ms] [ERROR] Failed to load resource: the server responded with a status of 500 (Internal Server Error) @ http://127.0.0.1:5173/sessions/fsE4Pq9fJqMR4dxgp4PiZ/worktree:0
+[21669674ms] [ERROR] WebSocket connection to 'ws://localhost:3000/?token=eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ1c2VySWQiOiJLcWdnODctMHZ1OVRqMUpibl9lN20iLCJpYXQiOjE3ODI3NDYyMzEsImV4cCI6MTc4NTMzODIzMX0.TolwcIFdAPY_I-LHy5CC3f1i7ftzRizX4hoAB-ht9MQ' failed: Error in connection establishment: net::ERR_CONNECTION_REFUSED @ http://127.0.0.1:5173/src/lib/ws.ts:14
+[21680673ms] [ERROR] WebSocket connection to 'ws://localhost:3000/?token=eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ1c2VySWQiOiJLcWdnODctMHZ1OVRqMUpibl9lN20iLCJpYXQiOjE3ODI3NDYyMzEsImV4cCI6MTc4NTMzODIzMX0.TolwcIFdAPY_I-LHy5CC3f1i7ftzRizX4hoAB-ht9MQ' failed: Error in connection establishment: net::ERR_CONNECTION_REFUSED @ http://127.0.0.1:5173/src/lib/ws.ts:14
+[21688918ms] [ERROR] Failed to load resource: the server responded with a status of 500 (Internal Server Error) @ http://127.0.0.1:5173/sessions/fsE4Pq9fJqMR4dxgp4PiZ/worktree:0
+[21689927ms] [ERROR] Failed to load resource: the server responded with a status of 500 (Internal Server Error) @ http://127.0.0.1:5173/sessions/fsE4Pq9fJqMR4dxgp4PiZ/worktree:0
+[21690143ms] [ERROR] [vite] SyntaxError: The requested module '/src/lib/api.ts?t=1782767854104' does not provide an export named 'getAllDocuments' @ http://127.0.0.1:5173/@vite/client:881
+[21690143ms] [ERROR] [vite] Failed to reload /src/App.tsx. This could be due to syntax errors or importing non-existent modules. (see errors above) @ http://127.0.0.1:5173/@vite/client:881
+[21694880ms] [ERROR] WebSocket connection to 'ws://localhost:3000/?token=eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ1c2VySWQiOiJLcWdnODctMHZ1OVRqMUpibl9lN20iLCJpYXQiOjE3ODI3NDYyMzEsImV4cCI6MTc4NTMzODIzMX0.TolwcIFdAPY_I-LHy5CC3f1i7ftzRizX4hoAB-ht9MQ' failed: Error in connection establishment: net::ERR_CONNECTION_REFUSED @ http://127.0.0.1:5173/src/lib/ws.ts:14
+[21699680ms] [ERROR] WebSocket connection to 'ws://localhost:3000/?token=eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ1c2VySWQiOiJLcWdnODctMHZ1OVRqMUpibl9lN20iLCJpYXQiOjE3ODI3NDYyMzEsImV4cCI6MTc4NTMzODIzMX0.TolwcIFdAPY_I-LHy5CC3f1i7ftzRizX4hoAB-ht9MQ' failed: Error in connection establishment: net::ERR_CONNECTION_REFUSED @ http://127.0.0.1:5173/src/lib/ws.ts:14
+[21709939ms] [ERROR] Failed to load resource: the server responded with a status of 500 (Internal Server Error) @ http://127.0.0.1:5173/sessions/fsE4Pq9fJqMR4dxgp4PiZ/worktree:0
+[21710696ms] [ERROR] WebSocket connection to 'ws://localhost:3000/?token=eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ1c2VySWQiOiJLcWdnODctMHZ1OVRqMUpibl9lN20iLCJpYXQiOjE3ODI3NDYyMzEsImV4cCI6MTc4NTMzODIzMX0.TolwcIFdAPY_I-LHy5CC3f1i7ftzRizX4hoAB-ht9MQ' failed: Error in connection establishment: net::ERR_CONNECTION_REFUSED @ http://127.0.0.1:5173/src/lib/ws.ts:14
+[21710949ms] [ERROR] Failed to load resource: the server responded with a status of 500 (Internal Server Error) @ http://127.0.0.1:5173/sessions/fsE4Pq9fJqMR4dxgp4PiZ/worktree:0
+[21724901ms] [ERROR] WebSocket connection to 'ws://localhost:3000/?token=eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ1c2VySWQiOiJLcWdnODctMHZ1OVRqMUpibl9lN20iLCJpYXQiOjE3ODI3NDYyMzEsImV4cCI6MTc4NTMzODIzMX0.TolwcIFdAPY_I-LHy5CC3f1i7ftzRizX4hoAB-ht9MQ' failed: Error in connection establishment: net::ERR_CONNECTION_REFUSED @ http://127.0.0.1:5173/src/lib/ws.ts:14
+[21729685ms] [ERROR] WebSocket connection to 'ws://localhost:3000/?token=eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ1c2VySWQiOiJLcWdnODctMHZ1OVRqMUpibl9lN20iLCJpYXQiOjE3ODI3NDYyMzEsImV4cCI6MTc4NTMzODIzMX0.TolwcIFdAPY_I-LHy5CC3f1i7ftzRizX4hoAB-ht9MQ' failed: Error in connection establishment: net::ERR_CONNECTION_REFUSED @ http://127.0.0.1:5173/src/lib/ws.ts:14
+[21730953ms] [ERROR] Failed to load resource: the server responded with a status of 500 (Internal Server Error) @ http://127.0.0.1:5173/sessions/fsE4Pq9fJqMR4dxgp4PiZ/worktree:0
+[21731960ms] [ERROR] Failed to load resource: the server responded with a status of 500 (Internal Server Error) @ http://127.0.0.1:5173/sessions/fsE4Pq9fJqMR4dxgp4PiZ/worktree:0
+[21740699ms] [ERROR] WebSocket connection to 'ws://localhost:3000/?token=eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ1c2VySWQiOiJLcWdnODctMHZ1OVRqMUpibl9lN20iLCJpYXQiOjE3ODI3NDYyMzEsImV4cCI6MTc4NTMzODIzMX0.TolwcIFdAPY_I-LHy5CC3f1i7ftzRizX4hoAB-ht9MQ' failed: Error in connection establishment: net::ERR_CONNECTION_REFUSED @ http://127.0.0.1:5173/src/lib/ws.ts:14
+[21746433ms] [ERROR] Failed to load resource: the server responded with a status of 500 (Internal Server Error) @ http://127.0.0.1:5173/src/pages/TriggersPage.tsx?t=1782767985793:0
+[21746434ms] [ERROR] [vite] Failed to reload /src/pages/TriggersPage.tsx. This could be due to syntax errors or importing non-existent modules. (see errors above) @ http://127.0.0.1:5173/@vite/client:881
+[21746587ms] [ERROR] Failed to load resource: the server responded with a status of 500 (Internal Server Error) @ http://127.0.0.1:5173/auth/me:0
+[21746587ms] [ERROR] Failed to load resource: the server responded with a status of 500 (Internal Server Error) @ http://127.0.0.1:5173/sessions/fsE4Pq9fJqMR4dxgp4PiZ/messages:0
+[21746587ms] [ERROR] Failed to load resource: the server responded with a status of 500 (Internal Server Error) @ http://127.0.0.1:5173/sessions/fsE4Pq9fJqMR4dxgp4PiZ/status:0
+[21746587ms] [ERROR] Failed to load resource: the server responded with a status of 500 (Internal Server Error) @ http://127.0.0.1:5173/sessions/fsE4Pq9fJqMR4dxgp4PiZ/events:0
+[21746587ms] [ERROR] Failed to load resource: the server responded with a status of 500 (Internal Server Error) @ http://127.0.0.1:5173/sessions:0
+[21746587ms] [ERROR] Failed to load resource: the server responded with a status of 500 (Internal Server Error) @ http://127.0.0.1:5173/projects:0
+[21746588ms] [ERROR] Failed to load resource: the server responded with a status of 500 (Internal Server Error) @ http://127.0.0.1:5173/sessions/fsE4Pq9fJqMR4dxgp4PiZ/usage-risk:0
+[21746588ms] [ERROR] Failed to load resource: the server responded with a status of 500 (Internal Server Error) @ http://127.0.0.1:5173/sessions/fsE4Pq9fJqMR4dxgp4PiZ/worktree:0
+[21746588ms] [ERROR] Failed to load resource: the server responded with a status of 500 (Internal Server Error) @ http://127.0.0.1:5173/agent-providers:0
+[21746588ms] [ERROR] Failed to load resource: the server responded with a status of 500 (Internal Server Error) @ http://127.0.0.1:5173/executions/pending-approvals:0
+[21746588ms] [ERROR] WebSocket connection to 'ws://localhost:3000/?token=eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ1c2VySWQiOiJLcWdnODctMHZ1OVRqMUpibl9lN20iLCJpYXQiOjE3ODI3NDYyMzEsImV4cCI6MTc4NTMzODIzMX0.TolwcIFdAPY_I-LHy5CC3f1i7ftzRizX4hoAB-ht9MQ' failed: Error in connection establishment: net::ERR_CONNECTION_REFUSED @ http://127.0.0.1:5173/src/lib/ws.ts:14
+[21747594ms] [ERROR] Failed to load resource: the server responded with a status of 500 (Internal Server Error) @ http://127.0.0.1:5173/auth/me:0
+[21747595ms] [ERROR] Failed to load resource: the server responded with a status of 500 (Internal Server Error) @ http://127.0.0.1:5173/sessions/fsE4Pq9fJqMR4dxgp4PiZ/messages:0
+[21747595ms] [ERROR] Failed to load resource: the server responded with a status of 500 (Internal Server Error) @ http://127.0.0.1:5173/sessions/fsE4Pq9fJqMR4dxgp4PiZ/status:0
+[21747596ms] [ERROR] Failed to load resource: the server responded with a status of 500 (Internal Server Error) @ http://127.0.0.1:5173/sessions/fsE4Pq9fJqMR4dxgp4PiZ/events:0
+[21747596ms] [ERROR] Failed to load resource: the server responded with a status of 500 (Internal Server Error) @ http://127.0.0.1:5173/sessions:0
+[21747597ms] [ERROR] Failed to load resource: the server responded with a status of 500 (Internal Server Error) @ http://127.0.0.1:5173/projects:0
+[21747598ms] [ERROR] Failed to load resource: the server responded with a status of 500 (Internal Server Error) @ http://127.0.0.1:5173/sessions/fsE4Pq9fJqMR4dxgp4PiZ/usage-risk:0
+[21747598ms] [ERROR] Failed to load resource: the server responded with a status of 500 (Internal Server Error) @ http://127.0.0.1:5173/sessions/fsE4Pq9fJqMR4dxgp4PiZ/worktree:0
+[21747598ms] [ERROR] Failed to load resource: the server responded with a status of 500 (Internal Server Error) @ http://127.0.0.1:5173/agent-providers:0
+[21753808ms] [ERROR] Failed to load resource: the server responded with a status of 500 (Internal Server Error) @ http://127.0.0.1:5173/auth/me:0
+[21753808ms] [ERROR] Failed to load resource: the server responded with a status of 500 (Internal Server Error) @ http://127.0.0.1:5173/sessions/fsE4Pq9fJqMR4dxgp4PiZ/messages:0
+[21753808ms] [ERROR] Failed to load resource: the server responded with a status of 500 (Internal Server Error) @ http://127.0.0.1:5173/sessions/fsE4Pq9fJqMR4dxgp4PiZ/status:0
+[21753809ms] [ERROR] Failed to load resource: the server responded with a status of 500 (Internal Server Error) @ http://127.0.0.1:5173/sessions/fsE4Pq9fJqMR4dxgp4PiZ/events:0
+[21753809ms] [ERROR] Failed to load resource: the server responded with a status of 500 (Internal Server Error) @ http://127.0.0.1:5173/sessions:0
+[21753809ms] [ERROR] Failed to load resource: the server responded with a status of 500 (Internal Server Error) @ http://127.0.0.1:5173/projects:0
+[21753809ms] [ERROR] Failed to load resource: the server responded with a status of 500 (Internal Server Error) @ http://127.0.0.1:5173/sessions/fsE4Pq9fJqMR4dxgp4PiZ/usage-risk:0
+[21753809ms] [ERROR] Failed to load resource: the server responded with a status of 500 (Internal Server Error) @ http://127.0.0.1:5173/sessions/fsE4Pq9fJqMR4dxgp4PiZ/worktree:0
+[21753809ms] [ERROR] Failed to load resource: the server responded with a status of 500 (Internal Server Error) @ http://127.0.0.1:5173/executions/pending-approvals:0
+[21753809ms] [ERROR] Failed to load resource: the server responded with a status of 500 (Internal Server Error) @ http://127.0.0.1:5173/agent-providers:0
+[21753809ms] [ERROR] WebSocket connection to 'ws://localhost:3000/?token=eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ1c2VySWQiOiJLcWdnODctMHZ1OVRqMUpibl9lN20iLCJpYXQiOjE3ODI3NDYyMzEsImV4cCI6MTc4NTMzODIzMX0.TolwcIFdAPY_I-LHy5CC3f1i7ftzRizX4hoAB-ht9MQ' failed: Error in connection establishment: net::ERR_CONNECTION_REFUSED @ http://127.0.0.1:5173/src/lib/ws.ts:14
+[21754812ms] [ERROR] Failed to load resource: the server responded with a status of 500 (Internal Server Error) @ http://127.0.0.1:5173/auth/me:0
+[21754813ms] [ERROR] Failed to load resource: the server responded with a status of 500 (Internal Server Error) @ http://127.0.0.1:5173/sessions/fsE4Pq9fJqMR4dxgp4PiZ/messages:0
+[21754814ms] [ERROR] Failed to load resource: the server responded with a status of 500 (Internal Server Error) @ http://127.0.0.1:5173/sessions/fsE4Pq9fJqMR4dxgp4PiZ/status:0
+[21754814ms] [ERROR] Failed to load resource: the server responded with a status of 500 (Internal Server Error) @ http://127.0.0.1:5173/sessions/fsE4Pq9fJqMR4dxgp4PiZ/events:0
+[21754814ms] [ERROR] Failed to load resource: the server responded with a status of 500 (Internal Server Error) @ http://127.0.0.1:5173/sessions:0
+[21754814ms] [ERROR] Failed to load resource: the server responded with a status of 500 (Internal Server Error) @ http://127.0.0.1:5173/projects:0
+[21754814ms] [ERROR] Failed to load resource: the server responded with a status of 500 (Internal Server Error) @ http://127.0.0.1:5173/sessions/fsE4Pq9fJqMR4dxgp4PiZ/worktree:0
+[21754815ms] [ERROR] Failed to load resource: the server responded with a status of 500 (Internal Server Error) @ http://127.0.0.1:5173/sessions/fsE4Pq9fJqMR4dxgp4PiZ/usage-risk:0
+[21754815ms] [ERROR] Failed to load resource: the server responded with a status of 500 (Internal Server Error) @ http://127.0.0.1:5173/agent-providers:0
+[21754907ms] [ERROR] WebSocket connection to 'ws://localhost:3000/?token=eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ1c2VySWQiOiJLcWdnODctMHZ1OVRqMUpibl9lN20iLCJpYXQiOjE3ODI3NDYyMzEsImV4cCI6MTc4NTMzODIzMX0.TolwcIFdAPY_I-LHy5CC3f1i7ftzRizX4hoAB-ht9MQ' failed: Error in connection establishment: net::ERR_CONNECTION_REFUSED @ http://127.0.0.1:5173/src/lib/ws.ts:14
+[21759692ms] [ERROR] WebSocket connection to 'ws://localhost:3000/?token=eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ1c2VySWQiOiJLcWdnODctMHZ1OVRqMUpibl9lN20iLCJpYXQiOjE3ODI3NDYyMzEsImV4cCI6MTc4NTMzODIzMX0.TolwcIFdAPY_I-LHy5CC3f1i7ftzRizX4hoAB-ht9MQ' failed: Error in connection establishment: net::ERR_CONNECTION_REFUSED @ http://127.0.0.1:5173/src/lib/ws.ts:14
+[21763826ms] [ERROR] Failed to load resource: the server responded with a status of 500 (Internal Server Error) @ http://127.0.0.1:5173/auth/me:0
+[21763827ms] [ERROR] Failed to load resource: the server responded with a status of 500 (Internal Server Error) @ http://127.0.0.1:5173/sessions/fsE4Pq9fJqMR4dxgp4PiZ/messages:0
+[21763827ms] [ERROR] Failed to load resource: the server responded with a status of 500 (Internal Server Error) @ http://127.0.0.1:5173/sessions/fsE4Pq9fJqMR4dxgp4PiZ/status:0
+[21763827ms] [ERROR] Failed to load resource: the server responded with a status of 500 (Internal Server Error) @ http://127.0.0.1:5173/sessions/fsE4Pq9fJqMR4dxgp4PiZ/events:0
+[21763827ms] [ERROR] Failed to load resource: the server responded with a status of 500 (Internal Server Error) @ http://127.0.0.1:5173/sessions:0
+[21763827ms] [ERROR] Failed to load resource: the server responded with a status of 500 (Internal Server Error) @ http://127.0.0.1:5173/sessions/fsE4Pq9fJqMR4dxgp4PiZ/usage-risk:0
+[21763827ms] [ERROR] Failed to load resource: the server responded with a status of 500 (Internal Server Error) @ http://127.0.0.1:5173/projects:0
+[21763827ms] [ERROR] Failed to load resource: the server responded with a status of 500 (Internal Server Error) @ http://127.0.0.1:5173/sessions/fsE4Pq9fJqMR4dxgp4PiZ/worktree:0
+[21763827ms] [ERROR] Failed to load resource: the server responded with a status of 500 (Internal Server Error) @ http://127.0.0.1:5173/executions/pending-approvals:0
+[21763828ms] [ERROR] Failed to load resource: the server responded with a status of 500 (Internal Server Error) @ http://127.0.0.1:5173/agent-providers:0
+[21763828ms] [ERROR] WebSocket connection to 'ws://localhost:3000/?token=eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ1c2VySWQiOiJLcWdnODctMHZ1OVRqMUpibl9lN20iLCJpYXQiOjE3ODI3NDYyMzEsImV4cCI6MTc4NTMzODIzMX0.TolwcIFdAPY_I-LHy5CC3f1i7ftzRizX4hoAB-ht9MQ' failed: Error in connection establishment: net::ERR_CONNECTION_REFUSED @ http://127.0.0.1:5173/src/lib/ws.ts:14
+[21764833ms] [ERROR] Failed to load resource: the server responded with a status of 500 (Internal Server Error) @ http://127.0.0.1:5173/auth/me:0
+[21764834ms] [ERROR] Failed to load resource: the server responded with a status of 500 (Internal Server Error) @ http://127.0.0.1:5173/sessions/fsE4Pq9fJqMR4dxgp4PiZ/messages:0
+[21764834ms] [ERROR] Failed to load resource: the server responded with a status of 500 (Internal Server Error) @ http://127.0.0.1:5173/sessions/fsE4Pq9fJqMR4dxgp4PiZ/status:0
+[21764835ms] [ERROR] Failed to load resource: the server responded with a status of 500 (Internal Server Error) @ http://127.0.0.1:5173/sessions/fsE4Pq9fJqMR4dxgp4PiZ/events:0
+[21764835ms] [ERROR] Failed to load resource: the server responded with a status of 500 (Internal Server Error) @ http://127.0.0.1:5173/sessions:0
+[21764836ms] [ERROR] Failed to load resource: the server responded with a status of 500 (Internal Server Error) @ http://127.0.0.1:5173/sessions/fsE4Pq9fJqMR4dxgp4PiZ/usage-risk:0
+[21764836ms] [ERROR] Failed to load resource: the server responded with a status of 500 (Internal Server Error) @ http://127.0.0.1:5173/projects:0
+[21764836ms] [ERROR] Failed to load resource: the server responded with a status of 500 (Internal Server Error) @ http://127.0.0.1:5173/sessions/fsE4Pq9fJqMR4dxgp4PiZ/worktree:0
+[21764837ms] [ERROR] Failed to load resource: the server responded with a status of 500 (Internal Server Error) @ http://127.0.0.1:5173/agent-providers:0
+[21770718ms] [ERROR] WebSocket connection to 'ws://localhost:3000/?token=eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ1c2VySWQiOiJLcWdnODctMHZ1OVRqMUpibl9lN20iLCJpYXQiOjE3ODI3NDYyMzEsImV4cCI6MTc4NTMzODIzMX0.TolwcIFdAPY_I-LHy5CC3f1i7ftzRizX4hoAB-ht9MQ' failed: Error in connection establishment: net::ERR_CONNECTION_REFUSED @ http://127.0.0.1:5173/src/lib/ws.ts:14
+[21775772ms] [ERROR] Failed to load resource: the server responded with a status of 500 (Internal Server Error) @ http://127.0.0.1:5173/agent-providers:0
+[21775786ms] [ERROR] WebSocket connection to 'ws://localhost:3000/?token=eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ1c2VySWQiOiJLcWdnODctMHZ1OVRqMUpibl9lN20iLCJpYXQiOjE3ODI3NDYyMzEsImV4cCI6MTc4NTMzODIzMX0.TolwcIFdAPY_I-LHy5CC3f1i7ftzRizX4hoAB-ht9MQ' failed: Error in connection establishment: net::ERR_CONNECTION_REFUSED @ http://127.0.0.1:5173/src/lib/ws.ts:14
+[21776675ms] [ERROR] WebSocket connection to 'ws://localhost:3000/?token=eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ1c2VySWQiOiJLcWdnODctMHZ1OVRqMUpibl9lN20iLCJpYXQiOjE3ODI3NDYyMzEsImV4cCI6MTc4NTMzODIzMX0.TolwcIFdAPY_I-LHy5CC3f1i7ftzRizX4hoAB-ht9MQ' failed: Error in connection establishment: net::ERR_CONNECTION_REFUSED @ http://127.0.0.1:5173/src/lib/ws.ts:14
+[21776777ms] [ERROR] Failed to load resource: the server responded with a status of 500 (Internal Server Error) @ http://127.0.0.1:5173/agent-providers:0
+[21783976ms] [ERROR] WebSocket connection to 'ws://localhost:3000/?token=eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ1c2VySWQiOiJLcWdnODctMHZ1OVRqMUpibl9lN20iLCJpYXQiOjE3ODI3NDYyMzEsImV4cCI6MTc4NTMzODIzMX0.TolwcIFdAPY_I-LHy5CC3f1i7ftzRizX4hoAB-ht9MQ' failed: Error in connection establishment: net::ERR_CONNECTION_REFUSED @ http://127.0.0.1:5173/src/lib/ws.ts:14
+[21784845ms] [ERROR] Failed to load resource: the server responded with a status of 500 (Internal Server Error) @ http://127.0.0.1:5173/sessions/fsE4Pq9fJqMR4dxgp4PiZ/worktree:0
+[21785083ms] [ERROR] WebSocket connection to 'ws://localhost:3000/?token=eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ1c2VySWQiOiJLcWdnODctMHZ1OVRqMUpibl9lN20iLCJpYXQiOjE3ODI3NDYyMzEsImV4cCI6MTc4NTMzODIzMX0.TolwcIFdAPY_I-LHy5CC3f1i7ftzRizX4hoAB-ht9MQ' failed: Error in connection establishment: net::ERR_CONNECTION_REFUSED @ http://127.0.0.1:5173/src/lib/ws.ts:14
+[21785854ms] [ERROR] Failed to load resource: the server responded with a status of 500 (Internal Server Error) @ http://127.0.0.1:5173/sessions/fsE4Pq9fJqMR4dxgp4PiZ/worktree:0
+[21789828ms] [ERROR] WebSocket connection to 'ws://localhost:3000/?token=eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ1c2VySWQiOiJLcWdnODctMHZ1OVRqMUpibl9lN20iLCJpYXQiOjE3ODI3NDYyMzEsImV4cCI6MTc4NTMzODIzMX0.TolwcIFdAPY_I-LHy5CC3f1i7ftzRizX4hoAB-ht9MQ' failed: Error in connection establishment: net::ERR_CONNECTION_REFUSED @ http://127.0.0.1:5173/src/lib/ws.ts:14
+[21794526ms] [ERROR] WebSocket connection to 'ws://localhost:3000/?token=eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ1c2VySWQiOiJLcWdnODctMHZ1OVRqMUpibl9lN20iLCJpYXQiOjE3ODI3NDYyMzEsImV4cCI6MTc4NTMzODIzMX0.TolwcIFdAPY_I-LHy5CC3f1i7ftzRizX4hoAB-ht9MQ' failed: Error in connection establishment: net::ERR_CONNECTION_REFUSED @ http://127.0.0.1:5173/src/lib/ws.ts:14
+[21865965ms] [ERROR] Failed to load resource: the server responded with a status of 500 (Internal Server Error) @ http://127.0.0.1:5173/sessions/fsE4Pq9fJqMR4dxgp4PiZ/worktree:0
+[21895610ms] [INFO] %cDownload the React DevTools for a better development experience: https://react.dev/link/react-devtools font-weight:bold @ http://127.0.0.1:5173/node_modules/.vite/deps/react-dom_client.js?v=a1b313eb:20102
+[21895683ms] [WARNING] ⚠️ React Router Future Flag Warning: React Router will begin wrapping state updates in `React.startTransition` in v7. You can use the `v7_startTransition` future flag to opt-in early. For more information, see https://reactrouter.com/v6/upgrading/future#v7_starttransition. @ http://127.0.0.1:5173/node_modules/.vite/deps/react-router-dom.js?v=a1b313eb:4426
+[21895685ms] [WARNING] WebSocket connection to 'ws://localhost:3000/?token=eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ1c2VySWQiOiJLcWdnODctMHZ1OVRqMUpibl9lN20iLCJpYXQiOjE3ODI3NDYyMzEsImV4cCI6MTc4NTMzODIzMX0.TolwcIFdAPY_I-LHy5CC3f1i7ftzRizX4hoAB-ht9MQ' failed: WebSocket is closed before the connection is established. @ http://127.0.0.1:5173/src/lib/ws.ts:40
+[21895717ms] [WARNING] WebSocket connection to 'ws://localhost:3000/?token=eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ1c2VySWQiOiJLcWdnODctMHZ1OVRqMUpibl9lN20iLCJpYXQiOjE3ODI3NDYyMzEsImV4cCI6MTc4NTMzODIzMX0.TolwcIFdAPY_I-LHy5CC3f1i7ftzRizX4hoAB-ht9MQ' failed: WebSocket is closed before the connection is established. @ http://127.0.0.1:5173/src/lib/ws.ts:36
+[21895718ms] [ERROR] Failed to load resource: the server responded with a status of 500 (Internal Server Error) @ http://127.0.0.1:5173/sessions/fsE4Pq9fJqMR4dxgp4PiZ/messages:0
+[21896754ms] [ERROR] Failed to load resource: the server responded with a status of 500 (Internal Server Error) @ http://127.0.0.1:5173/sessions/fsE4Pq9fJqMR4dxgp4PiZ/messages:0
+[21901637ms] [INFO] %cDownload the React DevTools for a better development experience: https://react.dev/link/react-devtools font-weight:bold @ http://127.0.0.1:5173/node_modules/.vite/deps/react-dom_client.js?v=a1b313eb:20102
+[21901675ms] [WARNING] ⚠️ React Router Future Flag Warning: React Router will begin wrapping state updates in `React.startTransition` in v7. You can use the `v7_startTransition` future flag to opt-in early. For more information, see https://reactrouter.com/v6/upgrading/future#v7_starttransition. @ http://127.0.0.1:5173/node_modules/.vite/deps/react-router-dom.js?v=a1b313eb:4426
+[21901676ms] [WARNING] WebSocket connection to 'ws://localhost:3000/?token=eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ1c2VySWQiOiJLcWdnODctMHZ1OVRqMUpibl9lN20iLCJpYXQiOjE3ODI3NDYyMzEsImV4cCI6MTc4NTMzODIzMX0.TolwcIFdAPY_I-LHy5CC3f1i7ftzRizX4hoAB-ht9MQ' failed: WebSocket is closed before the connection is established. @ http://127.0.0.1:5173/src/lib/ws.ts:40
+[21901688ms] [WARNING] WebSocket connection to 'ws://localhost:3000/?token=eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ1c2VySWQiOiJLcWdnODctMHZ1OVRqMUpibl9lN20iLCJpYXQiOjE3ODI3NDYyMzEsImV4cCI6MTc4NTMzODIzMX0.TolwcIFdAPY_I-LHy5CC3f1i7ftzRizX4hoAB-ht9MQ' failed: WebSocket is closed before the connection is established. @ http://127.0.0.1:5173/src/lib/ws.ts:36
+[21901688ms] [ERROR] Failed to load resource: the server responded with a status of 500 (Internal Server Error) @ http://127.0.0.1:5173/sessions/fsE4Pq9fJqMR4dxgp4PiZ/messages:0
+[21902700ms] [ERROR] Failed to load resource: the server responded with a status of 500 (Internal Server Error) @ http://127.0.0.1:5173/sessions/fsE4Pq9fJqMR4dxgp4PiZ/messages:0
+[23185612ms] [LOG] [vite] server connection lost. Polling for restart... @ http://127.0.0.1:5173/@vite/client:963
+[23185615ms] [ERROR] WebSocket connection to 'ws://127.0.0.1:5173/' failed: Error in connection establishment: net::ERR_CONNECTION_REFUSED @ http://127.0.0.1:5173/@vite/client:1034
+[23187504ms] [INFO] %cDownload the React DevTools for a better development experience: https://react.dev/link/react-devtools font-weight:bold @ http://127.0.0.1:5173/node_modules/.vite/deps/react-dom_client.js?v=a1b313eb:20102
+[23187557ms] [WARNING] ⚠️ React Router Future Flag Warning: React Router will begin wrapping state updates in `React.startTransition` in v7. You can use the `v7_startTransition` future flag to opt-in early. For more information, see https://reactrouter.com/v6/upgrading/future#v7_starttransition. @ http://127.0.0.1:5173/node_modules/.vite/deps/react-router-dom.js?v=a1b313eb:4426
+[23187558ms] [WARNING] WebSocket connection to 'ws://localhost:3000/?token=eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ1c2VySWQiOiJLcWdnODctMHZ1OVRqMUpibl9lN20iLCJpYXQiOjE3ODI3NDYyMzEsImV4cCI6MTc4NTMzODIzMX0.TolwcIFdAPY_I-LHy5CC3f1i7ftzRizX4hoAB-ht9MQ' failed: WebSocket is closed before the connection is established. @ http://127.0.0.1:5173/src/lib/ws.ts:40
+[23187571ms] [WARNING] WebSocket connection to 'ws://localhost:3000/?token=eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ1c2VySWQiOiJLcWdnODctMHZ1OVRqMUpibl9lN20iLCJpYXQiOjE3ODI3NDYyMzEsImV4cCI6MTc4NTMzODIzMX0.TolwcIFdAPY_I-LHy5CC3f1i7ftzRizX4hoAB-ht9MQ' failed: WebSocket is closed before the connection is established. @ http://127.0.0.1:5173/src/lib/ws.ts:36
+[23187573ms] [ERROR] Failed to load resource: the server responded with a status of 500 (Internal Server Error) @ http://127.0.0.1:5173/sessions/fsE4Pq9fJqMR4dxgp4PiZ/messages:0
+[23188587ms] [ERROR] Failed to load resource: the server responded with a status of 500 (Internal Server Error) @ http://127.0.0.1:5173/sessions/fsE4Pq9fJqMR4dxgp4PiZ/messages:0

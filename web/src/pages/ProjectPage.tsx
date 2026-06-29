@@ -6,7 +6,7 @@ import { ArrowRight, FileText, GitBranch, MessageSquare, MoreHorizontal, Pencil,
 import {
   getProject, updateProject, deleteTopLevelProject,
   getConnections, getChats, deleteChat, createChat, updateChatConfig,
-  getDocuments, updateDocumentById, deleteDocumentById,
+  getProjectFiles, updateFileById, deleteFileById,
 } from '../lib/api.js';
 import { usePageTitle } from '../lib/usePageTitle.js';
 import { timeAgo } from '../lib/utils.js';
@@ -18,7 +18,7 @@ import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSepara
 import { DataTable, DataTableBody, DataTableHeader, DataTableRow } from '@/components/ui/data-table';
 import FileBrowser from '../components/FileBrowser.js';
 import TriggersSection from '../components/TriggersSection.js';
-import type { Connection, Document, Project, Session } from '../types.js';
+import type { Connection, LibraryFile, Project, Session } from '../types.js';
 
 type SubRoute = 'overview' | 'files' | 'chats' | 'documents';
 
@@ -246,25 +246,25 @@ function ProjectDocumentsView({ project }: { project: Project }) {
   const [renaming, setRenaming] = useState<{ id: string; value: string } | null>(null);
   const renameInputRef = useRef<HTMLInputElement>(null);
 
-  const { data: documents = [], isLoading } = useQuery<Document[]>({
-    queryKey: ['documents', project.id],
-    queryFn: () => getDocuments(project.id),
+  const { data: documents = [], isLoading } = useQuery<LibraryFile[]>({
+    queryKey: ['files', project.id],
+    queryFn: () => getProjectFiles(project.id),
     staleTime: 30_000,
   });
 
   const renameMutation = useMutation({
-    mutationFn: ({ id, title }: { id: string; title: string }) => updateDocumentById(id, { title }),
+    mutationFn: ({ id, title }: { id: string; title: string }) => updateFileById(id, { title }),
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['documents', project.id] });
+      queryClient.invalidateQueries({ queryKey: ['files', project.id] });
       queryClient.invalidateQueries({ queryKey: ['documents-global'] });
       setRenaming(null);
     },
   });
 
   const deleteMutation = useMutation({
-    mutationFn: (id: string) => deleteDocumentById(id),
+    mutationFn: (id: string) => deleteFileById(id),
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['documents', project.id] });
+      queryClient.invalidateQueries({ queryKey: ['files', project.id] });
       queryClient.invalidateQueries({ queryKey: ['documents-global'] });
       setPendingDelete(null);
     },
@@ -322,7 +322,7 @@ function ProjectDocumentsView({ project }: { project: Project }) {
                         />
                       ) : (
                         <Link
-                          to={`/documents/${doc.id}`}
+                          to={`/library/${doc.id}`}
                           className="block truncate text-sm font-medium text-foreground underline-offset-2 hover:underline"
                         >
                           {doc.title}
@@ -385,9 +385,9 @@ function ProjectOverview({ project, navigate }: { project: Project; navigate: Re
   const { data: allChats = [] } = useQuery<Session[]>({ queryKey: ['chats'], queryFn: () => getChats() });
   const recentChats = allChats.filter((c: Session) => c.pinned_project_id === project.id).slice(0, 4);
 
-  const { data: documents = [] } = useQuery<Document[]>({
-    queryKey: ['documents', project.id],
-    queryFn: () => getDocuments(project.id),
+  const { data: documents = [] } = useQuery<LibraryFile[]>({
+    queryKey: ['files', project.id],
+    queryFn: () => getProjectFiles(project.id),
     staleTime: 30_000,
   });
   const recentDocs = [...documents].sort((a, b) => b.updated_at - a.updated_at).slice(0, 4);
@@ -589,7 +589,7 @@ function RecentChatsCard({
   );
 }
 
-function RecentDocsCard({ docs }: { docs: Document[] }) {
+function RecentDocsCard({ docs }: { docs: LibraryFile[] }) {
   if (docs.length === 0) return null;
   return (
     <section className="rounded-lg border border-border-soft bg-card">
@@ -601,7 +601,7 @@ function RecentDocsCard({ docs }: { docs: Document[] }) {
         {docs.map(doc => (
           <li key={doc.id}>
             <Link
-              to={`/documents/${doc.id}`}
+              to={`/library/${doc.id}`}
               className="flex min-w-0 items-center gap-3 px-4 py-2.5 transition-colors hover:bg-muted/40"
             >
               <span className="min-w-0 flex-1 truncate text-sm text-foreground">{doc.title}</span>

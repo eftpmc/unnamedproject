@@ -74,27 +74,23 @@ describe('MessageList', () => {
     expect(innerConstraint).toBeNull();
   });
 
-  it('renders user attachments as download controls', () => {
+  it('renders uploaded documents as library links', () => {
     const messages: Message[] = [
       {
         id: 'user-1',
         role: 'user',
         content: 'See attached',
         created_at: 1,
-        attachments: [{
-          id: 'att-1',
-          filename: 'notes.md',
+        uploads: [{
+          id: 'doc-1',
+          title: 'notes',
           mimeType: 'text/markdown',
-          sizeBytes: 2048,
-          url: '/sessions/sess-1/messages/user-1/attachments/att-1',
-          createdAt: 1,
         }],
       },
     ];
 
     render(<MessageList messages={messages} executions={{}} />);
 
-    expect(screen.getByRole('button', { name: /notes\.md/i })).toHaveAttribute('title', 'Download notes.md');
-    expect(screen.getByText('2 KB')).toBeInTheDocument();
+    expect(screen.getByTitle('Open notes in library')).toBeInTheDocument();
   });
 });

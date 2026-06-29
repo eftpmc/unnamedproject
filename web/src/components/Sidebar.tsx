@@ -9,7 +9,6 @@ import {
   FolderGit2,
   FolderOpen,
   Globe,
-  Image,
   LayoutDashboard,
   Layers,
   MessageSquare,
@@ -104,19 +103,7 @@ function GlobalNav({ expanded, pathname, onNavigate }: { expanded: boolean; path
       <NavItem icon={<MessageSquare size={16} strokeWidth={1.75} />} label="Chats" href="/chats" active={pathname.startsWith('/chats') || pathname.startsWith('/c')} expanded={expanded} onNavigate={onNavigate} />
       <NavItem icon={<FolderGit2 size={16} strokeWidth={1.75} />} label="Projects" href="/projects" active={pathname === '/projects'} expanded={expanded} onNavigate={onNavigate} />
 
-      <NavGroup
-        icon={<Layers size={16} strokeWidth={1.75} />}
-        label="Library"
-        expanded={expanded}
-        active={pathname.startsWith('/documents') || pathname.startsWith('/media')}
-        fallbackHref="/documents"
-        storageKey="sidebar:library"
-        defaultOpen
-        onNavigate={onNavigate}
-      >
-        <NavSubItem label="Documents" href="/documents" active={pathname.startsWith('/documents')} icon={<FileText size={13} strokeWidth={1.75} />} onNavigate={onNavigate} />
-        <NavSubItem label="Media" href="/media" active={pathname.startsWith('/media')} icon={<Image size={13} strokeWidth={1.75} />} onNavigate={onNavigate} />
-      </NavGroup>
+      <NavItem icon={<Layers size={16} strokeWidth={1.75} />} label="Library" href="/library" active={pathname.startsWith('/library')} expanded={expanded} onNavigate={onNavigate} />
 
       <NavItem icon={<Zap size={16} strokeWidth={1.75} />} label="Triggers" href="/triggers" active={pathname.startsWith('/triggers')} expanded={expanded} onNavigate={onNavigate} />
 

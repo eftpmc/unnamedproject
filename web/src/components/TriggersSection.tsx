@@ -10,7 +10,7 @@ import type { Trigger } from '../types.js';
 
 function WebhookUrl({ triggerId }: { triggerId: string }) {
   const [copied, setCopied] = useState(false);
-  const url = `${window.location.protocol}//${window.location.hostname}:3000/webhooks/trigger/${triggerId}`;
+  const url = `${window.location.origin}/webhooks/trigger/${triggerId}`;
 
   function copy() {
     navigator.clipboard.writeText(url).then(() => {

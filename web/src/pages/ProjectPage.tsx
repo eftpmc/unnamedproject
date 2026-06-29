@@ -2,7 +2,7 @@ import type React from 'react';
 import { useEffect, useRef, useState } from 'react';
 import { Link, useNavigate, useParams, useLocation } from 'react-router-dom';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { ArrowRight, FileText, GitBranch, MessageSquare, MoreHorizontal, Pencil, Plus, Trash2 } from 'lucide-react';
+import { ArrowRight, FileText, GitBranch, MessageSquare, MoreHorizontal, Pencil, Plus, Trash2, Zap } from 'lucide-react';
 import {
   getProject, updateProject, deleteTopLevelProject,
   getConnections, updateSpace, getSpaces, getChats, deleteChat, createChat, updateChatConfig,
@@ -17,6 +17,7 @@ import { PageBody, PageHeader, PageLoading, PageShell } from '@/components/ui/ap
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
 import { DataTable, DataTableBody, DataTableHeader, DataTableRow } from '@/components/ui/data-table';
 import FileBrowser from '../components/FileBrowser.js';
+import TriggersSection from '../components/TriggersSection.js';
 import type { Connection, Document, Project, Session, Space } from '../types.js';
 
 type SubRoute = 'overview' | 'files' | 'chats' | 'documents';
@@ -472,6 +473,7 @@ function ProjectOverview({ project, navigate }: { project: Project; navigate: Re
               onOpen={id => navigate(`/c/${id}`)}
             />
             <RecentDocsCard docs={recentDocs} />
+            <ProjectTriggerCard spaceId={project.space_id} />
           </div>
 
           <aside className="min-w-0 space-y-5 pt-1">
@@ -830,6 +832,20 @@ function RightRailSection({ title, children }: { title: React.ReactNode; childre
     <section className="border-t border-border-soft pt-4 first:border-t-0 first:pt-0">
       <h2 className="mb-2.5 text-sm font-medium text-foreground">{title}</h2>
       {children}
+    </section>
+  );
+}
+
+function ProjectTriggerCard({ spaceId }: { spaceId: string }) {
+  return (
+    <section className="rounded-lg border border-border-soft bg-card">
+      <div className="flex min-h-12 items-center gap-2 border-b border-border-soft px-4 py-2.5">
+        <Zap size={14} className="shrink-0 text-muted-foreground" strokeWidth={1.75} />
+        <h2 className="text-sm font-medium text-foreground">Triggers</h2>
+      </div>
+      <div className="p-4">
+        <TriggersSection spaceId={spaceId} />
+      </div>
     </section>
   );
 }

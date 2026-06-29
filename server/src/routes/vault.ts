@@ -60,7 +60,7 @@ router.post('/import', (req, res) => {
 });
 
 router.delete('/:key', (req, res) => {
-  const { userId } = req as AuthedRequest;
+  const { userId } = req as unknown as AuthedRequest;
   const { key } = req.params;
   const result = getDb()
     .prepare('DELETE FROM vault_entries WHERE user_id = ? AND key = ?')

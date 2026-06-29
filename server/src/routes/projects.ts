@@ -6,6 +6,7 @@ import { newId } from '../lib/ids.js';
 import { requireAuthHeaderOrQuery, type AuthedRequest } from '../middleware/auth.js';
 import { listProjectsForUser, getProjectForUser, createProject, linkProject, deleteProject } from '../services/projects.js';
 import { listDocuments } from '../services/documents.js';
+import { buildGraph } from '../services/graphify.js';
 
 const router = Router();
 router.use(requireAuthHeaderOrQuery);
@@ -54,7 +55,14 @@ router.post('/', async (req, res) => {
     throw err;
   }
 
-  res.status(201).json(getProjectForUser(project.id, userId));
+  const created = getProjectForUser(project.id, userId)!;
+  // Fire-and-forget — don't block the response
+  if (created.repo_path) {
+    buildGraph(created.repo_path, created.id).catch(err =>
+      console.error(`[projects] graph build failed for ${created.id}:`, err),
+    );
+  }
+  res.status(201).json(created);
 });
 
 router.get('/:id', (req, res) => {

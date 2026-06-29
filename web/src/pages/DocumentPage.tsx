@@ -3,7 +3,7 @@ import { Link, useNavigate, useParams } from 'react-router-dom';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
-import { ArrowLeft, Check, Pencil, Trash2, X } from 'lucide-react';
+import { ArrowLeft, Check, ChevronDown, ChevronRight, Pencil, Plus, Trash2, X } from 'lucide-react';
 import { getDocumentById, updateDocumentById, deleteDocumentById } from '../lib/api.js';
 import { ConfirmDialog } from '@/components/ui/confirm-dialog';
 import { usePageTitle } from '../lib/usePageTitle.js';
@@ -169,6 +169,10 @@ export default function DocumentPage() {
               <ReactMarkdown remarkPlugins={[remarkGfm]}>{document.body || '_No content yet._'}</ReactMarkdown>
             </div>
           )}
+          <FrontmatterPanel documentId={documentId!} frontmatter={document.frontmatter} onSaved={() => {
+            qc.invalidateQueries({ queryKey: ['document', documentId] });
+            qc.invalidateQueries({ queryKey: ['documents-global'] });
+          }} />
         </article>
       </PageBody>
 
@@ -182,5 +186,153 @@ export default function DocumentPage() {
         />
       )}
     </PageShell>
+  );
+}
+
+function FrontmatterPanel({ documentId, frontmatter, onSaved }: {
+  documentId: string;
+  frontmatter: Record<string, unknown>;
+  onSaved: () => void;
+}) {
+  const [open, setOpen] = useState(false);
+  const [editing, setEditing] = useState<string | null>(null);
+  const [draft, setDraft] = useState('');
+  const [newKey, setNewKey] = useState('');
+  const [newVal, setNewVal] = useState('');
+  const [addingNew, setAddingNew] = useState(false);
+
+  const patchMutation = useMutation({
+    mutationFn: (patch: Record<string, unknown>) => updateDocumentById(documentId, { frontmatter: patch }),
+    onSuccess: () => { setEditing(null); setAddingNew(false); setNewKey(''); setNewVal(''); onSaved(); },
+  });
+
+  const entries = Object.entries(frontmatter);
+
+  function startEdit(key: string) {
+    setEditing(key);
+    setDraft(String(frontmatter[key] ?? ''));
+  }
+
+  function commitEdit(key: string) {
+    const val = draft.trim();
+    if (val === String(frontmatter[key] ?? '')) { setEditing(null); return; }
+    patchMutation.mutate({ [key]: val });
+  }
+
+  function deleteKey(key: string) {
+    // Patch with undefined removes the key server-side via spread
+    const next = { ...frontmatter };
+    delete next[key];
+    updateDocumentById(documentId, { frontmatter: next }).then(onSaved);
+  }
+
+  function addField() {
+    const k = newKey.trim();
+    const v = newVal.trim();
+    if (!k) return;
+    patchMutation.mutate({ [k]: v });
+  }
+
+  return (
+    <div className="border-t border-border-soft">
+      <button
+        type="button"
+        onClick={() => setOpen(v => !v)}
+        className="flex w-full items-center gap-2 px-5 py-3 text-left text-xs font-medium text-muted-foreground transition-colors hover:text-foreground"
+      >
+        {open ? <ChevronDown size={13} /> : <ChevronRight size={13} />}
+        Frontmatter
+        {entries.length > 0 && (
+          <span className="ml-1 rounded-full bg-muted px-1.5 py-0.5 text-[10px] font-semibold tabular-nums">{entries.length}</span>
+        )}
+      </button>
+
+      {open && (
+        <div className="px-5 pb-4">
+          <table className="w-full text-xs">
+            <tbody>
+              {entries.map(([key, val]) => (
+                <tr key={key} className="group border-t border-border-soft/50 first:border-0">
+                  <td className="w-32 py-1.5 pr-3 font-mono text-muted-foreground">{key}</td>
+                  <td className="py-1.5">
+                    {editing === key ? (
+                      <input
+                        autoFocus
+                        value={draft}
+                        onChange={e => setDraft(e.target.value)}
+                        onBlur={() => commitEdit(key)}
+                        onKeyDown={e => {
+                          if (e.key === 'Enter') { e.preventDefault(); commitEdit(key); }
+                          if (e.key === 'Escape') setEditing(null);
+                        }}
+                        className="w-full rounded border border-ring bg-background px-1.5 py-0.5 font-mono outline-none focus:ring-1 focus:ring-ring/50"
+                      />
+                    ) : (
+                      <button
+                        type="button"
+                        onClick={() => startEdit(key)}
+                        className="font-mono text-foreground hover:underline"
+                      >
+                        {String(val)}
+                      </button>
+                    )}
+                  </td>
+                  <td className="w-6 py-1.5 text-right opacity-0 transition-opacity group-hover:opacity-100">
+                    <button
+                      type="button"
+                      onClick={() => deleteKey(key)}
+                      className="text-muted-foreground hover:text-destructive"
+                      title={`Remove ${key}`}
+                    >
+                      <X size={11} />
+                    </button>
+                  </td>
+                </tr>
+              ))}
+              {addingNew && (
+                <tr className="border-t border-border-soft/50">
+                  <td className="py-1.5 pr-3">
+                    <input
+                      autoFocus
+                      value={newKey}
+                      onChange={e => setNewKey(e.target.value)}
+                      placeholder="key"
+                      onKeyDown={e => { if (e.key === 'Escape') { setAddingNew(false); setNewKey(''); setNewVal(''); } }}
+                      className="w-full rounded border border-ring bg-background px-1.5 py-0.5 font-mono text-xs outline-none focus:ring-1 focus:ring-ring/50"
+                    />
+                  </td>
+                  <td className="py-1.5">
+                    <input
+                      value={newVal}
+                      onChange={e => setNewVal(e.target.value)}
+                      placeholder="value"
+                      onKeyDown={e => {
+                        if (e.key === 'Enter') { e.preventDefault(); addField(); }
+                        if (e.key === 'Escape') { setAddingNew(false); setNewKey(''); setNewVal(''); }
+                      }}
+                      className="w-full rounded border border-border bg-background px-1.5 py-0.5 font-mono text-xs outline-none focus:border-ring focus:ring-1 focus:ring-ring/50"
+                    />
+                  </td>
+                  <td className="w-6 py-1.5 text-right">
+                    <button type="button" onClick={addField} className="text-muted-foreground hover:text-foreground">
+                      <Check size={11} />
+                    </button>
+                  </td>
+                </tr>
+              )}
+            </tbody>
+          </table>
+          {!addingNew && (
+            <button
+              type="button"
+              onClick={() => setAddingNew(true)}
+              className="mt-2 flex items-center gap-1 text-[11px] text-muted-foreground hover:text-foreground"
+            >
+              <Plus size={11} />Add field
+            </button>
+          )}
+        </div>
+      )}
+    </div>
   );
 }

@@ -80,3 +80,39 @@ test.describe('projects page', () => {
     await expect(page).toHaveURL(/\/projects\/new/);
   });
 });
+
+test.describe('new project form', () => {
+  let createdProjectId: string | null = null;
+
+  test.afterAll(async ({ request }) => {
+    if (createdProjectId) await deleteProject(request, createdProjectId);
+  });
+
+  test('cancel button returns to projects list', async ({ page }) => {
+    await page.goto('/projects/new');
+    await page.getByRole('button', { name: 'Cancel' }).click();
+    await expect(page).toHaveURL('/projects');
+  });
+
+  test('submit is disabled until name is entered', async ({ page }) => {
+    await page.goto('/projects/new');
+    await expect(page.getByRole('button', { name: 'Create project' })).toBeDisabled();
+    await page.getByPlaceholder('Project name').fill('x');
+    await expect(page.getByRole('button', { name: 'Create project' })).toBeEnabled();
+    await page.getByPlaceholder('Project name').fill('');
+    await expect(page.getByRole('button', { name: 'Create project' })).toBeDisabled();
+  });
+
+  test('submitting form creates project and redirects to project page', async ({ page, request }) => {
+    await page.goto('/projects/new');
+    await page.getByPlaceholder('Project name').fill('Playwright new-project form test');
+    await page.getByRole('button', { name: 'Create project' }).click();
+
+    await expect(page).toHaveURL(/\/projects\/[^/]+$/, { timeout: 8000 });
+    await expect(page.getByRole('heading', { name: 'Playwright new-project form test' })).toBeVisible();
+
+    // Extract the created project ID for cleanup
+    const url = page.url();
+    createdProjectId = url.split('/projects/')[1] ?? null;
+  });
+});

@@ -5,7 +5,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { ArrowRight, FileText, GitBranch, MessageSquare, MoreHorizontal, Pencil, Plus, Trash2, Zap } from 'lucide-react';
 import {
   getProject, updateProject, deleteTopLevelProject,
-  getConnections, updateSpace, getSpace, getChats, deleteChat, createChat, updateChatConfig,
+  getConnections, getChats, deleteChat, createChat, updateChatConfig,
   getDocuments, updateDocumentById, deleteDocumentById,
 } from '../lib/api.js';
 import { usePageTitle } from '../lib/usePageTitle.js';
@@ -18,7 +18,7 @@ import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSepara
 import { DataTable, DataTableBody, DataTableHeader, DataTableRow } from '@/components/ui/data-table';
 import FileBrowser from '../components/FileBrowser.js';
 import TriggersSection from '../components/TriggersSection.js';
-import type { Connection, Document, Project, Session, Space } from '../types.js';
+import type { Connection, Document, Project, Session } from '../types.js';
 
 type SubRoute = 'overview' | 'files' | 'chats' | 'documents';
 
@@ -382,12 +382,6 @@ function ProjectOverview({ project, navigate }: { project: Project; navigate: Re
   const { data: connections = [] } = useQuery<Connection[]>({ queryKey: ['connections'], queryFn: getConnections });
   const mcpConnections = connections.filter(c => c.type === 'mcp');
 
-  const { data: space } = useQuery<Space>({
-    queryKey: ['space', project.space_id],
-    queryFn: () => getSpace(project.space_id),
-    staleTime: 60_000,
-  });
-
   const { data: allChats = [] } = useQuery<Session[]>({ queryKey: ['chats'], queryFn: () => getChats() });
   const recentChats = allChats.filter((c: Session) => c.pinned_space_id === project.space_id).slice(0, 4);
 
@@ -399,16 +393,14 @@ function ProjectOverview({ project, navigate }: { project: Project; navigate: Re
   const recentDocs = [...documents].sort((a, b) => b.updated_at - a.updated_at).slice(0, 4);
 
   const updateMutation = useMutation({
-    mutationFn: async () => {
-      await updateProject(project.id, {
-        name: editName.trim() || project.name,
-        default_branch: editBranch.trim() || null,
-      });
-      await updateSpace(project.space_id, { description: editDescription.trim() || null as unknown as string });
-    },
+    mutationFn: () => updateProject(project.id, {
+      name: editName.trim() || project.name,
+      default_branch: editBranch.trim() || null,
+      description: editDescription.trim() || null,
+    }),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['project', project.id] });
-      queryClient.invalidateQueries({ queryKey: ['space', project.space_id] });
+      queryClient.invalidateQueries({ queryKey: ['projects'] });
     },
   });
 
@@ -427,20 +419,19 @@ function ProjectOverview({ project, navigate }: { project: Project; navigate: Re
   });
 
   function toggleMcp(connectionId: string) {
-    if (!space) return;
-    const current = space.enabled_connection_ids ?? [];
+    const current = project.enabled_connection_ids ?? [];
     const updated = current.includes(connectionId) ? current.filter(id => id !== connectionId) : [...current, connectionId];
-    updateSpace(project.space_id, { enabled_connection_ids: updated }).then(() =>
-      queryClient.invalidateQueries({ queryKey: ['space', project.space_id] }),
+    updateProject(project.id, { enabled_connection_ids: updated }).then(() =>
+      queryClient.invalidateQueries({ queryKey: ['project', project.id] }),
     );
   }
 
   useEffect(() => {
     setEditName(project.name);
     setEditBranch(project.default_branch ?? '');
-    setEditDescription(space?.description ?? '');
+    setEditDescription(project.description ?? '');
     setSettingsEditing(false);
-  }, [project.id, project.name, project.default_branch, space?.description]);
+  }, [project.id, project.name, project.default_branch, project.description]);
 
   return (
     <PageShell>
@@ -478,7 +469,7 @@ function ProjectOverview({ project, navigate }: { project: Project; navigate: Re
           <aside className="min-w-0 space-y-5 pt-1">
             <ProjectSettingsPanel
               project={project}
-              spaceDescription={space?.description ?? null}
+              spaceDescription={project.description}
               editing={settingsEditing}
               editName={editName}
               editBranch={editBranch}
@@ -490,13 +481,13 @@ function ProjectOverview({ project, navigate }: { project: Project; navigate: Re
               onEdit={() => {
                 setEditName(project.name);
                 setEditBranch(project.default_branch ?? '');
-                setEditDescription(space?.description ?? '');
+                setEditDescription(project.description ?? '');
                 setSettingsEditing(true);
               }}
               onCancel={() => {
                 setEditName(project.name);
                 setEditBranch(project.default_branch ?? '');
-                setEditDescription(space?.description ?? '');
+                setEditDescription(project.description ?? '');
                 setSettingsEditing(false);
               }}
               onSave={() => updateMutation.mutate(undefined, { onSuccess: () => setSettingsEditing(false) })}
@@ -505,7 +496,7 @@ function ProjectOverview({ project, navigate }: { project: Project; navigate: Re
             {mcpConnections.length > 0 && (
               <McpToolsPanel
                 connections={mcpConnections}
-                enabledIds={space?.enabled_connection_ids ?? []}
+                enabledIds={project.enabled_connection_ids ?? []}
                 onToggle={toggleMcp}
               />
             )}

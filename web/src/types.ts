@@ -116,6 +116,8 @@ export interface Project {
   default_branch: string | null;
   origin: 'created' | 'linked';
   created_at: number;
+  description: string | null;
+  enabled_connection_ids: string[];
 }
 
 export interface Trigger {

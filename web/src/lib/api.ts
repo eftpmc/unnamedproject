@@ -236,7 +236,7 @@ export function createTopLevelProject(body: { name: string; repo_path?: string; 
   return request('/projects', { method: 'POST', body: JSON.stringify(body) });
 }
 
-export function updateProject(id: string, body: { name?: string; default_branch?: string | null }): Promise<Project> {
+export function updateProject(id: string, body: { name?: string; default_branch?: string | null; description?: string | null; enabled_connection_ids?: string[] }): Promise<Project> {
   return request(`/projects/${id}`, { method: 'PATCH', body: JSON.stringify(body) });
 }
 

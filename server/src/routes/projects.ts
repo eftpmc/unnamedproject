@@ -64,24 +64,37 @@ router.get('/:id', (req, res) => {
   res.json(project);
 });
 
-// Update project name or default branch
+// Update project fields (name, default_branch) and space fields (description, enabled_connection_ids)
 router.patch('/:id', (req, res) => {
   const { userId } = req as unknown as AuthedRequest;
   const project = getProjectForUser(req.params.id, userId);
   if (!project) { res.status(404).json({ error: 'Project not found' }); return; }
-  const { name, default_branch } = req.body as { name?: string; default_branch?: string | null };
-  const fields: string[] = [];
-  const values: unknown[] = [];
-  if (name?.trim()) { fields.push('name = ?'); values.push(name.trim()); }
-  if (default_branch !== undefined) { fields.push('default_branch = ?'); values.push(default_branch); }
-  if (fields.length > 0) {
-    values.push(project.id);
-    getDb().prepare(`UPDATE projects SET ${fields.join(', ')} WHERE id = ?`).run(...values);
-    // Keep the backing space name in sync
-    if (name?.trim()) {
-      getDb().prepare('UPDATE spaces SET name = ? WHERE id = ?').run(name.trim(), project.space_id);
-    }
+  const { name, default_branch, description, enabled_connection_ids } = req.body as {
+    name?: string;
+    default_branch?: string | null;
+    description?: string | null;
+    enabled_connection_ids?: string[];
+  };
+
+  const projFields: string[] = [];
+  const projValues: unknown[] = [];
+  if (name?.trim()) { projFields.push('name = ?'); projValues.push(name.trim()); }
+  if (default_branch !== undefined) { projFields.push('default_branch = ?'); projValues.push(default_branch); }
+  if (projFields.length > 0) {
+    projValues.push(project.id);
+    getDb().prepare(`UPDATE projects SET ${projFields.join(', ')} WHERE id = ?`).run(...projValues);
   }
+
+  const spaceFields: string[] = [];
+  const spaceValues: unknown[] = [];
+  if (name?.trim()) { spaceFields.push('name = ?'); spaceValues.push(name.trim()); }
+  if (description !== undefined) { spaceFields.push('description = ?'); spaceValues.push(description); }
+  if (enabled_connection_ids !== undefined) { spaceFields.push('enabled_connection_ids = ?'); spaceValues.push(JSON.stringify(enabled_connection_ids)); }
+  if (spaceFields.length > 0) {
+    spaceValues.push(project.space_id);
+    getDb().prepare(`UPDATE spaces SET ${spaceFields.join(', ')} WHERE id = ?`).run(...spaceValues);
+  }
+
   res.json(getProjectForUser(req.params.id, userId));
 });
 

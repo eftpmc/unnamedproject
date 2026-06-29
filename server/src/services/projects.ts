@@ -13,6 +13,8 @@ export interface ProjectRecord {
   default_branch: string | null;
   origin: 'created' | 'linked';
   created_at: number;
+  description: string | null;
+  enabled_connection_ids: string[];
 }
 
 function insert(rec: ProjectRecord): void {
@@ -58,21 +60,29 @@ export function deleteProject(id: string): boolean {
   return getDb().prepare('DELETE FROM projects WHERE id = ?').run(id).changes > 0;
 }
 
+type RawProjectRow = Omit<ProjectRecord, 'enabled_connection_ids'> & { enabled_connection_ids: string };
+
+function parseRow(row: RawProjectRow): ProjectRecord {
+  return { ...row, enabled_connection_ids: JSON.parse(row.enabled_connection_ids) };
+}
+
 export function listProjectsForUser(userId: string): ProjectRecord[] {
-  return getDb().prepare(`
-    SELECT p.*
+  const rows = getDb().prepare(`
+    SELECT p.*, s.description, s.enabled_connection_ids
     FROM projects p
     JOIN spaces s ON p.space_id = s.id
     WHERE s.user_id = ?
     ORDER BY p.created_at DESC
-  `).all(userId) as ProjectRecord[];
+  `).all(userId) as RawProjectRow[];
+  return rows.map(parseRow);
 }
 
 export function getProjectForUser(projectId: string, userId: string): ProjectRecord | undefined {
-  return getDb().prepare(`
-    SELECT p.*
+  const row = getDb().prepare(`
+    SELECT p.*, s.description, s.enabled_connection_ids
     FROM projects p
     JOIN spaces s ON p.space_id = s.id
     WHERE p.id = ? AND s.user_id = ?
-  `).get(projectId, userId) as ProjectRecord | undefined;
+  `).get(projectId, userId) as RawProjectRow | undefined;
+  return row ? parseRow(row) : undefined;
 }

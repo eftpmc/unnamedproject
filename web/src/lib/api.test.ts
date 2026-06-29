@@ -69,14 +69,14 @@ describe('api', () => {
 
   it('getDocuments constructs the correct URL without params', async () => {
     mockFetch.mockResolvedValueOnce(mockResponse([]));
-    await getDocuments('space-1');
-    expect(mockFetch).toHaveBeenCalledWith('/spaces/space-1/documents', expect.any(Object));
+    await getDocuments('proj-1');
+    expect(mockFetch).toHaveBeenCalledWith('/projects/proj-1/documents', expect.any(Object));
   });
 
   it('getDocuments appends type query param when provided', async () => {
     mockFetch.mockResolvedValueOnce(mockResponse([]));
-    await getDocuments('space-1', { type: 'playbook' });
-    expect(mockFetch).toHaveBeenCalledWith('/spaces/space-1/documents?type=playbook', expect.any(Object));
+    await getDocuments('proj-1', { type: 'playbook' });
+    expect(mockFetch).toHaveBeenCalledWith('/projects/proj-1/documents?type=playbook', expect.any(Object));
   });
 
 });

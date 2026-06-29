@@ -23,20 +23,20 @@ describe('migration v6', () => {
     expect(cols).toContain('provider_session_id');
   });
 
-  it('connections accepts claude_code and codex types', () => {
+  it('connections accepts mcp and github types', () => {
     const db = getDb();
-    // Insert a user first
-    db.prepare("INSERT OR IGNORE INTO users (id, email, hashed_password) VALUES ('u1','test@test.com','x')").run();
+    db.prepare("INSERT OR IGNORE INTO users (id, email, hashed_password) VALUES ('u1','test-v6@test.com','x')").run();
     expect(() => {
-      db.prepare("INSERT INTO connections (id, user_id, name, type, encrypted_config) VALUES ('c1','u1','Claude Code','claude_code','{}')").run();
+      db.prepare("INSERT INTO connections (id, user_id, name, type, encrypted_config) VALUES ('c1','u1','My MCP','mcp','{}')").run();
     }).not.toThrow();
     expect(() => {
-      db.prepare("INSERT INTO connections (id, user_id, name, type, encrypted_config) VALUES ('c2','u1','Codex','codex','{}')").run();
+      db.prepare("INSERT INTO connections (id, user_id, name, type, encrypted_config) VALUES ('c2','u1','My GitHub','github','{}')").run();
     }).not.toThrow();
   });
 
   it('connections rejects unknown types', () => {
     const db = getDb();
+    db.prepare("INSERT OR IGNORE INTO users (id, email, hashed_password) VALUES ('u1','test-v6@test.com','x')").run();
     expect(() => {
       db.prepare("INSERT INTO connections (id, user_id, name, type, encrypted_config) VALUES ('c3','u1','Bad','unknown','{}')").run();
     }).toThrow();

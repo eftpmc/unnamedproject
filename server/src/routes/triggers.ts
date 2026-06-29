@@ -1,27 +1,18 @@
 import { Router } from 'express';
 import { getDb } from '../db/index.js';
 import { requireAuthHeaderOrQuery, type AuthedRequest } from '../middleware/auth.js';
-import { listTriggers, createTrigger, deleteTrigger, type TriggerRecord } from '../services/triggers.js';
+import { createTrigger, deleteTrigger, getTrigger, listTriggersByUser, type TriggerRecord } from '../services/triggers.js';
 import { nextCronRun } from '../lib/cron.js';
 import { fireTrigger } from '../services/triggerRunner.js';
 
 const router = Router();
 router.use(requireAuthHeaderOrQuery);
 
-// List all triggers for this user across all their spaces
 router.get('/', (req, res) => {
   const { userId } = req as unknown as AuthedRequest;
-  const rows = getDb().prepare(`
-    SELECT t.*
-    FROM triggers t
-    JOIN spaces s ON t.space_id = s.id
-    WHERE s.user_id = ?
-    ORDER BY t.created_at DESC
-  `).all(userId) as TriggerRecord[];
-  res.json(rows);
+  res.json(listTriggersByUser(userId));
 });
 
-// Create a trigger — requires a project_id to derive the space; falls back to first user space
 router.post('/', (req, res) => {
   const { userId } = req as unknown as AuthedRequest;
   const { kind, schedule_cron, playbook_id, project_id } = req.body as {
@@ -34,21 +25,16 @@ router.post('/', (req, res) => {
     res.status(400).json({ error: 'kind required (schedule|webhook|manual)' });
     return;
   }
-  // Resolve space_id: if project_id given, look up its space; else use first user space
-  let spaceId: string | undefined;
-  if (project_id) {
-    const row = getDb().prepare(`
-      SELECT p.space_id FROM projects p
-      JOIN spaces s ON p.space_id = s.id
-      WHERE p.id = ? AND s.user_id = ?
-    `).get(project_id, userId) as { space_id: string } | undefined;
-    if (!row) { res.status(400).json({ error: 'Project not found' }); return; }
-    spaceId = row.space_id;
-  } else {
-    const row = getDb().prepare('SELECT id FROM spaces WHERE user_id = ? LIMIT 1').get(userId) as { id: string } | undefined;
-    if (!row) { res.status(400).json({ error: 'No space available — create a project first' }); return; }
-    spaceId = row.id;
+
+  const projectRow = project_id
+    ? getDb().prepare('SELECT id FROM projects WHERE id = ? AND user_id = ?').get(project_id, userId) as { id: string } | undefined
+    : getDb().prepare('SELECT id FROM projects WHERE user_id = ? LIMIT 1').get(userId) as { id: string } | undefined;
+
+  if (!projectRow) {
+    res.status(400).json({ error: project_id ? 'Project not found' : 'No project available — create one first' });
+    return;
   }
+
   let next_run_at: number | null = null;
   if (kind === 'schedule' && schedule_cron) {
     try {
@@ -58,8 +44,9 @@ router.post('/', (req, res) => {
       return;
     }
   }
+
   res.status(201).json(createTrigger({
-    space_id: spaceId,
+    project_id: projectRow.id,
     kind,
     schedule_cron: schedule_cron ?? null,
     playbook_id: playbook_id ?? null,
@@ -67,17 +54,18 @@ router.post('/', (req, res) => {
   }));
 });
 
-// Fire a trigger immediately; returns sessionId so the UI can navigate to the resulting chat
+function authTrigger(triggerId: string, userId: string): TriggerRecord | undefined {
+  const t = getTrigger(triggerId);
+  if (!t) return undefined;
+  const owned = getDb().prepare('SELECT 1 FROM projects WHERE id = ? AND user_id = ?').get(t.project_id, userId);
+  return owned ? t : undefined;
+}
+
 router.post('/:id/fire', async (req, res) => {
   const { userId } = req as unknown as AuthedRequest;
-  const row = getDb().prepare(`
-    SELECT t.id FROM triggers t
-    JOIN spaces s ON t.space_id = s.id
-    WHERE t.id = ? AND s.user_id = ?
-  `).get(req.params.id, userId) as { id: string } | undefined;
-  if (!row) { res.status(404).json({ error: 'Trigger not found' }); return; }
+  if (!authTrigger(req.params.id, userId)) { res.status(404).json({ error: 'Trigger not found' }); return; }
   try {
-    const sessionId = await fireTrigger(row.id);
+    const sessionId = await fireTrigger(req.params.id);
     res.json({ status: 'firing', sessionId });
   } catch (err) {
     console.error('[trigger/fire]', err);
@@ -85,7 +73,6 @@ router.post('/:id/fire', async (req, res) => {
   }
 });
 
-// Update trigger (enabled state and/or playbook)
 router.patch('/:id', (req, res) => {
   const { userId } = req as unknown as AuthedRequest;
   const { enabled, playbook_id } = req.body as { enabled?: boolean; playbook_id?: string | null };
@@ -93,32 +80,20 @@ router.patch('/:id', (req, res) => {
     res.status(400).json({ error: 'enabled or playbook_id required' });
     return;
   }
-  const row = getDb().prepare(`
-    SELECT t.id FROM triggers t
-    JOIN spaces s ON t.space_id = s.id
-    WHERE t.id = ? AND s.user_id = ?
-  `).get(req.params.id, userId) as { id: string } | undefined;
-  if (!row) { res.status(404).json({ error: 'Trigger not found' }); return; }
+  if (!authTrigger(req.params.id, userId)) { res.status(404).json({ error: 'Trigger not found' }); return; }
   const fields: string[] = [];
   const values: unknown[] = [];
   if (typeof enabled === 'boolean') { fields.push('enabled = ?'); values.push(enabled ? 1 : 0); }
   if (playbook_id !== undefined) { fields.push('playbook_id = ?'); values.push(playbook_id ?? null); }
-  values.push(row.id);
+  values.push(req.params.id);
   getDb().prepare(`UPDATE triggers SET ${fields.join(', ')} WHERE id = ?`).run(...values);
-  const updated = getDb().prepare('SELECT * FROM triggers WHERE id = ?').get(row.id);
-  res.json(updated);
+  res.json(getTrigger(req.params.id));
 });
 
-// Delete a trigger (auth: must be in user's space)
 router.delete('/:id', (req, res) => {
   const { userId } = req as unknown as AuthedRequest;
-  const row = getDb().prepare(`
-    SELECT t.id FROM triggers t
-    JOIN spaces s ON t.space_id = s.id
-    WHERE t.id = ? AND s.user_id = ?
-  `).get(req.params.id, userId) as { id: string } | undefined;
-  if (!row) { res.status(404).json({ error: 'Trigger not found' }); return; }
-  deleteTrigger(row.id);
+  if (!authTrigger(req.params.id, userId)) { res.status(404).json({ error: 'Trigger not found' }); return; }
+  deleteTrigger(req.params.id);
   res.status(204).end();
 });
 

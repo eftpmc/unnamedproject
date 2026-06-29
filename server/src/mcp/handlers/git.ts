@@ -12,21 +12,20 @@ export function registerGitHandlers(): void {
     inputSchema: {
       type: 'object',
       properties: {
-        space_id: { type: 'string' },
         project_id: { type: 'string' },
         op: { type: 'string', enum: ['log', 'diff', 'status', 'add', 'commit', 'push'] },
         message: { type: 'string' },
         branch: { type: 'string' },
       },
-      required: ['space_id', 'project_id', 'op'],
+      required: ['project_id', 'op'],
     },
     handler: async (args, userId, sessionId) => {
       const project = getProject(args.project_id as string);
-      if (!project || project.space_id !== args.space_id) {
-        return `Error: repo project ${args.project_id} not found in space ${args.space_id}`;
+      if (!project) {
+        return `Error: project ${args.project_id} not found`;
       }
       const repoItem = { id: project.id, fields: { repo_path: project.repo_path } };
-      const executionId = createExecution(userId, null, args.space_id as string, 'git_op');
+      const executionId = createExecution(userId, null, project.id, 'git_op');
       const worktree = await ensureWorktree(repoItem, sessionId ?? newId());
       const result = await runGitOp(
         {
@@ -34,7 +33,7 @@ export function registerGitHandlers(): void {
           message: args.message as string | undefined,
           branch: (args.branch as string | undefined) ?? worktree.branch,
         },
-        { userId, executionId, projectId: args.space_id as string, repoPath: worktree.worktree_path },
+        { userId, executionId, projectId: project.id, repoPath: worktree.worktree_path },
       );
       completeExecution(executionId, userId, result.startsWith('Error:') ? 'error' : 'done', result);
       return result;

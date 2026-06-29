@@ -2,7 +2,7 @@ export interface Session {
   id: string;
   title: string | null;
   effort: EffortLevel;
-  pinned_space_id: string | null;
+  pinned_project_id: string | null;
   created_at: number;
   updated_at: number;
 }
@@ -12,7 +12,7 @@ export type EffortLevel = 'low' | 'medium' | 'high';
 export interface MessageExecution {
   executionId: string;
   tool: string;
-  spaceName?: string;
+  projectName?: string;
   status: 'pending' | 'running' | 'done' | 'error' | 'awaiting_approval';
   outputLog: string;
   result: string | null;
@@ -55,7 +55,6 @@ export interface SessionEvent {
   type: SessionEventType;
   title: string;
   body: string | null;
-  space_id: string | null;
   item_id: string | null;
   execution_id: string | null;
   metadata: Record<string, unknown>;
@@ -74,7 +73,6 @@ export interface Message {
 export interface Execution {
   id: string;
   message_id: string;
-  space_id: string;
   tool: string;
   status: 'pending' | 'running' | 'done' | 'error' | 'awaiting_approval';
   output_log: string;
@@ -83,17 +81,8 @@ export interface Execution {
   completed_at: number | null;
 }
 
-export interface Space {
-  id: string;
-  name: string;
-  description: string | null;
-  enabled_connection_ids: string[];
-  created_at?: number;
-}
-
 export interface Document {
   id: string;
-  space_id: string;
   path: string;
   title: string;
   type: string | null;
@@ -110,7 +99,8 @@ export interface DocumentWithBody extends Document {
 
 export interface Project {
   id: string;
-  space_id: string;
+  space_id: string; // internal — used for FS paths; not surfaced in UI
+  user_id: string;
   name: string;
   repo_path: string;
   default_branch: string | null;
@@ -122,7 +112,7 @@ export interface Project {
 
 export interface Trigger {
   id: string;
-  space_id: string;
+  project_id: string;
   kind: 'schedule' | 'webhook' | 'manual';
   schedule_cron: string | null;
   playbook_id: string | null;
@@ -186,7 +176,7 @@ export interface WSExecutionUpdate extends WSEvent {
   chunk?: string;
   result?: string;
   tool?: string;
-  spaceName?: string;
+  projectName?: string;
   messageId?: string;
 }
 
@@ -249,13 +239,12 @@ export interface Memory {
   type: 'user' | 'feedback' | 'project' | 'reference';
   key: string;
   value: string;
-  space_id: string | null;
+  project_id: string | null;
 }
 
 export interface SessionWorktree {
   branch: string;
   project_name: string;
-  space_name?: string;
   files_changed: number;
   ahead: number;
   has_uncommitted: boolean;
@@ -269,12 +258,5 @@ export interface ScheduledTask {
   enabled: number;
   next_run_at: number;
   last_run_at: number | null;
-  pinned_space_id: string | null;
-}
-
-export interface AgentProvider {
-  id: string;
-  name: string;
-  type: 'claude_code' | 'codex';
-  created_at: number;
+  pinned_project_id: string | null;
 }

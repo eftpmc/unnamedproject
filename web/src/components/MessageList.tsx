@@ -15,12 +15,6 @@ import type { Message, MessageAttachment, SessionEvent } from '../types.js';
 // decision, and tool calls that render as a richer preview card.
 function isGroupExempt(exec: InlineExecution): boolean {
   if (exec.status === 'error' || exec.status === 'awaiting_approval') return true;
-  if (exec.tool === 'create_item' && exec.status === 'done' && exec.result) {
-    try {
-      const parsed = JSON.parse(exec.result) as Record<string, unknown>;
-      if (parsed.id && parsed.space_id) return true;
-    } catch { /* not an item payload, stays groupable */ }
-  }
   return false;
 }
 
@@ -212,27 +206,6 @@ function stripEmoji(text: string): string {
 }
 
 function renderExecutionCard(exec: InlineExecution) {
-  if (exec.status === 'done' && exec.result) {
-    try {
-      const parsed = JSON.parse(exec.result) as Record<string, unknown>;
-      if (exec.tool === 'create_item' && parsed.id && parsed.space_id) {
-        return (
-          <Link
-            key={exec.executionId}
-            to={`/documents/${parsed.id as string}`}
-            className="flex items-center gap-3 rounded-lg border border-border-soft bg-card p-3.5 transition-colors hover:border-border"
-          >
-            <span className="grid size-8 place-items-center rounded-md bg-muted text-muted-foreground"><FileText size={14} /></span>
-            <span className="min-w-0 flex-1">
-              <span className="block truncate text-sm font-medium">{parsed.name as string}</span>
-              <span className="block text-xs capitalize text-muted-foreground">{parsed.type as string}</span>
-            </span>
-            <ArrowRight size={14} className="text-faint-fg" />
-          </Link>
-        );
-      }
-    } catch { /* fall through to ExecutionCard */ }
-  }
   return <ExecutionCard key={exec.executionId} {...exec} />;
 }
 
@@ -455,8 +428,7 @@ export default function MessageList({ messages, executions, streamingIds, sessio
             }
             if (
               (item.event.type === 'document_created' || item.event.type === 'document_updated') &&
-              item.event.item_id &&
-              item.event.space_id
+              item.event.item_id
             ) {
               const isUpdate = item.event.type === 'document_updated';
               const typeLabel = (item.event.metadata as { itemType?: string })?.itemType ?? 'document';

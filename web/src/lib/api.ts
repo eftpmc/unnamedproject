@@ -1,5 +1,5 @@
 import { getToken, setToken, clearToken } from './auth.js';
-import type { Session, Message, Space, Connection, AgentProvider, GoogleAccount, EffortLevel, UserSettings, Memory, ScheduledTask, SessionWorktree, PermissionProfile, SessionEvent, Document, DocumentWithBody, Project, Trigger, FileEntry, MediaItem } from '../types.js';
+import type { Session, Message, Connection, AgentProvider, GoogleAccount, EffortLevel, UserSettings, Memory, ScheduledTask, SessionWorktree, PermissionProfile, SessionEvent, Document, DocumentWithBody, Project, Trigger, FileEntry, MediaItem } from '../types.js';
 
 async function request<T>(path: string, init: RequestInit = {}): Promise<T> {
   const token = getToken();
@@ -74,7 +74,7 @@ export function createChat(title?: string): Promise<{ id: string }> {
   return request('/sessions', { method: 'POST', body: JSON.stringify({ title }) });
 }
 
-export function updateChatConfig(chatId: string, config: { effort?: EffortLevel; pinned_space_id?: string | null; pinned_project_id?: string | null; title?: string }): Promise<void> {
+export function updateChatConfig(chatId: string, config: { effort?: EffortLevel; pinned_project_id?: string | null; title?: string }): Promise<void> {
   return request(`/sessions/${chatId}`, { method: 'PATCH', body: JSON.stringify(config) });
 }
 
@@ -143,49 +143,13 @@ export function cancelExecution(executionId: string): Promise<void> {
   return request(`/executions/${executionId}/cancel`, { method: 'POST' });
 }
 
-export function getSpaces(): Promise<Space[]> {
-  return request('/spaces');
-}
-
-export function getSpace(id: string): Promise<Space> {
-  return request(`/spaces/${id}`);
-}
-
-export function createSpace(body: { name: string; description?: string; enabled_connection_ids?: string[] }): Promise<{ id: string }> {
-  return request('/spaces', { method: 'POST', body: JSON.stringify(body) });
-}
-
-export function deleteSpace(id: string): Promise<void> {
-  return request(`/spaces/${id}`, { method: 'DELETE' });
-}
-
-export function updateSpace(id: string, body: { description?: string; name?: string; enabled_connection_ids?: string[] }): Promise<void> {
-  return request(`/spaces/${id}`, { method: 'PATCH', body: JSON.stringify(body) });
-}
-
 // Documents
-export function getDocuments(spaceId: string, params?: { type?: string }): Promise<Document[]> {
+export function getDocuments(projectId: string, params?: { type?: string }): Promise<Document[]> {
   const q = params?.type ? `?type=${encodeURIComponent(params.type)}` : '';
-  return request(`/spaces/${spaceId}/documents${q}`);
+  return request(`/projects/${projectId}/documents${q}`);
 }
 
-export function getDocument(spaceId: string, docId: string): Promise<DocumentWithBody> {
-  return request(`/spaces/${spaceId}/documents/${docId}`);
-}
-
-export function createDocument(spaceId: string, body: { path: string; title: string; frontmatter?: Record<string, unknown>; body: string }): Promise<Document> {
-  return request(`/spaces/${spaceId}/documents`, { method: 'POST', body: JSON.stringify(body) });
-}
-
-export function updateDocument(spaceId: string, docId: string, body: { title?: string; body?: string; frontmatter?: Record<string, unknown> }): Promise<Document> {
-  return request(`/spaces/${spaceId}/documents/${docId}`, { method: 'PATCH', body: JSON.stringify(body) });
-}
-
-export function deleteDocument(spaceId: string, docId: string): Promise<void> {
-  return request(`/spaces/${spaceId}/documents/${docId}`, { method: 'DELETE' });
-}
-
-export function createGlobalDocument(body: { title: string; space_id: string }): Promise<Document> {
+export function createGlobalDocument(body: { title: string; project_id: string }): Promise<Document> {
   return request('/documents', { method: 'POST', body: JSON.stringify(body) });
 }
 
@@ -207,29 +171,12 @@ export function deleteDocumentById(id: string): Promise<void> {
 }
 
 // Projects
-export function getProjects(): Promise<Project[]>;
-export function getProjects(spaceId: string): Promise<Project[]>;
-export function getProjects(spaceId?: string): Promise<Project[]> {
-  if (spaceId) {
-    return request(`/spaces/${spaceId}/projects`);
-  }
+export function getProjects(): Promise<Project[]> {
   return request('/projects');
 }
 
 export function getProject(id: string): Promise<Project> {
   return request(`/projects/${id}`);
-}
-
-export function createProject(spaceId: string, body: { name: string }): Promise<Project> {
-  return request(`/spaces/${spaceId}/projects`, { method: 'POST', body: JSON.stringify(body) });
-}
-
-export function linkProject(spaceId: string, body: { name: string; repo_path: string; default_branch?: string }): Promise<Project> {
-  return request(`/spaces/${spaceId}/projects`, { method: 'POST', body: JSON.stringify(body) });
-}
-
-export function deleteProject(spaceId: string, projectId: string): Promise<void> {
-  return request(`/spaces/${spaceId}/projects/${projectId}`, { method: 'DELETE' });
 }
 
 export function createTopLevelProject(body: { name: string; repo_path?: string; default_branch?: string | null }): Promise<Project> {
@@ -244,38 +191,13 @@ export function deleteTopLevelProject(id: string): Promise<void> {
   return request(`/projects/${id}`, { method: 'DELETE' });
 }
 
-export function getProjectTree(spaceId: string, projectId: string, dirPath?: string): Promise<{ entries: { name: string; type: 'file' | 'dir'; path: string }[] }> {
-  const q = dirPath ? `?path=${encodeURIComponent(dirPath)}` : '';
-  return request(`/spaces/${spaceId}/projects/${projectId}/tree${q}`);
-}
-
 export function getProjectTreeByProjectId(projectId: string, dirPath?: string): Promise<{ entries: FileEntry[] }> {
   const q = dirPath ? `?path=${encodeURIComponent(dirPath)}` : '';
   return request(`/projects/${projectId}/tree${q}`);
 }
 
-export function getProjectFile(spaceId: string, projectId: string, filePath: string): Promise<{ content: string; path: string }>;
-export function getProjectFile(id: string, filePath: string): Promise<{ content: string; path: string }>;
-export function getProjectFile(spaceIdOrId: string, projectIdOrFilePath: string, filePath?: string): Promise<{ content: string; path: string }> {
-  if (filePath !== undefined) {
-    // Old signature: (spaceId, projectId, filePath)
-    return request(`/spaces/${spaceIdOrId}/projects/${projectIdOrFilePath}/file?path=${encodeURIComponent(filePath)}`);
-  }
-  // New signature: (id, filePath)
-  return request(`/projects/${spaceIdOrId}/file?path=${encodeURIComponent(projectIdOrFilePath)}`);
-}
-
-// Triggers
-export function getTriggers(spaceId: string): Promise<Trigger[]> {
-  return request(`/spaces/${spaceId}/triggers`);
-}
-
-export function createTrigger(spaceId: string, body: { kind: Trigger['kind']; schedule_cron?: string; playbook_id?: string }): Promise<Trigger> {
-  return request(`/spaces/${spaceId}/triggers`, { method: 'POST', body: JSON.stringify(body) });
-}
-
-export function deleteTrigger(spaceId: string, triggerId: string): Promise<void> {
-  return request(`/spaces/${spaceId}/triggers/${triggerId}`, { method: 'DELETE' });
+export function getProjectFile(id: string, filePath: string): Promise<{ content: string; path: string }> {
+  return request(`/projects/${id}/file?path=${encodeURIComponent(filePath)}`);
 }
 
 export function getAllTriggers(): Promise<Trigger[]> {

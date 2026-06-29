@@ -102,8 +102,8 @@ function PanelContent({
   const primaryProject = pinnedProject;
 
   const { data: items = [] } = useQuery({
-    queryKey: ['documents', primaryProject?.space_id],
-    queryFn: () => getDocuments(primaryProject!.space_id),
+    queryKey: ['documents', primaryProject?.id],
+    queryFn: () => getDocuments(primaryProject!.id),
     enabled: !!primaryProject,
     staleTime: 20_000,
   });

@@ -37,17 +37,18 @@ beforeAll(async () => {
 describe('connections', () => {
   let connectionId: string;
 
-  it('creates a claude_code connection', async () => {
+  it('creates an mcp connection', async () => {
     const res = await request(app)
       .post('/connections')
       .set('Authorization', `Bearer ${token}`)
       .send({
-        name: 'My Claude Code',
-        type: 'claude_code',
-        config: { model: 'claude-sonnet-4-6', permissionProfile: 'default' },
+        name: 'My MCP Server',
+        type: 'mcp',
+        config: { command: 'npx', args: ['-y', '@some/mcp-server'] },
       });
     expect(res.status).toBe(201);
     expect(res.body.id).toBeDefined();
+    expect(res.body.type).toBe('mcp');
     connectionId = res.body.id;
   });
 
@@ -58,22 +59,13 @@ describe('connections', () => {
     expect(res.status).toBe(200);
     expect(res.body.length).toBeGreaterThanOrEqual(1);
     expect(res.body[0].config).toBeUndefined();
-    expect(res.body[0].purpose).toBe('claude_code');
   });
 
-  it('rejects lead_agent purpose', async () => {
+  it('rejects invalid connection type', async () => {
     const res = await request(app)
       .post('/connections')
       .set('Authorization', `Bearer ${token}`)
-      .send({ name: 'Old Lead Agent', type: 'anthropic', purpose: 'lead_agent', config: { apiKey: 'sk-test' } });
-    expect(res.status).toBe(400);
-  });
-
-  it('rejects incompatible purpose/type pairs', async () => {
-    const res = await request(app)
-      .post('/connections')
-      .set('Authorization', `Bearer ${token}`)
-      .send({ name: 'Bad Codex', type: 'anthropic', purpose: 'codex', config: { apiKey: 'sk-test' } });
+      .send({ name: 'Bad Type', type: 'anthropic', config: {} });
     expect(res.status).toBe(400);
   });
 
@@ -90,18 +82,17 @@ describe('connections', () => {
     expect(list.body).toEqual([]);
   });
 
-
-  it('creates a codex connection with api key', async () => {
+  it('creates a github connection', async () => {
     const res = await request(app)
       .post('/connections')
       .set('Authorization', `Bearer ${token}`)
       .send({
-        name: 'My Codex',
-        type: 'codex',
-        config: { model: 'codex-mini-latest', permissionProfile: 'default', apiKey: 'sk-test' },
+        name: 'My GitHub',
+        type: 'github',
+        config: { token: 'ghp_test' },
       });
     expect(res.status).toBe(201);
-    expect(res.body.type).toBe('codex');
+    expect(res.body.type).toBe('github');
   });
 
   it('deletes a connection', async () => {

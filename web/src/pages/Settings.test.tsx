@@ -6,7 +6,7 @@ import Settings from './Settings.js';
 
 vi.mock('../lib/api.js', () => ({
   getConnections: vi.fn().mockResolvedValue([]),
-  getSpaces: vi.fn().mockResolvedValue([]),
+  getProjects: vi.fn().mockResolvedValue([]),
   getMemory: vi.fn().mockResolvedValue([]),
   getScheduledTasks: vi.fn().mockResolvedValue([]),
   getSettings: vi.fn().mockResolvedValue({

@@ -52,7 +52,7 @@ export default function ScopePopover({
               icon={<Folder size={14} />}
               title={project.name}
               description="Project context"
-              onClick={() => onScopeChange(project.space_id)}
+              onClick={() => onScopeChange(project.id)}
             />
           ))}
         </div>

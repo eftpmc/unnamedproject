@@ -144,31 +144,37 @@ export async function runAgentTurn(userId: string, sessionId: string, userMessag
   activeTurnControllers.set(sessionId, abortController);
 
   let invokeResult: { costUsd?: number } = {};
+  const onText = (delta: string) => {
+    if (!started) {
+      started = true;
+      getDb()
+        .prepare('INSERT INTO messages (id, session_id, role, content, created_at) VALUES (?,?,?,?,?)')
+        .run(replyId, sessionId, 'assistant', '', replyCreatedAt);
+      broadcast(userId, { type: 'message_started', sessionId, message: { id: replyId, role: 'assistant', content: '', created_at: replyCreatedAt } });
+    }
+    fullText += delta;
+    broadcast(userId, { type: 'message_delta', sessionId, messageId: replyId, delta });
+  };
+  const onSessionId = (id: string) => { setSessionProviderInfo(sessionId, provider.type, id); };
+
+  const doInvoke = (resumeSessionId: string | null) => provider.invoke({
+    userId, prompt: effectivePrompt, resumeSessionId, systemPromptSuffix, mcpServers,
+    model: session?.model ?? undefined, effort: session?.effort ?? undefined,
+    signal: abortController.signal, onText, onSessionId,
+  });
+
   try {
-    invokeResult = await provider.invoke({
-      userId,
-      prompt: effectivePrompt,
-      resumeSessionId: session?.provider_session_id,
-      systemPromptSuffix,
-      mcpServers,
-      model: session?.model ?? undefined,
-      effort: session?.effort ?? undefined,
-      signal: abortController.signal,
-      onText: (delta) => {
-        if (!started) {
-          started = true;
-          getDb()
-            .prepare('INSERT INTO messages (id, session_id, role, content, created_at) VALUES (?,?,?,?,?)')
-            .run(replyId, sessionId, 'assistant', '', replyCreatedAt);
-          broadcast(userId, { type: 'message_started', sessionId, message: { id: replyId, role: 'assistant', content: '', created_at: replyCreatedAt } });
-        }
-        fullText += delta;
-        broadcast(userId, { type: 'message_delta', sessionId, messageId: replyId, delta });
-      },
-      onSessionId: (id) => {
-        setSessionProviderInfo(sessionId, provider.type, id);
-      },
-    });
+    try {
+      invokeResult = await doInvoke(session?.provider_session_id ?? null);
+    } catch (firstErr) {
+      const msg = firstErr instanceof Error ? firstErr.message : String(firstErr);
+      if (msg.includes('no rollout found') && session?.provider_session_id) {
+        getDb().prepare('UPDATE sessions SET provider_session_id = NULL WHERE id = ?').run(sessionId);
+        invokeResult = await doInvoke(null);
+      } else {
+        throw firstErr;
+      }
+    }
   } catch (err) {
     const wasStopped = abortController.signal.aborted;
     if (started) {

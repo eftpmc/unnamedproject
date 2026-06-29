@@ -5,6 +5,7 @@ import { getDb } from '../db/index.js';
 import { newId } from '../lib/ids.js';
 import { requireAuthHeaderOrQuery, type AuthedRequest } from '../middleware/auth.js';
 import { listProjectsForUser, getProjectForUser, createProject, linkProject, deleteProject } from '../services/projects.js';
+import { listDocuments } from '../services/documents.js';
 
 const router = Router();
 router.use(requireAuthHeaderOrQuery);
@@ -18,13 +19,11 @@ function resolveInRepo(repoPath: string, relPath: string): string {
   return resolved;
 }
 
-// List all projects for the authenticated user
 router.get('/', (req, res) => {
   const { userId } = req as unknown as AuthedRequest;
   res.json(listProjectsForUser(userId));
 });
 
-// Create or link a project (auto-creates a backing space)
 router.post('/', async (req, res) => {
   const { userId } = req as unknown as AuthedRequest;
   const { name, repo_path, default_branch } = req.body as {
@@ -36,7 +35,8 @@ router.post('/', async (req, res) => {
     res.status(400).json({ error: 'name required' });
     return;
   }
-  // Auto-create a backing space for this project
+
+  // Create a backing space (internal — not exposed in the API)
   const spaceId = newId();
   getDb().prepare(
     'INSERT INTO spaces (id, user_id, name, description, enabled_connection_ids) VALUES (?, ?, ?, NULL, ?)',
@@ -45,18 +45,18 @@ router.post('/', async (req, res) => {
   let project;
   try {
     project = repo_path
-      ? linkProject({ space_id: spaceId, name: name.trim(), repo_path, default_branch }) // linkProject is synchronous
+      ? linkProject({ space_id: spaceId, name: name.trim(), repo_path, default_branch })
       : await createProject({ space_id: spaceId, name: name.trim() });
+    // Stamp user_id/description/enabled_connection_ids directly on the project row
+    getDb().prepare("UPDATE projects SET user_id = ?, enabled_connection_ids = '[]' WHERE id = ?").run(userId, project.id);
   } catch (err) {
-    // Roll back the orphaned space if project creation fails
     getDb().prepare('DELETE FROM spaces WHERE id = ?').run(spaceId);
     throw err;
   }
 
-  res.status(201).json(project);
+  res.status(201).json(getProjectForUser(project.id, userId));
 });
 
-// Get a single project
 router.get('/:id', (req, res) => {
   const { userId } = req as unknown as AuthedRequest;
   const project = getProjectForUser(req.params.id, userId);
@@ -64,7 +64,6 @@ router.get('/:id', (req, res) => {
   res.json(project);
 });
 
-// Update project fields (name, default_branch) and space fields (description, enabled_connection_ids)
 router.patch('/:id', (req, res) => {
   const { userId } = req as unknown as AuthedRequest;
   const project = getProjectForUser(req.params.id, userId);
@@ -76,29 +75,31 @@ router.patch('/:id', (req, res) => {
     enabled_connection_ids?: string[];
   };
 
-  const projFields: string[] = [];
-  const projValues: unknown[] = [];
-  if (name?.trim()) { projFields.push('name = ?'); projValues.push(name.trim()); }
-  if (default_branch !== undefined) { projFields.push('default_branch = ?'); projValues.push(default_branch); }
-  if (projFields.length > 0) {
-    projValues.push(project.id);
-    getDb().prepare(`UPDATE projects SET ${projFields.join(', ')} WHERE id = ?`).run(...projValues);
-  }
+  const fields: string[] = [];
+  const values: unknown[] = [];
+  if (name?.trim()) { fields.push('name = ?'); values.push(name.trim()); }
+  if (default_branch !== undefined) { fields.push('default_branch = ?'); values.push(default_branch); }
+  if (description !== undefined) { fields.push('description = ?'); values.push(description); }
+  if (enabled_connection_ids !== undefined) { fields.push('enabled_connection_ids = ?'); values.push(JSON.stringify(enabled_connection_ids)); }
 
-  const spaceFields: string[] = [];
-  const spaceValues: unknown[] = [];
-  if (name?.trim()) { spaceFields.push('name = ?'); spaceValues.push(name.trim()); }
-  if (description !== undefined) { spaceFields.push('description = ?'); spaceValues.push(description); }
-  if (enabled_connection_ids !== undefined) { spaceFields.push('enabled_connection_ids = ?'); spaceValues.push(JSON.stringify(enabled_connection_ids)); }
-  if (spaceFields.length > 0) {
-    spaceValues.push(project.space_id);
-    getDb().prepare(`UPDATE spaces SET ${spaceFields.join(', ')} WHERE id = ?`).run(...spaceValues);
+  if (fields.length > 0) {
+    values.push(project.id);
+    getDb().prepare(`UPDATE projects SET ${fields.join(', ')} WHERE id = ?`).run(...values);
+    // Keep spaces table in sync (used internally for FS paths and legacy FKs)
+    const spaceFields: string[] = [];
+    const spaceValues: unknown[] = [];
+    if (name?.trim()) { spaceFields.push('name = ?'); spaceValues.push(name.trim()); }
+    if (description !== undefined) { spaceFields.push('description = ?'); spaceValues.push(description); }
+    if (enabled_connection_ids !== undefined) { spaceFields.push('enabled_connection_ids = ?'); spaceValues.push(JSON.stringify(enabled_connection_ids)); }
+    if (spaceFields.length > 0) {
+      spaceValues.push(project.space_id);
+      getDb().prepare(`UPDATE spaces SET ${spaceFields.join(', ')} WHERE id = ?`).run(...spaceValues);
+    }
   }
 
   res.json(getProjectForUser(req.params.id, userId));
 });
 
-// Delete project and its backing space
 router.delete('/:id', (req, res) => {
   const { userId } = req as unknown as AuthedRequest;
   const project = getProjectForUser(req.params.id, userId);
@@ -108,7 +109,16 @@ router.delete('/:id', (req, res) => {
   res.status(204).end();
 });
 
-// File browser — directory listing
+// Documents scoped to project
+router.get('/:id/documents', (req, res) => {
+  const { userId } = req as unknown as AuthedRequest;
+  const project = getProjectForUser(req.params.id, userId);
+  if (!project) { res.status(404).json({ error: 'Project not found' }); return; }
+  const { type } = req.query as Record<string, string>;
+  const docs = listDocuments(project.space_id, type ? { type } : undefined);
+  res.json(docs);
+});
+
 router.get('/:id/tree', async (req, res) => {
   const { userId } = req as unknown as AuthedRequest;
   const project = getProjectForUser(req.params.id, userId);
@@ -127,7 +137,6 @@ router.get('/:id/tree', async (req, res) => {
   }
 });
 
-// File browser — file content
 router.get('/:id/file', async (req, res) => {
   const { userId } = req as unknown as AuthedRequest;
   const project = getProjectForUser(req.params.id, userId);

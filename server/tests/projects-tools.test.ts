@@ -3,21 +3,39 @@ import fs from 'fs';
 import { initDb, getDb } from '../src/db/index.js';
 import { registerProjectHandlers } from '../src/mcp/handlers/projects.js';
 import { getTool } from '../src/mcp/registry.js';
+import { newId } from '../src/lib/ids.js';
 
-const SPACE = 'space-projtools';
+let projectId: string;
+const userId = 'u-projtools';
+
 beforeAll(() => {
   fs.mkdirSync(process.env.DATA_DIR!, { recursive: true });
   initDb();
-  getDb().prepare("INSERT INTO users (id,email,hashed_password) VALUES ('u','pt@test','x')").run();
-  getDb().prepare("INSERT INTO spaces (id,user_id,name) VALUES (?,?,?)").run(SPACE, 'u', 'S');
+  const spaceId = newId();
+  projectId = newId();
+  getDb().prepare("INSERT INTO users (id,email,hashed_password) VALUES (?,?,?)").run(userId, 'pt@test.com', 'x');
+  getDb().prepare("INSERT INTO spaces (id,user_id,name) VALUES (?,?,?)").run(spaceId, userId, 'ProjToolsSpace');
+  getDb().prepare("INSERT INTO projects (id,space_id,user_id,name,repo_path,default_branch,origin,created_at) VALUES (?,?,?,?,?,?,?,?)")
+    .run(projectId, spaceId, userId, 'ProjToolsProj', '/tmp/projtools', null, 'linked', Math.floor(Date.now() / 1000));
   registerProjectHandlers();
 });
 
 describe('project tools', () => {
-  it('create_project then list_projects', async () => {
-    const created = JSON.parse(await getTool('create_project')!.handler({ space_id: SPACE, name: 'Repo' }, 'u', null));
-    expect(created.origin).toBe('created');
-    const list = JSON.parse(await getTool('list_projects')!.handler({ space_id: SPACE }, 'u', null));
-    expect(list.map((p: { id: string }) => p.id)).toContain(created.id);
+  it('link_project then list_git_repos', async () => {
+    const repoPath = fs.mkdtempSync('/tmp/pt-repo-');
+    const linked = JSON.parse(await getTool('link_project')!.handler(
+      { project_id: projectId, name: 'Repo', repo_path: repoPath }, userId, null));
+    expect(linked.origin).toBe('linked');
+    expect(linked.repo_path).toBe(repoPath);
+
+    const list = JSON.parse(await getTool('list_git_repos')!.handler({ project_id: projectId }, userId, null));
+    expect(list.map((p: { id: string }) => p.id)).toContain(linked.id);
+    fs.rmSync(repoPath, { recursive: true, force: true });
+  });
+
+  it('returns error for unknown project', async () => {
+    const result = await getTool('link_project')!.handler(
+      { project_id: 'nonexistent', name: 'X', repo_path: '/tmp/x' }, userId, null);
+    expect(result).toContain('Error');
   });
 });

@@ -907,7 +907,7 @@ export default function Settings() {
                               {m.key}
                               {m.type === 'project' && (
                                 <div className="mt-0.5 font-sans text-[11px] text-faint-fg">
-                                  {projects.find(p => p.space_id === m.space_id)?.name ?? m.space_id}
+                                  {projects.find(p => p.id === m.project_id)?.name ?? m.project_id}
                                 </div>
                               )}
                             </div>

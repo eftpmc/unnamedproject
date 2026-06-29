@@ -5,20 +5,20 @@ import { getDb } from '../../db/index.js';
 export function registerChatHandlers(): void {
   registerTool({
     name: 'list_chats',
-    description: 'List recent chat sessions, optionally filtered by space',
+    description: 'List recent chat sessions, optionally filtered by project',
     inputSchema: {
       type: 'object',
       properties: {
-        space_id: { type: 'string' },
+        project_id: { type: 'string' },
         limit: { type: 'number' },
       },
     },
     handler: async (args, userId) => {
       const limit = Math.min(100, (args.limit as number | undefined) ?? 20);
-      const filterSpace = args.space_id as string | undefined;
-      const rows = filterSpace
-        ? getDb().prepare('SELECT id, title, updated_at, pinned_space_id FROM sessions WHERE user_id = ? AND pinned_space_id = ? ORDER BY updated_at DESC LIMIT ?').all(userId, filterSpace, limit)
-        : getDb().prepare('SELECT id, title, updated_at, pinned_space_id FROM sessions WHERE user_id = ? ORDER BY updated_at DESC LIMIT ?').all(userId, limit);
+      const filterProject = args.project_id as string | undefined;
+      const rows = filterProject
+        ? getDb().prepare('SELECT id, title, updated_at, pinned_project_id FROM sessions WHERE user_id = ? AND pinned_project_id = ? ORDER BY updated_at DESC LIMIT ?').all(userId, filterProject, limit)
+        : getDb().prepare('SELECT id, title, updated_at, pinned_project_id FROM sessions WHERE user_id = ? ORDER BY updated_at DESC LIMIT ?').all(userId, limit);
       return JSON.stringify(rows, null, 2);
     },
   });

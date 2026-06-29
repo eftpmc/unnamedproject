@@ -67,10 +67,10 @@ export default function ChatView({ chatId }: ChatViewProps) {
     queryFn: () => getProjects(),
     staleTime: 60_000,
   });
-  const pinnedProject = projects.find(p => p.space_id === chat?.pinned_space_id) ?? null;
+  const pinnedProject = projects.find(p => p.id === chat?.pinned_project_id) ?? null;
 
   const configMutation = useMutation({
-    mutationFn: (config: { effort?: EffortLevel; pinned_space_id?: string | null; title?: string }) => updateChatConfig(chatId, config),
+    mutationFn: (config: { effort?: EffortLevel; pinned_project_id?: string | null; title?: string }) => updateChatConfig(chatId, config),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['chats'] });
       queryClient.invalidateQueries({ queryKey: ['chat-events', chatId] });
@@ -375,7 +375,7 @@ export default function ChatView({ chatId }: ChatViewProps) {
         const newExec: InlineExecution = {
           executionId: ev.executionId,
           tool: ev.tool ?? 'unknown',
-          spaceName: ev.spaceName,
+          projectName: ev.projectName,
           status: 'running',
           outputLog: '',
           result: null,
@@ -474,10 +474,10 @@ export default function ChatView({ chatId }: ChatViewProps) {
         });
         queryClient.invalidateQueries({ queryKey: ['chat-events', chatId] });
         if (ev.event.type === 'document_created' || ev.event.type === 'document_updated') {
-          if (ev.event.space_id) queryClient.invalidateQueries({ queryKey: ['documents', ev.event.space_id] });
+          queryClient.invalidateQueries({ queryKey: ['documents'] });
         }
         if (ev.event.type === 'project_created') {
-          if (ev.event.space_id) queryClient.invalidateQueries({ queryKey: ['projects', ev.event.space_id] });
+          queryClient.invalidateQueries({ queryKey: ['projects'] });
         }
       }
     }
@@ -556,7 +556,7 @@ export default function ChatView({ chatId }: ChatViewProps) {
                 projects={projects}
                 pinnedProject={pinnedProject}
                 agentActive={agentActive}
-                onScopeChange={(projectId) => configMutation.mutate({ pinned_space_id: projectId })}
+                onScopeChange={(projectId) => configMutation.mutate({ pinned_project_id: projectId })}
               />
               {worktree && (
                 <DropdownMenuItem onSelect={() => setDiffOpen(true)}>
@@ -613,7 +613,7 @@ export default function ChatView({ chatId }: ChatViewProps) {
           onPendingFilesConsumed={() => setDropFiles([])}
           projectName={pinnedProject?.name}
           projects={pinnedProject ? [] : projects}
-          onPinProject={(projectId) => configMutation.mutate({ pinned_space_id: projectId })}
+          onPinProject={(projectId) => configMutation.mutate({ pinned_project_id: projectId })}
         />
       ) : (
         <MessageList

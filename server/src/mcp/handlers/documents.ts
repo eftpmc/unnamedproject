@@ -1,29 +1,34 @@
 import { registerTool } from '../registry.js';
 import { writeDocument, readDocument, listDocuments, patchFrontmatter } from '../../services/documents.js';
+import { getDb } from '../../db/index.js';
 
 export function registerDocumentHandlers(): void {
   registerTool({
     name: 'write_document',
-    description: 'Create or overwrite a markdown document in a space. Frontmatter is YAML key/values (set `type` and `status` for tracking). Body is markdown. Re-writing the same path updates it.',
+    description: 'Create or overwrite a markdown document in a project. Frontmatter is YAML key/values (set `type` and `status` for tracking). Body is markdown. Re-writing the same path updates it.',
     inputSchema: {
       type: 'object',
       properties: {
-        space_id: { type: 'string' },
-        path: { type: 'string', description: 'Relative path within the space, e.g. application-acme.md' },
+        project_id: { type: 'string' },
+        path: { type: 'string', description: 'Relative path within the project, e.g. application-acme.md' },
         title: { type: 'string' },
         frontmatter: { type: 'object', description: 'YAML key/values; include type and status when relevant' },
         body: { type: 'string', description: 'Markdown body' },
       },
-      required: ['space_id', 'path', 'title', 'body'],
+      required: ['project_id', 'path', 'title', 'body'],
     },
-    handler: async (args, _userId, sessionId) => JSON.stringify(await writeDocument({
-      space_id: args.space_id as string,
-      path: args.path as string,
-      title: args.title as string,
-      frontmatter: args.frontmatter as Record<string, unknown> | undefined,
-      body: args.body as string,
-      source_session_id: sessionId,
-    })),
+    handler: async (args, _userId, sessionId) => {
+      const project = getDb().prepare('SELECT space_id FROM projects WHERE id = ?').get(args.project_id as string) as { space_id: string } | undefined;
+      if (!project) return `Error: project ${args.project_id} not found`;
+      return JSON.stringify(await writeDocument({
+        space_id: project.space_id,
+        path: args.path as string,
+        title: args.title as string,
+        frontmatter: args.frontmatter as Record<string, unknown> | undefined,
+        body: args.body as string,
+        source_session_id: sessionId,
+      }));
+    },
   });
 
   registerTool({
@@ -38,20 +43,24 @@ export function registerDocumentHandlers(): void {
 
   registerTool({
     name: 'list_documents',
-    description: 'List documents in a space. Filter by type and/or exact frontmatter field values. A tracker view is just list_documents grouped by status.',
+    description: 'List documents in a project. Filter by type and/or exact frontmatter field values.',
     inputSchema: {
       type: 'object',
       properties: {
-        space_id: { type: 'string' },
+        project_id: { type: 'string' },
         type: { type: 'string' },
         frontmatter: { type: 'object', description: 'Exact-match filters, e.g. { status: "applied" }' },
       },
-      required: ['space_id'],
+      required: ['project_id'],
     },
-    handler: async (args) => JSON.stringify(listDocuments(
-      args.space_id as string,
-      (args.type || args.frontmatter) ? { type: args.type as string | undefined, frontmatter: args.frontmatter as Record<string, unknown> | undefined } : undefined,
-    )),
+    handler: async (args) => {
+      const project = getDb().prepare('SELECT space_id FROM projects WHERE id = ?').get(args.project_id as string) as { space_id: string } | undefined;
+      if (!project) return `Error: project ${args.project_id} not found`;
+      return JSON.stringify(listDocuments(
+        project.space_id,
+        (args.type || args.frontmatter) ? { type: args.type as string | undefined, frontmatter: args.frontmatter as Record<string, unknown> | undefined } : undefined,
+      ));
+    },
   });
 
   registerTool({

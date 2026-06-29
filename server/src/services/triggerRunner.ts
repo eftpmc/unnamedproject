@@ -6,14 +6,14 @@ import { nextCronRun } from '../lib/cron.js';
 import { runAgentTurn } from './agent.js';
 
 function triggerById(id: string) {
-  return getDb().prepare('SELECT t.*, s.user_id FROM triggers t JOIN spaces s ON s.id = t.space_id WHERE t.id = ?')
-    .get(id) as { id: string; space_id: string; schedule_cron: string | null; playbook_id: string | null; user_id: string } | undefined;
+  return getDb().prepare(`
+    SELECT t.*, p.user_id
+    FROM triggers t
+    JOIN projects p ON p.id = t.project_id
+    WHERE t.id = ?
+  `).get(id) as { id: string; project_id: string; schedule_cron: string | null; playbook_id: string | null; user_id: string } | undefined;
 }
 
-/**
- * Creates the session + message synchronously, then runs the agent turn async.
- * Returns the sessionId immediately so callers can link to the resulting chat.
- */
 export async function fireTrigger(triggerId: string): Promise<string> {
   const trigger = triggerById(triggerId);
   if (!trigger) throw new Error(`Trigger ${triggerId} not found`);
@@ -26,8 +26,8 @@ export async function fireTrigger(triggerId: string): Promise<string> {
 
   const db = getDb();
   const sessionId = newId();
-  db.prepare('INSERT INTO sessions (id, user_id, title, pinned_space_id) VALUES (?,?,?,?)')
-    .run(sessionId, trigger.user_id, title, trigger.space_id);
+  db.prepare('INSERT INTO sessions (id, user_id, title, pinned_project_id) VALUES (?,?,?,?)')
+    .run(sessionId, trigger.user_id, title, trigger.project_id);
   const messageId = newId();
   db.prepare('INSERT INTO messages (id, session_id, role, content) VALUES (?,?,?,?)')
     .run(messageId, sessionId, 'user', prompt);

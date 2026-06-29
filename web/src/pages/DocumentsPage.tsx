@@ -47,8 +47,8 @@ export default function DocumentsPage() {
   });
 
   const createMutation = useMutation({
-    mutationFn: ({ title, spaceId }: { title: string; spaceId: string }) =>
-      createGlobalDocument({ title, space_id: spaceId }),
+    mutationFn: ({ title, projectId }: { title: string; projectId: string }) =>
+      createGlobalDocument({ title, project_id: projectId }),
     onSuccess: (doc) => {
       queryClient.invalidateQueries({ queryKey: ['documents-global'] });
       setCreateOpen(false);
@@ -76,7 +76,7 @@ export default function DocumentsPage() {
     const title = newTitle.trim();
     const project = projects.find(p => p.id === newProjectId);
     if (!title || !project) return;
-    createMutation.mutate({ title, spaceId: project.space_id! });
+    createMutation.mutate({ title, projectId: project.id });
   }
 
   const renameMutation = useMutation({

@@ -1,6 +1,6 @@
 import { Router } from 'express';
 import simpleGit from 'simple-git';
-import { createSessionEvent, getDb, getSpaceForUser, getSessionEvents, linkSessionProject, getSessionProjectLinks } from '../db/index.js';
+import { createSessionEvent, getDb, getSessionEvents, linkSessionProject, getSessionProjectLinks, getProjectByIdForUser } from '../db/index.js';
 import { newId } from '../lib/ids.js';
 import { requireAuth, type AuthedRequest } from '../middleware/auth.js';
 import { DEFAULT_EFFORT, isEffortLevel } from '../services/effort.js';
@@ -15,7 +15,7 @@ router.get('/', (req, res) => {
   const PAGE = 100;
 
   const params: unknown[] = [userId];
-  let sql = 'SELECT id, title, effort, pinned_space_id, created_at, updated_at FROM sessions WHERE user_id = ?';
+  let sql = 'SELECT id, title, effort, pinned_project_id, created_at, updated_at FROM sessions WHERE user_id = ?';
   if (before) {
     sql += ' AND updated_at < ?';
     params.push(before);
@@ -87,7 +87,7 @@ router.get('/search', (req, res) => {
   const pattern = `%${q}%`;
   const rows = getDb()
     .prepare(`
-      SELECT DISTINCT s.id, s.title, s.effort, s.pinned_space_id, s.created_at, s.updated_at
+      SELECT DISTINCT s.id, s.title, s.effort, s.pinned_project_id, s.created_at, s.updated_at
       FROM sessions s
       LEFT JOIN messages m ON m.session_id = s.id
       WHERE s.user_id = ? AND (s.title LIKE ? OR m.content LIKE ?)
@@ -101,12 +101,12 @@ router.get('/search', (req, res) => {
 
 router.patch('/:id', (req, res) => {
   const { userId } = req as unknown as AuthedRequest;
-  const { effort, title, pinned_project_id, pinned_space_id: pinnedSpaceIdBody } = req.body as { effort?: string; title?: string; pinned_project_id?: string | null; pinned_space_id?: string | null };
-  // Accept pinned_space_id (new) or pinned_project_id (legacy alias)
-  const pinnedSpaceUpdate = pinnedSpaceIdBody !== undefined ? pinnedSpaceIdBody : pinned_project_id;
+  const { effort, title, pinned_project_id, pinned_space_id } = req.body as { effort?: string; title?: string; pinned_project_id?: string | null; pinned_space_id?: string | null };
+  // Accept pinned_project_id (preferred) or pinned_space_id (legacy alias — treated as project_id)
+  const pinnedProjectUpdate = pinned_project_id !== undefined ? pinned_project_id : pinned_space_id;
 
-  if (effort === undefined && title === undefined && pinnedSpaceUpdate === undefined) {
-    res.status(400).json({ error: 'effort, title, or pinned_space_id required' });
+  if (effort === undefined && title === undefined && pinnedProjectUpdate === undefined) {
+    res.status(400).json({ error: 'effort, title, or pinned_project_id required' });
     return;
   }
   if (effort !== undefined && !isEffortLevel(effort)) {
@@ -115,8 +115,8 @@ router.patch('/:id', (req, res) => {
   }
 
   const session = getDb()
-    .prepare('SELECT id, pinned_space_id FROM sessions WHERE id = ? AND user_id = ?')
-    .get(req.params.id, userId) as { id: string; pinned_space_id: string | null } | undefined;
+    .prepare('SELECT id, pinned_project_id FROM sessions WHERE id = ? AND user_id = ?')
+    .get(req.params.id, userId) as { id: string; pinned_project_id: string | null } | undefined;
   if (!session) { res.status(404).json({ error: 'Session not found' }); return; }
 
   if (effort !== undefined) {
@@ -125,24 +125,23 @@ router.patch('/:id', (req, res) => {
   if (title !== undefined) {
     getDb().prepare('UPDATE sessions SET title = ? WHERE id = ?').run(title, req.params.id);
   }
-  if (pinnedSpaceUpdate !== undefined) {
-    const space = pinnedSpaceUpdate ? getSpaceForUser(pinnedSpaceUpdate, userId) : null;
-    if (pinnedSpaceUpdate && !space) {
-      res.status(404).json({ error: 'Space not found' });
+  if (pinnedProjectUpdate !== undefined) {
+    const project = pinnedProjectUpdate ? getProjectByIdForUser(pinnedProjectUpdate, userId) : null;
+    if (pinnedProjectUpdate && !project) {
+      res.status(404).json({ error: 'Project not found' });
       return;
     }
-    // When unpinning, backfill the previously-pinned space into project links so history is preserved
-    if (!pinnedSpaceUpdate && session.pinned_space_id) {
-      linkSessionProject(req.params.id, session.pinned_space_id, 'user');
+    // When unpinning, backfill the previously-pinned project into project links so history is preserved
+    if (!pinnedProjectUpdate && session.pinned_project_id) {
+      linkSessionProject(req.params.id, session.pinned_project_id, 'user');
     }
-    getDb().prepare('UPDATE sessions SET pinned_space_id = ? WHERE id = ?').run(pinnedSpaceUpdate, req.params.id);
-    if (pinnedSpaceUpdate) {
-      linkSessionProject(req.params.id, space!.id, 'user');
+    getDb().prepare('UPDATE sessions SET pinned_project_id = ? WHERE id = ?').run(pinnedProjectUpdate, req.params.id);
+    if (pinnedProjectUpdate) {
+      linkSessionProject(req.params.id, project!.id, 'user');
       createSessionEvent({
         sessionId: req.params.id,
         type: 'scope_changed',
-        title: `Scoped to ${space!.name}`,
-        spaceId: space!.id,
+        title: `Scoped to ${project!.name}`,
         metadata: { source: 'user' },
       });
     } else {
@@ -209,8 +208,7 @@ router.get('/:id/worktree', async (req, res) => {
     SELECT w.id, w.branch, w.worktree_path, pr.repo_path, pr.name AS project_name
     FROM agent_worktrees w
     JOIN projects pr ON pr.id = w.project_id
-    JOIN spaces p ON p.id = pr.space_id
-    WHERE w.session_id = ? AND p.user_id = ?
+    WHERE w.session_id = ? AND pr.user_id = ?
   `).get(req.params.id, userId) as { id: string; branch: string; worktree_path: string; repo_path: string; project_name: string } | undefined;
 
   if (!wt) { res.json(null); return; }
@@ -235,11 +233,10 @@ router.get('/:id/worktree', async (req, res) => {
 router.get('/:id/worktree/diff', async (req, res) => {
   const { userId } = req as unknown as AuthedRequest;
   const wt = getDb().prepare(`
-    SELECT w.worktree_path, p.user_id
+    SELECT w.worktree_path
     FROM agent_worktrees w
     JOIN projects pr ON pr.id = w.project_id
-    JOIN spaces p ON p.id = pr.space_id
-    WHERE w.session_id = ? AND p.user_id = ?
+    WHERE w.session_id = ? AND pr.user_id = ?
   `).get(req.params.id, userId) as { worktree_path: string } | undefined;
 
   if (!wt) { res.status(404).json({ error: 'No worktree for this session' }); return; }
@@ -259,8 +256,7 @@ router.post('/:id/merge', async (req, res) => {
     SELECT w.branch, pr.repo_path
     FROM agent_worktrees w
     JOIN projects pr ON pr.id = w.project_id
-    JOIN spaces p ON p.id = pr.space_id
-    WHERE w.session_id = ? AND p.user_id = ?
+    WHERE w.session_id = ? AND pr.user_id = ?
   `).get(req.params.id, userId) as { branch: string; repo_path: string } | undefined;
 
   if (!wt) { res.status(404).json({ error: 'No worktree for this session' }); return; }

@@ -11,12 +11,12 @@ export function registerMemoryHandlers(): void {
         type: { type: 'string' },
         key: { type: 'string' },
         value: { type: 'string' },
-        space_id: { type: 'string' },
+        project_id: { type: 'string' },
       },
       required: ['type', 'key', 'value'],
     },
     handler: async (args, userId) =>
-      remember(userId, args.type as string, args.key as string, args.value as string, args.space_id as string | undefined),
+      remember(userId, args.type as string, args.key as string, args.value as string, args.project_id as string | undefined),
   });
 
   registerTool({

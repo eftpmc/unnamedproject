@@ -21,6 +21,18 @@ const codeIntent: Intent = { ...DEFAULT_INTENT, domain: 'code' };
 const writingIntent: Intent = { ...DEFAULT_INTENT, domain: 'writing' };
 const researchIntent: Intent = { ...DEFAULT_INTENT, domain: 'research' };
 
+function makeProject(name: string, description?: string): { spaceId: string; projectId: string } {
+  const spaceId = newId();
+  const projectId = newId();
+  getDb()
+    .prepare('INSERT INTO spaces (id, user_id, name, description, enabled_connection_ids) VALUES (?,?,?,?,?)')
+    .run(spaceId, userId, name, description ?? null, '[]');
+  getDb()
+    .prepare('INSERT INTO projects (id, space_id, user_id, name, repo_path, default_branch, origin, created_at) VALUES (?,?,?,?,?,?,?,?)')
+    .run(projectId, spaceId, userId, name, `/tmp/${projectId}`, null, 'linked', Math.floor(Date.now() / 1000));
+  return { spaceId, projectId };
+}
+
 describe('buildContext', () => {
   it('always includes base identity and approval tier content', async () => {
     const ctx = await buildContext(userId, sessionId, DEFAULT_INTENT, '');
@@ -36,7 +48,6 @@ describe('buildContext', () => {
 
   it('includes worktree isolation guidance for code domain', async () => {
     const ctx = await buildContext(userId, sessionId, codeIntent, '');
-    // Permission block mentions isolated worktrees; code domain mandates git_op commit
     expect(ctx).toContain('worktree');
     expect(ctx).toContain('git_op');
   });
@@ -44,7 +55,6 @@ describe('buildContext', () => {
   it('includes write_document guidance for writing domain', async () => {
     const ctx = await buildContext(userId, sessionId, writingIntent, '');
     expect(ctx).toContain('write_document');
-    // The writing domain guidance must steer away from delegating to coding agents.
     expect(ctx).toContain('Do not invoke coding agents');
   });
 
@@ -66,44 +76,35 @@ describe('buildContext', () => {
   });
 
   it('includes project name and id in project context', async () => {
-    const spaceId = newId();
-    getDb()
-      .prepare('INSERT INTO spaces (id, user_id, name, description, enabled_connection_ids) VALUES (?,?,?,?,?)')
-      .run(spaceId, userId, 'sandbox-demo', 'A sandbox project', '[]');
-    getDb().prepare('UPDATE sessions SET pinned_space_id = ? WHERE id = ?').run(spaceId, sessionId);
+    const { projectId } = makeProject('sandbox-demo', 'A sandbox project');
+    getDb().prepare('UPDATE sessions SET pinned_project_id = ? WHERE id = ?').run(projectId, sessionId);
 
     const ctx = await buildContext(userId, sessionId, DEFAULT_INTENT, '');
     expect(ctx).toContain('sandbox-demo');
-    expect(ctx).toContain(spaceId);
+    expect(ctx).toContain(projectId);
 
-    getDb().prepare('UPDATE sessions SET pinned_space_id = NULL WHERE id = ?').run(sessionId);
+    getDb().prepare('UPDATE sessions SET pinned_project_id = NULL WHERE id = ?').run(sessionId);
   });
 
   it('project context block does not reference a project type label', async () => {
-    const spaceId = newId();
-    getDb()
-      .prepare('INSERT INTO spaces (id, user_id, name, description, enabled_connection_ids) VALUES (?,?,?,?,?)')
-      .run(spaceId, userId, 'type-check-project', 'Testing no type label', '[]');
-    getDb().prepare('UPDATE sessions SET pinned_space_id = ? WHERE id = ?').run(spaceId, sessionId);
+    const { projectId } = makeProject('type-check-project', 'Testing no type label');
+    getDb().prepare('UPDATE sessions SET pinned_project_id = ? WHERE id = ?').run(projectId, sessionId);
 
     const ctx = await buildContext(userId, sessionId, DEFAULT_INTENT, '');
     expect(ctx).not.toMatch(/type:\s*(default|video)/);
 
-    getDb().prepare('UPDATE sessions SET pinned_space_id = NULL WHERE id = ?').run(sessionId);
+    getDb().prepare('UPDATE sessions SET pinned_project_id = NULL WHERE id = ?').run(sessionId);
   });
 
   it('includes document guidance for a Space with no projects or documents', async () => {
-    const spaceId = newId();
-    getDb()
-      .prepare('INSERT INTO spaces (id, user_id, name, enabled_connection_ids) VALUES (?,?,?,?)')
-      .run(spaceId, userId, 'empty-space', '[]');
-    getDb().prepare('UPDATE sessions SET pinned_space_id = ? WHERE id = ?').run(spaceId, sessionId);
+    const { projectId, spaceId } = makeProject('empty-project');
+    getDb().prepare('UPDATE sessions SET pinned_project_id = ? WHERE id = ?').run(projectId, sessionId);
 
     const ctx = await buildContext(userId, sessionId, DEFAULT_INTENT, '');
-    // New doctrine: space without projects should mention create_project or documents
     expect(ctx).toMatch(/create_project|write_document|No projects/);
 
-    getDb().prepare('UPDATE sessions SET pinned_space_id = NULL WHERE id = ?').run(sessionId);
+    getDb().prepare('UPDATE sessions SET pinned_project_id = NULL WHERE id = ?').run(sessionId);
+    getDb().prepare('DELETE FROM projects WHERE id = ?').run(projectId);
     getDb().prepare('DELETE FROM spaces WHERE id = ?').run(spaceId);
   });
 });

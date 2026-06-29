@@ -17,6 +17,7 @@ let token: string;
 let userId: string;
 let sessionId: string;
 let projectId: string;
+let spaceId: string;
 
 beforeAll(async () => {
   fs.mkdirSync(process.env.DATA_DIR!, { recursive: true });
@@ -29,7 +30,6 @@ beforeAll(async () => {
   const { verifyToken } = await import('../src/lib/jwt.js');
   userId = verifyToken(reg.body.token).userId;
 
-  // Create session and project
   const sessRes = await request(app)
     .post('/sessions')
     .set('Authorization', `Bearer ${token}`)
@@ -39,22 +39,27 @@ beforeAll(async () => {
   const db = getDb();
   db.prepare('INSERT INTO messages (id, session_id, role, content) VALUES (?,?,?,?)')
     .run(newId(), sessionId, 'user', 'keep session active for route tests');
+
+  // Create a space then a project in that space
+  spaceId = newId();
   projectId = newId();
-  db.prepare("INSERT INTO spaces (id, user_id, name, enabled_connection_ids) VALUES (?,?,?,?)").run(projectId, userId, 'myproj', '[]');
+  db.prepare("INSERT INTO spaces (id, user_id, name, enabled_connection_ids) VALUES (?,?,?,?)").run(spaceId, userId, 'myspace', '[]');
+  db.prepare("INSERT INTO projects (id, space_id, user_id, name, repo_path, default_branch, origin, created_at) VALUES (?,?,?,?,?,?,?,?)")
+    .run(projectId, spaceId, userId, 'myproj', '/fake/repo', null, 'linked', Math.floor(Date.now() / 1000));
 });
 
-describe('PATCH /sessions/:id pinned_space_id', () => {
+describe('PATCH /sessions/:id pinned_project_id', () => {
   it('pins a project to a session', async () => {
     const res = await request(app)
       .patch(`/sessions/${sessionId}`)
       .set('Authorization', `Bearer ${token}`)
-      .send({ pinned_space_id: projectId });
+      .send({ pinned_project_id: projectId });
     expect(res.status).toBe(200);
     expect(res.body.ok).toBe(true);
 
     const list = await request(app).get('/sessions').set('Authorization', `Bearer ${token}`);
     const sess = list.body.find((s: { id: string }) => s.id === sessionId);
-    expect(sess.pinned_space_id).toBe(projectId);
+    expect(sess.pinned_project_id).toBe(projectId);
 
     const events = await request(app)
       .get(`/sessions/${sessionId}/events`)
@@ -66,7 +71,6 @@ describe('PATCH /sessions/:id pinned_space_id', () => {
       expect.objectContaining({
         type: 'scope_changed',
         title: 'Scoped to myproj',
-        space_id: projectId,
         metadata: expect.objectContaining({ source: 'user' }),
       }),
     ]));
@@ -76,7 +80,7 @@ describe('PATCH /sessions/:id pinned_space_id', () => {
     const res = await request(app)
       .patch(`/sessions/${sessionId}`)
       .set('Authorization', `Bearer ${token}`)
-      .send({ pinned_space_id: null });
+      .send({ pinned_project_id: null });
     expect(res.status).toBe(200);
 
     const events = await request(app)
@@ -86,7 +90,6 @@ describe('PATCH /sessions/:id pinned_space_id', () => {
       expect.objectContaining({
         type: 'scope_changed',
         title: 'Back to Auto',
-        space_id: null,
         metadata: expect.objectContaining({ source: 'user' }),
       }),
     ]));
@@ -99,13 +102,13 @@ describe('PATCH /sessions/:id pinned_space_id', () => {
       .send({ title: 'legacy pin' });
 
     getDb()
-      .prepare('UPDATE sessions SET pinned_space_id = ? WHERE id = ?')
+      .prepare('UPDATE sessions SET pinned_project_id = ? WHERE id = ?')
       .run(projectId, legacy.body.id);
 
     const res = await request(app)
       .patch(`/sessions/${legacy.body.id}`)
       .set('Authorization', `Bearer ${token}`)
-      .send({ pinned_space_id: null });
+      .send({ pinned_project_id: null });
     expect(res.status).toBe(200);
 
     const events = await request(app)
@@ -124,12 +127,12 @@ describe('PATCH /sessions/:id pinned_space_id', () => {
     const res = await request(app)
       .patch(`/sessions/${sessionId}`)
       .set('Authorization', `Bearer ${token}`)
-      .send({ pinned_space_id: missingProjectId });
+      .send({ pinned_project_id: missingProjectId });
     expect(res.status).toBe(404);
 
     const list = await request(app).get('/sessions').set('Authorization', `Bearer ${token}`);
     const sess = list.body.find((s: { id: string }) => s.id === sessionId);
-    expect(sess.pinned_space_id).toBeNull();
+    expect(sess.pinned_project_id).toBeNull();
   });
 });
 
@@ -145,11 +148,8 @@ describe('GET /sessions/:id/worktree', () => {
   it('returns worktree info when worktree exists', async () => {
     const db = getDb();
     const wtId = newId();
-    const repoProjectId = newId();
-    db.prepare("INSERT INTO projects (id, space_id, name, repo_path, default_branch, origin, created_at) VALUES (?,?,?,?,?,?,?)")
-      .run(repoProjectId, projectId, 'myproj', '/fake/repo', null, 'created', Math.floor(Date.now() / 1000));
     db.prepare("INSERT INTO agent_worktrees (id, project_id, session_id, branch, worktree_path) VALUES (?,?,?,?,?)")
-      .run(wtId, repoProjectId, sessionId, `agent/${sessionId}`, '/fake/worktree');
+      .run(wtId, projectId, sessionId, `agent/${sessionId}`, '/fake/worktree');
 
     mockStatus.mockResolvedValueOnce({ files: [{ path: 'foo.ts' }] });
     mockRaw.mockResolvedValueOnce('3\n');

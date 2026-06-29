@@ -162,7 +162,7 @@ export default function EmptyChatState({ value, onChange, onSend, disabled, pend
                   key={project.id}
                   type="button"
                   disabled={disabled}
-                  onClick={() => onPinProject(project.space_id)}
+                  onClick={() => onPinProject(project.id)}
                   className="flex items-center gap-1.5 rounded-lg border border-border-soft bg-card px-3 py-1.5 text-xs font-medium text-muted-foreground transition-colors hover:border-border hover:text-foreground disabled:opacity-50"
                 >
                   <Folder size={12} className="shrink-0" />

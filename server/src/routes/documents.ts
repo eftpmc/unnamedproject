@@ -6,58 +6,59 @@ import { writeDocument, readDocument, patchFrontmatter, deleteDocument } from '.
 const router = Router();
 router.use(requireAuthHeaderOrQuery);
 
+function projectOwnsDoc(spaceId: string, userId: string): boolean {
+  return !!getDb().prepare('SELECT 1 FROM projects WHERE space_id = ? AND user_id = ?').get(spaceId, userId);
+}
+
 // Create a new document
 router.post('/', async (req, res) => {
   const { userId } = req as unknown as AuthedRequest;
-  const { title, body = '', frontmatter, space_id } = req.body as {
+  const { title, body = '', frontmatter, project_id, space_id } = req.body as {
     title?: string;
     body?: string;
     frontmatter?: Record<string, unknown>;
-    space_id?: string;
+    project_id?: string;
+    space_id?: string; // legacy alias
   };
 
-  // Validate required fields
-  if (!title || !space_id) {
-    res.status(400).json({ error: 'title and space_id are required' });
+  if (!title || (!project_id && !space_id)) {
+    res.status(400).json({ error: 'title and project_id are required' });
     return;
   }
 
-  // Verify space belongs to user
-  const space = getDb().prepare('SELECT id FROM spaces WHERE id = ? AND user_id = ?').get(space_id, userId);
-  if (!space) {
-    res.status(404).json({ error: 'Space not found' });
-    return;
+  // Resolve the internal space_id from project_id
+  let resolvedSpaceId: string;
+  if (project_id) {
+    const project = getDb().prepare('SELECT space_id FROM projects WHERE id = ? AND user_id = ?').get(project_id, userId) as { space_id: string } | undefined;
+    if (!project) { res.status(404).json({ error: 'Project not found' }); return; }
+    resolvedSpaceId = project.space_id;
+  } else {
+    // Legacy: space_id passed directly — verify ownership via projects table
+    if (!projectOwnsDoc(space_id!, userId)) { res.status(404).json({ error: 'Project not found' }); return; }
+    resolvedSpaceId = space_id!;
   }
 
-  // Generate a unique path from title — append -2, -3 … if the path already exists
   const base = `${title.toLowerCase().replace(/\s+/g, '-').replace(/[^\w-]/g, '') || 'document'}.md`;
-  let path = base;
+  let docPath = base;
   let counter = 2;
-  while (getDb().prepare('SELECT id FROM documents WHERE space_id = ? AND path = ?').get(space_id, path)) {
-    path = base.replace('.md', `-${counter}.md`);
+  while (getDb().prepare('SELECT id FROM documents WHERE space_id = ? AND path = ?').get(resolvedSpaceId, docPath)) {
+    docPath = base.replace('.md', `-${counter}.md`);
     counter++;
   }
 
-  const doc = await writeDocument({
-    space_id,
-    path,
-    title,
-    frontmatter,
-    body,
-  });
-
+  const doc = await writeDocument({ space_id: resolvedSpaceId, path: docPath, title, frontmatter, body });
   res.status(201).json(doc);
 });
 
-// List all documents for this user across all their spaces
+// List all documents for this user across all their projects
 router.get('/', (req, res) => {
   const { userId } = req as unknown as AuthedRequest;
   const { type } = req.query as Record<string, string>;
   const rows = getDb().prepare(`
     SELECT d.*
     FROM documents d
-    JOIN spaces s ON d.space_id = s.id
-    WHERE s.user_id = ?
+    JOIN projects p ON p.space_id = d.space_id
+    WHERE p.user_id = ?
     ${type ? 'AND d.type = ?' : ''}
     ORDER BY d.updated_at DESC
   `).all(...(type ? [userId, type] : [userId])) as Array<Record<string, unknown>>;
@@ -67,24 +68,19 @@ router.get('/', (req, res) => {
   })));
 });
 
-// Get a single document (auth: must be owned by user's space)
 router.get('/:id', async (req, res) => {
   const { userId } = req as unknown as AuthedRequest;
   const doc = await readDocument(req.params.id);
   if (!doc) { res.status(404).json({ error: 'Document not found' }); return; }
-  // Verify ownership
-  const space = getDb().prepare('SELECT id FROM spaces WHERE id = ? AND user_id = ?').get(doc.space_id, userId);
-  if (!space) { res.status(404).json({ error: 'Document not found' }); return; }
+  if (!projectOwnsDoc(doc.space_id, userId)) { res.status(404).json({ error: 'Document not found' }); return; }
   res.json(doc);
 });
 
-// Update document
 router.patch('/:id', async (req, res) => {
   const { userId } = req as unknown as AuthedRequest;
   const doc = await readDocument(req.params.id);
   if (!doc) { res.status(404).json({ error: 'Document not found' }); return; }
-  const space = getDb().prepare('SELECT id FROM spaces WHERE id = ? AND user_id = ?').get(doc.space_id, userId);
-  if (!space) { res.status(404).json({ error: 'Document not found' }); return; }
+  if (!projectOwnsDoc(doc.space_id, userId)) { res.status(404).json({ error: 'Document not found' }); return; }
   const { frontmatter, title, body } = req.body as {
     frontmatter?: Record<string, unknown>; title?: string; body?: string;
   };
@@ -101,13 +97,11 @@ router.patch('/:id', async (req, res) => {
   }));
 });
 
-// Delete document
 router.delete('/:id', async (req, res) => {
   const { userId } = req as unknown as AuthedRequest;
   const doc = await readDocument(req.params.id);
   if (!doc) { res.status(404).json({ error: 'Document not found' }); return; }
-  const space = getDb().prepare('SELECT id FROM spaces WHERE id = ? AND user_id = ?').get(doc.space_id, userId);
-  if (!space) { res.status(404).json({ error: 'Document not found' }); return; }
+  if (!projectOwnsDoc(doc.space_id, userId)) { res.status(404).json({ error: 'Document not found' }); return; }
   await deleteDocument(doc.id);
   res.status(204).end();
 });

@@ -80,8 +80,7 @@ export default function ChatsPage() {
     queryFn: () => getProjects(),
     staleTime: 60_000,
   });
-  // Key by space_id since sessions store pinned_space_id (not project id)
-  const projectById = Object.fromEntries(projects.map(p => [p.space_id, p]));
+  const projectById = Object.fromEntries(projects.map(p => [p.id, p]));
 
   const { data: searchResults, isFetching: isSearching } = useQuery<Session[]>({
     queryKey: ['chats-search', debouncedQuery],
@@ -121,11 +120,11 @@ export default function ChatsPage() {
   const isSearchActive = debouncedQuery.length >= 2;
   const baseChats = isSearchActive ? (searchResults ?? []) : chats;
   const displayedChats = projectFilter
-    ? baseChats.filter(c => c.pinned_space_id === projectFilter)
+    ? baseChats.filter(c => c.pinned_project_id === projectFilter)
     : baseChats;
 
   // Only show projects that actually have chats pinned to them
-  const projectsWithChats = projects.filter(p => chats.some(c => c.pinned_space_id === p.space_id));
+  const projectsWithChats = projects.filter(p => chats.some(c => c.pinned_project_id === p.id));
 
   function updateProjectFilter(projectId: string | null) {
     const next = new URLSearchParams(searchParams);
@@ -200,8 +199,8 @@ export default function ChatsPage() {
                       {projectsWithChats.map(project => (
                         <DropdownMenuItem
                           key={project.id}
-                          onSelect={() => updateProjectFilter(project.space_id === projectFilter ? null : project.space_id)}
-                          className={cn(projectFilter === project.space_id && 'font-medium')}
+                          onSelect={() => updateProjectFilter(project.id === projectFilter ? null : project.id)}
+                          className={cn(projectFilter === project.id && 'font-medium')}
                         >
                           {project.name}
                         </DropdownMenuItem>
@@ -248,7 +247,7 @@ export default function ChatsPage() {
                         </DataTableHeader>
                         <DataTableBody>
                           {groupChats.map(chat => {
-                            const project = chat.pinned_space_id ? projectById[chat.pinned_space_id] : null;
+                            const project = chat.pinned_project_id ? projectById[chat.pinned_project_id] : null;
                             return (
                               <DataTableRow
                                 key={chat.id}
@@ -296,8 +295,8 @@ export default function ChatsPage() {
                                   {project ? (
                                     <button
                                       type="button"
-                                      onClick={(e) => { e.stopPropagation(); updateProjectFilter(project.space_id === projectFilter ? null : project.space_id); }}
-                                      className={cn('block max-w-full truncate text-left text-xs text-muted-foreground transition-colors hover:text-foreground', projectFilter === project.space_id && 'text-foreground font-medium')}
+                                      onClick={(e) => { e.stopPropagation(); updateProjectFilter(project.id === projectFilter ? null : project.id); }}
+                                      className={cn('block max-w-full truncate text-left text-xs text-muted-foreground transition-colors hover:text-foreground', projectFilter === project.id && 'text-foreground font-medium')}
                                     >
                                       {project.name}
                                     </button>

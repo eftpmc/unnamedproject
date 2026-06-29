@@ -1,7 +1,7 @@
 import { describe, it, expect, beforeAll, vi } from 'vitest';
 import fs from 'fs';
 import { initDb, getDb } from '../../src/db/index.js';
-import { rememberFact, recallFact, forgetFact, recallAll, spaceNameFor, recallRelevant } from '../../src/services/memory.js';
+import { rememberFact, recallFact, forgetFact, recallAll, projectNameFor, recallRelevant } from '../../src/services/memory.js';
 import { newId } from '../../src/lib/ids.js';
 
 vi.mock('../../src/services/embeddings.js', () => ({
@@ -16,6 +16,15 @@ vi.mock('../../src/services/embeddings.js', () => ({
 }));
 
 const userId = newId();
+
+function makeProject(ownerId: string, name: string): string {
+  const spaceId = newId();
+  const projectId = newId();
+  getDb().prepare("INSERT INTO spaces (id, user_id, name, enabled_connection_ids) VALUES (?,?,?,?)").run(spaceId, ownerId, name, '[]');
+  getDb().prepare("INSERT INTO projects (id, space_id, user_id, name, repo_path, default_branch, origin, created_at) VALUES (?,?,?,?,?,?,?,?)")
+    .run(projectId, spaceId, ownerId, name, `/tmp/${projectId}`, null, 'linked', Math.floor(Date.now() / 1000));
+  return projectId;
+}
 
 beforeAll(() => {
   fs.mkdirSync(process.env.DATA_DIR!, { recursive: true });
@@ -64,20 +73,17 @@ describe('memory', () => {
     expect(forgetFact(userId, 'user', 'temp_fact')).toBe(false);
   });
 
-  it('stores space-linked entries with a space_id', () => {
-    const spaceId = newId();
-    getDb().prepare('INSERT INTO spaces (id, user_id, name, enabled_connection_ids) VALUES (?,?,?,?)')
-      .run(spaceId, userId, 'demo-space', '[]');
-
-    rememberFact(userId, 'project', 'auth_status', 'blocked on legal review', spaceId);
+  it('stores project-linked entries with a project_id', () => {
+    const projectId = makeProject(userId, 'demo-project');
+    rememberFact(userId, 'project', 'auth_status', 'blocked on legal review', projectId);
     const all = recallAll(userId, 'project');
     const entry = all.find(e => e.key === 'auth_status');
-    expect(entry?.space_id).toBe(spaceId);
-    expect(spaceNameFor(userId, spaceId)).toBe('demo-space');
+    expect(entry?.project_id).toBe(projectId);
+    expect(projectNameFor(userId, projectId)).toBe('demo-project');
   });
 
-  it('spaceNameFor returns null for null space_id', () => {
-    expect(spaceNameFor(userId, null)).toBeNull();
+  it('projectNameFor returns null for null project_id', () => {
+    expect(projectNameFor(userId, null)).toBeNull();
   });
 });
 
@@ -99,14 +105,12 @@ describe('recallRelevant', () => {
   });
 
   it('filters project memories to pinned project when provided', async () => {
-    const projectId = newId();
-    getDb().prepare('INSERT INTO spaces (id, user_id, name, enabled_connection_ids) VALUES (?,?,?,?)').run(projectId, relUserId, `proj-${relUserId}`, '[]');
+    const projectId = makeProject(relUserId, `proj-${relUserId}`);
     rememberFact(relUserId, 'project', 'auth_decision', 'using JWT with RS256', projectId);
     rememberFact(relUserId, 'project', 'other_note', 'unrelated project fact');
 
     const withPin = await recallRelevant(relUserId, 'fix code', projectId);
     expect(withPin.some(e => e.type === 'project' && e.key === 'auth_decision')).toBe(true);
-    // other_note has null space_id and scores 0 against 'fix code' → excluded
     expect(withPin.some(e => e.type === 'project' && e.key === 'other_note')).toBe(false);
   });
 

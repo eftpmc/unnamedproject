@@ -92,7 +92,7 @@ function ProjectChatsView({ project }: { project: Project }) {
     queryFn: () => getChats(),
   });
 
-  const chats = allChats.filter(c => c.pinned_space_id === project.space_id);
+  const chats = allChats.filter(c => c.pinned_project_id === project.id);
 
   const deleteMutation = useMutation({
     mutationFn: deleteChat,
@@ -127,7 +127,7 @@ function ProjectChatsView({ project }: { project: Project }) {
   const newChatMutation = useMutation({
     mutationFn: async () => {
       const { id } = await createChat();
-      await updateChatConfig(id, { pinned_space_id: project.space_id });
+      await updateChatConfig(id, { pinned_project_id: project.id });
       return id;
     },
     onSuccess: (id: string) => navigate(`/c/${id}`),
@@ -247,15 +247,15 @@ function ProjectDocumentsView({ project }: { project: Project }) {
   const renameInputRef = useRef<HTMLInputElement>(null);
 
   const { data: documents = [], isLoading } = useQuery<Document[]>({
-    queryKey: ['documents', project.space_id],
-    queryFn: () => getDocuments(project.space_id),
+    queryKey: ['documents', project.id],
+    queryFn: () => getDocuments(project.id),
     staleTime: 30_000,
   });
 
   const renameMutation = useMutation({
     mutationFn: ({ id, title }: { id: string; title: string }) => updateDocumentById(id, { title }),
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['documents', project.space_id] });
+      queryClient.invalidateQueries({ queryKey: ['documents', project.id] });
       queryClient.invalidateQueries({ queryKey: ['documents-global'] });
       setRenaming(null);
     },
@@ -264,7 +264,7 @@ function ProjectDocumentsView({ project }: { project: Project }) {
   const deleteMutation = useMutation({
     mutationFn: (id: string) => deleteDocumentById(id),
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['documents', project.space_id] });
+      queryClient.invalidateQueries({ queryKey: ['documents', project.id] });
       queryClient.invalidateQueries({ queryKey: ['documents-global'] });
       setPendingDelete(null);
     },
@@ -383,11 +383,11 @@ function ProjectOverview({ project, navigate }: { project: Project; navigate: Re
   const mcpConnections = connections.filter(c => c.type === 'mcp');
 
   const { data: allChats = [] } = useQuery<Session[]>({ queryKey: ['chats'], queryFn: () => getChats() });
-  const recentChats = allChats.filter((c: Session) => c.pinned_space_id === project.space_id).slice(0, 4);
+  const recentChats = allChats.filter((c: Session) => c.pinned_project_id === project.id).slice(0, 4);
 
   const { data: documents = [] } = useQuery<Document[]>({
-    queryKey: ['documents', project.space_id],
-    queryFn: () => getDocuments(project.space_id),
+    queryKey: ['documents', project.id],
+    queryFn: () => getDocuments(project.id),
     staleTime: 30_000,
   });
   const recentDocs = [...documents].sort((a, b) => b.updated_at - a.updated_at).slice(0, 4);
@@ -412,7 +412,7 @@ function ProjectOverview({ project, navigate }: { project: Project; navigate: Re
   const newChatMutation = useMutation({
     mutationFn: async () => {
       const { id } = await createChat();
-      await updateChatConfig(id, { pinned_space_id: project.space_id });
+      await updateChatConfig(id, { pinned_project_id: project.id });
       return id;
     },
     onSuccess: (id: string) => navigate(`/c/${id}`),
@@ -463,7 +463,7 @@ function ProjectOverview({ project, navigate }: { project: Project; navigate: Re
               onOpen={id => navigate(`/c/${id}`)}
             />
             <RecentDocsCard docs={recentDocs} />
-            <ProjectTriggerCard spaceId={project.space_id} />
+            <ProjectTriggerCard projectId={project.id} />
           </div>
 
           <aside className="min-w-0 space-y-5 pt-1">
@@ -826,7 +826,7 @@ function RightRailSection({ title, children }: { title: React.ReactNode; childre
   );
 }
 
-function ProjectTriggerCard({ spaceId }: { spaceId: string }) {
+function ProjectTriggerCard({ projectId }: { projectId: string }) {
   return (
     <section className="rounded-lg border border-border-soft bg-card">
       <div className="flex min-h-12 items-center gap-2 border-b border-border-soft px-4 py-2.5">
@@ -834,7 +834,7 @@ function ProjectTriggerCard({ spaceId }: { spaceId: string }) {
         <h2 className="text-sm font-medium text-foreground">Triggers</h2>
       </div>
       <div className="p-4">
-        <TriggersSection spaceId={spaceId} />
+        <TriggersSection projectId={projectId} />
       </div>
     </section>
   );

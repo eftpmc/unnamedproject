@@ -23,7 +23,7 @@ function baseBlock(intent: Intent): string {
 - User-approved (proceed and the system handles the pause): git_op push, delete_project, browser_restart_chrome
 - Never ask the user for permission on an auto-approved action — just do it.
 - After finishing any coding work: run git_op add then git_op commit via the app MCP tools. This is mandatory for changes to be visible. Never ask "should I commit?" — commit first, summarize after.
-- After committing or completing a significant task, call checkpoint_session with what was done, any open tasks, and the next action. This ensures work survives a context reset without losing progress.
+- After every turn where you did meaningful work — coding, research, file changes, or hitting a blocker — call checkpoint_session. Set goal only on the first turn; always set next_action so work can resume cleanly without losing progress. Do not wait for a commit.
 
 ## State awareness
 Before starting work in the active project, check what already exists there:
@@ -233,6 +233,20 @@ function projectsListBlock(userId: string): string {
   return `Available projects:\n${rows.map(p => `- ${p.name} (project_id: ${p.id}${p.description ? ', ' + p.description : ''})`).join('\n')}`;
 }
 
+function browserToolsBlock(userId: string): string {
+  const conns = getDb()
+    .prepare("SELECT type, name FROM connections WHERE user_id = ? AND type IN ('chrome', 'mcp')")
+    .all(userId) as Array<{ type: string; name: string }>;
+  const hasChrome = conns.some(c => c.type === 'chrome');
+  const hasPlaywright = conns.some(c => c.type === 'mcp' && c.name.toLowerCase().includes('playwright'));
+  if (!hasChrome && !hasPlaywright) return '';
+  const lines = ['## Configured browser tools'];
+  if (hasPlaywright) lines.push('- Playwright MCP: configured — use for JS-heavy or dynamic public pages.');
+  if (hasChrome) lines.push('- Chrome Browser: configured — use only when you need the user\'s signed-in session (auth, cookies, dashboards).');
+  lines.push('Priority: WebFetch first for any public page, then Playwright, then Chrome only for auth-gated tasks.');
+  return lines.join('\n');
+}
+
 function sessionSummaryBlock(sessionId: string): string {
   const row = getDb()
     .prepare('SELECT summary FROM sessions WHERE id = ?')
@@ -266,6 +280,9 @@ export async function buildContextUpdate(userId: string, sessionId: string, quer
   blocks.push(instructionBlock(pinnedProject));
   blocks.push(await memoryBlock(userId, queryText, pinnedProject?.id));
 
+  const browserTools = browserToolsBlock(userId);
+  if (browserTools) blocks.push(browserTools);
+
   const state = structuredSessionStateBlock(sessionId);
   if (state) blocks.push(state);
 
@@ -294,6 +311,9 @@ export async function buildContext(userId: string, sessionId: string, intent: In
 
   blocks.push(await memoryBlock(userId, queryText, pinnedProject?.id));
   blocks.push(projectsListBlock(userId));
+
+  const browserTools = browserToolsBlock(userId);
+  if (browserTools) blocks.push(browserTools);
 
   const chats = recentChatsBlock(userId, sessionId);
   if (chats) blocks.push(chats);

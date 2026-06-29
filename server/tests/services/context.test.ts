@@ -50,8 +50,8 @@ describe('buildContext', () => {
 
   it('includes browser retry-loop guardrail', async () => {
     const ctx = await buildContext(userId, sessionId, DEFAULT_INTENT, '');
-    expect(ctx).toContain('do not retry the same action');
-    expect(ctx).toContain('continue from the checkpoint');
+    expect(ctx).toContain('stop retrying');
+    expect(ctx).toContain('checkpoint_session');
   });
 
   it('includes worktree isolation guidance for code domain', async () => {

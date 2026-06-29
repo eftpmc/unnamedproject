@@ -157,8 +157,10 @@ function countOccurrences(items: string[], value: string): number {
 
 function updateFromTurn(state: SessionState, userText: string, assistantText: string): SessionState {
   let next: SessionState = { ...state, updated_at: Math.floor(Date.now() / 1000) };
-  if (!next.goal && userText.trim()) next.goal = firstSentence(userText);
-  if (userText.trim()) next.current_focus = firstSentence(userText);
+  const userWords = userText.trim().split(/\s+/);
+  if (!next.goal && userWords.length > 2) next.goal = firstSentence(userText);
+  // Only update current_focus from substantive user messages (not "yes", "ok", "1-3")
+  if (userWords.length > 2) next.current_focus = firstSentence(userText);
 
   const assistant = assistantText.trim();
   if (!assistant) return next;
@@ -169,10 +171,11 @@ function updateFromTurn(state: SessionState, userText: string, assistantText: st
   if (/\b(decided|will|should|plan|next step|recommend)\b/i.test(assistant)) {
     next.decisions = pushUnique(next.decisions, firstSentence(assistant));
   }
-  if (/\b(blocked|stuck|can't|cannot|failed|error|limit|needs? approval|manual)\b/i.test(assistant)) {
+  // Only record real blockers — requires stronger language than incidental "can't find"
+  if (/\b(cannot proceed|waiting for user|needs? manual|actually blocked|requires? your|needs? approval|session limit|rate limit)\b/i.test(assistant)) {
     next.blockers = pushUnique(next.blockers, firstSentence(assistant));
   }
-  if (/\b(failed|didn't|did not|same screen|no navigation|error)\b/i.test(assistant)) {
+  if (/\b(failed|didn't work|did not work|same screen|no navigation|no progress)\b/i.test(assistant)) {
     next.failed_attempts = pushUnique(next.failed_attempts, firstSentence(assistant));
   }
   const browserSignature = browserFailureSignature(assistant);

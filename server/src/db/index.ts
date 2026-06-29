@@ -254,11 +254,40 @@ function applySchema(): void {
       UNIQUE(connection_id, mcp_tool_name),
       UNIQUE(user_id, tool_name)
     );
+
+    CREATE TABLE IF NOT EXISTS vault_entries (
+      id TEXT PRIMARY KEY,
+      user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+      key TEXT NOT NULL,
+      encrypted_value TEXT NOT NULL,
+      created_at INTEGER NOT NULL DEFAULT (unixepoch()),
+      updated_at INTEGER NOT NULL DEFAULT (unixepoch()),
+      UNIQUE(user_id, key)
+    );
+    CREATE INDEX IF NOT EXISTS idx_vault_entries_user ON vault_entries(user_id);
   `);
 }
 
 const migrations: Migration[] = [
   { version: 1, name: 'baseline', up: () => applySchema() },
+  {
+    version: 2,
+    name: 'vault_entries',
+    up: (db) => {
+      db.exec(`
+        CREATE TABLE IF NOT EXISTS vault_entries (
+          id TEXT PRIMARY KEY,
+          user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+          key TEXT NOT NULL,
+          encrypted_value TEXT NOT NULL,
+          created_at INTEGER NOT NULL DEFAULT (unixepoch()),
+          updated_at INTEGER NOT NULL DEFAULT (unixepoch()),
+          UNIQUE(user_id, key)
+        );
+        CREATE INDEX IF NOT EXISTS idx_vault_entries_user ON vault_entries(user_id);
+      `);
+    },
+  },
 ];
 
 function tableSql(database: Database.Database, name: string): string | undefined {

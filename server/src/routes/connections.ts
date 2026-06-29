@@ -1,10 +1,10 @@
-import { execSync } from 'child_process';
 import { Router } from 'express';
 import { google } from 'googleapis';
 import { getDb } from '../db/index.js';
 import { newId } from '../lib/ids.js';
 import { encrypt, decrypt, deriveKey } from '../lib/crypto.js';
 import { requireAuth, type AuthedRequest } from '../middleware/auth.js';
+import { isChromeBridgeConnected } from '../services/chromeBridge.js';
 
 const router = Router();
 router.use(requireAuth);
@@ -108,22 +108,7 @@ router.get('/chrome/status', async (req, res) => {
     .prepare("SELECT id FROM connections WHERE user_id = ? AND type = 'chrome' LIMIT 1")
     .get(userId);
 
-  let chromeRunning = false;
-  let debugPortOpen = false;
-
-  try {
-    execSync('pgrep -f "Google Chrome" > /dev/null 2>&1', { stdio: 'ignore' });
-    chromeRunning = true;
-  } catch { /* not running */ }
-
-  if (chromeRunning) {
-    try {
-      const r = await fetch('http://localhost:9222/json/version', { signal: AbortSignal.timeout(1000) });
-      debugPortOpen = r.ok;
-    } catch { /* not open */ }
-  }
-
-  res.json({ enabled, chromeRunning, debugPortOpen });
+  res.json({ enabled, extensionConnected: isChromeBridgeConnected(userId) });
 });
 
 router.delete('/:id', (req, res) => {

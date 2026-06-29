@@ -127,7 +127,7 @@ export function deleteMedia(id: string): Promise<void> {
   return request(`/media/${id}`, { method: 'DELETE' });
 }
 
-export function getPendingApprovals(): Promise<Array<{ approval_id: string; execution_id: string; action: string; payload: Record<string, unknown> }>> {
+export function getPendingApprovals(): Promise<Array<{ approval_id: string; execution_id: string; action: string; payload: Record<string, unknown>; tool: string; created_at: number; session_id: string | null }>> {
   return request('/executions/pending-approvals');
 }
 
@@ -264,7 +264,7 @@ export function getGoogleStatus(): Promise<Record<string, GoogleAccount[]>> {
   return request('/auth/google/status');
 }
 
-export function getChromeStatus(): Promise<{ enabled: boolean; chromeRunning: boolean; debugPortOpen: boolean }> {
+export function getChromeStatus(): Promise<{ enabled: boolean; extensionConnected: boolean }> {
   return request('/connections/chrome/status');
 }
 
@@ -304,4 +304,3 @@ export function deleteAgentProvider(id: string): Promise<void> {
 export function testAgentProvider(id: string): Promise<{ ok: boolean | null; latencyMs?: number; error?: string }> {
   return request(`/agent-providers/${id}/test`);
 }
-

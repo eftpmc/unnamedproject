@@ -1,6 +1,7 @@
 import { WebSocketServer, WebSocket } from 'ws';
 import type { Server } from 'http';
 import { verifyToken } from '../lib/jwt.js';
+import { registerChromeBridgeSocket } from './chromeBridge.js';
 
 type UserId = string;
 
@@ -20,6 +21,11 @@ export function initSocket(server: Server): void {
       userId = verifyToken(token).userId;
     } catch {
       ws.close(1008, 'Invalid token');
+      return;
+    }
+
+    if (url.pathname === '/chrome-bridge') {
+      registerChromeBridgeSocket(userId, ws);
       return;
     }
 

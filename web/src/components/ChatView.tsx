@@ -17,7 +17,7 @@ import WorktreeDiff from './WorktreeDiff.js';
 import ContextBar from './ContextBar.js';
 import EmptyChatState from './EmptyChatState.js';
 import ScopePopover from './ScopePopover.js';
-import { getMessages, sendMessage, getChats, updateChatConfig, getSessionWorktree, mergeSessionBranch, getWorktreeDiff, getProjects, truncateMessagesFrom, approveExecution, rejectExecution, getChatEvents, getChatStatus, stopChat } from '../lib/api.js';
+import { getMessages, sendMessage, getChats, updateChatConfig, getSessionWorktree, mergeSessionBranch, getWorktreeDiff, getProjects, truncateMessagesFrom, approveExecution, rejectExecution, getChatEvents, getChatStatus, stopChat, getPendingApprovals } from '../lib/api.js';
 import { subscribe } from '../lib/ws.js';
 import { cn } from '../lib/utils.js';
 import { usePageTitle } from '../lib/usePageTitle.js';
@@ -140,6 +140,40 @@ export default function ChatView({ chatId }: ChatViewProps) {
     }
     if (Object.keys(byMessage).length) setExecutions(prev => ({ ...byMessage, ...prev }));
   }, [messages]);
+
+  // Hydrate pending approvals that belong to this chat session but have no message
+  // (e.g. browser_restart_chrome runs outside any message context)
+  const pendingApprovalsFetched = useRef(false);
+  useEffect(() => {
+    if (pendingApprovalsFetched.current) return;
+    pendingApprovalsFetched.current = true;
+    getPendingApprovals().then(approvals => {
+      const relevant = approvals.filter(a => {
+        const sessionId = a.session_id ?? (typeof a.payload?.session_id === 'string' ? a.payload.session_id : null);
+        return sessionId === chatId;
+      });
+      if (!relevant.length) return;
+      setExecutions(prev => {
+        const orphans = [...(prev.__orphan__ ?? [])];
+        for (const a of relevant) {
+          if (orphans.some(e => e.executionId === a.execution_id)) continue;
+          orphans.push({
+            executionId: a.execution_id,
+            tool: a.tool ?? 'browser_restart_chrome',
+            status: 'awaiting_approval',
+            outputLog: '',
+            result: null,
+            createdAt: a.created_at ?? Math.floor(Date.now() / 1000),
+            needsApproval: true,
+            approvalId: a.approval_id,
+            action: a.action,
+            payload: a.payload,
+          });
+        }
+        return { ...prev, __orphan__: orphans };
+      });
+    }).catch(() => { /* non-fatal */ });
+  }, [chatId]);
 
   const draftKey = `draft:${chatId}`;
   const [inputValue, setInputValue] = useState(() => localStorage.getItem(draftKey) ?? '');

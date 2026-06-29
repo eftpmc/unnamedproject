@@ -1,0 +1,115 @@
+- generic [ref=e2]:
+  - generic [ref=e3]:
+    - navigation [ref=e4]:
+      - button "Pin sidebar open" [ref=e5]:
+        - generic [ref=e6]: u
+      - generic [ref=e7]:
+        - button "Quick search (⌘K)" [ref=e8]:
+          - img [ref=e9]
+        - link "Home" [ref=e12] [cursor=pointer]:
+          - /url: /home
+          - img [ref=e14]
+        - link "Chats" [ref=e19] [cursor=pointer]:
+          - /url: /chats
+          - img [ref=e21]
+        - link "Projects" [ref=e23] [cursor=pointer]:
+          - /url: /projects
+          - img [ref=e25]
+        - link "Library" [ref=e30] [cursor=pointer]:
+          - /url: /documents
+          - img [ref=e32]
+        - link "Triggers" [ref=e36] [cursor=pointer]:
+          - /url: /triggers
+          - img [ref=e38]
+        - link "Settings" [ref=e41] [cursor=pointer]:
+          - /url: /settings/tools
+          - img [ref=e43]
+      - button "Pin sidebar open" [ref=e46]:
+        - img [ref=e47]
+    - generic [ref=e49]:
+      - banner [ref=e50]:
+        - generic [ref=e51]:
+          - button "Open inbox" [ref=e52]:
+            - img [ref=e53]
+          - button "Account menu" [ref=e56]:
+            - generic [ref=e57]: Z
+            - generic [ref=e58]: zackhhi
+            - img [ref=e59]
+      - main [ref=e61]:
+        - generic [ref=e62]:
+          - generic [ref=e69]:
+            - generic [ref=e70]:
+              - generic [ref=e71]:
+                - button "Untitled chat" [ref=e72]
+                - button "Chat settings" [ref=e73]:
+                  - img [ref=e74]
+              - generic [ref=e76]:
+                - generic [ref=e77]: Internship Applications
+                - button "Context" [pressed] [ref=e79]:
+                  - img [ref=e80]
+                  - generic [ref=e82]: Context
+            - log [ref=e84]:
+              - generic [ref=e87]:
+                - button "Copy" [ref=e89]:
+                  - img [ref=e90]
+                - generic "Jun 29, 3:09 AM" [ref=e93]:
+                  - paragraph [ref=e95]:
+                    - text: "Use the Chrome MCP browser tools, not Playwright, to complete this task end-to-end: go to Handshake, sign in as"
+                    - link "zackhhi@gmail.com" [ref=e96] [cursor=pointer]:
+                      - /url: mailto:zackhhi@gmail.com
+                    - text: with password test1234 if needed, find my internship applications, create a new project for my internship applications, and add documents/items for the applications you find. If Chrome is running without remote debugging, call browser_restart_chrome and wait for approval rather than using another browser. Report what project and documents you created.
+              - generic [ref=e97]:
+                - img [ref=e99]
+                - generic [ref=e103]:
+                  - text: "Approval needed: Restart Chrome with remote debugging"
+                  - generic [ref=e104]: · The agent is waiting for your decision.
+              - button "Browser Restart Chrome Done" [ref=e177] [cursor=pointer]:
+                - img [ref=e109]
+                - generic [ref=e112]: Browser Restart Chrome
+                - generic [ref=e113]:
+                  - img [ref=e178]
+                  - text: Done
+              - generic [ref=e121]:
+                - img [ref=e123]
+                - generic [ref=e127]:
+                  - text: "Approval needed: Restart Chrome with remote debugging"
+                  - generic [ref=e128]: · The agent is waiting for your decision.
+            - generic [ref=e131]:
+              - textbox "Agent is responding…" [disabled] [ref=e132]
+              - generic [ref=e133]:
+                - generic [ref=e134]:
+                  - button "Attach files" [disabled] [ref=e135]:
+                    - img [ref=e136]
+                  - button "medium" [ref=e138]:
+                    - generic [ref=e139]: medium
+                    - img
+                - button "Stop" [ref=e141]:
+                  - img [ref=e142]
+          - complementary [ref=e144]:
+            - generic [ref=e146]:
+              - generic [ref=e147]:
+                - generic [ref=e148]: Context
+                - button [ref=e149]:
+                  - img [ref=e150]
+              - generic [ref=e153]:
+                - generic [ref=e154]: Project
+                - button "Internship Applications Pinned" [ref=e156]:
+                  - generic [ref=e159]: Internship Applications
+                  - generic [ref=e160]: Pinned
+                  - img [ref=e161]
+              - generic [ref=e163]:
+                - generic [ref=e164]:
+                  - img [ref=e165]
+                  - text: Needs approval
+                - generic [ref=e168]: Restart Chrome with remote debugging
+                - generic [ref=e169]:
+                  - button "Deny" [ref=e170]
+                  - button "Approve" [ref=e171]:
+                    - img [ref=e172]
+                    - text: Approve
+              - generic [ref=e174]:
+                - generic [ref=e175]: Documents
+                - generic [ref=e176]: Documents created from this chat will appear here.
+  - generic [ref=e66]:
+    - heading "Search" [level=2] [ref=e67]
+    - paragraph [ref=e68]: Search chats, projects, and documents

@@ -1,0 +1,102 @@
+- generic [ref=e2]:
+  - generic [ref=e3]:
+    - navigation [ref=e4]:
+      - button "Pin sidebar open" [ref=e5]:
+        - generic [ref=e6]: u
+      - generic [ref=e7]:
+        - button "Quick search (⌘K)" [ref=e8]:
+          - img [ref=e9]
+        - link "Home" [ref=e12] [cursor=pointer]:
+          - /url: /home
+          - img [ref=e14]
+        - link "Chats" [ref=e19] [cursor=pointer]:
+          - /url: /chats
+          - img [ref=e21]
+        - link "Projects" [ref=e23] [cursor=pointer]:
+          - /url: /projects
+          - img [ref=e25]
+        - link "Library" [ref=e30] [cursor=pointer]:
+          - /url: /documents
+          - img [ref=e32]
+        - link "Triggers" [ref=e36] [cursor=pointer]:
+          - /url: /triggers
+          - img [ref=e38]
+        - link "Settings" [ref=e41] [cursor=pointer]:
+          - /url: /settings/tools
+          - img [ref=e43]
+      - button "Pin sidebar open" [ref=e46]:
+        - img [ref=e47]
+    - generic [ref=e49]:
+      - banner [ref=e50]:
+        - generic [ref=e51]:
+          - button "Open inbox" [ref=e52]:
+            - img [ref=e53]
+          - button "Account menu" [ref=e56]:
+            - generic [ref=e57]: Z
+            - generic [ref=e58]: zackhhi
+            - img [ref=e59]
+      - main [ref=e61]:
+        - generic [ref=e62]:
+          - generic [ref=e63]:
+            - generic [ref=e64]:
+              - generic [ref=e65]:
+                - button "Handshake internship applications" [ref=e66]
+                - button "Chat settings" [ref=e67]:
+                  - img [ref=e68]
+              - generic [ref=e70]:
+                - generic [ref=e71]: Internship Applications
+                - button "Context" [pressed] [ref=e73]:
+                  - img [ref=e74]
+                  - generic [ref=e76]: Context
+            - log [ref=e78]:
+              - generic [ref=e81]:
+                - img [ref=e82]
+                - text: Scoped to Internship Applications
+              - generic [ref=e89]:
+                - button "Copy" [ref=e91]:
+                  - img [ref=e92]
+                - button "Edit message" [ref=e95]:
+                  - img [ref=e96]
+                - generic "Jun 29, 3:43 AM" [ref=e99]:
+                  - paragraph [ref=e101]: "Use the connected Chrome Browser MCP tools for this task, not Playwright. Go to Handshake in the connected Chrome profile, use my existing signed-in session if present, and find my internship applications. Create or update documents in this pinned Internship Applications project for each application you find. Use frontmatter like type: application, status: applied, company, role, source: Handshake, and include the application details/body. If Handshake asks for a one-time code, CAPTCHA, or a missing login step you cannot complete from the existing Chrome session, stop and ask me exactly what is needed."
+              - generic "Jun 29, 3:43 AM" [ref=e103]:
+                - generic [ref=e104]:
+                  - paragraph [ref=e105]:
+                    - text: I’ll use the Chrome control skill for the signed-in Handshake session, and I’ll first check the project documents so I update rather than duplicate records.The project currently has no application documents, so every Handshake record I find will become a new markdown document unless I see an existing match later. I’m connecting to the existing Chrome profile now.The Chrome connection is configured. The lower-level Chrome runtime failed before it could initialize, so I’m using the connected Chrome MCP browser tools exposed for this project rather than switching to Playwright.I’m opening Handshake in the signed-in Chrome profile and looking for the applications area. If it lands on a login or verification wall, I’ll stop there and tell you exactly what it needs.Handshake is not signed in in the connected Chrome profile. It is showing the login page at
+                    - code [ref=e106]: app.joinhandshake.com
+                    - text: with options to continue with Google or email.
+                  - paragraph [ref=e107]: Please sign in to Handshake in that Chrome window, including any one-time code or CAPTCHA if prompted, then tell me when it’s ready.
+                - button "Copy" [ref=e109]:
+                  - img [ref=e110]
+            - generic [ref=e115]:
+              - textbox "Message…" [ref=e116]
+              - generic [ref=e117]:
+                - generic [ref=e118]:
+                  - button "Attach files" [ref=e119]:
+                    - img [ref=e120]
+                  - button "medium" [ref=e122]:
+                    - generic [ref=e123]: medium
+                    - img
+                - generic [ref=e124]:
+                  - button "Start voice input" [ref=e125]:
+                    - img [ref=e126]
+                  - button "Send" [disabled] [ref=e129]:
+                    - img [ref=e130]
+          - complementary [ref=e132]:
+            - generic [ref=e134]:
+              - generic [ref=e135]:
+                - generic [ref=e136]: Context
+                - button [ref=e137]:
+                  - img [ref=e138]
+              - generic [ref=e141]:
+                - generic [ref=e142]: Project
+                - button "Internship Applications Pinned" [ref=e144]:
+                  - generic [ref=e147]: Internship Applications
+                  - generic [ref=e148]: Pinned
+                  - img [ref=e149]
+              - generic [ref=e151]:
+                - generic [ref=e152]: Documents
+                - generic [ref=e153]: Documents created from this chat will appear here.
+  - generic [ref=e154]:
+    - heading "Search" [level=2] [ref=e155]
+    - paragraph [ref=e156]: Search chats, projects, and documents

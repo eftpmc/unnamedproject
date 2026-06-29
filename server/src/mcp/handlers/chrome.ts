@@ -1,68 +1,6 @@
-import os from 'os';
-import path from 'path';
-import { execSync } from 'child_process';
-import { chromium, type BrowserContext } from 'playwright';
 import { registerTool } from '../registry.js';
 import { getDb } from '../../db/index.js';
-import { createExecution, completeExecution, requestApproval } from '../../services/executor.js';
-
-const CDP_URL = 'http://localhost:9222';
-
-// Per-user browser contexts kept alive between tool calls
-const contexts = new Map<string, BrowserContext>();
-
-function chromeProfilePath(): string {
-  return path.join(os.homedir(), 'Library', 'Application Support', 'Google', 'Chrome');
-}
-
-function isChromeRunning(): boolean {
-  try {
-    execSync('pgrep -f "Google Chrome" > /dev/null 2>&1', { stdio: 'ignore' });
-    return true;
-  } catch {
-    return false;
-  }
-}
-
-async function getContext(userId: string): Promise<{ ctx: BrowserContext; mode: 'cdp' | 'launched' } | null> {
-  const existing = contexts.get(userId);
-  if (existing) {
-    try {
-      existing.pages(); // throws if disconnected
-      return { ctx: existing, mode: 'cdp' };
-    } catch {
-      contexts.delete(userId);
-    }
-  }
-
-  // Try CDP attach
-  try {
-    const browser = await chromium.connectOverCDP(CDP_URL);
-    const ctx = browser.contexts()[0] ?? await browser.newContext();
-    contexts.set(userId, ctx);
-    browser.on('disconnected', () => contexts.delete(userId));
-    return { ctx, mode: 'cdp' };
-  } catch {
-    // CDP not available
-  }
-
-  // Chrome running but no debug port — caller must ask for restart
-  if (isChromeRunning()) return null;
-
-  // Chrome not running at all — launch with user's profile
-  try {
-    const ctx = await chromium.launchPersistentContext(chromeProfilePath(), {
-      channel: 'chrome',
-      headless: false,
-      args: ['--remote-debugging-port=9222', '--no-first-run'],
-    });
-    contexts.set(userId, ctx);
-    ctx.browser()?.on('disconnected', () => contexts.delete(userId));
-    return { ctx, mode: 'launched' };
-  } catch (err) {
-    throw new Error(`Failed to launch Chrome: ${err instanceof Error ? err.message : String(err)}`);
-  }
-}
+import { callChromeBridge, isChromeBridgeConnected } from '../../services/chromeBridge.js';
 
 function hasChrome(userId: string): boolean {
   const row = getDb()
@@ -71,59 +9,37 @@ function hasChrome(userId: string): boolean {
   return !!row;
 }
 
-async function resolveContext(userId: string): Promise<BrowserContext> {
-  const result = await getContext(userId);
-  if (result) return result.ctx;
-  throw new Error(
-    'Chrome is running but remote debugging is not enabled. ' +
-    'Call browser_restart_chrome to restart Chrome with the remote debugging port enabled.'
-  );
-}
-
-async function activePage(ctx: BrowserContext) {
-  const pages = ctx.pages();
-  if (pages.length === 0) return ctx.newPage();
-  return pages[pages.length - 1];
+async function chromeTool(userId: string, method: string, params: Record<string, unknown> = {}): Promise<string> {
+  if (!hasChrome(userId)) return 'Chrome browser is not enabled. Enable it in Settings -> Tools -> Chrome Browser.';
+  const result = await callChromeBridge(userId, method, params);
+  return typeof result === 'string' ? result : JSON.stringify(result ?? null, null, 2);
 }
 
 export function registerChromeHandlers(): void {
-
   registerTool({
     name: 'browser_navigate',
-    description: 'Navigate the Chrome browser to a URL. Chrome must be enabled in Settings → MCP.',
+    description: 'Navigate the connected Chrome browser to a URL. Requires the Unnamed Chrome extension to be connected.',
     inputSchema: {
       type: 'object',
       properties: {
         url: { type: 'string', description: 'URL to navigate to' },
-        wait_until: { type: 'string', enum: ['load', 'domcontentloaded', 'networkidle'], description: 'When to consider navigation done (default: load)' },
+        wait_until: { type: 'string', enum: ['load', 'domcontentloaded', 'networkidle'], description: 'Accepted for compatibility; the extension waits for the tab to finish loading.' },
       },
       required: ['url'],
     },
-    handler: async (args, userId) => {
-      if (!hasChrome(userId)) return 'Chrome browser is not enabled. Enable it in Settings → MCP → Chrome Browser.';
-      const ctx = await resolveContext(userId);
-      const page = await activePage(ctx);
-      await page.goto(args.url as string, { waitUntil: (args.wait_until as 'load' | 'domcontentloaded' | 'networkidle') ?? 'load' });
-      return `Navigated to ${page.url()}`;
-    },
+    handler: async (args, userId) => chromeTool(userId, 'navigate', { url: args.url }),
   });
 
   registerTool({
     name: 'browser_screenshot',
-    description: 'Take a screenshot of the current Chrome tab. Returns base64 PNG.',
+    description: 'Take a screenshot of the active connected Chrome tab. Returns base64 PNG.',
     inputSchema: { type: 'object', properties: {} },
-    handler: async (_args, userId) => {
-      if (!hasChrome(userId)) return 'Chrome browser is not enabled. Enable it in Settings → MCP → Chrome Browser.';
-      const ctx = await resolveContext(userId);
-      const page = await activePage(ctx);
-      const buf = await page.screenshot({ type: 'png' });
-      return `data:image/png;base64,${buf.toString('base64')}`;
-    },
+    handler: async (_args, userId) => chromeTool(userId, 'screenshot'),
   });
 
   registerTool({
     name: 'browser_click',
-    description: 'Click an element in Chrome by CSS selector or text.',
+    description: 'Click an element in Chrome by CSS selector or text= selector.',
     inputSchema: {
       type: 'object',
       properties: {
@@ -131,18 +47,12 @@ export function registerChromeHandlers(): void {
       },
       required: ['selector'],
     },
-    handler: async (args, userId) => {
-      if (!hasChrome(userId)) return 'Chrome browser is not enabled. Enable it in Settings → MCP → Chrome Browser.';
-      const ctx = await resolveContext(userId);
-      const page = await activePage(ctx);
-      await page.click(args.selector as string);
-      return `Clicked ${args.selector}`;
-    },
+    handler: async (args, userId) => chromeTool(userId, 'click', { selector: args.selector }),
   });
 
   registerTool({
     name: 'browser_fill',
-    description: 'Fill a form field in Chrome.',
+    description: 'Fill a form field in Chrome by CSS selector or text= selector.',
     inputSchema: {
       type: 'object',
       properties: {
@@ -151,18 +61,12 @@ export function registerChromeHandlers(): void {
       },
       required: ['selector', 'value'],
     },
-    handler: async (args, userId) => {
-      if (!hasChrome(userId)) return 'Chrome browser is not enabled. Enable it in Settings → MCP → Chrome Browser.';
-      const ctx = await resolveContext(userId);
-      const page = await activePage(ctx);
-      await page.fill(args.selector as string, args.value as string);
-      return `Filled ${args.selector}`;
-    },
+    handler: async (args, userId) => chromeTool(userId, 'fill', { selector: args.selector, value: args.value }),
   });
 
   registerTool({
     name: 'browser_evaluate',
-    description: 'Run JavaScript in the current Chrome tab and return the result.',
+    description: 'Run JavaScript in the active connected Chrome tab and return the result.',
     inputSchema: {
       type: 'object',
       properties: {
@@ -170,127 +74,89 @@ export function registerChromeHandlers(): void {
       },
       required: ['script'],
     },
-    handler: async (args, userId) => {
-      if (!hasChrome(userId)) return 'Chrome browser is not enabled. Enable it in Settings → MCP → Chrome Browser.';
-      const ctx = await resolveContext(userId);
-      const page = await activePage(ctx);
-      const result = await page.evaluate(args.script as string);
-      return JSON.stringify(result ?? null);
-    },
+    handler: async (args, userId) => chromeTool(userId, 'evaluate', { script: args.script }),
   });
 
   registerTool({
     name: 'browser_get_text',
-    description: 'Get the visible text content of the current Chrome page.',
+    description: 'Get the visible text content of the active connected Chrome page.',
     inputSchema: { type: 'object', properties: {} },
-    handler: async (_args, userId) => {
-      if (!hasChrome(userId)) return 'Chrome browser is not enabled. Enable it in Settings → MCP → Chrome Browser.';
-      const ctx = await resolveContext(userId);
-      const page = await activePage(ctx);
-      const text = await page.evaluate(() => document.body.innerText);
-      return String(text).slice(0, 20000);
-    },
+    handler: async (_args, userId) => chromeTool(userId, 'getText'),
   });
 
   registerTool({
     name: 'browser_tabs',
-    description: 'List open tabs in Chrome with their title and URL.',
+    description: 'List open tabs in the connected Chrome profile with their title and URL.',
     inputSchema: { type: 'object', properties: {} },
-    handler: async (_args, userId) => {
-      if (!hasChrome(userId)) return 'Chrome browser is not enabled. Enable it in Settings → MCP → Chrome Browser.';
-      const ctx = await resolveContext(userId);
-      const pages = ctx.pages();
-      const tabs = await Promise.all(pages.map(async (p, i) => ({ index: i, url: p.url(), title: await p.title() })));
-      return JSON.stringify(tabs, null, 2);
+    handler: async (_args, userId) => chromeTool(userId, 'tabs'),
+  });
+
+  registerTool({
+    name: 'browser_select_tab',
+    description: 'Select an open Chrome tab by index from browser_tabs. Use this when login or OAuth opens a new tab/window.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        index: { type: 'number', description: 'Tab index from browser_tabs' },
+      },
+      required: ['index'],
     },
+    handler: async (args, userId) => chromeTool(userId, 'selectTab', { index: args.index }),
   });
 
   registerTool({
     name: 'browser_new_tab',
-    description: 'Open a new tab in Chrome and optionally navigate to a URL.',
+    description: 'Open a new tab in the connected Chrome profile and optionally navigate to a URL.',
     inputSchema: {
       type: 'object',
       properties: {
         url: { type: 'string', description: 'Optional URL to navigate to in the new tab' },
       },
     },
-    handler: async (args, userId) => {
-      if (!hasChrome(userId)) return 'Chrome browser is not enabled. Enable it in Settings → MCP → Chrome Browser.';
-      const ctx = await resolveContext(userId);
-      const page = await ctx.newPage();
-      if (args.url) await page.goto(args.url as string);
-      return `Opened new tab${args.url ? ` at ${page.url()}` : ''}`;
+    handler: async (args, userId) => chromeTool(userId, 'newTab', { url: args.url }),
+  });
+
+  registerTool({
+    name: 'browser_press_key',
+    description: 'Press a key on the currently focused element in Chrome. Use "Enter" to submit a form or activate a focused button, "Tab" to move focus, "Escape" to dismiss. Detects resulting navigation.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        key: { type: 'string', description: 'Key to press: "Enter", "Tab", "Escape", "Space", "ArrowDown", "ArrowUp", or a character', enum: ['Enter', 'Tab', 'Escape', 'Space', 'ArrowDown', 'ArrowUp'] },
+      },
+      required: ['key'],
     },
+    handler: async (args, userId) => chromeTool(userId, 'pressKey', { key: String(args.key || 'Enter') }),
+  });
+
+  registerTool({
+    name: 'browser_autofill',
+    description: 'Fill a login form in the connected Chrome tab with a username and password using React-compatible native input events. Optionally submits the form. Use vault_get to retrieve credentials before calling this.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        username: { type: 'string', description: 'Username or email to fill' },
+        password: { type: 'string', description: 'Password to fill' },
+        submit: { type: 'boolean', description: 'Whether to click the submit button after filling (default: true)' },
+      },
+      required: ['username', 'password'],
+    },
+    handler: async (args, userId) =>
+      chromeTool(userId, 'autofill', {
+        username: String(args.username),
+        password: String(args.password),
+        submit: args.submit !== false,
+      }),
   });
 
   registerTool({
     name: 'browser_restart_chrome',
-    description: 'Restart Chrome with remote debugging enabled so the agent can control your browser. Requires user approval.',
+    description: 'Compatibility tool. The extension-backed Chrome connector does not restart Chrome; it reports connection status and setup guidance.',
     inputSchema: { type: 'object', properties: {} },
-    handler: async (_args, userId, sessionId) => {
-      if (!hasChrome(userId)) return 'Chrome browser is not enabled. Enable it in Settings → MCP → Chrome Browser.';
-
-      const executionId = createExecution(userId, null, null, 'browser_restart_chrome');
-
-      const decision = await requestApproval(
-        executionId,
-        userId,
-        'Restart Chrome with remote debugging',
-        {
-          reason: 'Chrome is running without remote debugging. The agent needs to restart Chrome to control your browser. Your session and tabs will be restored from your Chrome profile.',
-          session_id: sessionId,
-        },
-        'user',
-      );
-
-      if (decision === 'rejected') {
-        completeExecution(executionId, userId, 'error', 'User rejected Chrome restart');
-        return 'Chrome restart was rejected. You can manually relaunch Chrome with: open -a "Google Chrome" --args --remote-debugging-port=9222';
-      }
-
-      // Gracefully quit Chrome so it saves the session before restarting
-      contexts.delete(userId);
-      try {
-        execSync('osascript -e \'tell application "Google Chrome" to quit\'', { stdio: 'ignore' });
-        await new Promise(r => setTimeout(r, 2000));
-      } catch { /* Chrome wasn't running */ }
-
-      // Ensure it's fully gone before relaunching
-      try {
-        execSync('pkill -f "Google Chrome"', { stdio: 'ignore' });
-        await new Promise(r => setTimeout(r, 500));
-      } catch { /* already gone */ }
-
-      // Relaunch Chrome normally with the remote debugging flag — this restores the saved session
-      try {
-        execSync('open -a "Google Chrome" --args --remote-debugging-port=9222', { stdio: 'ignore' });
-      } catch (err) {
-        const msg = `Failed to launch Chrome: ${err instanceof Error ? err.message : String(err)}`;
-        completeExecution(executionId, userId, 'error', msg);
-        return msg;
-      }
-
-      // Wait for CDP to become available (up to 10 s)
-      let cdpReady = false;
-      for (let i = 0; i < 20; i++) {
-        await new Promise(r => setTimeout(r, 500));
-        try {
-          const browser = await chromium.connectOverCDP(CDP_URL);
-          const ctx = browser.contexts()[0] ?? await browser.newContext();
-          contexts.set(userId, ctx);
-          browser.on('disconnected', () => contexts.delete(userId));
-          cdpReady = true;
-          break;
-        } catch { /* not ready yet */ }
-      }
-
-      if (!cdpReady) {
-        completeExecution(executionId, userId, 'error', 'Chrome launched but CDP not yet available — try a browser tool in a moment');
-        return 'Chrome is launching. Wait a few seconds then retry your browser command.';
-      }
-
-      completeExecution(executionId, userId, 'done', 'Chrome restarted with remote debugging on port 9222');
-      return 'Chrome restarted with remote debugging enabled. Your previous tabs have been restored.';
+    handler: async (_args, userId) => {
+      if (!hasChrome(userId)) return 'Chrome browser is not enabled. Enable it in Settings -> Tools -> Chrome Browser.';
+      if (isChromeBridgeConnected(userId)) return 'Chrome extension is connected. Use browser_navigate, browser_tabs, and related tools.';
+      return 'Chrome extension is not connected. Install or reload the Unnamed Chrome extension from chrome-extension/, open its options, paste your local app token, and connect it to this server.';
     },
   });
 }

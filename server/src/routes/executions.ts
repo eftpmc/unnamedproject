@@ -12,14 +12,15 @@ router.get('/pending-approvals', (req, res) => {
   const { userId } = req as unknown as AuthedRequest;
   const rows = getDb()
     .prepare(`
-      SELECT a.id as approval_id, a.execution_id, a.action, a.payload
+      SELECT a.id as approval_id, a.execution_id, a.action, a.payload,
+             e.tool, e.created_at, m.session_id
       FROM approvals a
       JOIN executions e ON e.id = a.execution_id
       LEFT JOIN messages m ON m.id = e.message_id
       LEFT JOIN sessions t ON t.id = m.session_id
       WHERE (t.user_id = ? OR e.message_id IS NULL) AND a.status = 'pending'
     `)
-    .all(userId) as Array<{ approval_id: string; execution_id: string; action: string; payload: string }>;
+    .all(userId) as Array<{ approval_id: string; execution_id: string; action: string; payload: string; tool: string; created_at: number; session_id: string | null }>;
   res.json(rows.map(r => ({ ...r, payload: JSON.parse(r.payload) })));
 });
 

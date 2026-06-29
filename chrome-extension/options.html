@@ -1,0 +1,35 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Unnamed Chrome Bridge</title>
+    <link rel="stylesheet" href="options.css">
+  </head>
+  <body>
+    <main>
+      <h1>Unnamed Chrome Bridge</h1>
+      <label>
+        App URL
+        <input id="appUrl" type="url" placeholder="http://localhost:3000">
+      </label>
+      <label>
+        App auth token
+        <textarea id="token" spellcheck="false" placeholder="Paste your local app token"></textarea>
+      </label>
+      <label class="row">
+        <input id="enabled" type="checkbox">
+        <span>Connect this Chrome profile to Unnamed</span>
+      </label>
+      <div class="actions">
+        <button id="save">Save</button>
+        <span id="status"></span>
+      </div>
+      <p>
+        Keep this extension installed in the Chrome profile that has the sessions
+        you want the agent to use.
+      </p>
+    </main>
+    <script src="options.js"></script>
+  </body>
+</html>

@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { Check, Moon, Play, Plus, Sun, Trash2 } from 'lucide-react';
+import { Check, Copy, Moon, Play, Plus, Sun, Trash2 } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
@@ -12,6 +12,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Textarea } from '@/components/ui/textarea';
 import { ContentColumn, PageBody, PageHeader, PageShell } from '@/components/ui/app-layout';
 import { cn } from '@/lib/utils';
+import { getToken } from '../lib/auth.js';
 import {
   createConnection,
   createAgentProvider,
@@ -161,6 +162,7 @@ function SettingRow({ children, className }: { children: React.ReactNode; classN
 function ChromeBrowserSection({ connections, onConnectionsChanged }: { connections: Connection[]; onConnectionsChanged: () => void }) {
   const qc = useQueryClient();
   const chromeConn = connections.find(c => c.type === 'chrome');
+  const [tokenCopied, setTokenCopied] = useState(false);
 
   const { data: status, refetch: refetchStatus } = useQuery({
     queryKey: ['chrome-status'],
@@ -179,39 +181,49 @@ function ChromeBrowserSection({ connections, onConnectionsChanged }: { connectio
     onSuccess: () => { qc.invalidateQueries({ queryKey: ['connections'] }); onConnectionsChanged(); refetchStatus(); },
   });
 
+  const copyToken = async () => {
+    const token = getToken();
+    if (!token) return;
+    await navigator.clipboard.writeText(token);
+    setTokenCopied(true);
+    window.setTimeout(() => setTokenCopied(false), 1600);
+  };
+
   const statusLabel = !chromeConn
     ? null
-    : status?.debugPortOpen
-      ? 'Connected via CDP'
-      : status?.chromeRunning
-        ? 'Chrome running — no debug port'
-        : 'Chrome not running';
+    : status?.extensionConnected
+      ? 'Extension connected'
+      : 'Extension not connected';
 
   const statusColor = !chromeConn
     ? null
-    : status?.debugPortOpen
+    : status?.extensionConnected
       ? 'text-success'
-      : status?.chromeRunning
-        ? 'text-warning'
-        : 'text-muted-foreground';
+      : 'text-warning';
 
   return (
     <div>
       <SectionLabel>Chrome Browser</SectionLabel>
       <SettingRow>
         <div className="min-w-0">
-          <SettingRowInfo title="Chrome Browser" description={chromeConn ? (statusLabel ?? 'Checking…') : 'Control your real Chrome browser with all your sign-ins and cookies.'} />
+          <SettingRowInfo title="Chrome Browser" description={chromeConn ? (statusLabel ?? 'Checking...') : 'Control your active Chrome profile through the Unnamed Chrome extension.'} />
           {chromeConn && statusLabel && (
             <div className={`mt-1 text-xs ${statusColor ?? ''}`}>{statusLabel}</div>
           )}
-          {chromeConn && status?.chromeRunning && !status.debugPortOpen && (
+          {chromeConn && !status?.extensionConnected && (
             <div className="mt-1 text-xs text-muted-foreground/70">
-              The agent will ask to restart Chrome when it needs browser access.
+              Load the extension from <code>chrome-extension/</code>, paste your app token in its options, and connect it.
             </div>
           )}
         </div>
         <div className="flex shrink-0 items-center gap-2 self-start sm:self-center">
           {chromeConn && <ConnectedBadge />}
+          {chromeConn && (
+            <Button size="sm" variant="outline" onClick={copyToken}>
+              {tokenCopied ? <Check size={14} className="mr-1.5" /> : <Copy size={14} className="mr-1.5" />}
+              {tokenCopied ? 'Copied' : 'Copy token'}
+            </Button>
+          )}
           {chromeConn ? (
             <Button size="sm" variant="ghost" onClick={() => disableMutation.mutate()} disabled={disableMutation.isPending}>
               Disable
@@ -224,8 +236,7 @@ function ChromeBrowserSection({ connections, onConnectionsChanged }: { connectio
         </div>
       </SettingRow>
       <HintText>
-        Tries to attach to Chrome on port 9222 first (CDP). If Chrome is not running, launches it with your real profile.
-        If Chrome is already running without a debug port, the agent will ask permission before restarting it.
+        Uses an extension bridge instead of Chrome remote debugging, so it can work with your normal signed-in Chrome profile.
       </HintText>
     </div>
   );

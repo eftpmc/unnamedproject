@@ -1,0 +1,50 @@
+- generic [ref=e2]:
+  - generic [ref=e17]:
+    - navigation [ref=e18]:
+      - button "Pin sidebar open" [ref=e19]:
+        - generic [ref=e20]: u
+      - generic [ref=e21]:
+        - button "Quick search (⌘K)" [ref=e22]:
+          - img [ref=e23]
+        - link "Home" [ref=e26] [cursor=pointer]:
+          - /url: /home
+          - img [ref=e28]
+        - link "Chats" [ref=e33] [cursor=pointer]:
+          - /url: /chats
+          - img [ref=e35]
+        - link "Projects" [ref=e37] [cursor=pointer]:
+          - /url: /projects
+          - img [ref=e39]
+        - link "Library" [ref=e44] [cursor=pointer]:
+          - /url: /documents
+          - img [ref=e46]
+        - link "Triggers" [ref=e50] [cursor=pointer]:
+          - /url: /triggers
+          - img [ref=e52]
+        - link "Settings" [ref=e55] [cursor=pointer]:
+          - /url: /settings/tools
+          - img [ref=e57]
+      - button "Pin sidebar open" [ref=e60]:
+        - img [ref=e61]
+    - generic [ref=e63]:
+      - banner [ref=e64]:
+        - generic [ref=e65]:
+          - button "Open inbox" [ref=e66]:
+            - img [ref=e67]
+          - button "Account menu" [ref=e70]:
+            - generic [ref=e71]: Z
+            - generic [ref=e72]: zackhhi
+            - img [ref=e73]
+      - main [ref=e75]:
+        - generic [ref=e77]:
+          - generic [ref=e78]:
+            - button "Help me plan the next useful step." [ref=e79]
+            - button "Review this app and suggest the highest-impact improvements." [ref=e80]
+            - button "Start by asking me the fewest questions needed to get moving." [ref=e81]
+          - generic [ref=e82]:
+            - textbox "What can I help with?" [active] [ref=e83]
+            - button "Send" [disabled] [ref=e85]:
+              - img [ref=e86]
+  - generic [ref=e88]:
+    - heading "Search" [level=2] [ref=e89]
+    - paragraph [ref=e90]: Search chats, projects, and documents

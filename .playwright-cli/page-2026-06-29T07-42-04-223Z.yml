@@ -1,0 +1,13 @@
+- generic [ref=e4]:
+  - generic [ref=e5]:
+    - generic [ref=e6]: Sign in
+    - generic [ref=e7]: Open your local agent workspace.
+  - generic [ref=e9]:
+    - generic [ref=e10]:
+      - generic [ref=e11]: Email
+      - textbox "Email" [ref=e12]: zackhhi@gmail.com
+    - generic [ref=e13]:
+      - generic [ref=e14]: Password
+      - textbox "Password" [ref=e15]: test1234
+    - generic [ref=e17]: Too many attempts, please try again later.
+    - button "Sign in" [ref=e16]

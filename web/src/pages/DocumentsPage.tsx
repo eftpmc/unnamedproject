@@ -1,5 +1,5 @@
-import { useRef, useState } from 'react';
-import { Link, useNavigate } from 'react-router-dom';
+import { useEffect, useRef, useState } from 'react';
+import { Link, useNavigate, useLocation } from 'react-router-dom';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { Clipboard, MoreHorizontal, Pencil, Plus, Search, Trash2 } from 'lucide-react';
 import { getAllDocuments, updateDocumentById, deleteDocumentById, createGlobalDocument, getProjects } from '../lib/api.js';
@@ -24,6 +24,7 @@ function documentKind(doc: Document): string {
 export default function DocumentsPage() {
   usePageTitle('Documents');
   const navigate = useNavigate();
+  const location = useLocation();
   const queryClient = useQueryClient();
   const [search, setSearch] = useState('');
   const [filter, setFilter] = useState('all');
@@ -62,6 +63,14 @@ export default function DocumentsPage() {
     setNewProjectId(projects[0]?.id ?? '');
     setCreateOpen(true);
   }
+
+  useEffect(() => {
+    if ((location.state as { openNew?: boolean } | null)?.openNew && projects.length > 0) {
+      openCreateDialog();
+      // Clear state so a refresh doesn't re-open the dialog
+      navigate(location.pathname, { replace: true, state: {} });
+    }
+  }, [location.state, projects.length]); // eslint-disable-line react-hooks/exhaustive-deps
 
   function submitCreate() {
     const title = newTitle.trim();

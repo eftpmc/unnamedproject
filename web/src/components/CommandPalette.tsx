@@ -130,6 +130,10 @@ function PaletteModal({ open, onOpenChange }: { open: boolean; onOpenChange: (v:
                   <Plus className="text-muted-foreground" />
                   New chat
                 </CommandItem>
+                <CommandItem value="new-document" onSelect={() => run(() => navigate('/documents', { state: { openNew: true } }))}>
+                  <FileText className="text-muted-foreground" />
+                  New document
+                </CommandItem>
               </CommandGroup>
               <CommandSeparator />
               <CommandGroup heading="Go to">

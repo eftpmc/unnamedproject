@@ -236,7 +236,7 @@ function renderExecutionCard(exec: InlineExecution) {
   return <ExecutionCard key={exec.executionId} {...exec} />;
 }
 
-function ItemCreatedCard({ spaceId, itemId, label, title, isUpdate }: { spaceId: string; itemId: string; label: string; title: string; isUpdate: boolean }) {
+function ItemCreatedCard({ itemId, label, title, isUpdate }: { itemId: string; label: string; title: string; isUpdate: boolean }) {
   return (
     <Link
       to={`/documents/${itemId}`}
@@ -464,7 +464,6 @@ export default function MessageList({ messages, executions, streamingIds, sessio
               return (
                 <ItemCreatedCard
                   key={`event-${item.event.id}`}
-                  spaceId={item.event.space_id}
                   itemId={item.event.item_id}
                   label={label}
                   title={item.event.title.replace(/^(Created|Updated) document: /, '')}

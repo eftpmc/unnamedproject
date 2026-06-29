@@ -11,7 +11,6 @@ vi.mock('../lib/api.js', () => ({
   getScheduledTasks: vi.fn().mockResolvedValue([]),
   getSettings: vi.fn().mockResolvedValue({
     projects_root: '/tmp/projects',
-    agent_budgets: { claude_code: null, codex: null },
     permission_profile: 'fast',
   }),
   createConnection: vi.fn(),

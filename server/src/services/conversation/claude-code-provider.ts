@@ -17,15 +17,16 @@ export class ClaudeCodeProvider implements ConversationProvider {
     this.config = config;
   }
 
-  async invoke(params: InvokeParams): Promise<{ costUsd?: number }> {
+  async invoke(params: InvokeParams): Promise<{ costUsd?: number; executionId?: string }> {
     const userId = params.userId ?? 'system';
-    const executionId = createExecution(userId, null, null, 'claude_code');
+    const executionId = createExecution(userId, params.messageId ?? null, null, 'claude_code');
     try {
       const result = await invokeClaudeCode(
         { prompt: params.prompt, model: this.config.model },
         {
           userId,
           executionId,
+          repoPath: params.repoPath,
           resumeSessionId: params.resumeSessionId,
           mcpServers: params.mcpServers as Record<string, McpServerConfig>,
           permissionProfile: normalizePermissionProfile(this.config.permissionProfile),
@@ -37,7 +38,7 @@ export class ClaudeCodeProvider implements ConversationProvider {
         },
       );
       completeExecution(executionId, userId, 'done', result.result);
-      return { costUsd: result.costUsd };
+      return { costUsd: result.costUsd, executionId };
     } catch (err) {
       completeExecution(executionId, userId, 'error', err instanceof Error ? err.message : String(err));
       throw err;

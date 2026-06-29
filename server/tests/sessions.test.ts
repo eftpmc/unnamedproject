@@ -1,9 +1,11 @@
-import { describe, it, expect, beforeAll } from 'vitest';
+import { describe, it, expect, beforeAll, vi } from 'vitest';
 import request from 'supertest';
 import fs from 'fs';
 import { app } from '../src/index.js';
 import { initDb, getDb } from '../src/db/index.js';
 import { newId } from '../src/lib/ids.js';
+
+vi.mock('../src/services/socket.js', () => ({ broadcast: vi.fn(), initSocket: vi.fn() }));
 
 let token: string;
 
@@ -78,8 +80,8 @@ describe('sessions', () => {
       .prepare('INSERT INTO messages (id, session_id, role, content) VALUES (?,?,?,?)')
       .run(messageId, sessionId, 'user', 'long task');
     getDb()
-      .prepare('INSERT INTO session_turns (id, session_id, user_message_id, status) VALUES (?,?,?,?)')
-      .run(newId(), sessionId, messageId, 'running');
+      .prepare('INSERT INTO session_turns (id, session_id, user_message_id, status, invocation_mode, provider_type, provider_session_id) VALUES (?,?,?,?,?,?,?)')
+      .run(newId(), sessionId, messageId, 'running', 'resume_provider_session', 'claude_code', 'provider-status-1');
 
     const res = await request(app)
       .get(`/sessions/${sessionId}/status`)
@@ -88,6 +90,9 @@ describe('sessions', () => {
     expect(res.status).toBe(200);
     expect(res.body.active).toBe(true);
     expect(res.body.turn.userMessageId).toBe(messageId);
+    expect(res.body.turn.invocationMode).toBe('resume_provider_session');
+    expect(res.body.turn.providerType).toBe('claude_code');
+    expect(res.body.turn.providerSessionId).toBe('provider-status-1');
   });
 
   it('includes active execution tool in chat status', async () => {
@@ -106,6 +111,58 @@ describe('sessions', () => {
     expect(res.status).toBe(200);
     expect(res.body.active).toBe(true);
     expect(res.body.execution.tool).toBe('invoke_claude_code');
+  });
+
+  it('reports usage risk for long resumed chats', async () => {
+    getDb()
+      .prepare('UPDATE sessions SET provider_type = ?, provider_session_id = ? WHERE id = ?')
+      .run('claude_code', 'provider-session-risk', sessionId);
+    for (let i = 0; i < 12; i++) {
+      getDb()
+        .prepare('INSERT INTO messages (id, session_id, role, content) VALUES (?,?,?,?)')
+        .run(`risk-msg-${i}`, sessionId, i % 2 === 0 ? 'user' : 'assistant', `risk message ${i}`);
+    }
+    const session = getDb()
+      .prepare('SELECT user_id FROM sessions WHERE id = ?')
+      .get(sessionId) as { user_id: string };
+    getDb()
+      .prepare('INSERT INTO agent_usage (id, user_id, session_id, tool, cost_usd) VALUES (?,?,?,?,?)')
+      .run(newId(), session.user_id, sessionId, 'claude_code', 1.25);
+
+    const res = await request(app)
+      .get(`/sessions/${sessionId}/usage-risk`)
+      .set('Authorization', `Bearer ${token}`);
+
+    expect(res.status).toBe(200);
+    expect(res.body.hasProviderSession).toBe(true);
+    expect(res.body.messageCount).toBeGreaterThanOrEqual(12);
+    expect(res.body.attributedCostUsd).toBe(1.25);
+    expect(res.body.shouldWarn).toBe(true);
+  });
+
+  it('resets provider session state without deleting chat history', async () => {
+    getDb()
+      .prepare('UPDATE sessions SET provider_type = ?, provider_session_id = ? WHERE id = ?')
+      .run('claude_code', 'provider-session-1', sessionId);
+
+    const res = await request(app)
+      .post(`/sessions/${sessionId}/reset-provider-session`)
+      .set('Authorization', `Bearer ${token}`);
+
+    expect(res.status).toBe(200);
+    expect(res.body.ok).toBe(true);
+
+    const row = getDb()
+      .prepare('SELECT provider_type, provider_session_id FROM sessions WHERE id = ?')
+      .get(sessionId) as { provider_type: string | null; provider_session_id: string | null };
+    expect(row.provider_type).toBeNull();
+    expect(row.provider_session_id).toBeNull();
+
+    const event = getDb()
+      .prepare("SELECT type, title, metadata FROM session_events WHERE session_id = ? AND type = 'runtime_checkpoint' ORDER BY created_at DESC LIMIT 1")
+      .get(sessionId) as { type: string; title: string; metadata: string } | undefined;
+    expect(event).toMatchObject({ type: 'runtime_checkpoint', title: 'Provider session reset' });
+    expect(JSON.parse(event!.metadata)).toMatchObject({ source: 'user' });
   });
 
   it('DELETE /sessions/:id deletes the session', async () => {

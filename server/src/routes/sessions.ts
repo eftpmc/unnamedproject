@@ -5,6 +5,7 @@ import { newId } from '../lib/ids.js';
 import { requireAuth, type AuthedRequest } from '../middleware/auth.js';
 import { DEFAULT_EFFORT, isEffortLevel } from '../services/effort.js';
 import { stopAgentTurn, getActiveSessionIds } from '../services/agent.js';
+import { broadcast } from '../services/socket.js';
 
 const router = Router();
 router.use(requireAuth);
@@ -54,13 +55,18 @@ router.get('/:id/status', (req, res) => {
 
   const activeTurn = getDb()
     .prepare(`
-      SELECT id, user_message_id as userMessageId, started_at as startedAt
+      SELECT id, user_message_id as userMessageId, started_at as startedAt,
+             invocation_mode as invocationMode, provider_type as providerType,
+             provider_session_id as providerSessionId
       FROM session_turns
       WHERE session_id = ? AND status = 'running'
       ORDER BY started_at DESC
       LIMIT 1
     `)
-    .get(req.params.id) as { id: string; userMessageId: string; startedAt: number } | undefined;
+    .get(req.params.id) as {
+      id: string; userMessageId: string; startedAt: number;
+      invocationMode: string | null; providerType: string | null; providerSessionId: string | null;
+    } | undefined;
 
   const activeExecution = getDb()
     .prepare(`
@@ -77,6 +83,41 @@ router.get('/:id/status', (req, res) => {
     active: !!activeTurn || !!activeExecution,
     turn: activeTurn ?? null,
     execution: activeExecution ?? null,
+  });
+});
+
+router.get('/:id/usage-risk', (req, res) => {
+  const { userId } = req as unknown as AuthedRequest;
+  const session = getDb()
+    .prepare('SELECT id, provider_type as providerType, provider_session_id as providerSessionId FROM sessions WHERE id = ? AND user_id = ?')
+    .get(req.params.id, userId) as { id: string; providerType: string | null; providerSessionId: string | null } | undefined;
+  if (!session) { res.status(404).json({ error: 'Session not found' }); return; }
+
+  const messageRow = getDb()
+    .prepare('SELECT COUNT(*) as count FROM messages WHERE session_id = ?')
+    .get(req.params.id) as { count: number };
+  const usageRow = getDb()
+    .prepare('SELECT COALESCE(SUM(cost_usd), 0) as total FROM agent_usage WHERE session_id = ?')
+    .get(req.params.id) as { total: number };
+  const executionRow = getDb()
+    .prepare(`
+      SELECT COUNT(*) as count
+      FROM executions e
+      JOIN messages m ON m.id = e.message_id
+      WHERE m.session_id = ?
+    `)
+    .get(req.params.id) as { count: number };
+
+  const hasProviderSession = !!session.providerSessionId;
+  const shouldWarn = hasProviderSession && (messageRow.count >= 12 || usageRow.total >= 1 || executionRow.count >= 8);
+
+  res.json({
+    messageCount: messageRow.count,
+    executionCount: executionRow.count,
+    attributedCostUsd: usageRow.total,
+    providerType: session.providerType,
+    hasProviderSession,
+    shouldWarn,
   });
 });
 
@@ -190,6 +231,30 @@ router.post('/:id/stop', (req, res) => {
   if (!session) { res.status(404).json({ error: 'Session not found' }); return; }
   const stopped = stopAgentTurn(req.params.id);
   res.json({ ok: true, stopped });
+});
+
+router.post('/:id/reset-provider-session', (req, res) => {
+  const { userId } = req as unknown as AuthedRequest;
+  const session = getDb()
+    .prepare('SELECT id FROM sessions WHERE id = ? AND user_id = ?')
+    .get(req.params.id, userId);
+  if (!session) { res.status(404).json({ error: 'Session not found' }); return; }
+  getDb()
+    .prepare('UPDATE sessions SET provider_type = NULL, provider_session_id = NULL WHERE id = ?')
+    .run(req.params.id);
+  const event = createSessionEvent({
+    sessionId: req.params.id,
+    type: 'runtime_checkpoint',
+    title: 'Provider session reset',
+    body: 'Hidden provider context was cleared manually. Future turns can continue from saved chat and session state.',
+    metadata: { source: 'user' },
+  });
+  broadcast(userId, {
+    type: 'session_event_created',
+    sessionId: req.params.id,
+    event: { ...event, metadata: JSON.parse(event.metadata || '{}') },
+  });
+  res.json({ ok: true });
 });
 
 router.delete('/:id', (req, res) => {

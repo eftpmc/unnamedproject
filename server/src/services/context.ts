@@ -3,7 +3,10 @@ import { listProjects } from './projects.js';
 import { listDocuments } from './documents.js';
 import { recallRelevant } from './memory.js';
 import { formatEntry } from '../tools/memory_tools.js';
+import { formatSessionStateBlock } from './session-state.js';
 import type { Intent } from './intent.js';
+import fs from 'fs';
+import path from 'path';
 
 // ─── Block builders ────────────────────────────────────────────────────────
 
@@ -32,6 +35,7 @@ GitHub, web search, and other external integrations are configured in Settings �
 
 ## Chrome Browser
 If the user has enabled Chrome Browser (check list_connections for type=chrome), you have access to browser_navigate, browser_screenshot, browser_click, browser_fill, browser_evaluate, browser_get_text, browser_tabs, browser_select_tab, browser_new_tab. These control the user's active Chrome profile through the Unnamed Chrome extension, including signed-in sites and cookies in that profile. If a login or OAuth flow opens a new tab/window, call browser_tabs and browser_select_tab to follow it. If a Chrome tool says the extension is not connected, tell the user to load and connect the extension from the project's chrome-extension/ directory. Do not fall back to Playwright for tasks that require the user's signed-in Chrome session.
+If structured session state shows the same browser/login/click action failed twice, do not retry the same action. Switch strategy (for example browser_evaluate/native form submission) or ask the user for a manual step, then continue from the checkpoint.
 
 ## File search
 Use search_files for fast codebase lookups (finding where a function is defined, tracing usages, locating config). Only fall back to project_query for broad architectural questions that need reasoning across the whole codebase.
@@ -119,6 +123,63 @@ interface ProjectCtx {
   space_id: string;
 }
 
+const INSTRUCTION_FILES = ['CLAUDE.md', 'AGENTS.md'] as const;
+const MAX_INSTRUCTION_FILE_CHARS = 6000;
+const MAX_INSTRUCTION_BLOCK_CHARS = 18000;
+
+function readInstructionFile(filePath: string): string | null {
+  try {
+    const stat = fs.statSync(filePath);
+    if (!stat.isFile()) return null;
+    const raw = fs.readFileSync(filePath, 'utf8');
+    if (raw.length <= MAX_INSTRUCTION_FILE_CHARS) return raw.trim();
+    return `${raw.slice(0, MAX_INSTRUCTION_FILE_CHARS).trim()}\n\n[Truncated: ${path.basename(filePath)} exceeded ${MAX_INSTRUCTION_FILE_CHARS} characters.]`;
+  } catch {
+    return null;
+  }
+}
+
+function instructionBlock(project?: ProjectCtx): string {
+  const roots = new Set<string>();
+
+  // Server processes usually run from server/, but local global guidance may
+  // live at either the server package root or the workspace root.
+  roots.add(path.resolve(process.cwd()));
+  roots.add(path.resolve(process.cwd(), '..'));
+
+  const entries: string[] = [];
+  const seenFiles = new Set<string>();
+  for (const root of roots) {
+    for (const name of INSTRUCTION_FILES) {
+      const filePath = path.join(root, name);
+      if (seenFiles.has(filePath)) continue;
+      seenFiles.add(filePath);
+      const content = readInstructionFile(filePath);
+      if (!content) continue;
+      const label = root === path.resolve(process.cwd()) || root === path.resolve(process.cwd(), '..')
+        ? `global ${name}`
+        : `project ${name} (${root})`;
+      entries.push(`### ${label}\n${content}`);
+    }
+  }
+
+  if (entries.length === 0) {
+    return `## Agent instruction files
+Project-level CLAUDE.md and AGENTS.md files are loaded natively by Claude Code/Codex from the active repo working directory when a repo is pinned.${project ? ` Active project: ${project.name}.` : ''}
+No global CLAUDE.md or AGENTS.md files were found in the app workspace roots.`;
+  }
+
+  const body = entries.join('\n\n');
+  const bounded = body.length <= MAX_INSTRUCTION_BLOCK_CHARS
+    ? body
+    : `${body.slice(0, MAX_INSTRUCTION_BLOCK_CHARS).trim()}\n\n[Truncated: combined instruction files exceeded ${MAX_INSTRUCTION_BLOCK_CHARS} characters.]`;
+
+  return `## Agent instruction files
+Follow these durable global instructions. Project-level CLAUDE.md and AGENTS.md files are loaded natively by Claude Code/Codex from the active repo working directory when a repo is pinned, so do not ask the user to restate them.
+
+${bounded}`;
+}
+
 function projectContextBlock(project: ProjectCtx, _userId: string): string {
   const repos = listProjects(project.space_id);
   const docs = listDocuments(project.space_id);
@@ -174,6 +235,10 @@ function sessionSummaryBlock(sessionId: string): string {
   return `Earlier in this session:\n${row.summary}`;
 }
 
+function structuredSessionStateBlock(sessionId: string): string {
+  return formatSessionStateBlock(sessionId);
+}
+
 function getPinnedProject(sessionId: string): ProjectCtx | undefined {
   const session = getDb()
     .prepare('SELECT pinned_project_id FROM sessions WHERE id = ?')
@@ -192,7 +257,11 @@ export async function buildContextUpdate(userId: string, sessionId: string, quer
   const blocks: string[] = [];
 
   if (pinnedProject) blocks.push(projectContextBlock(pinnedProject, userId));
+  blocks.push(instructionBlock(pinnedProject));
   blocks.push(await memoryBlock(userId, queryText, pinnedProject?.id));
+
+  const state = structuredSessionStateBlock(sessionId);
+  if (state) blocks.push(state);
 
   const summary = sessionSummaryBlock(sessionId);
   if (summary) blocks.push(summary);
@@ -213,6 +282,8 @@ export async function buildContext(userId: string, sessionId: string, intent: In
   const domain = domainBlock(intent);
   if (domain) blocks.push(domain);
 
+  blocks.push(instructionBlock(pinnedProject));
+
   if (pinnedProject) blocks.push(projectContextBlock(pinnedProject, userId));
 
   blocks.push(await memoryBlock(userId, queryText, pinnedProject?.id));
@@ -220,6 +291,9 @@ export async function buildContext(userId: string, sessionId: string, intent: In
 
   const chats = recentChatsBlock(userId, sessionId);
   if (chats) blocks.push(chats);
+
+  const state = structuredSessionStateBlock(sessionId);
+  if (state) blocks.push(state);
 
   const summary = sessionSummaryBlock(sessionId);
   if (summary) blocks.push(summary);

@@ -50,7 +50,14 @@ export function getChatEvents(chatId: string): Promise<{ events: SessionEvent[] 
 
 export interface ChatStatus {
   active: boolean;
-  turn: { id: string; userMessageId: string; startedAt: number } | null;
+  turn: {
+    id: string;
+    userMessageId: string;
+    startedAt: number;
+    invocationMode?: string | null;
+    providerType?: string | null;
+    providerSessionId?: string | null;
+  } | null;
   execution: { id: string; status: 'running' | 'awaiting_approval'; tool: string; createdAt: number } | null;
 }
 
@@ -58,8 +65,25 @@ export function getChatStatus(chatId: string): Promise<ChatStatus> {
   return request(`/sessions/${chatId}/status`);
 }
 
+export interface ChatUsageRisk {
+  messageCount: number;
+  executionCount: number;
+  attributedCostUsd: number;
+  providerType: string | null;
+  hasProviderSession: boolean;
+  shouldWarn: boolean;
+}
+
+export function getChatUsageRisk(chatId: string): Promise<ChatUsageRisk> {
+  return request(`/sessions/${chatId}/usage-risk`);
+}
+
 export function stopChat(chatId: string): Promise<{ ok: boolean; stopped: boolean }> {
   return request(`/sessions/${chatId}/stop`, { method: 'POST' });
+}
+
+export function resetChatProviderSession(chatId: string): Promise<{ ok: boolean }> {
+  return request(`/sessions/${chatId}/reset-provider-session`, { method: 'POST' });
 }
 
 export function getActiveSessions(): Promise<{ ids: string[] }> {

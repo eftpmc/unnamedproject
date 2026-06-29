@@ -1,5 +1,7 @@
 import { describe, it, expect, beforeAll } from 'vitest';
 import fs from 'fs';
+import os from 'os';
+import path from 'path';
 import { initDb, getDb } from '../../src/db/index.js';
 import { newId } from '../../src/lib/ids.js';
 import { buildContext } from '../../src/services/context.js';
@@ -46,6 +48,12 @@ describe('buildContext', () => {
     expect(ctx).toContain('Web search');
   });
 
+  it('includes browser retry-loop guardrail', async () => {
+    const ctx = await buildContext(userId, sessionId, DEFAULT_INTENT, '');
+    expect(ctx).toContain('do not retry the same action');
+    expect(ctx).toContain('continue from the checkpoint');
+  });
+
   it('includes worktree isolation guidance for code domain', async () => {
     const ctx = await buildContext(userId, sessionId, codeIntent, '');
     expect(ctx).toContain('worktree');
@@ -73,6 +81,29 @@ describe('buildContext', () => {
     const ctx = await buildContext(userId, sessionId, DEFAULT_INTENT, '');
     expect(ctx).toContain('Earlier we discussed auth');
     getDb().prepare('UPDATE sessions SET summary = NULL WHERE id = ?').run(sessionId);
+  });
+
+  it('includes structured session state when present', async () => {
+    getDb()
+      .prepare('UPDATE sessions SET session_state = ? WHERE id = ?')
+      .run(JSON.stringify({
+        goal: 'Organize internship applications',
+        facts: ['Created index.md'],
+        decisions: [],
+        open_tasks: ['Verify remaining dates'],
+        blockers: [],
+        artifacts: ['index.md'],
+        failed_attempts: [],
+        next_action: 'Update docs',
+        updated_at: 1,
+      }), sessionId);
+
+    const ctx = await buildContext(userId, sessionId, DEFAULT_INTENT, '');
+    expect(ctx).toContain('Structured session state');
+    expect(ctx).toContain('Organize internship applications');
+    expect(ctx).toContain('index.md');
+
+    getDb().prepare('UPDATE sessions SET session_state = NULL WHERE id = ?').run(sessionId);
   });
 
   it('includes project name and id in project context', async () => {
@@ -106,5 +137,24 @@ describe('buildContext', () => {
     getDb().prepare('UPDATE sessions SET pinned_project_id = NULL WHERE id = ?').run(sessionId);
     getDb().prepare('DELETE FROM projects WHERE id = ?').run(projectId);
     getDb().prepare('DELETE FROM spaces WHERE id = ?').run(spaceId);
+  });
+
+  it('defers pinned project CLAUDE.md and AGENTS.md to provider-native loading', async () => {
+    const repoPath = fs.mkdtempSync(path.join(os.tmpdir(), 'ctx-instructions-'));
+    fs.writeFileSync(path.join(repoPath, 'CLAUDE.md'), 'Claude project instruction: always use app MCP tools.');
+    fs.writeFileSync(path.join(repoPath, 'AGENTS.md'), 'Agents project instruction: keep context compact.');
+
+    const { projectId } = makeProject('instruction-project');
+    getDb().prepare('UPDATE projects SET repo_path = ? WHERE id = ?').run(repoPath, projectId);
+    getDb().prepare('UPDATE sessions SET pinned_project_id = ? WHERE id = ?').run(projectId, sessionId);
+
+    const ctx = await buildContext(userId, sessionId, DEFAULT_INTENT, '');
+    expect(ctx).toContain('Agent instruction files');
+    expect(ctx).toContain('loaded natively by Claude Code/Codex');
+    expect(ctx).not.toContain('Claude project instruction');
+    expect(ctx).not.toContain('Agents project instruction');
+
+    getDb().prepare('UPDATE sessions SET pinned_project_id = NULL WHERE id = ?').run(sessionId);
+    fs.rmSync(repoPath, { recursive: true, force: true });
   });
 });

@@ -13,6 +13,7 @@ const mockInvoke = vi.fn().mockImplementation(async (params) => {
 });
 
 vi.mock('../../src/services/conversation-provider.js', () => ({
+  isProviderLimitError: (err: unknown) => String(err instanceof Error ? err.message : err).toLowerCase().includes('usage limit'),
   getConversationProvider: vi.fn().mockResolvedValue({
     type: 'codex',
     invoke: mockInvoke,
@@ -47,13 +48,16 @@ describe('runAgentTurn', () => {
     mockInvoke.mockImplementation(async (params) => {
       params.onText('Hello from provider');
       params.onSessionId('prov-sess-1');
-      return { costUsd: 0.001 };
+      return { costUsd: 0.001, executionId: 'exec-1' };
     });
   });
 
   it('streams text delta and stores provider session id', async () => {
     const { broadcast } = await import('../../src/services/socket.js');
     const { runAgentTurn } = await import('../../src/services/agent.js');
+    getDb()
+      .prepare("INSERT INTO executions (id, message_id, tool, status) VALUES ('exec-1','m1','codex','running')")
+      .run();
 
     await runAgentTurn('u1', 's1', 'm1');
 
@@ -64,6 +68,27 @@ describe('runAgentTurn', () => {
 
     const session = getDb().prepare('SELECT provider_session_id FROM sessions WHERE id = ?').get('s1') as { provider_session_id: string | null };
     expect(session.provider_session_id).toBe('prov-sess-1');
+
+    const usage = getDb()
+      .prepare('SELECT session_id, turn_id, message_id, execution_id, cost_usd FROM agent_usage WHERE user_id = ?')
+      .get('u1') as { session_id: string | null; turn_id: string | null; message_id: string | null; execution_id: string | null; cost_usd: number };
+    expect(usage).toMatchObject({
+      session_id: 's1',
+      turn_id: 't1',
+      message_id: 'm1',
+      execution_id: 'exec-1',
+    });
+    expect(usage.cost_usd).toBe(0.001);
+
+    const state = getDb().prepare('SELECT session_state FROM sessions WHERE id = ?').get('s1') as { session_state: string | null };
+    expect(state.session_state).toContain('"updated_at"');
+
+    const turn = getDb()
+      .prepare('SELECT invocation_mode, provider_type, provider_session_id FROM session_turns WHERE id = ?')
+      .get('t1') as { invocation_mode: string | null; provider_type: string | null; provider_session_id: string | null };
+    expect(turn.invocation_mode).toBe('new_provider_session');
+    expect(turn.provider_type).toBe('codex');
+    expect(turn.provider_session_id).toBeNull();
   });
 
   it('retries codex once without resume when the saved thread rollout is missing', async () => {
@@ -72,13 +97,14 @@ describe('runAgentTurn', () => {
     db.prepare("INSERT INTO sessions (id, user_id, provider_type, provider_session_id) VALUES ('s2','u1','codex','stale-thread')").run();
     db.prepare("INSERT INTO messages (id, session_id, role, content) VALUES ('m2','s2','user','continue')").run();
     db.prepare("INSERT INTO session_turns (id, session_id, user_message_id, status) VALUES ('t2','s2','m2','running')").run();
+    db.prepare("INSERT INTO executions (id, message_id, tool, status) VALUES ('exec-fresh','m2','codex','running')").run();
 
     mockInvoke
       .mockRejectedValueOnce(new Error('codex exited with code 1: Error: thread/resume: thread/resume failed: no rollout found for thread id 5f3d61d7-bf'))
       .mockImplementationOnce(async (params) => {
         params.onText('Fresh thread response');
         params.onSessionId('fresh-thread');
-        return { costUsd: 0.001 };
+        return { costUsd: 0.001, executionId: 'exec-fresh' };
       });
 
     await runAgentTurn('u1', 's2', 'm2');
@@ -87,7 +113,83 @@ describe('runAgentTurn', () => {
     expect(mockInvoke.mock.calls[0][0].resumeSessionId).toBe('stale-thread');
     expect(mockInvoke.mock.calls[1][0].resumeSessionId).toBeNull();
 
+    const turn = db.prepare('SELECT invocation_mode, provider_type, provider_session_id FROM session_turns WHERE id = ?').get('t2') as {
+      invocation_mode: string | null; provider_type: string | null; provider_session_id: string | null;
+    };
+    expect(turn.invocation_mode).toBe('resume_provider_session');
+    expect(turn.provider_type).toBe('codex');
+    expect(turn.provider_session_id).toBe('stale-thread');
+
     const session = db.prepare('SELECT provider_session_id FROM sessions WHERE id = ?').get('s2') as { provider_session_id: string | null };
     expect(session.provider_session_id).toBe('fresh-thread');
+  });
+
+  it('starts fresh with compact context for bookkeeping in long resumed chats', async () => {
+    const { runAgentTurn } = await import('../../src/services/agent.js');
+    const db = getDb();
+    mockInvoke.mockImplementationOnce(async (params) => {
+      params.onText('Hello from provider');
+      params.onSessionId('prov-sess-3');
+      return { costUsd: 0.001 };
+    });
+    db.prepare("INSERT INTO sessions (id, user_id, provider_type, provider_session_id, summary) VALUES ('s3','u1','codex','expensive-thread','Earlier useful facts')").run();
+    for (let i = 0; i < 12; i++) {
+      db.prepare('INSERT INTO messages (id, session_id, role, content) VALUES (?,?,?,?)')
+        .run(`s3-m${i}`, 's3', i % 2 === 0 ? 'user' : 'assistant', `old message ${i}`);
+    }
+    db.prepare("INSERT INTO messages (id, session_id, role, content) VALUES ('m3','s3','user','Update the index and be done')").run();
+    db.prepare("INSERT INTO session_turns (id, session_id, user_message_id, status) VALUES ('t3','s3','m3','running')").run();
+
+    await runAgentTurn('u1', 's3', 'm3');
+
+    expect(mockInvoke).toHaveBeenCalledTimes(1);
+    expect(mockInvoke.mock.calls[0][0].resumeSessionId).toBeNull();
+    expect(mockInvoke.mock.calls[0][0].systemPromptSuffix).toContain('Earlier in this session');
+  });
+
+  it('runs providers from the pinned project repo path', async () => {
+    const { runAgentTurn } = await import('../../src/services/agent.js');
+    const db = getDb();
+    db.prepare("INSERT INTO spaces (id, user_id, name) VALUES ('sp-agent','u1','Agent Space')").run();
+    db.prepare("INSERT INTO projects (id, space_id, user_id, name, repo_path, origin) VALUES ('p-agent','sp-agent','u1','Agent Repo','/tmp/agent-repo','linked')").run();
+    db.prepare("INSERT INTO sessions (id, user_id, pinned_project_id) VALUES ('s4','u1','p-agent')").run();
+    db.prepare("INSERT INTO messages (id, session_id, role, content) VALUES ('m4','s4','user','work in repo')").run();
+    db.prepare("INSERT INTO session_turns (id, session_id, user_message_id, status) VALUES ('t4','s4','m4','running')").run();
+
+    mockInvoke.mockImplementationOnce(async (params) => {
+      params.onText('Repo response');
+      params.onSessionId('prov-sess-4');
+      return { costUsd: 0.001 };
+    });
+
+    await runAgentTurn('u1', 's4', 'm4');
+
+    expect(mockInvoke.mock.calls[0][0].repoPath).toBe('/tmp/agent-repo');
+  });
+
+  it('clears provider session and checkpoints state on provider usage limits', async () => {
+    const { runAgentTurn } = await import('../../src/services/agent.js');
+    const db = getDb();
+    db.prepare("INSERT INTO sessions (id, user_id, provider_type, provider_session_id) VALUES ('s5','u1','codex','limited-thread')").run();
+    db.prepare("INSERT INTO messages (id, session_id, role, content) VALUES ('m5','s5','user','continue')").run();
+    db.prepare("INSERT INTO session_turns (id, session_id, user_message_id, status) VALUES ('t5','s5','m5','running')").run();
+
+    mockInvoke.mockRejectedValueOnce(new Error("You've hit your usage limit · resets 8:50am"));
+
+    await expect(runAgentTurn('u1', 's5', 'm5')).rejects.toThrow(/usage limit/);
+
+    const session = db.prepare('SELECT provider_session_id, session_state FROM sessions WHERE id = ?').get('s5') as {
+      provider_session_id: string | null;
+      session_state: string | null;
+    };
+    expect(session.provider_session_id).toBeNull();
+    expect(session.session_state).toContain('Provider session hit a usage/rate/session limit');
+    expect(session.session_state).toContain('Start a fresh provider session');
+
+    const event = db
+      .prepare("SELECT title, metadata FROM session_events WHERE session_id = ? AND type = 'runtime_checkpoint' AND title = 'Provider session reset' LIMIT 1")
+      .get('s5') as { title: string; metadata: string } | undefined;
+    expect(event?.title).toBe('Provider session reset');
+    expect(JSON.parse(event!.metadata)).toMatchObject({ reason: 'provider_limit' });
   });
 });

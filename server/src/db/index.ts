@@ -115,11 +115,16 @@ function applySchema(): void {
     CREATE TABLE IF NOT EXISTS agent_usage (
       id TEXT PRIMARY KEY,
       user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+      session_id TEXT REFERENCES sessions(id) ON DELETE SET NULL,
+      turn_id TEXT REFERENCES session_turns(id) ON DELETE SET NULL,
+      message_id TEXT REFERENCES messages(id) ON DELETE SET NULL,
+      execution_id TEXT REFERENCES executions(id) ON DELETE SET NULL,
       tool TEXT NOT NULL CHECK(tool IN ('claude_code','codex','lead_agent','subagent')),
       cost_usd REAL NOT NULL,
       created_at INTEGER NOT NULL DEFAULT (unixepoch())
     );
     CREATE INDEX IF NOT EXISTS idx_agent_usage_user_tool_date ON agent_usage(user_id, tool, created_at);
+    CREATE INDEX IF NOT EXISTS idx_agent_usage_session_date ON agent_usage(session_id, created_at);
 
     CREATE TABLE IF NOT EXISTS sessions (
       id TEXT PRIMARY KEY,
@@ -129,6 +134,7 @@ function applySchema(): void {
       model TEXT,
       pinned_project_id TEXT REFERENCES projects(id) ON DELETE SET NULL,
       summary TEXT,
+      session_state TEXT,
       provider_type TEXT,
       provider_session_id TEXT,
       discovered_tools TEXT NOT NULL DEFAULT '[]',
@@ -162,6 +168,9 @@ function applySchema(): void {
       user_message_id TEXT NOT NULL REFERENCES messages(id) ON DELETE CASCADE,
       status TEXT NOT NULL DEFAULT 'running' CHECK(status IN ('running','done','error')),
       error TEXT,
+      invocation_mode TEXT,
+      provider_type TEXT,
+      provider_session_id TEXT,
       started_at INTEGER NOT NULL DEFAULT (unixepoch()),
       completed_at INTEGER
     );
@@ -194,7 +203,7 @@ function applySchema(): void {
       type TEXT NOT NULL CHECK(type IN (
         'scope_changed','project_linked','space_linked','project_created',
         'artifact_created','item_created','item_updated','approval_requested','approval_resolved',
-        'mcp_required','subagent_started','subagent_completed','connection_created'
+        'mcp_required','subagent_started','subagent_completed','connection_created','runtime_checkpoint'
       )),
       title TEXT NOT NULL,
       body TEXT,
@@ -288,6 +297,79 @@ const migrations: Migration[] = [
       `);
     },
   },
+  {
+    version: 3,
+    name: 'agent_usage_attribution',
+    up: (database) => {
+      const cols = (database.prepare("PRAGMA table_info(agent_usage)").all() as { name: string }[]).map(c => c.name);
+      const addColumn = (name: string, sql: string) => {
+        if (!cols.includes(name)) database.exec(`ALTER TABLE agent_usage ADD COLUMN ${sql}`);
+      };
+      addColumn('session_id', 'session_id TEXT REFERENCES sessions(id) ON DELETE SET NULL');
+      addColumn('turn_id', 'turn_id TEXT REFERENCES session_turns(id) ON DELETE SET NULL');
+      addColumn('message_id', 'message_id TEXT REFERENCES messages(id) ON DELETE SET NULL');
+      addColumn('execution_id', 'execution_id TEXT REFERENCES executions(id) ON DELETE SET NULL');
+      database.exec('CREATE INDEX IF NOT EXISTS idx_agent_usage_session_date ON agent_usage(session_id, created_at);');
+    },
+  },
+  {
+    version: 4,
+    name: 'session_state',
+    up: (database) => {
+      const cols = (database.prepare("PRAGMA table_info(sessions)").all() as { name: string }[]).map(c => c.name);
+      if (!cols.includes('session_state')) {
+        database.exec('ALTER TABLE sessions ADD COLUMN session_state TEXT');
+      }
+    },
+  },
+  {
+    version: 5,
+    name: 'session_turn_observability',
+    up: (database) => {
+      const cols = (database.prepare("PRAGMA table_info(session_turns)").all() as { name: string }[]).map(c => c.name);
+      const addColumn = (name: string, sql: string) => {
+        if (!cols.includes(name)) database.exec(`ALTER TABLE session_turns ADD COLUMN ${sql}`);
+      };
+      addColumn('invocation_mode', 'invocation_mode TEXT');
+      addColumn('provider_type', 'provider_type TEXT');
+      addColumn('provider_session_id', 'provider_session_id TEXT');
+    },
+  },
+  {
+    version: 6,
+    name: 'runtime_checkpoint_events',
+    noTransaction: true,
+    up: (database) => {
+      const sql = tableSql(database, 'session_events');
+      if (sql?.includes('runtime_checkpoint')) return;
+      database.pragma('foreign_keys = OFF');
+      database.exec('ALTER TABLE session_events RENAME TO _session_events_runtime_checkpoint_tmp;');
+      database.exec(`CREATE TABLE session_events (
+        id TEXT PRIMARY KEY,
+        session_id TEXT NOT NULL REFERENCES sessions(id) ON DELETE CASCADE,
+        type TEXT NOT NULL CHECK(type IN (
+          'scope_changed','project_linked','space_linked','project_created',
+          'artifact_created','item_created','item_updated','approval_requested','approval_resolved',
+          'mcp_required','subagent_started','subagent_completed','connection_created','runtime_checkpoint'
+        )),
+        title TEXT NOT NULL,
+        body TEXT,
+        space_id TEXT REFERENCES spaces(id) ON DELETE SET NULL,
+        item_id TEXT,
+        execution_id TEXT REFERENCES executions(id) ON DELETE SET NULL,
+        metadata TEXT NOT NULL DEFAULT '{}',
+        created_at INTEGER NOT NULL DEFAULT (unixepoch())
+      );`);
+      database.exec(`
+        INSERT INTO session_events (id, session_id, type, title, body, space_id, item_id, execution_id, metadata, created_at)
+        SELECT id, session_id, type, title, body, space_id, item_id, execution_id, metadata, created_at
+        FROM _session_events_runtime_checkpoint_tmp;
+      `);
+      database.exec('DROP TABLE _session_events_runtime_checkpoint_tmp;');
+      database.exec('CREATE INDEX IF NOT EXISTS idx_session_events_session_id ON session_events(session_id);');
+      database.pragma('foreign_keys = ON');
+    },
+  },
 ];
 
 function tableSql(database: Database.Database, name: string): string | undefined {
@@ -319,7 +401,7 @@ function dropPlanSystem(database: Database.Database): void {
       type TEXT NOT NULL CHECK(type IN (
         'scope_changed','project_linked','space_linked','project_created',
         'artifact_created','item_created','item_updated','approval_requested','approval_resolved',
-        'mcp_required','subagent_started','subagent_completed','connection_created'
+        'mcp_required','subagent_started','subagent_completed','connection_created','runtime_checkpoint'
       )),
       title TEXT NOT NULL,
       body TEXT,
@@ -509,7 +591,8 @@ export type SessionEventType =
   | 'mcp_required'
   | 'subagent_started'
   | 'subagent_completed'
-  | 'connection_created';
+  | 'connection_created'
+  | 'runtime_checkpoint';
 
 export interface DbSessionEvent {
   id: string;
@@ -642,11 +725,16 @@ export function setPermissionProfile(userId: string, profile: PermissionProfile)
     .run(userId, profile);
 }
 
-export function recordAgentUsage(userId: string, tool: AgentUsageTool, costUsd: number): void {
+export function recordAgentUsage(
+  userId: string,
+  tool: AgentUsageTool,
+  costUsd: number,
+  attribution: { sessionId?: string | null; turnId?: string | null; messageId?: string | null; executionId?: string | null } = {},
+): void {
   if (!costUsd) return;
   getDb()
-    .prepare('INSERT INTO agent_usage (id, user_id, tool, cost_usd) VALUES (?, ?, ?, ?)')
-    .run(newId(), userId, tool, costUsd);
+    .prepare('INSERT INTO agent_usage (id, user_id, session_id, turn_id, message_id, execution_id, tool, cost_usd) VALUES (?, ?, ?, ?, ?, ?, ?, ?)')
+    .run(newId(), userId, attribution.sessionId ?? null, attribution.turnId ?? null, attribution.messageId ?? null, attribution.executionId ?? null, tool, costUsd);
 }
 
 export function getMonthlyUsage(userId: string, tool: AgentUsageTool): number {

@@ -47,7 +47,11 @@ export type SessionEventType =
   | 'artifact_created'
   | 'approval_requested'
   | 'approval_resolved'
-  | 'mcp_required';
+  | 'mcp_required'
+  | 'subagent_started'
+  | 'subagent_completed'
+  | 'connection_created'
+  | 'runtime_checkpoint';
 
 export interface SessionEvent {
   id: string;

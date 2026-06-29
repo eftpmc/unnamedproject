@@ -4,6 +4,8 @@ import { ClaudeCodeProvider } from './conversation/claude-code-provider.js';
 
 export interface InvokeParams {
   userId?: string;
+  messageId?: string | null;
+  repoPath?: string;
   prompt: string;
   resumeSessionId?: string | null;
   systemPromptSuffix?: string;
@@ -17,11 +19,11 @@ export interface InvokeParams {
 
 export interface ConversationProvider {
   readonly type: 'claude_code' | 'codex';
-  invoke(params: InvokeParams): Promise<{ costUsd?: number }>;
+  invoke(params: InvokeParams): Promise<{ costUsd?: number; executionId?: string }>;
   resolveModel(): Promise<string>;
 }
 
-function isRateLimitError(err: unknown): boolean {
+export function isProviderLimitError(err: unknown): boolean {
   const msg = (err instanceof Error ? err.message : String(err)).toLowerCase();
   return (
     msg.includes('rate limit') ||
@@ -43,7 +45,7 @@ class FallbackProvider implements ConversationProvider {
     this._type = providers[0].type;
   }
 
-  async invoke(params: InvokeParams): Promise<{ costUsd?: number }> {
+  async invoke(params: InvokeParams): Promise<{ costUsd?: number; executionId?: string }> {
     let lastError: Error | undefined;
     for (const provider of this.providers) {
       try {
@@ -51,7 +53,7 @@ class FallbackProvider implements ConversationProvider {
         this._type = provider.type;
         return result;
       } catch (err) {
-        if (isRateLimitError(err)) {
+        if (isProviderLimitError(err)) {
           lastError = err instanceof Error ? err : new Error(String(err));
           continue;
         }

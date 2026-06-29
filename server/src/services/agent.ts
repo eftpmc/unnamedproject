@@ -1,10 +1,12 @@
-import { getDb, recordAgentUsage, setSessionProviderInfo, type AgentUsageTool } from '../db/index.js';
+import { createSessionEvent, getDb, recordAgentUsage, setSessionProviderInfo, type AgentUsageTool } from '../db/index.js';
 import { broadcast } from './socket.js';
 import { newId } from '../lib/ids.js';
 import { classifyIntent } from './intent.js';
 import { buildContext, buildContextUpdate } from './context.js';
+import { modeUsesProviderResume, selectInvocationMode } from './invocation-policy.js';
+import { recordSessionStateEvent, updateSessionState } from './session-state.js';
 import { generateMcpToken } from '../mcp/auth.js';
-import { getConversationProvider } from './conversation-provider.js';
+import { getConversationProvider, isProviderLimitError } from './conversation-provider.js';
 import { getDecryptedConfig } from '../routes/connections.js';
 
 const activeTurnControllers = new Map<string, AbortController>();
@@ -96,6 +98,45 @@ function getUserMcpServers(userId: string): Record<string, McpServerEntry> {
   return servers;
 }
 
+function getInvocationRepoPath(sessionId: string): string | undefined {
+  const session = getDb()
+    .prepare('SELECT pinned_project_id FROM sessions WHERE id = ?')
+    .get(sessionId) as { pinned_project_id: string | null } | undefined;
+  const pinnedProjectId = session?.pinned_project_id;
+  if (!pinnedProjectId) return undefined;
+
+  const worktree = getDb()
+    .prepare('SELECT worktree_path FROM agent_worktrees WHERE session_id = ? AND project_id = ? ORDER BY created_at DESC LIMIT 1')
+    .get(sessionId, pinnedProjectId) as { worktree_path: string } | undefined;
+  if (worktree?.worktree_path) return worktree.worktree_path;
+
+  const project = getDb()
+    .prepare('SELECT repo_path FROM projects WHERE id = ?')
+    .get(pinnedProjectId) as { repo_path: string } | undefined;
+  return project?.repo_path || undefined;
+}
+
+function emitRuntimeCheckpoint(
+  userId: string,
+  sessionId: string,
+  title: string,
+  body: string | null,
+  metadata: Record<string, unknown>,
+): void {
+  const event = createSessionEvent({
+    sessionId,
+    type: 'runtime_checkpoint',
+    title,
+    body,
+    metadata,
+  });
+  broadcast(userId, {
+    type: 'session_event_created',
+    sessionId,
+    event: { ...event, metadata: JSON.parse(event.metadata || '{}') },
+  });
+}
+
 export async function runAgentTurn(userId: string, sessionId: string, userMessageId: string): Promise<void> {
   const provider = await getConversationProvider(userId);
 
@@ -108,6 +149,12 @@ export async function runAgentTurn(userId: string, sessionId: string, userMessag
     .get(sessionId) as { id: string; content: string } | undefined;
 
   const prompt = lastUserMsg?.content ?? '';
+  const turn = getDb()
+    .prepare("SELECT id FROM session_turns WHERE session_id = ? AND user_message_id = ? ORDER BY started_at DESC LIMIT 1")
+    .get(sessionId, userMessageId) as { id: string } | undefined;
+  const messageCount = (getDb()
+    .prepare('SELECT COUNT(*) as count FROM messages WHERE session_id = ?')
+    .get(sessionId) as { count: number }).count;
 
   const attachments = lastUserMsg
     ? (getDb()
@@ -120,7 +167,28 @@ export async function runAgentTurn(userId: string, sessionId: string, userMessag
     : '';
 
   const intent = classifyIntent(prompt);
-  const isResume = !!session?.provider_session_id;
+  const invocationMode = selectInvocationMode({
+    providerSessionId: session?.provider_session_id,
+    prompt,
+    messageCount,
+  });
+  const isResume = modeUsesProviderResume(invocationMode);
+  if (turn) {
+    getDb()
+      .prepare('UPDATE session_turns SET invocation_mode = ?, provider_type = ?, provider_session_id = ? WHERE id = ?')
+      .run(invocationMode, provider.type, isResume ? (session?.provider_session_id ?? null) : null, turn.id);
+  }
+  if (session?.provider_session_id) {
+    emitRuntimeCheckpoint(
+      userId,
+      sessionId,
+      isResume ? 'Resumed provider context' : 'Started fresh from checkpoint',
+      isResume
+        ? 'The agent continued the existing provider session.'
+        : 'The agent kept the visible chat but avoided resuming hidden provider context.',
+      { invocationMode, providerType: provider.type, providerSessionId: isResume ? session.provider_session_id : null },
+    );
+  }
   const systemPromptSuffix = isResume ? undefined : await buildContext(userId, sessionId, intent, prompt);
   const contextUpdate = isResume ? await buildContextUpdate(userId, sessionId, prompt) : undefined;
   const effectivePrompt = contextUpdate
@@ -133,6 +201,7 @@ export async function runAgentTurn(userId: string, sessionId: string, userMessag
     app: { url: `http://localhost:${port}/mcp`, headers: { Authorization: `Bearer ${mcpToken}` } },
     ...getUserMcpServers(userId),
   };
+  const repoPath = getInvocationRepoPath(sessionId);
 
   const replyId = newId();
   const replyCreatedAt = Math.floor(Date.now() / 1000);
@@ -143,7 +212,7 @@ export async function runAgentTurn(userId: string, sessionId: string, userMessag
   activeTurnControllers.get(sessionId)?.abort();
   activeTurnControllers.set(sessionId, abortController);
 
-  let invokeResult: { costUsd?: number } = {};
+  let invokeResult: { costUsd?: number; executionId?: string } = {};
   const onText = (delta: string) => {
     if (!started) {
       started = true;
@@ -158,14 +227,14 @@ export async function runAgentTurn(userId: string, sessionId: string, userMessag
   const onSessionId = (id: string) => { setSessionProviderInfo(sessionId, provider.type, id); };
 
   const doInvoke = (resumeSessionId: string | null) => provider.invoke({
-    userId, prompt: effectivePrompt, resumeSessionId, systemPromptSuffix, mcpServers,
+    userId, messageId: userMessageId, repoPath, prompt: effectivePrompt, resumeSessionId, systemPromptSuffix, mcpServers,
     model: session?.model ?? undefined, effort: session?.effort ?? undefined,
     signal: abortController.signal, onText, onSessionId,
   });
 
   try {
     try {
-      invokeResult = await doInvoke(session?.provider_session_id ?? null);
+      invokeResult = await doInvoke(isResume ? (session?.provider_session_id ?? null) : null);
     } catch (firstErr) {
       const msg = firstErr instanceof Error ? firstErr.message : String(firstErr);
       if (msg.includes('no rollout found') && session?.provider_session_id) {
@@ -189,8 +258,39 @@ export async function runAgentTurn(userId: string, sessionId: string, userMessag
       getDb()
         .prepare("UPDATE session_turns SET status = 'done', completed_at = unixepoch() WHERE session_id = ? AND user_message_id = ? AND status = 'running'")
         .run(sessionId, userMessageId);
+      try {
+        recordSessionStateEvent(sessionId, {
+          open_tasks: ['User stopped the active agent turn before completion.'],
+          next_action: 'Wait for the user to clarify whether to continue from the checkpoint.',
+        });
+      } catch (e) { console.error('[stopTurn:sessionState]', e); }
+      try {
+        emitRuntimeCheckpoint(userId, sessionId, 'Turn stopped', 'The user stopped the active agent turn before completion.', {
+          invocationMode,
+          providerType: provider.type,
+        });
+      } catch (e) { console.error('[stopTurn:event]', e); }
       broadcast(userId, { type: 'turn_complete', sessionId, status: 'stopped' });
       return;
+    }
+    if (isProviderLimitError(err)) {
+      getDb()
+        .prepare('UPDATE sessions SET provider_session_id = NULL WHERE id = ?')
+        .run(sessionId);
+      try {
+        recordSessionStateEvent(sessionId, {
+          blockers: ['Provider session hit a usage/rate/session limit. Hidden provider context was reset.'],
+          open_tasks: ['Continue from structured session state instead of resuming the exhausted provider session.'],
+          next_action: 'Start a fresh provider session with the saved session state.',
+        });
+      } catch (e) { console.error('[limitError:sessionState]', e); }
+      try {
+        emitRuntimeCheckpoint(userId, sessionId, 'Provider session reset', 'The provider reported a usage/session limit. Hidden provider context was cleared; future turns can continue from saved state.', {
+          invocationMode,
+          providerType: provider.type,
+          reason: 'provider_limit',
+        });
+      } catch (e) { console.error('[limitError:event]', e); }
     }
     throw err;
   } finally {
@@ -208,7 +308,15 @@ export async function runAgentTurn(userId: string, sessionId: string, userMessag
   getDb().prepare('UPDATE sessions SET updated_at = unixepoch() WHERE id = ?').run(sessionId);
   broadcast(userId, { type: 'turn_complete', sessionId, status: 'done' });
 
-  try { recordAgentUsage(userId, provider.type as AgentUsageTool, invokeResult.costUsd ?? 0); } catch (e) { console.error('[postTurn:recordUsage]', e); }
+  try {
+    recordAgentUsage(userId, provider.type as AgentUsageTool, invokeResult.costUsd ?? 0, {
+      sessionId,
+      turnId: turn?.id ?? null,
+      messageId: userMessageId,
+      executionId: invokeResult.executionId ?? null,
+    });
+  } catch (e) { console.error('[postTurn:recordUsage]', e); }
+  try { updateSessionState(sessionId); } catch (e) { console.error('[postTurn:sessionState]', e); }
   try { maybeGenerateSessionTitle(userId, sessionId); } catch (e) { console.error('[postTurn:title]', e); }
   try { updateSessionSummary(sessionId); } catch (e) { console.error('[postTurn:summary]', e); }
 }

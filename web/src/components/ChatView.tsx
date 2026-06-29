@@ -8,6 +8,7 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from '@/components/ui/sheet';
 import ContextPanel from './ContextPanel.js';
 import MessageList from './MessageList.js';
@@ -17,7 +18,7 @@ import WorktreeDiff from './WorktreeDiff.js';
 import ContextBar from './ContextBar.js';
 import EmptyChatState from './EmptyChatState.js';
 import ScopePopover from './ScopePopover.js';
-import { getMessages, sendMessage, getChats, updateChatConfig, getSessionWorktree, mergeSessionBranch, getWorktreeDiff, getProjects, truncateMessagesFrom, approveExecution, rejectExecution, getChatEvents, getChatStatus, stopChat, getPendingApprovals } from '../lib/api.js';
+import { getMessages, sendMessage, getChats, updateChatConfig, getSessionWorktree, mergeSessionBranch, getWorktreeDiff, getProjects, truncateMessagesFrom, approveExecution, rejectExecution, getChatEvents, getChatStatus, getChatUsageRisk, resetChatProviderSession, stopChat, getPendingApprovals } from '../lib/api.js';
 import { subscribe } from '../lib/ws.js';
 import { cn } from '../lib/utils.js';
 import { usePageTitle } from '../lib/usePageTitle.js';
@@ -181,6 +182,7 @@ export default function ChatView({ chatId }: ChatViewProps) {
   const [sending, setSending] = useState(false);
   const [agentError, setAgentError] = useState<string | null>(null);
   const [failedMessageId, setFailedMessageId] = useState<string | null>(null);
+  const [pendingRiskSend, setPendingRiskSend] = useState<{ content: string; attachments: File[]; costUsd: number; messageCount: number } | null>(null);
   const hasActiveExecution = Object.values(executions).some(list =>
     list.some(exec => exec.status === 'running' || exec.status === 'awaiting_approval')
   );
@@ -279,9 +281,27 @@ export default function ChatView({ chatId }: ChatViewProps) {
     setInputValue(content);
   }, []);
 
-  const sendPrompt = useCallback(async (overrideContent?: string, attachments: File[] = []): Promise<boolean> => {
+  const sendPrompt = useCallback(async (overrideContent?: string, attachments: File[] = [], opts: { skipRiskCheck?: boolean } = {}): Promise<boolean> => {
     const content = (overrideContent ?? inputValue).trim();
     if (!content && attachments.length === 0) return false;
+
+    if (!opts.skipRiskCheck && !editingMessageId && messages.length > 0) {
+      try {
+        const risk = await getChatUsageRisk(chatId);
+        if (risk.shouldWarn) {
+          setPendingRiskSend({
+            content,
+            attachments,
+            costUsd: risk.attributedCostUsd,
+            messageCount: risk.messageCount,
+          });
+          return false;
+        }
+      } catch {
+        // Risk checks should not block chat if the endpoint is unavailable.
+      }
+    }
+
     setSending(true);
     setAgentError(null);
     setFailedMessageId(null);
@@ -313,7 +333,7 @@ export default function ChatView({ chatId }: ChatViewProps) {
       setAgentError('Message could not be sent. Please try again.');
       return false;
     }
-  }, [inputValue, editingMessageId, chatId, queryClient, mutation]);
+  }, [inputValue, editingMessageId, messages.length, chatId, queryClient, mutation]);
 
   const handleWsEvent = useCallback((event: WSEvent) => {
     const scopedTypes = new Set([
@@ -753,6 +773,41 @@ export default function ChatView({ chatId }: ChatViewProps) {
           </div>
         </SheetContent>
       </Sheet>
+
+      {pendingRiskSend && (
+        <Dialog open onOpenChange={open => { if (!open) setPendingRiskSend(null); }}>
+          <DialogContent className="sm:max-w-md">
+            <DialogHeader>
+              <DialogTitle>Large chat context</DialogTitle>
+              <DialogDescription>
+                This chat has {pendingRiskSend.messageCount} messages and about ${pendingRiskSend.costUsd.toFixed(2)} attributed usage. Starting fresh keeps the visible chat but drops hidden provider context for this next turn.
+              </DialogDescription>
+            </DialogHeader>
+            <DialogFooter>
+              <Button
+                variant="ghost"
+                onClick={() => {
+                  const pending = pendingRiskSend;
+                  setPendingRiskSend(null);
+                  sendPrompt(pending.content, pending.attachments, { skipRiskCheck: true });
+                }}
+              >
+                Resume anyway
+              </Button>
+              <Button
+                onClick={async () => {
+                  const pending = pendingRiskSend;
+                  setPendingRiskSend(null);
+                  await resetChatProviderSession(chatId);
+                  sendPrompt(pending.content, pending.attachments, { skipRiskCheck: true });
+                }}
+              >
+                Start fresh
+              </Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
+      )}
 
       <ContextPanel
         open={ctxOpen}

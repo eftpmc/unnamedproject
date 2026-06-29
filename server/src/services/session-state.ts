@@ -247,8 +247,14 @@ export function recordSessionStateEvent(
     repo_state?: string | null;
     facts?: string[];
     decisions?: string[];
+    /** Append to open_tasks (used internally). Use set_open_tasks to replace. */
     open_tasks?: string[];
+    /** Replace open_tasks entirely (used by checkpoint_session). */
+    set_open_tasks?: string[];
+    /** Append to blockers (used internally). Use set_blockers to replace. */
     blockers?: string[];
+    /** Replace blockers entirely (used by checkpoint_session). */
+    set_blockers?: string[];
     artifacts?: string[];
     files_touched?: string[];
     verification?: string[];
@@ -263,8 +269,16 @@ export function recordSessionStateEvent(
   if (event.next_action) next.next_action = normalizeItem(event.next_action);
   for (const item of event.facts ?? []) next.facts = pushUnique(next.facts, item);
   for (const item of event.decisions ?? []) next.decisions = pushUnique(next.decisions, item);
-  for (const item of event.open_tasks ?? []) next.open_tasks = pushUnique(next.open_tasks, item);
-  for (const item of event.blockers ?? []) next.blockers = pushUnique(next.blockers, item);
+  if (event.set_open_tasks !== undefined) {
+    next.open_tasks = event.set_open_tasks.map(normalizeItem).filter(Boolean).slice(-MAX_ITEMS);
+  } else {
+    for (const item of event.open_tasks ?? []) next.open_tasks = pushUnique(next.open_tasks, item);
+  }
+  if (event.set_blockers !== undefined) {
+    next.blockers = event.set_blockers.map(normalizeItem).filter(Boolean).slice(-MAX_ITEMS);
+  } else {
+    for (const item of event.blockers ?? []) next.blockers = pushUnique(next.blockers, item);
+  }
   for (const item of event.artifacts ?? []) next.artifacts = pushUnique(next.artifacts, item);
   for (const item of event.files_touched ?? []) next.files_touched = pushUnique(next.files_touched, item);
   for (const item of event.verification ?? []) next.verification = pushUnique(next.verification, item);

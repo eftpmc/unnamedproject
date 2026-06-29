@@ -261,6 +261,12 @@ function PanelContent({
                 <div className="text-[12px] leading-snug text-fg-soft">{sessionState.goal}</div>
               </div>
             )}
+            {sessionState.current_focus && sessionState.current_focus !== sessionState.goal && (
+              <div>
+                <div className="mb-0.5 text-[10px] font-medium uppercase tracking-wide text-faint-fg">Focus</div>
+                <div className="text-[12px] leading-snug text-fg-soft">{sessionState.current_focus}</div>
+              </div>
+            )}
             {sessionState.blockers.length > 0 && (
               <div>
                 <div className="mb-1 flex items-center gap-1 text-[10px] font-medium uppercase tracking-wide text-destructive/70">

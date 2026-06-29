@@ -26,10 +26,12 @@ export function registerSessionHandlers(): void {
       if (typeof args.next_action === 'string' && args.next_action.trim()) event.next_action = args.next_action;
       if (typeof args.completed === 'string' && args.completed.trim()) event.facts = [args.completed];
       if (Array.isArray(args.open_tasks)) {
-        event.open_tasks = (args.open_tasks as unknown[]).filter((t): t is string => typeof t === 'string' && t.trim().length > 0);
+        // Replace the existing task list — the agent is declaring current state, not appending
+        event.set_open_tasks = (args.open_tasks as unknown[]).filter((t): t is string => typeof t === 'string' && t.trim().length > 0);
       }
       if (Array.isArray(args.blockers)) {
-        event.blockers = (args.blockers as unknown[]).filter((b): b is string => typeof b === 'string' && b.trim().length > 0);
+        // Replace the existing blocker list — same reason
+        event.set_blockers = (args.blockers as unknown[]).filter((b): b is string => typeof b === 'string' && b.trim().length > 0);
       }
       if (Array.isArray(args.files_changed)) {
         event.files_touched = (args.files_changed as unknown[]).filter((f): f is string => typeof f === 'string' && f.trim().length > 0);

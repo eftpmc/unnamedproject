@@ -185,15 +185,15 @@ export async function runAgentTurn(userId: string, sessionId: string, userMessag
       .prepare('UPDATE session_turns SET invocation_mode = ?, provider_type = ?, provider_session_id = ? WHERE id = ?')
       .run(invocationMode, provider.type, isResume ? (session?.provider_session_id ?? null) : null, turn.id);
   }
-  if (session?.provider_session_id) {
+  // Only show a divider when the agent starts fresh — resuming is the expected path
+  // and showing a divider on every turn creates noise.
+  if (!isResume && session?.provider_session_id) {
     emitRuntimeCheckpoint(
       userId,
       sessionId,
-      isResume ? 'Resumed provider context' : 'Started fresh from checkpoint',
-      isResume
-        ? 'The agent continued the existing provider session.'
-        : 'The agent kept the visible chat but avoided resuming hidden provider context.',
-      { invocationMode, providerType: provider.type, providerSessionId: isResume ? session.provider_session_id : null },
+      'Started fresh from checkpoint',
+      'The agent kept the visible chat but started a new provider session from saved state.',
+      { invocationMode, providerType: provider.type },
     );
   }
   const systemPromptSuffix = isResume ? undefined : await buildContext(userId, sessionId, intent, prompt);

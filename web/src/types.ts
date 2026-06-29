@@ -142,9 +142,11 @@ export interface UserSettings {
 export interface Connection {
   id: string;
   name: string;
-  type: 'github' | 'mcp' | 'google' | 'chrome';
-  purpose: 'github' | 'mcp' | 'tool' | 'google' | 'chrome';
+  type: 'github' | 'mcp' | 'google' | 'chrome' | 'web';
+  purpose: 'github' | 'mcp' | 'tool' | 'google' | 'chrome' | 'web';
   service?: string;
+  url?: string;
+  notes?: string;
   created_at: number;
 }
 

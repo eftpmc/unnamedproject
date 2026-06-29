@@ -26,16 +26,13 @@ function maskConfig(config: Record<string, unknown>): Record<string, unknown> {
 }
 
 export async function createConnectionTool(
-  input: { name: string; type: string; purpose?: string; config: Record<string, unknown> },
+  input: { name: string; type: string; purpose?: string; config: Record<string, unknown>; service?: string; url?: string; notes?: string },
   ctx: { userId: string; executionId: string },
 ): Promise<string> {
-  const decision = await requestApproval(
-    ctx.executionId,
-    ctx.userId,
-    'create_connection',
-    { name: input.name, type: input.type, purpose: input.purpose ?? 'tool', config: maskConfig(input.config) },
-    'user',
-  );
+  const approval = input.type === 'web'
+    ? { name: input.name, type: input.type, service: input.service, url: input.url }
+    : { name: input.name, type: input.type, purpose: input.purpose ?? 'tool', config: maskConfig(input.config) };
+  const decision = await requestApproval(ctx.executionId, ctx.userId, 'create_connection', approval, 'user');
   if (decision === 'rejected') return 'create_connection cancelled';
 
   try {

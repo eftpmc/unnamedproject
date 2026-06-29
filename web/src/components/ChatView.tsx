@@ -653,26 +653,24 @@ export default function ChatView({ chatId }: ChatViewProps) {
               ${sessionCost.toFixed(2)}
             </span>
           )}
-          {(pinnedProject || worktree || pendingApproval) && (
-            <button
-              type="button"
-              onClick={toggleCtx}
-              aria-pressed={ctxOpen}
-              title={ctxOpen ? 'Hide context' : 'Show context'}
-              className={cn(
-                'flex h-7 items-center gap-1.5 rounded-md border px-2 text-xs font-medium transition-colors',
-                ctxOpen
-                  ? 'border-transparent bg-accent-tint text-on-accent-soft'
-                  : 'border-border-soft bg-transparent text-muted-foreground hover:bg-muted hover:text-foreground',
-              )}
-            >
-              <PanelRight size={13} strokeWidth={1.75} />
-              <span className="hidden sm:inline">Context</span>
-              {!ctxOpen && pendingApproval && (
-                <span className="size-1.5 rounded-full bg-warning" />
-              )}
-            </button>
-          )}
+          <button
+            type="button"
+            onClick={toggleCtx}
+            aria-pressed={ctxOpen}
+            title={ctxOpen ? 'Hide context' : 'Show context'}
+            className={cn(
+              'flex h-7 items-center gap-1.5 rounded-md border px-2 text-xs font-medium transition-colors',
+              ctxOpen
+                ? 'border-transparent bg-accent-tint text-on-accent-soft'
+                : 'border-border-soft bg-transparent text-muted-foreground hover:bg-muted hover:text-foreground',
+            )}
+          >
+            <PanelRight size={13} strokeWidth={1.75} />
+            <span className="hidden sm:inline">Context</span>
+            {!ctxOpen && pendingApproval && (
+              <span className="size-1.5 rounded-full bg-warning" />
+            )}
+          </button>
         </div>
       </header>
 

@@ -259,8 +259,12 @@ export function getConnections(): Promise<Connection[]> {
   return request('/connections');
 }
 
-export function createConnection(body: { name: string; type: string; purpose?: string; config: Record<string, unknown> }): Promise<{ id: string }> {
+export function createConnection(body: { name: string; type: string; purpose?: string; config?: Record<string, unknown>; service?: string; url?: string; notes?: string }): Promise<{ id: string }> {
   return request('/connections', { method: 'POST', body: JSON.stringify(body) });
+}
+
+export function updateConnection(id: string, body: { name?: string; service?: string; url?: string; notes?: string }): Promise<{ ok: boolean }> {
+  return request(`/connections/${id}`, { method: 'PATCH', body: JSON.stringify(body) });
 }
 
 export function deleteConnection(id: string): Promise<void> {

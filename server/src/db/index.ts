@@ -336,6 +336,38 @@ const migrations: Migration[] = [
     },
   },
   {
+    version: 7,
+    name: 'web_connections',
+    noTransaction: true,
+    up: (database) => {
+      const cols = (database.prepare("PRAGMA table_info(connections)").all() as { name: string }[]).map(c => c.name);
+      if (!cols.includes('url')) database.exec("ALTER TABLE connections ADD COLUMN url TEXT");
+      if (!cols.includes('notes')) database.exec("ALTER TABLE connections ADD COLUMN notes TEXT");
+      // Widen the type CHECK to include 'web' by recreating the table
+      const currentSql = tableSql(database, 'connections') ?? '';
+      if (currentSql.includes("'web'")) return;
+      database.pragma('foreign_keys = OFF');
+      database.exec(`ALTER TABLE connections RENAME TO _connections_web_tmp;`);
+      database.exec(`CREATE TABLE connections (
+        id TEXT PRIMARY KEY,
+        user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+        name TEXT NOT NULL,
+        type TEXT NOT NULL CHECK(type IN ('github','mcp','google','chrome','web')),
+        purpose TEXT NOT NULL DEFAULT 'tool' CHECK(purpose IN ('github','mcp','tool','google','chrome','web')),
+        service TEXT,
+        url TEXT,
+        notes TEXT,
+        encrypted_config TEXT NOT NULL DEFAULT '',
+        created_at INTEGER NOT NULL DEFAULT (unixepoch()),
+        UNIQUE(user_id, name)
+      );`);
+      database.exec(`INSERT INTO connections (id, user_id, name, type, purpose, service, url, notes, encrypted_config, created_at)
+        SELECT id, user_id, name, type, purpose, service, url, notes, encrypted_config, created_at FROM _connections_web_tmp;`);
+      database.exec(`DROP TABLE _connections_web_tmp;`);
+      database.pragma('foreign_keys = ON');
+    },
+  },
+  {
     version: 6,
     name: 'runtime_checkpoint_events',
     noTransaction: true,

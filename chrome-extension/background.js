@@ -670,8 +670,8 @@ function _autofillForm(username, password, submit) {
   return results.join('; ');
 }
 
-function evaluateScript(script) {
-  return (0, eval)(script);
+async function evaluateScript(script) {
+  return await (0, eval)(script);
 }
 
 function getPageText() {

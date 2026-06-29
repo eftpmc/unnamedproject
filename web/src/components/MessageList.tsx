@@ -292,10 +292,15 @@ export default function MessageList({ messages, executions, streamingIds, sessio
   const sortedMessages = [...messages].sort((a, b) => a.created_at - b.created_at);
   const knownMessageIds = new Set(sortedMessages.map(m => m.id));
   const timeline: TimelineItem[] = [];
+  const isConversationExec = (exec: InlineExecution) =>
+    exec.tool === 'claude_code' || exec.tool === 'invoke_claude_code' ||
+    exec.tool === 'codex' || exec.tool === 'invoke_codex';
+
   sortedMessages.forEach((message, messageIndex) => {
     const messageOrder = message.created_at * 1000 + messageIndex * 10;
     timeline.push({ type: 'message' as const, message, order: messageOrder });
     (executions[message.id] ?? []).forEach((execution, executionIndex) => {
+      if (isConversationExec(execution)) return;
       timeline.push({ type: 'execution' as const, execution, order: messageOrder + executionIndex + 1 });
     });
   });
@@ -303,6 +308,7 @@ export default function MessageList({ messages, executions, streamingIds, sessio
   Object.entries(executions).forEach(([msgId, execs], orphanIndex) => {
     if (!knownMessageIds.has(msgId)) {
       execs.forEach((execution, executionIndex) => {
+        if (isConversationExec(execution)) return;
         timeline.push({ type: 'execution' as const, execution, order: execution.createdAt * 1000 + orphanIndex * 10 + executionIndex });
       });
     }

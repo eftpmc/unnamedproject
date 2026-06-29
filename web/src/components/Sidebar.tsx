@@ -8,6 +8,7 @@ import {
   FileText,
   FolderGit2,
   FolderOpen,
+  Globe,
   Image,
   LayoutDashboard,
   Layers,
@@ -133,6 +134,7 @@ function GlobalNav({ expanded, pathname, onNavigate }: { expanded: boolean; path
       >
         <NavSubItem label="Tools" href="/settings/tools" active={pathname === '/settings/tools'} icon={<Wrench size={13} strokeWidth={1.75} />} onNavigate={onNavigate} />
         <NavSubItem label="MCP" href="/settings/mcp" active={pathname === '/settings/mcp'} icon={<Plug size={13} strokeWidth={1.75} />} onNavigate={onNavigate} />
+        <NavSubItem label="Connections" href="/settings/connections" active={pathname === '/settings/connections'} icon={<Globe size={13} strokeWidth={1.75} />} onNavigate={onNavigate} />
         <NavSubItem label="Workspace" href="/settings/workspace" active={pathname === '/settings/workspace'} icon={<FolderOpen size={13} strokeWidth={1.75} />} onNavigate={onNavigate} />
         <NavSubItem label="Memory" href="/settings/memory" active={pathname === '/settings/memory'} icon={<Database size={13} strokeWidth={1.75} />} onNavigate={onNavigate} />
         <NavSubItem label="Vault" href="/settings/vault" active={pathname === '/settings/vault'} icon={<KeyRound size={13} strokeWidth={1.75} />} onNavigate={onNavigate} />

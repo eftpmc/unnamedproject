@@ -1,5 +1,5 @@
 import { registerTool } from '../registry.js';
-import { writeDocument, readDocument, listDocuments, patchFrontmatter } from '../../services/documents.js';
+import { writeDocument, readDocument, listDocuments, patchFrontmatter, deleteDocument } from '../../services/documents.js';
 import { getDb } from '../../db/index.js';
 
 export function registerDocumentHandlers(): void {
@@ -60,6 +60,20 @@ export function registerDocumentHandlers(): void {
         project.space_id,
         (args.type || args.frontmatter) ? { type: args.type as string | undefined, frontmatter: args.frontmatter as Record<string, unknown> | undefined } : undefined,
       ));
+    },
+  });
+
+  registerTool({
+    name: 'delete_document',
+    description: 'Permanently delete a document by id.',
+    inputSchema: {
+      type: 'object',
+      properties: { id: { type: 'string' } },
+      required: ['id'],
+    },
+    handler: async (args) => {
+      const ok = await deleteDocument(args.id as string);
+      return ok ? 'deleted' : `Error: document ${args.id} not found`;
     },
   });
 

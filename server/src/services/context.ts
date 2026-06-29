@@ -14,8 +14,8 @@ import path from 'path';
 function baseBlock(intent: Intent): string {
   const isCode = intent.domain === 'code' || intent.domain === 'multi' || intent.domain === 'general';
   const autoApproved = isCode
-    ? 'git_op add/commit, list_projects, create_project, update_project, pin_project, search_files, project_query, rebuild_graph, recall, remember, forget, list_chats, read_chat, write_document, read_document, list_documents, patch_frontmatter, link_project, create_trigger, list_triggers, delete_trigger, list_connections, test_connection, checkpoint_session'
-    : 'list_projects, create_project, pin_project, recall, remember, forget, list_chats, read_chat, write_document, read_document, list_documents, patch_frontmatter, list_connections, test_connection, checkpoint_session';
+    ? 'git_op add/commit, list_projects, create_project, update_project, pin_project, search_files, project_query, rebuild_graph, recall, remember, forget, list_chats, read_chat, write_document, read_document, list_documents, patch_frontmatter, delete_document, link_project, create_trigger, list_triggers, delete_trigger, list_connections, create_connection, update_connection, delete_connection, test_connection, vault_get, vault_list, checkpoint_session'
+    : 'list_projects, create_project, pin_project, recall, remember, forget, list_chats, read_chat, write_document, read_document, list_documents, patch_frontmatter, delete_document, list_connections, create_connection, update_connection, delete_connection, test_connection, vault_get, vault_list, checkpoint_session';
 
   return `You are a personal AI assistant with full coding capabilities and access to the user's projects, documents, and memory. You can implement code, write files, run commands, and manage the user's workspace directly.
 
@@ -43,6 +43,24 @@ Use the right browser tool for the task — in this order:
 
 Do not use Chrome for tasks that WebFetch or Playwright can handle.
 If a browser action fails or produces no visible progress twice in a row, stop retrying. Record the failure in checkpoint_session blockers, switch strategy (try browser_evaluate, a different selector, or native form submission), or ask the user for a manual step.
+
+## Reading content from browser pages — cost rules
+Screenshots are image payloads that cost ~10–20× more tokens than text. Never take a screenshot just to read content.
+
+Reading hierarchy (cheapest first):
+1. browser_extract format=text — gets all visible text from the page. Use this first for any data reading task.
+2. browser_extract format=json — structured extraction (cards, tables, lists, headings). Use for job listings, search results, profiles.
+3. browser_extract format=links — all links with text+href. Use when you need to find navigation targets.
+4. browser_evaluate — run custom JS when you need something specific (a particular element, attribute, or computed value).
+5. browser_screenshot — ONLY when you need to see visual layout, debug a UI interaction, or text extraction has failed and you have no other option. Do not use for reading text.
+
+## Data scraping workflow
+When the task is to collect structured data (job listings, profiles, search results, etc.):
+1. Navigate with browser_navigate
+2. Extract with browser_extract format=json (or format=text if json is insufficient)
+3. Immediately write the extracted data to a document with write_document — do not hold it in conversation context
+4. Move to the next page or URL
+Do not take screenshots during a scraping workflow. Do not re-extract data you have already written to a document.
 
 ## File search
 Use search_files for fast codebase lookups (finding where a function is defined, tracing usages, locating config). Only fall back to project_query for broad architectural questions that need reasoning across the whole codebase.

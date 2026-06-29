@@ -25,8 +25,38 @@ router.get('/', (req, res) => {
   res.json(getDb().prepare(sql).all(...params));
 });
 
+// Static routes must come before /:id/* to avoid parameterized routes shadowing them
+router.get('/active', (req, res) => {
+  const { userId } = req as AuthedRequest;
+  const activeIds = getActiveSessionIds();
+  if (activeIds.length === 0) { res.json({ ids: [] }); return; }
+  const placeholders = activeIds.map(() => '?').join(',');
+  const rows = getDb()
+    .prepare(`SELECT id FROM sessions WHERE id IN (${placeholders}) AND user_id = ?`)
+    .all(...activeIds, userId) as { id: string }[];
+  res.json({ ids: rows.map(r => r.id) });
+});
+
+router.get('/search', (req, res) => {
+  const { userId } = req as AuthedRequest;
+  const q = (req.query.q as string | undefined)?.trim();
+  if (!q) { res.json([]); return; }
+  const pattern = `%${q}%`;
+  const rows = getDb()
+    .prepare(`
+      SELECT DISTINCT s.id, s.title, s.effort, s.pinned_project_id, s.created_at, s.updated_at
+      FROM sessions s
+      LEFT JOIN messages m ON m.session_id = s.id
+      WHERE s.user_id = ? AND (s.title LIKE ? OR m.content LIKE ?)
+      ORDER BY s.updated_at DESC
+      LIMIT 50
+    `)
+    .all(userId, pattern, pattern);
+  res.json(rows);
+});
+
 router.get('/:id/events', (req, res) => {
-  const { userId } = req as unknown as AuthedRequest;
+  const { userId } = req as AuthedRequest;
   const session = getDb()
     .prepare('SELECT id FROM sessions WHERE id = ? AND user_id = ?')
     .get(req.params.id, userId);
@@ -47,7 +77,7 @@ router.get('/:id/events', (req, res) => {
 });
 
 router.get('/:id/status', (req, res) => {
-  const { userId } = req as unknown as AuthedRequest;
+  const { userId } = req as AuthedRequest;
   const session = getDb()
     .prepare('SELECT id FROM sessions WHERE id = ? AND user_id = ?')
     .get(req.params.id, userId);
@@ -87,17 +117,20 @@ router.get('/:id/status', (req, res) => {
 });
 
 router.get('/:id/state', (req, res) => {
-  const { userId } = req as unknown as AuthedRequest;
+  const { userId } = req as AuthedRequest;
   const row = getDb()
     .prepare('SELECT session_state FROM sessions WHERE id = ? AND user_id = ?')
     .get(req.params.id, userId) as { session_state: string | null } | undefined;
   if (!row) { res.status(404).json({ error: 'Session not found' }); return; }
-  const state = row.session_state ? JSON.parse(row.session_state) : null;
+  let state = null;
+  if (row.session_state) {
+    try { state = JSON.parse(row.session_state); } catch { /* malformed — return null */ }
+  }
   res.json({ state });
 });
 
 router.get('/:id/usage-risk', (req, res) => {
-  const { userId } = req as unknown as AuthedRequest;
+  const { userId } = req as AuthedRequest;
   const session = getDb()
     .prepare('SELECT id, provider_type as providerType, provider_session_id as providerSessionId FROM sessions WHERE id = ? AND user_id = ?')
     .get(req.params.id, userId) as { id: string; providerType: string | null; providerSessionId: string | null } | undefined;
@@ -121,27 +154,8 @@ router.get('/:id/usage-risk', (req, res) => {
   });
 });
 
-router.get('/search', (req, res) => {
-  const { userId } = req as AuthedRequest;
-  const q = (req.query.q as string | undefined)?.trim();
-  if (!q) { res.json([]); return; }
-  const pattern = `%${q}%`;
-  const rows = getDb()
-    .prepare(`
-      SELECT DISTINCT s.id, s.title, s.effort, s.pinned_project_id, s.created_at, s.updated_at
-      FROM sessions s
-      LEFT JOIN messages m ON m.session_id = s.id
-      WHERE s.user_id = ? AND (s.title LIKE ? OR m.content LIKE ?)
-      ORDER BY s.updated_at DESC
-      LIMIT 50
-    `)
-    .all(userId, pattern, pattern);
-  res.json(rows);
-});
-
-
 router.patch('/:id', (req, res) => {
-  const { userId } = req as unknown as AuthedRequest;
+  const { userId } = req as AuthedRequest;
   const { effort, title, pinned_project_id, pinned_space_id } = req.body as { effort?: string; title?: string; pinned_project_id?: string | null; pinned_space_id?: string | null };
   // Accept pinned_project_id (preferred) or pinned_space_id (legacy alias — treated as project_id)
   const pinnedProjectUpdate = pinned_project_id !== undefined ? pinned_project_id : pinned_space_id;
@@ -211,20 +225,8 @@ router.post('/', (req, res) => {
   res.status(201).json({ id });
 });
 
-router.get('/active', (req, res) => {
-  const { userId } = req as unknown as AuthedRequest;
-  // Filter to only sessions belonging to this user
-  const activeIds = getActiveSessionIds();
-  if (activeIds.length === 0) { res.json({ ids: [] }); return; }
-  const placeholders = activeIds.map(() => '?').join(',');
-  const rows = getDb()
-    .prepare(`SELECT id FROM sessions WHERE id IN (${placeholders}) AND user_id = ?`)
-    .all(...activeIds, userId) as { id: string }[];
-  res.json({ ids: rows.map(r => r.id) });
-});
-
 router.post('/:id/stop', (req, res) => {
-  const { userId } = req as unknown as AuthedRequest;
+  const { userId } = req as AuthedRequest;
   const session = getDb()
     .prepare('SELECT id FROM sessions WHERE id = ? AND user_id = ?')
     .get(req.params.id, userId);
@@ -234,7 +236,7 @@ router.post('/:id/stop', (req, res) => {
 });
 
 router.post('/:id/reset-provider-session', (req, res) => {
-  const { userId } = req as unknown as AuthedRequest;
+  const { userId } = req as AuthedRequest;
   const session = getDb()
     .prepare('SELECT id FROM sessions WHERE id = ? AND user_id = ?')
     .get(req.params.id, userId);
@@ -258,7 +260,7 @@ router.post('/:id/reset-provider-session', (req, res) => {
 });
 
 router.delete('/:id', (req, res) => {
-  const { userId } = req as unknown as AuthedRequest;
+  const { userId } = req as AuthedRequest;
   const session = getDb()
     .prepare('SELECT id FROM sessions WHERE id = ? AND user_id = ?')
     .get(req.params.id, userId);
@@ -268,7 +270,7 @@ router.delete('/:id', (req, res) => {
 });
 
 router.get('/:id/worktree', async (req, res) => {
-  const { userId } = req as unknown as AuthedRequest;
+  const { userId } = req as AuthedRequest;
   const wt = getDb().prepare(`
     SELECT w.id, w.branch, w.worktree_path, pr.repo_path, pr.name AS project_name
     FROM agent_worktrees w
@@ -296,7 +298,7 @@ router.get('/:id/worktree', async (req, res) => {
 });
 
 router.get('/:id/worktree/diff', async (req, res) => {
-  const { userId } = req as unknown as AuthedRequest;
+  const { userId } = req as AuthedRequest;
   const wt = getDb().prepare(`
     SELECT w.worktree_path
     FROM agent_worktrees w
@@ -316,7 +318,7 @@ router.get('/:id/worktree/diff', async (req, res) => {
 });
 
 router.post('/:id/merge', async (req, res) => {
-  const { userId } = req as unknown as AuthedRequest;
+  const { userId } = req as AuthedRequest;
   const wt = getDb().prepare(`
     SELECT w.branch, pr.repo_path
     FROM agent_worktrees w

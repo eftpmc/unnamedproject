@@ -59,11 +59,12 @@ A trigger runs a playbook document (a document with frontmatter type: workflow) 
 
 function permissionBlock(userId: string): string {
   const profile = getPermissionProfile(userId);
-  const description = {
+  const descriptions: Record<string, string> = {
     fast: 'delegated agents run non-interactively in isolated worktrees with a minimal environment; this is the default speed/safety balance.',
     trusted: 'delegated agents run non-interactively and inherit the server environment; use only for fully trusted local work.',
     strict: 'delegated agents avoid bypass permission flags and may fail or pause if their CLI requires interactive approval.',
-  }[profile];
+  };
+  const description = descriptions[profile] ?? 'permission profile active.';
   return `## Permission profile
 Active profile: ${profile}. ${description}`;
 }

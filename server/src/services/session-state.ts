@@ -20,6 +20,10 @@ export interface SessionState {
 const MAX_ITEMS = 12;
 const MAX_ITEM_CHARS = 220;
 
+function now(): number {
+  return Math.floor(Date.now() / 1000);
+}
+
 function emptyState(): SessionState {
   return {
     goal: null,
@@ -35,7 +39,7 @@ function emptyState(): SessionState {
     failed_attempts: [],
     handoff_notes: [],
     next_action: null,
-    updated_at: Math.floor(Date.now() / 1000),
+    updated_at: now(),
   };
 }
 
@@ -71,7 +75,7 @@ function parseState(raw: string | null): SessionState {
       current_focus: parsed.current_focus ? normalizeItem(parsed.current_focus) : null,
       repo_state: parsed.repo_state ? normalizeItem(parsed.repo_state) : null,
       next_action: parsed.next_action ? normalizeItem(parsed.next_action) : null,
-      updated_at: typeof parsed.updated_at === 'number' ? parsed.updated_at : Math.floor(Date.now() / 1000),
+      updated_at: typeof parsed.updated_at === 'number' ? parsed.updated_at : now(),
     };
   } catch {
     return emptyState();
@@ -156,7 +160,7 @@ function countOccurrences(items: string[], value: string): number {
 }
 
 function updateFromTurn(state: SessionState, userText: string, assistantText: string): SessionState {
-  let next: SessionState = { ...state, updated_at: Math.floor(Date.now() / 1000) };
+  let next: SessionState = { ...state, updated_at: now() };
   const userWords = userText.trim().split(/\s+/);
   if (!next.goal && userWords.length > 2) next.goal = firstSentence(userText);
   // Only update current_focus from substantive user messages (not "yes", "ok", "1-3")
@@ -187,8 +191,11 @@ function updateFromTurn(state: SessionState, userText: string, assistantText: st
       next.next_action = 'Switch browser automation strategy or ask the user for manual intervention.';
     }
   }
-  if (/\b(todo|still|remaining|next|continue|follow[- ]?up)\b/i.test(assistant)) {
+  if (/\b(todo|still|remaining|next step|follow[- ]?up|still need)\b/i.test(assistant)) {
     next.open_tasks = pushUnique(next.open_tasks, firstSentence(assistant));
+  }
+  // Only set next_action from explicit forward-looking intent, not general "next/continue" mentions
+  if (/\b(next step is|next[,:]?\s+I('ll| will)|continuing with|will now|about to)\b/i.test(assistant)) {
     next.next_action = firstSentence(assistant);
   }
   for (const artifact of extractArtifacts(assistant)) {
@@ -284,7 +291,7 @@ export function recordSessionStateEvent(
   for (const item of event.verification ?? []) next.verification = pushUnique(next.verification, item);
   for (const item of event.failed_attempts ?? []) next.failed_attempts = pushUnique(next.failed_attempts, item);
   for (const item of event.handoff_notes ?? []) next.handoff_notes = pushUnique(next.handoff_notes, item);
-  next = { ...next, updated_at: Math.floor(Date.now() / 1000) };
+  next = { ...next, updated_at: now() };
   getDb()
     .prepare('UPDATE sessions SET session_state = ? WHERE id = ?')
     .run(JSON.stringify(next), sessionId);

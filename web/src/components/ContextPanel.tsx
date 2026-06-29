@@ -274,8 +274,8 @@ function PanelContent({
                   Blockers
                 </div>
                 <ul className="flex flex-col gap-0.5">
-                  {sessionState.blockers.map((b, i) => (
-                    <li key={i} className="text-[11px] leading-snug text-destructive/80">· {b}</li>
+                  {sessionState.blockers.map((b) => (
+                    <li key={b} className="text-[11px] leading-snug text-destructive/80">· {b}</li>
                   ))}
                 </ul>
               </div>
@@ -284,8 +284,8 @@ function PanelContent({
               <div>
                 <div className="mb-1 text-[10px] font-medium uppercase tracking-wide text-faint-fg">Open tasks</div>
                 <ul className="flex flex-col gap-0.5">
-                  {sessionState.open_tasks.map((t, i) => (
-                    <li key={i} className="text-[11px] leading-snug text-fg-soft">· {t}</li>
+                  {sessionState.open_tasks.map((t) => (
+                    <li key={t} className="text-[11px] leading-snug text-fg-soft">· {t}</li>
                   ))}
                 </ul>
               </div>

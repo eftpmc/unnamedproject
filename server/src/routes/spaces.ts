@@ -32,6 +32,17 @@ router.get('/', (req, res) => {
   })));
 });
 
+router.get('/:id', (req, res) => {
+  const { userId } = req as unknown as AuthedRequest;
+  const row = getDb().prepare(`
+    SELECT id, name, description, enabled_connection_ids, created_at
+    FROM spaces
+    WHERE id = ? AND user_id = ?
+  `).get(req.params.id, userId) as (Record<string, unknown> & { enabled_connection_ids: string }) | undefined;
+  if (!row) { res.status(404).json({ error: 'Not found' }); return; }
+  res.json({ ...row, enabled_connection_ids: JSON.parse(row.enabled_connection_ids) });
+});
+
 router.post('/', (req, res) => {
   const { userId } = req as AuthedRequest;
   const { name, description, enabled_connection_ids = [] } = req.body as {

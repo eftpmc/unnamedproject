@@ -147,6 +147,10 @@ export function getSpaces(): Promise<Space[]> {
   return request('/spaces');
 }
 
+export function getSpace(id: string): Promise<Space> {
+  return request(`/spaces/${id}`);
+}
+
 export function createSpace(body: { name: string; description?: string; enabled_connection_ids?: string[] }): Promise<{ id: string }> {
   return request('/spaces', { method: 'POST', body: JSON.stringify(body) });
 }

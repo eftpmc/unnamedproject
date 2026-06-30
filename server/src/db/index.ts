@@ -15,6 +15,10 @@ export function getDataDir(): string {
   return process.env.DATA_DIR ? path.resolve(process.env.DATA_DIR) : defaultDataDir;
 }
 
+export function getToolsDir(): string {
+  return path.join(getDataDir(), 'tools');
+}
+
 function applySchema(): void {
   db.exec(`
     CREATE TABLE IF NOT EXISTS users (
@@ -855,6 +859,7 @@ function seedDefaultAccounts(): void {
 export function initDb(overrideDataDir?: string): void {
   const dataDir = overrideDataDir ?? getDataDir();
   fs.mkdirSync(dataDir, { recursive: true });
+  fs.mkdirSync(path.join(dataDir, 'tools'), { recursive: true });
   const dbPath = path.join(dataDir, 'app.db');
   db = new Database(dbPath);
   db.pragma('journal_mode = WAL');

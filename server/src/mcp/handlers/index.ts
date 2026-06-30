@@ -1,3 +1,4 @@
+import { registerSystemHandlers } from './system.js';
 import { registerSpaceHandlers } from './spaces.js';
 import { registerMemoryHandlers } from './memory.js';
 import { registerKnowledgeHandlers } from './knowledge.js';
@@ -12,6 +13,7 @@ import { registerDriveHandlers } from './drive.js';
 import { registerChromeHandlers } from './chrome.js';
 import { registerVaultHandlers } from './vault.js';
 import { registerSessionHandlers } from './session.js';
+registerSystemHandlers();
 registerSpaceHandlers();
 registerMemoryHandlers();
 registerKnowledgeHandlers();

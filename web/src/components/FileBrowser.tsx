@@ -327,12 +327,26 @@ export interface FileBrowserProps {
 
 const ALL_TYPES = '__all__';
 type DisplayMode = 'list' | 'grid';
+type SortKey = 'name-asc' | 'name-desc' | 'date-desc' | 'date-asc' | 'type';
+
+function sortFiles(files: LibraryFile[], key: SortKey): LibraryFile[] {
+  return [...files].sort((a, b) => {
+    switch (key) {
+      case 'name-desc': return fileName(b).localeCompare(fileName(a));
+      case 'date-desc': return b.updated_at - a.updated_at;
+      case 'date-asc':  return a.updated_at - b.updated_at;
+      case 'type':      return mimeTypeLabel(a.mime_type).localeCompare(mimeTypeLabel(b.mime_type)) || fileName(a).localeCompare(fileName(b));
+      default:          return fileName(a).localeCompare(fileName(b));
+    }
+  });
+}
 
 export default function FileBrowser({ projectId, projectName = 'Files', canEdit, canDelete }: FileBrowserProps) {
   const [dirPath, setDirPath] = useState('');
   const [previewFile, setPreviewFile] = useState<LibraryFile | null>(null);
   const [search, setSearch] = useState('');
   const [filterMime, setFilterMime] = useState(ALL_TYPES);
+  const [sortKey, setSortKey] = useState<SortKey>('name-asc');
   const [displayMode, setDisplayMode] = useState<DisplayMode>('list');
 
   const { data: projectFiles = [], isLoading } = useQuery({
@@ -352,10 +366,11 @@ export default function FileBrowser({ projectId, projectName = 'Files', canEdit,
         const mimeMatch = filterMime === ALL_TYPES || f.mime_type === filterMime;
         return nameMatch && mimeMatch;
       });
-      return { folders: [], files: filtered.sort((a, b) => fileName(a).localeCompare(fileName(b))) };
+      return { folders: [], files: sortFiles(filtered, sortKey) };
     }
-    return getFolderContents(projectFiles, dirPath);
-  }, [projectFiles, dirPath, search, filterMime, isSearching]);
+    const { folders: rawFolders, files: rawFiles } = getFolderContents(projectFiles, dirPath);
+    return { folders: rawFolders, files: sortFiles(rawFiles, sortKey) };
+  }, [projectFiles, dirPath, search, filterMime, sortKey, isSearching]);
 
   const isEmpty = !isLoading && folders.length === 0 && files.length === 0;
   const breadcrumbs = dirPath ? dirPath.split('/').filter(Boolean) : [];
@@ -368,8 +383,9 @@ export default function FileBrowser({ projectId, projectName = 'Files', canEdit,
   return (
     <>
       {/* toolbar */}
-      <div className="mb-3 flex items-center gap-2">
-        <div className="relative min-w-0 flex-1">
+      <div className="mb-3 flex flex-col gap-2">
+        {/* row 1: search */}
+        <div className="relative">
           <Search size={13} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-muted-foreground/50" />
           <input
             type="text"
@@ -386,25 +402,39 @@ export default function FileBrowser({ projectId, projectName = 'Files', canEdit,
             </button>
           )}
         </div>
-        {mimeOptions.length > 0 && (
+        {/* row 2: filters + sort + view */}
+        <div className="flex items-center gap-2">
+          {mimeOptions.length > 0 && (
+            <select
+              value={filterMime}
+              onChange={e => setFilterMime(e.target.value)}
+              className="h-7 rounded-md border border-input bg-background px-2 text-xs text-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
+            >
+              <option value={ALL_TYPES}>All types</option>
+              {mimeOptions.map(({ mime, label }) => (
+                <option key={mime} value={mime}>{label}</option>
+              ))}
+            </select>
+          )}
           <select
-            value={filterMime}
-            onChange={e => setFilterMime(e.target.value)}
-            className="h-8 rounded-md border border-input bg-background px-2 text-xs text-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
+            value={sortKey}
+            onChange={e => setSortKey(e.target.value as SortKey)}
+            className="h-7 rounded-md border border-input bg-background px-2 text-xs text-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
           >
-            <option value={ALL_TYPES}>All types</option>
-            {mimeOptions.map(({ mime, label }) => (
-              <option key={mime} value={mime}>{label}</option>
-            ))}
+            <option value="name-asc">Name A–Z</option>
+            <option value="name-desc">Name Z–A</option>
+            <option value="date-desc">Newest first</option>
+            <option value="date-asc">Oldest first</option>
+            <option value="type">Type</option>
           </select>
-        )}
-        <div className="flex shrink-0 items-center gap-1">
-          <Button size="icon-sm" variant={displayMode === 'list' ? 'secondary' : 'ghost'} onClick={() => setDisplayMode('list')} title="List view">
-            <LayoutList size={13} />
-          </Button>
-          <Button size="icon-sm" variant={displayMode === 'grid' ? 'secondary' : 'ghost'} onClick={() => setDisplayMode('grid')} title="Grid view">
-            <Grid2X2 size={13} />
-          </Button>
+          <div className="ml-auto flex items-center gap-1">
+            <Button size="icon-sm" variant={displayMode === 'list' ? 'secondary' : 'ghost'} onClick={() => setDisplayMode('list')} title="List view">
+              <LayoutList size={13} />
+            </Button>
+            <Button size="icon-sm" variant={displayMode === 'grid' ? 'secondary' : 'ghost'} onClick={() => setDisplayMode('grid')} title="Grid view">
+              <Grid2X2 size={13} />
+            </Button>
+          </div>
         </div>
       </div>
 

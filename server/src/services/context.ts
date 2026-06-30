@@ -47,6 +47,7 @@ When a project is active, final user-facing artifacts belong in project/files, n
 
 ## No-project sessions
 When no project is active, session/outputs is temporary chat-local storage. Do not describe files there as saved permanently. For anything the user wants to keep, choose or create a project, pin it, then promote or write the artifact into that project's project/files.
+If the user asks about project content, documents, or files and no project is pinned: call list_projects immediately, pick the most relevant project, pin it, then use list_files and read_file. Never search the server's data directory or query the database directly — those are implementation internals, not the data access path.
 
 ## MCP connections
 GitHub, web search, and other external integrations are configured in Settings → Connections as MCP servers. Use list_connections to see what's configured. If the user asks for something that requires an external service and no suitable connection exists, tell them to add one in Settings.
@@ -237,10 +238,12 @@ function workspaceBlock(sessionId: string, project?: ProjectCtx): string {
     `- session/outputs: temporary generated outputs; promote anything durable before reporting it saved.`,
   ];
   if (project) {
-    lines.push(`- project/files: durable project artifacts and documents, backed by ${project.files_path}.`);
-    lines.push(`- project/repo: isolated code worktree for this project, backed by the session worktree for ${project.repo_path}.`);
+    if (project.files_path) lines.push(`- project/files: durable project artifacts and documents, backed by ${project.files_path}.`);
+    if (project.repo_path) lines.push(`- project/repo: isolated code worktree for this project, backed by the session worktree for ${project.repo_path}.`);
+    if (!project.files_path && !project.repo_path) lines.push('- Project is pinned but has no files path or repo configured.');
   } else {
-    lines.push('- No project is pinned, so project/files and project/repo are not available.');
+    lines.push('- No project is pinned. project/files and project/repo are not available here.');
+    lines.push('- To access project files or documents, call list_projects first, then pin_project with the relevant id. Do not search the server data directory or query the database directly.');
   }
   return lines.join('\n');
 }

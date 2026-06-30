@@ -112,7 +112,7 @@ function getUserMcpServers(userId: string): Record<string, McpServerEntry> {
 }
 
 async function replaceSymlink(linkPath: string, targetPath: string): Promise<void> {
-  await fs.rm(linkPath, { recursive: true, force: true });
+  try { await fs.unlink(linkPath); } catch { /* not present */ }
   await fs.mkdir(path.dirname(linkPath), { recursive: true });
   await fs.symlink(targetPath, linkPath, 'dir');
 }

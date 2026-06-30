@@ -2,27 +2,25 @@ import { registerTool } from '../registry.js';
 import fs from 'fs/promises';
 import path from 'path';
 import { writeFile, writeBinaryFile, readFile, listFiles, tagFile, deleteFile, mimeTypeFromPath } from '../../services/files.js';
-import { getDataDir, getDb } from '../../db/index.js';
-
-function getProject(projectId: string): { id: string } | undefined {
-  return getDb().prepare('SELECT id FROM projects WHERE id = ?').get(projectId) as { id: string } | undefined;
-}
+import { getDataDir } from '../../db/index.js';
+import { getProjectForUser } from '../../services/projects.js';
 
 function decodeBase64(data: unknown): Buffer | string {
   if (typeof data !== 'string' || data.trim() === '') return 'Error: data_base64 is required';
   const normalized = data.replace(/\s+/g, '');
-  if (!/^[A-Za-z0-9+/]*={0,2}$/.test(normalized) || normalized.length % 4 !== 0) {
+  if (!/^[A-Za-z0-9+/]*={0,2}$/.test(normalized)) {
     return 'Error: data_base64 is not valid base64';
   }
   return Buffer.from(normalized, 'base64');
 }
 
-function resolveArtifactSource(sourcePath: string, sessionId: string | null): string {
-  if (path.isAbsolute(sourcePath)) return path.resolve(sourcePath);
-  const root = sessionId
-    ? path.resolve(getDataDir(), 'agent-workspaces', sessionId)
-    : process.cwd();
-  return path.resolve(root, sourcePath);
+function resolveArtifactSource(sourcePath: string, sessionId: string | null): string | null {
+  if (!sessionId) return null;
+  if (path.isAbsolute(sourcePath)) return null;
+  const root = path.resolve(getDataDir(), 'agent-workspaces', sessionId);
+  const resolved = path.resolve(root, sourcePath);
+  if (!resolved.startsWith(root + path.sep)) return null;
+  return resolved;
 }
 
 export function registerFileHandlers(): void {
@@ -40,8 +38,8 @@ export function registerFileHandlers(): void {
       },
       required: ['project_id', 'path', 'title', 'body'],
     },
-    handler: async (args, _userId, sessionId) => {
-      const project = getProject(args.project_id as string);
+    handler: async (args, userId, sessionId) => {
+      const project = getProjectForUser(args.project_id as string, userId);
       if (!project) return `Error: project ${args.project_id} not found`;
       return JSON.stringify(await writeFile({
         project_id: args.project_id as string,
@@ -69,8 +67,8 @@ export function registerFileHandlers(): void {
       },
       required: ['project_id', 'path', 'title', 'data_base64'],
     },
-    handler: async (args, _userId, sessionId) => {
-      const project = getProject(args.project_id as string);
+    handler: async (args, userId, sessionId) => {
+      const project = getProjectForUser(args.project_id as string, userId);
       if (!project) return `Error: project ${args.project_id} not found`;
       const decoded = decodeBase64(args.data_base64);
       if (typeof decoded === 'string') return decoded;
@@ -102,10 +100,11 @@ export function registerFileHandlers(): void {
       },
       required: ['project_id', 'source_path', 'path', 'title'],
     },
-    handler: async (args, _userId, sessionId) => {
-      const project = getProject(args.project_id as string);
+    handler: async (args, userId, sessionId) => {
+      const project = getProjectForUser(args.project_id as string, userId);
       if (!project) return `Error: project ${args.project_id} not found`;
       const sourcePath = resolveArtifactSource(args.source_path as string, sessionId);
+      if (!sourcePath) return `Error: source_path must be a relative path within the session workspace (e.g. session/outputs/resume.pdf)`;
       let data: Buffer;
       try {
         const stat = await fs.stat(sourcePath);
@@ -150,8 +149,8 @@ export function registerFileHandlers(): void {
       },
       required: ['project_id'],
     },
-    handler: async (args) => {
-      const project = getProject(args.project_id as string);
+    handler: async (args, userId) => {
+      const project = getProjectForUser(args.project_id as string, userId);
       if (!project) return `Error: project ${args.project_id} not found`;
       return JSON.stringify(listFiles(
         args.project_id as string,

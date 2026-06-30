@@ -111,6 +111,7 @@ export async function recallRelevant(userId: string, queryText: string, pinnedPr
     scored.sort((a, b) => b.score - a.score);
 
     const top = scored
+      .filter(s => s.score > 0.15)
       .slice(0, MAX_MEMORIES)
       .map(s => s.entry);
 

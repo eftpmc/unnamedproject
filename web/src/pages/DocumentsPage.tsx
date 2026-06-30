@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useSearchParams } from 'react-router-dom';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
@@ -19,6 +19,7 @@ import {
   CenteredEmptyState, ContentColumn, EmptyPanel,
   PageBody, PageHeader, PageLoading, PageShell,
 } from '@/components/ui/app-layout';
+import { DataTable, DataTableBody, DataTableHeader, DataTableRow } from '@/components/ui/data-table';
 import { Dialog, DialogContent, DialogPortal, DialogOverlay } from '@/components/ui/dialog';
 import { ConfirmDialog } from '@/components/ui/confirm-dialog';
 import type { LibraryFile, LibraryFileWithBody, Project } from '../types.js';
@@ -98,7 +99,7 @@ function PreviewContent({ doc }: { doc: LibraryFileWithBody }) {
   if (isTextMime(mime) && doc.body !== null) {
     return (
       <div className="h-full overflow-auto p-6">
-        <pre className="font-mono text-[13px] text-fg-soft whitespace-pre-wrap break-words">{doc.body}</pre>
+        <pre className="font-mono text-[13px] text-muted-foreground whitespace-pre-wrap break-words">{doc.body}</pre>
       </div>
     );
   }
@@ -129,7 +130,6 @@ function FilePreviewModal({
   onDeleted: () => void;
 }) {
   const qc = useQueryClient();
-  const navigate = useNavigate();
   const [editing, setEditing] = useState(false);
   const [draftBody, setDraftBody] = useState('');
   const [confirmDelete, setConfirmDelete] = useState(false);
@@ -169,7 +169,6 @@ function FilePreviewModal({
       <DialogPortal>
         <DialogOverlay className="z-50" onClick={onClose} />
         <div className="fixed inset-4 z-50 flex flex-col overflow-hidden rounded-xl border bg-background shadow-2xl sm:inset-6">
-          {/* header */}
           <div className="flex shrink-0 items-center gap-3 border-b px-4 py-3">
             {doc && mimeIcon(doc.mime_type, 15)}
             <div className="min-w-0 flex-1">
@@ -207,7 +206,6 @@ function FilePreviewModal({
             </div>
           </div>
 
-          {/* content */}
           <div className="min-h-0 flex-1 overflow-hidden">
             {isLoading ? (
               <div className="flex h-full items-center justify-center text-sm text-muted-foreground">Loading…</div>
@@ -324,37 +322,31 @@ function FileCard({ doc, onClick }: { doc: LibraryFile; onClick: () => void }) {
 function FileBrowser({
   project,
   docs,
+  folderPath,
+  onNavigateFolder,
   onBack,
   onPreview,
 }: {
   project: Project;
   docs: LibraryFile[];
+  folderPath: string;
+  onNavigateFolder: (path: string) => void;
   onBack: () => void;
   onPreview: (id: string) => void;
 }) {
-  const [folderPath, setFolderPath] = useState('');
   const [displayMode, setDisplayMode] = useState<DisplayMode>('list');
 
   const { folders, files } = getFolderContents(docs, folderPath);
   const isEmpty = folders.length === 0 && files.length === 0;
-
-  const breadcrumbs = folderPath
-    ? folderPath.split('/').filter(Boolean)
-    : [];
-
-  function drillFolder(folder: string) {
-    setFolderPath(folder);
-  }
+  const breadcrumbs = folderPath ? folderPath.split('/').filter(Boolean) : [];
 
   function crumbTo(index: number) {
-    if (index < 0) { setFolderPath(''); return; }
-    const parts = breadcrumbs.slice(0, index + 1);
-    setFolderPath(parts.join('/') + '/');
+    if (index < 0) { onNavigateFolder(''); return; }
+    onNavigateFolder(breadcrumbs.slice(0, index + 1).join('/') + '/');
   }
 
   return (
     <>
-      {/* breadcrumb + controls */}
       <div className="mb-4 flex items-center gap-1.5">
         <button
           type="button"
@@ -366,7 +358,7 @@ function FileBrowser({
         <ChevronRight size={12} className="shrink-0 text-muted-foreground" />
         <button
           type="button"
-          onClick={() => { if (folderPath) setFolderPath(''); }}
+          onClick={() => { if (folderPath) onNavigateFolder(''); }}
           className="shrink-0 text-xs text-muted-foreground hover:text-foreground transition-colors"
         >
           {project.name}
@@ -403,13 +395,12 @@ function FileBrowser({
         </div>
       </div>
 
-      {/* contents */}
       {isEmpty ? (
         <EmptyPanel title="Empty folder" description="No files here yet." />
       ) : displayMode === 'list' ? (
         <div className="flex flex-col gap-0.5">
           {folders.map(f => (
-            <FolderRow key={f} name={f.slice(folderPath.length)} onClick={() => drillFolder(f)} />
+            <FolderRow key={f} name={f.slice(folderPath.length)} onClick={() => onNavigateFolder(f)} />
           ))}
           {files.map(doc => (
             <FileRow key={doc.id} doc={doc} onClick={() => onPreview(doc.id)} />
@@ -418,7 +409,7 @@ function FileBrowser({
       ) : (
         <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5">
           {folders.map(f => (
-            <FolderCard key={f} name={f.slice(folderPath.length)} onClick={() => drillFolder(f)} />
+            <FolderCard key={f} name={f.slice(folderPath.length)} onClick={() => onNavigateFolder(f)} />
           ))}
           {files.map(doc => (
             <FileCard key={doc.id} doc={doc} onClick={() => onPreview(doc.id)} />
@@ -429,33 +420,15 @@ function FileBrowser({
   );
 }
 
-// ─── project cards ───────────────────────────────────────────────────────────
-
-function ProjectCard({ project, docCount, onClick }: { project: Project; docCount: number; onClick: () => void }) {
-  return (
-    <button
-      type="button"
-      onClick={onClick}
-      className="flex items-center gap-4 rounded-xl border border-border-soft bg-background px-5 py-4 text-left transition-colors hover:border-border hover:shadow-sm w-full"
-    >
-      <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-muted">
-        <Folder size={16} className="text-muted-foreground" />
-      </div>
-      <div className="min-w-0 flex-1">
-        <p className="truncate text-sm font-medium text-foreground">{project.name}</p>
-        <p className="text-[11px] text-muted-foreground">{docCount} {docCount === 1 ? 'file' : 'files'}</p>
-      </div>
-      <ChevronRight size={14} className="shrink-0 text-muted-foreground" />
-    </button>
-  );
-}
-
 // ─── page ────────────────────────────────────────────────────────────────────
 
 export default function DocumentsPage() {
   usePageTitle('Library');
-  const [selectedProject, setSelectedProject] = useState<Project | null>(null);
+  const [searchParams, setSearchParams] = useSearchParams();
   const [previewDocId, setPreviewDocId] = useState<string | null>(null);
+
+  const selectedProjectId = searchParams.get('p');
+  const folderPath = searchParams.get('f') ?? '';
 
   const { data: documents = [], isLoading: docsLoading } = useQuery<LibraryFile[]>({
     queryKey: ['library-files'],
@@ -469,20 +442,32 @@ export default function DocumentsPage() {
   });
 
   const isLoading = docsLoading || projectsLoading;
-
+  const selectedProject = projects.find(p => p.id === selectedProjectId) ?? null;
   const projectDocs = selectedProject
     ? documents.filter(d => d.project_id === selectedProject.id)
     : [];
 
-  function openPreview(id: string) { setPreviewDocId(id); }
-  function closePreview() { setPreviewDocId(null); }
+  function selectProject(id: string) {
+    setSearchParams({ p: id }, { replace: false });
+  }
+
+  function goBack() {
+    setSearchParams({}, { replace: false });
+  }
+
+  function navigateFolder(path: string) {
+    const next = new URLSearchParams(searchParams);
+    if (path) next.set('f', path);
+    else next.delete('f');
+    setSearchParams(next, { replace: false });
+  }
 
   return (
     <PageShell>
       <PageHeader
         title={selectedProject ? selectedProject.name : 'Library'}
         className="px-4 pt-6 sm:px-8 sm:pt-10"
-        contentClassName="max-w-5xl"
+        contentClassName="max-w-7xl"
         titleClassName="text-2xl sm:text-3xl"
       />
 
@@ -496,40 +481,59 @@ export default function DocumentsPage() {
           />
         ) : (
           <PageBody className="px-4 pt-5 sm:px-8 sm:pt-9">
-            <ContentColumn className="max-w-5xl">
-              <div className="flex flex-col gap-2">
-                {projects.map(project => (
-                  <ProjectCard
-                    key={project.id}
-                    project={project}
-                    docCount={documents.filter(d => d.project_id === project.id).length}
-                    onClick={() => setSelectedProject(project)}
-                  />
-                ))}
-              </div>
+            <ContentColumn className="max-w-7xl">
+              <DataTable>
+                <DataTableHeader className="grid-cols-[minmax(0,1fr)_5rem]">
+                  <span>Project</span>
+                  <span className="justify-self-end">Files</span>
+                </DataTableHeader>
+                <DataTableBody>
+                  {projects.map(project => {
+                    const count = documents.filter(d => d.project_id === project.id).length;
+                    return (
+                      <DataTableRow key={project.id} className="grid-cols-[minmax(0,1fr)_5rem]">
+                        <div className="flex min-w-0 items-center gap-3">
+                          <Folder size={14} className="shrink-0 text-muted-foreground" />
+                          <button
+                            type="button"
+                            onClick={() => selectProject(project.id)}
+                            className="min-w-0 truncate text-left text-sm font-medium text-foreground underline-offset-2 hover:underline"
+                          >
+                            {project.name}
+                          </button>
+                        </div>
+                        <span className="justify-self-end text-xs text-faint-fg">
+                          {count} {count === 1 ? 'file' : 'files'}
+                        </span>
+                      </DataTableRow>
+                    );
+                  })}
+                </DataTableBody>
+              </DataTable>
             </ContentColumn>
           </PageBody>
         )
       ) : (
         <PageBody className="px-4 pt-5 sm:px-8 sm:pt-9">
-          <ContentColumn className="max-w-5xl">
+          <ContentColumn className="max-w-7xl">
             <FileBrowser
               project={selectedProject}
               docs={projectDocs}
-              onBack={() => setSelectedProject(null)}
-              onPreview={openPreview}
+              folderPath={folderPath}
+              onNavigateFolder={navigateFolder}
+              onBack={goBack}
+              onPreview={id => setPreviewDocId(id)}
             />
           </ContentColumn>
         </PageBody>
       )}
 
-      {/* preview modal */}
-      <Dialog open={!!previewDocId} onOpenChange={open => { if (!open) closePreview(); }}>
+      <Dialog open={!!previewDocId} onOpenChange={open => { if (!open) setPreviewDocId(null); }}>
         {previewDocId && (
           <FilePreviewModal
             docId={previewDocId}
-            onClose={closePreview}
-            onDeleted={() => { closePreview(); }}
+            onClose={() => setPreviewDocId(null)}
+            onDeleted={() => setPreviewDocId(null)}
           />
         )}
       </Dialog>

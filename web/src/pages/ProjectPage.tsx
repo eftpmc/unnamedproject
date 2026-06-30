@@ -13,7 +13,7 @@ import { timeAgo } from '../lib/utils.js';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { ConfirmDialog } from '@/components/ui/confirm-dialog';
-import { PageBody, PageHeader, PageLoading, PageShell } from '@/components/ui/app-layout';
+import { ContentColumn, PageBody, PageHeader, PageLoading, PageShell } from '@/components/ui/app-layout';
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
 import { DataTable, DataTableBody, DataTableHeader, DataTableRow } from '@/components/ui/data-table';
 import FileBrowser from '../components/FileBrowser.js';
@@ -57,9 +57,9 @@ export default function ProjectPage() {
           titleClassName="text-2xl sm:text-3xl"
         />
         <PageBody className="px-4 pt-5 sm:px-8 sm:pt-9">
-          <div className="mx-auto max-w-7xl">
+          <ContentColumn className="max-w-7xl">
             <FileBrowser projectId={project.id} projectName={project.name} />
-          </div>
+          </ContentColumn>
         </PageBody>
       </PageShell>
     );
@@ -148,7 +148,7 @@ function ProjectChatsView({ project }: { project: Project }) {
         }
       />
       <PageBody className="px-4 pt-5 sm:px-8 sm:pt-9">
-        <div className="mx-auto max-w-7xl">
+        <ContentColumn className="max-w-7xl">
           {isLoading ? (
             <PageLoading rows={3} />
           ) : chats.length === 0 ? (
@@ -218,7 +218,7 @@ function ProjectChatsView({ project }: { project: Project }) {
               </DataTableBody>
             </DataTable>
           )}
-        </div>
+        </ContentColumn>
       </PageBody>
 
       {pendingDelete && (
@@ -325,7 +325,7 @@ function ProjectOverview({ project, navigate }: { project: Project; navigate: Re
               onNew={() => newChatMutation.mutate()}
               onOpen={id => navigate(`/c/${id}`)}
             />
-            <RecentDocsCard docs={recentDocs} />
+            <RecentDocsCard docs={recentDocs} projectId={project.id} />
             <ProjectTriggerCard projectId={project.id} />
           </div>
 
@@ -452,19 +452,27 @@ function RecentChatsCard({
   );
 }
 
-function RecentDocsCard({ docs }: { docs: LibraryFile[] }) {
+function RecentDocsCard({ docs, projectId }: { docs: LibraryFile[]; projectId: string }) {
   if (docs.length === 0) return null;
   return (
     <section className="rounded-lg border border-border-soft bg-card">
-      <div className="flex min-h-12 items-center gap-2 border-b border-border-soft px-4 py-2.5">
-        <FileText size={14} className="shrink-0 text-muted-foreground" strokeWidth={1.75} />
-        <h2 className="text-sm font-medium text-foreground">Recent documents</h2>
+      <div className="flex min-h-12 items-center justify-between gap-3 border-b border-border-soft px-4 py-2.5">
+        <div className="flex items-center gap-2">
+          <FileText size={14} className="shrink-0 text-muted-foreground" strokeWidth={1.75} />
+          <h2 className="text-sm font-medium text-foreground">Recent documents</h2>
+        </div>
+        <Link
+          to={`/library?p=${projectId}`}
+          className="text-xs text-muted-foreground transition-colors hover:text-foreground"
+        >
+          View all
+        </Link>
       </div>
       <ul className="divide-y divide-border-soft">
         {docs.map(doc => (
           <li key={doc.id}>
             <Link
-              to={`/library/${doc.id}`}
+              to={`/library?p=${projectId}`}
               className="flex min-w-0 items-center gap-3 px-4 py-2.5 transition-colors hover:bg-muted/40"
             >
               <span className="min-w-0 flex-1 truncate text-sm text-foreground">{doc.title}</span>

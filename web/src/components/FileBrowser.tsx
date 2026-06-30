@@ -126,7 +126,6 @@ function FilePreviewModal({
   const { data, isLoading } = useQuery<LibraryFileWithBody>({
     queryKey: ['library-file', file.id],
     queryFn: () => getFileById(file.id),
-    staleTime: 10_000,
   });
 
   const saveMutation = useMutation({
@@ -134,6 +133,7 @@ function FilePreviewModal({
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['library-file', file.id] });
       qc.invalidateQueries({ queryKey: ['library-files'] });
+      qc.invalidateQueries({ queryKey: ['files', file.project_id] });
       setEditing(false);
     },
   });
@@ -142,7 +142,7 @@ function FilePreviewModal({
     mutationFn: () => deleteFileById(file.id),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['library-files'] });
-      qc.invalidateQueries({ queryKey: ['files', file.project_id] });
+      qc.invalidateQueries({ queryKey: ['files', file.project_id], exact: true });
       onDeleted?.();
       onClose();
     },
@@ -173,13 +173,13 @@ function FilePreviewModal({
               </p>
             </div>
             <div className="flex shrink-0 items-center gap-1">
-              {canEdit && isText && !editing && data && (
+              {canEdit && isText && !editing && data?.body !== null && (
                 <Button size="icon-sm" variant="ghost" onClick={startEdit} title="Edit">
                   <Pencil size={13} />
                 </Button>
               )}
               <Button size="icon-sm" variant="ghost" asChild title="Download">
-                <a href={contentUrl} download={name}>
+                <a href={contentUrl} download={file.title}>
                   <Download size={13} />
                 </a>
               </Button>

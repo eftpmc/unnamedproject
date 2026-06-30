@@ -200,7 +200,7 @@ export default function TriggersPage() {
                         type="button"
                         title="Run now"
                         aria-label="Run now"
-                        disabled={runningId === t.id}
+                        disabled={runningId !== null}
                         onClick={() => runMutation.mutate(t.id)}
                         className="grid size-7 place-items-center rounded-md text-muted-foreground transition-colors hover:bg-background hover:text-foreground disabled:opacity-40"
                       >
@@ -221,7 +221,7 @@ export default function TriggersPage() {
                         <DropdownMenuContent align="end" className="w-40">
                           <DropdownMenuItem
                             onSelect={() => runMutation.mutate(t.id)}
-                            disabled={runningId === t.id}
+                            disabled={runningId !== null}
                           >
                             <Play size={14} />
                             {runningId === t.id ? 'Running…' : 'Run now'}

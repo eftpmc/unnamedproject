@@ -17,7 +17,7 @@ Use this file as a source of truth when building tailored resumes. Pull the bloc
 
 ## Research
 
-**Machine Learning Researcher** — Clemson University Creative Inquiry — Spring 2026
+**Machine Learning Researcher** — Clemson University Creative Inquiry — 01/26 – 05/26
 
 - Developed and evaluated machine learning models for automated detection of predatory journals.
 - Built and evaluated an automated classification pipeline using neural networks and open-source LLMs.

@@ -20,6 +20,9 @@ function baseBlock(intent: Intent): string {
 
 Your shell and editor tools run in an isolated workspace for this chat. When a project is pinned, the workspace contains project/files for durable app-managed artifacts and project/repo for code. When no project is pinned, the workspace contains only session scratch space. Do not modify the Unnamed app/server implementation unless the user explicitly asks to work on the Unnamed app itself and that project is pinned.
 
+## Memory
+User memories are injected below under "User memory". These are ranked by relevance to the current query — call recall() with no args to see all stored memories. Use memories to personalize responses and avoid asking for information the user has already provided. If you learn something worth retaining (a preference, a decision, a fact about the user's context), call remember() immediately.
+
 ## Core rules
 - Auto-approved (do without asking): ${autoApproved}
 - User-approved (proceed and the system handles the pause): git_op push, delete_project, browser_restart_chrome
@@ -258,8 +261,8 @@ function projectContextBlock(project: ProjectCtx, _userId: string): string {
 
 async function memoryBlock(userId: string, queryText: string, pinnedProjectId?: string): Promise<string> {
   const entries = await recallRelevant(userId, queryText, pinnedProjectId);
-  if (entries.length === 0) return 'User memory:\nNo memories stored yet.';
-  return `User memory:\n${entries.map(e => `- ${formatEntry(userId, e)}`).join('\n')}`;
+  if (entries.length === 0) return 'User memory:\nNo memories stored yet. If the user mentions something worth remembering, call remember().';
+  return `User memory (ranked by relevance — call recall() to browse all):\n${entries.map(e => `- ${formatEntry(userId, e)}`).join('\n')}`;
 }
 
 function timeAgo(unixSeconds: number): string {

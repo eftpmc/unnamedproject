@@ -4,7 +4,7 @@ import { remember, recall, forget } from '../../tools/memory_tools.js';
 export function registerMemoryHandlers(): void {
   registerTool({
     name: 'remember',
-    description: 'Store a piece of information in memory',
+    description: 'Store a piece of information in memory. Types: user (preferences, profile), feedback (how the user wants you to behave), project (decisions, goals, deadlines), reference (external resource locations). Use a short descriptive key and a concise value.',
     inputSchema: {
       type: 'object',
       properties: {
@@ -21,7 +21,7 @@ export function registerMemoryHandlers(): void {
 
   registerTool({
     name: 'recall',
-    description: 'Retrieve information from memory',
+    description: 'Retrieve stored memories. Call with no args to list all memories. Pass type and/or key to look up a specific entry. Use this at the start of any session to surface stored user preferences, past decisions, and project context before answering.',
     inputSchema: {
       type: 'object',
       properties: {

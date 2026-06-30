@@ -255,7 +255,7 @@ function FolderRow({ name, onClick }: { name: string; onClick: () => void }) {
     <button
       type="button"
       onClick={onClick}
-      className="flex w-full items-center gap-3 rounded-lg px-3 py-2 text-left transition-colors hover:bg-muted/60"
+      className="flex w-full items-center gap-3 px-4 py-2.5 text-left transition-colors hover:bg-muted/50"
     >
       <Folder size={15} className="shrink-0 text-yellow-500" />
       <span className="flex-1 truncate text-sm font-medium text-foreground">{name.replace(/\/$/, '')}</span>
@@ -270,7 +270,7 @@ function FileRow({ doc, onClick }: { doc: LibraryFile; onClick: () => void }) {
     <button
       type="button"
       onClick={onClick}
-      className="flex w-full items-center gap-3 rounded-lg px-3 py-2 text-left transition-colors hover:bg-muted/60"
+      className="flex w-full items-center gap-3 px-4 py-2.5 text-left transition-colors hover:bg-muted/50"
     >
       {mimeIcon(doc.mime_type, 15)}
       <span className="flex-1 truncate text-sm text-foreground">{name}</span>
@@ -398,13 +398,15 @@ function FileBrowser({
       {isEmpty ? (
         <EmptyPanel title="Empty folder" description="No files here yet." />
       ) : displayMode === 'list' ? (
-        <div className="flex flex-col gap-0.5">
-          {folders.map(f => (
-            <FolderRow key={f} name={f.slice(folderPath.length)} onClick={() => onNavigateFolder(f)} />
-          ))}
-          {files.map(doc => (
-            <FileRow key={doc.id} doc={doc} onClick={() => onPreview(doc.id)} />
-          ))}
+        <div className="overflow-hidden rounded-lg border border-border-soft bg-card">
+          <div className="divide-y divide-border-soft">
+            {folders.map(f => (
+              <FolderRow key={f} name={f.slice(folderPath.length)} onClick={() => onNavigateFolder(f)} />
+            ))}
+            {files.map(doc => (
+              <FileRow key={doc.id} doc={doc} onClick={() => onPreview(doc.id)} />
+            ))}
+          </div>
         </div>
       ) : (
         <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5">

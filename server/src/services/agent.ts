@@ -76,6 +76,16 @@ function maybeGenerateSessionTitle(userId: string, sessionId: string): void {
 
 type McpServerEntry = { url?: string; headers?: Record<string, string>; command?: string; args?: string[]; env?: Record<string, string> };
 
+interface InvocationWorkspace {
+  cwd: string;
+  root: string;
+  sessionRoot: string;
+  sessionOutputsPath: string;
+  projectRoot?: string;
+  projectFilesPath?: string;
+  projectRepoPath?: string;
+}
+
 
 function getUserMcpServers(userId: string): Record<string, McpServerEntry> {
   const conns = getDb()
@@ -101,31 +111,63 @@ function getUserMcpServers(userId: string): Record<string, McpServerEntry> {
   return servers;
 }
 
-async function getInvocationRepoPath(sessionId: string): Promise<string> {
+async function replaceSymlink(linkPath: string, targetPath: string): Promise<void> {
+  await fs.rm(linkPath, { recursive: true, force: true });
+  await fs.mkdir(path.dirname(linkPath), { recursive: true });
+  await fs.symlink(targetPath, linkPath, 'dir');
+}
+
+async function ensureSessionWorkspace(root: string): Promise<{ sessionRoot: string; sessionOutputsPath: string }> {
+  const sessionRoot = path.join(root, 'session');
+  const sessionOutputsPath = path.join(sessionRoot, 'outputs');
+  await fs.mkdir(path.join(sessionRoot, 'scratch'), { recursive: true });
+  await fs.mkdir(path.join(sessionRoot, 'downloads'), { recursive: true });
+  await fs.mkdir(sessionOutputsPath, { recursive: true });
+  return { sessionRoot, sessionOutputsPath };
+}
+
+async function prepareInvocationWorkspace(sessionId: string): Promise<InvocationWorkspace> {
+  const root = path.resolve(getDataDir(), 'agent-workspaces', sessionId);
+  await fs.mkdir(root, { recursive: true });
+  const { sessionRoot, sessionOutputsPath } = await ensureSessionWorkspace(root);
+
   const session = getDb()
     .prepare('SELECT pinned_project_id FROM sessions WHERE id = ?')
     .get(sessionId) as { pinned_project_id: string | null } | undefined;
   const pinnedProjectId = session?.pinned_project_id;
-  if (!pinnedProjectId) return ensureSessionScratchDir(sessionId);
-
-  const worktree = getDb()
-    .prepare('SELECT worktree_path FROM agent_worktrees WHERE session_id = ? AND project_id = ? ORDER BY created_at DESC LIMIT 1')
-    .get(sessionId, pinnedProjectId) as { worktree_path: string } | undefined;
-  if (worktree?.worktree_path) return worktree.worktree_path;
+  if (!pinnedProjectId) return { cwd: root, root, sessionRoot, sessionOutputsPath };
 
   const project = getDb()
-    .prepare('SELECT id, repo_path FROM projects WHERE id = ?')
-    .get(pinnedProjectId) as { id: string; repo_path: string } | undefined;
-  if (!project?.repo_path) return ensureSessionScratchDir(sessionId);
+    .prepare('SELECT id, repo_path, files_path FROM projects WHERE id = ?')
+    .get(pinnedProjectId) as { id: string; repo_path: string; files_path: string } | undefined;
+  if (!project) return { cwd: root, root, sessionRoot, sessionOutputsPath };
 
-  const ensured = await ensureWorktree({ id: project.id, fields: { repo_path: project.repo_path } }, sessionId);
-  return ensured.worktree_path;
-}
+  const projectRoot = path.join(root, 'project');
+  await fs.mkdir(projectRoot, { recursive: true });
 
-async function ensureSessionScratchDir(sessionId: string): Promise<string> {
-  const scratchPath = path.resolve(getDataDir(), 'agent-scratch', sessionId);
-  await fs.mkdir(scratchPath, { recursive: true });
-  return scratchPath;
+  if (project.files_path) {
+    await fs.mkdir(project.files_path, { recursive: true });
+    await replaceSymlink(path.join(projectRoot, 'files'), project.files_path);
+  }
+
+  let projectRepoPath: string | undefined;
+  if (project.repo_path) {
+    const ensured = await ensureWorktree({ id: project.id, fields: { repo_path: project.repo_path } }, sessionId);
+    projectRepoPath = ensured.worktree_path;
+  }
+  if (projectRepoPath) {
+    await replaceSymlink(path.join(projectRoot, 'repo'), projectRepoPath);
+  }
+
+  return {
+    cwd: root,
+    root,
+    sessionRoot,
+    sessionOutputsPath,
+    projectRoot,
+    projectFilesPath: project.files_path ? path.join(projectRoot, 'files') : undefined,
+    projectRepoPath: projectRepoPath ? path.join(projectRoot, 'repo') : undefined,
+  };
 }
 
 function emitRuntimeCheckpoint(
@@ -220,7 +262,7 @@ export async function runAgentTurn(userId: string, sessionId: string, userMessag
     app: { url: `http://localhost:${port}/mcp`, headers: { Authorization: `Bearer ${mcpToken}` } },
     ...getUserMcpServers(userId),
   };
-  const repoPath = await getInvocationRepoPath(sessionId);
+  const workspace = await prepareInvocationWorkspace(sessionId);
 
   const replyId = newId();
   const replyCreatedAt = Math.floor(Date.now() / 1000);
@@ -247,7 +289,7 @@ export async function runAgentTurn(userId: string, sessionId: string, userMessag
   const onSessionId = (id: string) => { setSessionProviderInfo(sessionId, provider.type, id); };
 
   const doInvoke = (resumeSessionId: string | null) => provider.invoke({
-    userId, messageId: userMessageId, repoPath, prompt: effectivePrompt, resumeSessionId, systemPromptSuffix, mcpServers,
+    userId, messageId: userMessageId, repoPath: workspace.cwd, prompt: effectivePrompt, resumeSessionId, systemPromptSuffix, mcpServers,
     model: session?.model ?? undefined, effort: session?.effort ?? undefined,
     signal: abortController.signal, onText, onSessionId,
   });

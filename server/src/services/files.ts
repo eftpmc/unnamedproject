@@ -35,7 +35,7 @@ function rowByPath(projectId: string, p: string): FileRow | undefined {
   return getDb().prepare('SELECT * FROM files WHERE project_id = ? AND path = ?').get(projectId, p) as FileRow | undefined;
 }
 
-function mimeTypeFromPath(filePath: string): string {
+export function mimeTypeFromPath(filePath: string): string {
   const ext = path.extname(filePath).toLowerCase();
   const map: Record<string, string> = {
     '.md': 'text/markdown', '.mdx': 'text/markdown',
@@ -43,6 +43,13 @@ function mimeTypeFromPath(filePath: string): string {
     '.js': 'text/javascript', '.ts': 'text/typescript',
     '.json': 'application/json', '.xml': 'application/xml',
     '.yaml': 'application/yaml', '.yml': 'application/yaml',
+    '.pdf': 'application/pdf',
+    '.zip': 'application/zip',
+    '.png': 'image/png', '.jpg': 'image/jpeg', '.jpeg': 'image/jpeg',
+    '.gif': 'image/gif', '.webp': 'image/webp', '.svg': 'image/svg+xml',
+    '.docx': 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+    '.xlsx': 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+    '.pptx': 'application/vnd.openxmlformats-officedocument.presentationml.presentation',
   };
   return map[ext] ?? 'text/plain';
 }

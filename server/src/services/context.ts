@@ -1,4 +1,4 @@
-import { getDb, getPermissionProfile } from '../db/index.js';
+import { getDataDir, getDb, getPermissionProfile } from '../db/index.js';
 import { listFiles } from './files.js';
 import { recallRelevant } from './memory.js';
 import { formatEntry } from '../tools/memory_tools.js';
@@ -13,12 +13,12 @@ import path from 'path';
 function baseBlock(intent: Intent): string {
   const isCode = intent.domain === 'code' || intent.domain === 'multi' || intent.domain === 'general';
   const autoApproved = isCode
-    ? 'git_op add/commit, list_projects, create_project, update_project, pin_project, search_files, project_query, rebuild_graph, recall, remember, forget, list_chats, read_chat, write_file, read_file, list_files, tag_file, delete_file, link_project, create_trigger, list_triggers, delete_trigger, list_connections, create_connection, update_connection, delete_connection, test_connection, vault_get, vault_list, checkpoint_session'
-    : 'list_projects, create_project, pin_project, recall, remember, forget, list_chats, read_chat, write_file, read_file, list_files, tag_file, delete_file, list_connections, create_connection, update_connection, delete_connection, test_connection, vault_get, vault_list, checkpoint_session';
+    ? 'git_op add/commit, list_projects, create_project, update_project, pin_project, search_files, project_query, rebuild_graph, recall, remember, forget, list_chats, read_chat, write_file, write_binary_file, promote_artifact, read_file, list_files, tag_file, delete_file, link_project, create_trigger, list_triggers, delete_trigger, list_connections, create_connection, update_connection, delete_connection, test_connection, vault_get, vault_list, checkpoint_session'
+    : 'list_projects, create_project, pin_project, recall, remember, forget, list_chats, read_chat, write_file, write_binary_file, promote_artifact, read_file, list_files, tag_file, delete_file, list_connections, create_connection, update_connection, delete_connection, test_connection, vault_get, vault_list, checkpoint_session';
 
   return `You are a personal AI assistant with full coding capabilities and access to the user's projects, documents, and memory. You can implement code, write files, run commands, and manage the user's workspace directly.
 
-Your shell and editor tools run in an isolated workspace for this chat: either a git worktree for the pinned project or a per-session scratch directory when no project is pinned. Do not modify the Unnamed app/server implementation unless the user explicitly asks to work on the Unnamed app itself and that project is pinned.
+Your shell and editor tools run in an isolated workspace for this chat. When a project is pinned, the workspace contains project/files for durable app-managed artifacts and project/repo for code. When no project is pinned, the workspace contains only session scratch space. Do not modify the Unnamed app/server implementation unless the user explicitly asks to work on the Unnamed app itself and that project is pinned.
 
 ## Core rules
 - Auto-approved (do without asking): ${autoApproved}
@@ -30,8 +30,20 @@ Your shell and editor tools run in an isolated workspace for this chat: either a
 ## State awareness
 Before starting work in the active project, check what already exists there:
 - Call list_files with the active project_id — see what's already present before generating a new report or research output.
+- Also inspect project/files with shell tools when you need filenames, folders, binaries, or local build inputs. Inspect project/repo for code only.
 Only check other projects when the user's request explicitly involves them.
 If no project is active and you need a project_id, call list_projects to see available projects — never guess one. If list_projects comes back empty, call create_project to create a project, then immediately call pin_project with its id so it becomes the active context for this session. If projects exist but none is pinned, pick the most relevant one and call pin_project.
+
+## Project file containment
+When a project is active, final user-facing artifacts belong in project/files, not on the host Desktop, Downloads, Documents, or another personal folder. It is fine to compile or stage intermediate output in session/outputs or project/repo, but before reporting completion you must promote the final artifact into project/files:
+- Text/markdown/source files: write_file.
+- Generated PDFs, images, office files, archives, and other binary files: write_binary_file or promote_artifact.
+- If a local command created the final artifact at an absolute path, call promote_artifact with the active project_id and a relative destination path.
+- After promotion, call list_files and confirm the expected path is present before saying the file was added to the project.
+- If a tool or runtime prevents project promotion, say that explicitly; do not describe a Desktop/Downloads file as being "in the project."
+
+## No-project sessions
+When no project is active, session/outputs is temporary chat-local storage. Do not describe files there as saved permanently. For anything the user wants to keep, choose or create a project, pin it, then promote or write the artifact into that project's project/files.
 
 ## MCP connections
 GitHub, web search, and other external integrations are configured in Settings → Connections as MCP servers. Use list_connections to see what's configured. If the user asks for something that requires an external service and no suitable connection exists, tell them to add one in Settings.
@@ -70,8 +82,11 @@ Use search_files for fast codebase lookups (finding where a function is defined,
 ## Documents
 A document is a markdown file in a project, the source of truth on disk. Author with write_file (project_id, path, title, tags, body). Tags are YAML key/values used for tracking and querying — set \`type\` (e.g. application, resume, workflow, note) and \`status\` where relevant. Query with list_files({ project_id, type, tags }); a tracker is just a query grouped by status. Update a status cheaply with tag_file — do NOT rewrite the whole file for a field change. Link files with [[wikilinks]] in the body.
 
+## Binary artifacts
+Binary artifacts are first-class project files. Use write_binary_file for generated bytes or promote_artifact for files created by local commands. For PDFs, images, spreadsheets, slide decks, zip files, and compiled outputs, never fall back to Desktop/Downloads as the final delivery location when a project is active.
+
 ## Projects
-A project is a workspace that can contain git repos and documents. Create one with create_project; link an existing repo path with link_project. Code tools (read/write/edit/bash/git) operate inside a project — pass its project_id.
+A project is a workspace that can contain durable files and a code repo. Create one with create_project; link an existing repo path with link_project. In the shell, use project/files for durable artifacts and project/repo for code. In MCP tools, pass project_id.
 
 ## Triggers (the automation loop)
 A trigger runs a playbook document (a file with tags type: workflow) on a schedule. Create with create_trigger({ kind: 'schedule', schedule_cron, playbook_id }). When it fires, a new chat starts pinned to this project seeded with the playbook body; you execute it using the project's connections and tools, writing results back as files and tag updates.`;
@@ -117,7 +132,7 @@ Do not summarize or report done before step 3 completes.`;
 
     case 'writing':
       return `## Writing tasks
-Use write_file for output to save; respond inline for drafts the user has not asked to save.
+Use write_file for text output to save; use write_binary_file or promote_artifact for generated PDFs, images, and other binary outputs. Respond inline for drafts the user has not asked to save.
 Confirm path and project with the user before writing any file.
 Do not invoke coding agents for writing, documentation, or note-taking tasks.`;
 
@@ -127,11 +142,11 @@ Use list_connections to find the configured search MCP tool, then call it. Alway
 Cite sources in your response.
 Check recall first before any web search.
 
-After synthesizing findings: save them to the active project. Call list_documents — if a suitable research doc exists, use tag_file to update its status; otherwise write_file with type: research and tags status: draft. Use markdown sections for narrative; link related documents with [[wikilinks]].`;
+After synthesizing findings: save them to the active project. Call list_files — if a suitable research doc exists, use tag_file to update its status; otherwise write_file with type: research and tags status: draft. Use markdown sections for narrative; link related documents with [[wikilinks]].`;
 
     case 'creative':
       return `## Creative tasks
-Respond inline for short creative work. Use write_file when the user wants output saved.
+Respond inline for short creative work. Use write_file for saved text and write_binary_file or promote_artifact for saved generated assets.
 Research often improves creative work — check for relevant context before generating.`;
 
     case 'multi':
@@ -148,6 +163,8 @@ interface ProjectCtx {
   name: string;
   description: string | null;
   enabled_connection_ids: string;
+  repo_path: string;
+  files_path: string;
 }
 
 const INSTRUCTION_FILES = ['CLAUDE.md', 'AGENTS.md'] as const;
@@ -207,16 +224,34 @@ Follow these durable global instructions. Project-level CLAUDE.md and AGENTS.md 
 ${bounded}`;
 }
 
+function workspaceBlock(sessionId: string, project?: ProjectCtx): string {
+  const root = path.resolve(getDataDir(), 'agent-workspaces', sessionId);
+  const lines = [
+    `## Workspace filesystem`,
+    `Current workspace root: ${root}`,
+    `- session/scratch: temporary working notes and intermediates.`,
+    `- session/downloads: temporary downloaded inputs.`,
+    `- session/outputs: temporary generated outputs; promote anything durable before reporting it saved.`,
+  ];
+  if (project) {
+    lines.push(`- project/files: durable project artifacts and documents, backed by ${project.files_path}.`);
+    lines.push(`- project/repo: isolated code worktree for this project, backed by the session worktree for ${project.repo_path}.`);
+  } else {
+    lines.push('- No project is pinned, so project/files and project/repo are not available.');
+  }
+  return lines.join('\n');
+}
+
 function projectContextBlock(project: ProjectCtx, _userId: string): string {
   const files = listFiles(project.id);
   const header = `## Active project: **${project.name}** (project_id: ${project.id})${project.description ? ' — ' + project.description : ''}`;
 
-  const repoLine = `\nRepo (project_id: ${project.id}). Pass project_id to code tools.`;
+  const repoLine = `\nProject files: project/files. Project repo: project/repo. Pass project_id to MCP tools.`;
 
   const fileTypes = [...new Set(files.map(f => f.type).filter(Boolean))];
   const docLine = files.length > 0
-    ? `\nFiles: ${files.length} total${fileTypes.length ? ` (types: ${fileTypes.join(', ')})` : ''}. Use list_files to query by type/status, read_file before editing.`
-    : `\nNo files yet. Author markdown with write_file.`;
+    ? `\nFiles: ${files.length} total${fileTypes.length ? ` (types: ${fileTypes.join(', ')})` : ''}. Use list_files to query by type/status, read_file before editing. Save final artifacts here with write_file, write_binary_file, or promote_artifact; verify with list_files.`
+    : `\nNo files yet. Author markdown with write_file; save binary artifacts with write_binary_file or promote_artifact; verify with list_files.`;
 
   return header + repoLine + docLine;
 }
@@ -294,7 +329,7 @@ function getPinnedProject(sessionId: string): ProjectCtx | undefined {
   const pinnedProjectId = session?.pinned_project_id ?? undefined;
   if (!pinnedProjectId) return undefined;
   return getDb()
-    .prepare('SELECT id, name, description, enabled_connection_ids FROM projects WHERE id = ?')
+    .prepare('SELECT id, name, description, enabled_connection_ids, repo_path, files_path FROM projects WHERE id = ?')
     .get(pinnedProjectId) as ProjectCtx | undefined;
 }
 
@@ -304,6 +339,7 @@ export async function buildContextUpdate(userId: string, sessionId: string, quer
   const pinnedProject = getPinnedProject(sessionId);
   const blocks: string[] = [];
 
+  blocks.push(workspaceBlock(sessionId, pinnedProject));
   if (pinnedProject) blocks.push(projectContextBlock(pinnedProject, userId));
   blocks.push(instructionBlock(pinnedProject));
   blocks.push(await memoryBlock(userId, queryText, pinnedProject?.id));
@@ -335,6 +371,7 @@ export async function buildContext(userId: string, sessionId: string, intent: In
 
   blocks.push(instructionBlock(pinnedProject));
 
+  blocks.push(workspaceBlock(sessionId, pinnedProject));
   if (pinnedProject) blocks.push(projectContextBlock(pinnedProject, userId));
 
   blocks.push(await memoryBlock(userId, queryText, pinnedProject?.id));

@@ -1,11 +1,34 @@
 import { registerTool } from '../registry.js';
-import { writeFile, readFile, listFiles, tagFile, deleteFile } from '../../services/files.js';
-import { getDb } from '../../db/index.js';
+import fs from 'fs/promises';
+import path from 'path';
+import { writeFile, writeBinaryFile, readFile, listFiles, tagFile, deleteFile, mimeTypeFromPath } from '../../services/files.js';
+import { getDataDir, getDb } from '../../db/index.js';
+
+function getProject(projectId: string): { id: string } | undefined {
+  return getDb().prepare('SELECT id FROM projects WHERE id = ?').get(projectId) as { id: string } | undefined;
+}
+
+function decodeBase64(data: unknown): Buffer | string {
+  if (typeof data !== 'string' || data.trim() === '') return 'Error: data_base64 is required';
+  const normalized = data.replace(/\s+/g, '');
+  if (!/^[A-Za-z0-9+/]*={0,2}$/.test(normalized) || normalized.length % 4 !== 0) {
+    return 'Error: data_base64 is not valid base64';
+  }
+  return Buffer.from(normalized, 'base64');
+}
+
+function resolveArtifactSource(sourcePath: string, sessionId: string | null): string {
+  if (path.isAbsolute(sourcePath)) return path.resolve(sourcePath);
+  const root = sessionId
+    ? path.resolve(getDataDir(), 'agent-workspaces', sessionId)
+    : process.cwd();
+  return path.resolve(root, sourcePath);
+}
 
 export function registerFileHandlers(): void {
   registerTool({
     name: 'write_file',
-    description: 'Create or overwrite a file (.md or .txt) in a project. Tags are YAML key/values (set `type` and `status` for tracking). Body is the file content. Re-writing the same path updates it.',
+    description: 'Create or overwrite a text file in a project. Tags are YAML key/values (set `type` and `status` for tracking). Body is the file content. Re-writing the same path updates it. For PDFs, images, archives, or other binary artifacts, use write_binary_file or promote_artifact.',
     inputSchema: {
       type: 'object',
       properties: {
@@ -18,7 +41,7 @@ export function registerFileHandlers(): void {
       required: ['project_id', 'path', 'title', 'body'],
     },
     handler: async (args, _userId, sessionId) => {
-      const project = getDb().prepare('SELECT id FROM projects WHERE id = ?').get(args.project_id as string) as { id: string } | undefined;
+      const project = getProject(args.project_id as string);
       if (!project) return `Error: project ${args.project_id} not found`;
       return JSON.stringify(await writeFile({
         project_id: args.project_id as string,
@@ -28,6 +51,80 @@ export function registerFileHandlers(): void {
         body: args.body as string,
         source_session_id: sessionId,
       }));
+    },
+  });
+
+  registerTool({
+    name: 'write_binary_file',
+    description: 'Create or overwrite a binary artifact in a project from base64 data. Use for generated PDFs, images, archives, spreadsheets, and other non-text outputs. Verify with list_files before claiming the artifact was added.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        project_id: { type: 'string' },
+        path: { type: 'string', description: 'Relative path within the project, e.g. resumes/resume.pdf' },
+        title: { type: 'string' },
+        mime_type: { type: 'string', description: 'MIME type, e.g. application/pdf or image/png. Inferred from path when omitted.' },
+        tags: { type: 'object', description: 'YAML key/values; include type and status when relevant' },
+        data_base64: { type: 'string', description: 'Base64-encoded file bytes' },
+      },
+      required: ['project_id', 'path', 'title', 'data_base64'],
+    },
+    handler: async (args, _userId, sessionId) => {
+      const project = getProject(args.project_id as string);
+      if (!project) return `Error: project ${args.project_id} not found`;
+      const decoded = decodeBase64(args.data_base64);
+      if (typeof decoded === 'string') return decoded;
+      const record = await writeBinaryFile({
+        project_id: args.project_id as string,
+        path: args.path as string,
+        title: args.title as string,
+        mime_type: (args.mime_type as string | undefined) ?? mimeTypeFromPath(args.path as string),
+        data: decoded,
+        tags: args.tags as Record<string, unknown> | undefined,
+        source_session_id: sessionId,
+      });
+      return JSON.stringify(record);
+    },
+  });
+
+  registerTool({
+    name: 'promote_artifact',
+    description: 'Copy a locally generated artifact into a project file store. Use after compiling/exporting a PDF, image, archive, or other artifact in session/outputs or another workspace path. Relative source_path values resolve from the current session workspace root. Do not leave final outputs on Desktop or Downloads; promote them into the active project and verify with list_files.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        project_id: { type: 'string' },
+        source_path: { type: 'string', description: 'Path to the local artifact created by the agent. Relative paths resolve from the session workspace root, e.g. session/outputs/resume.pdf' },
+        path: { type: 'string', description: 'Relative destination path within the project, e.g. resumes/resume.pdf' },
+        title: { type: 'string' },
+        mime_type: { type: 'string', description: 'MIME type. Inferred from destination path when omitted.' },
+        tags: { type: 'object', description: 'YAML key/values; include type and status when relevant' },
+      },
+      required: ['project_id', 'source_path', 'path', 'title'],
+    },
+    handler: async (args, _userId, sessionId) => {
+      const project = getProject(args.project_id as string);
+      if (!project) return `Error: project ${args.project_id} not found`;
+      const sourcePath = resolveArtifactSource(args.source_path as string, sessionId);
+      let data: Buffer;
+      try {
+        const stat = await fs.stat(sourcePath);
+        if (!stat.isFile()) return `Error: source_path is not a file: ${sourcePath}`;
+        data = await fs.readFile(sourcePath);
+      } catch (err) {
+        const message = err instanceof Error ? err.message : String(err);
+        return `Error: could not read source_path ${sourcePath}: ${message}`;
+      }
+      const record = await writeBinaryFile({
+        project_id: args.project_id as string,
+        path: args.path as string,
+        title: args.title as string,
+        mime_type: (args.mime_type as string | undefined) ?? mimeTypeFromPath(args.path as string),
+        data,
+        tags: args.tags as Record<string, unknown> | undefined,
+        source_session_id: sessionId,
+      });
+      return JSON.stringify(record);
     },
   });
 
@@ -54,7 +151,7 @@ export function registerFileHandlers(): void {
       required: ['project_id'],
     },
     handler: async (args) => {
-      const project = getDb().prepare('SELECT id FROM projects WHERE id = ?').get(args.project_id as string) as { id: string } | undefined;
+      const project = getProject(args.project_id as string);
       if (!project) return `Error: project ${args.project_id} not found`;
       return JSON.stringify(listFiles(
         args.project_id as string,

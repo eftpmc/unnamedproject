@@ -25,7 +25,7 @@ export interface McpServerConfig {
 interface ToolContext {
   userId: string;
   executionId: string;
-  repoPath?: string;   // optional — defaults to cwd for conversational sessions
+  repoPath?: string;
   resumeSessionId?: string | null;
   mcpServers?: Record<string, McpServerConfig>;
   permissionProfile?: PermissionProfile;
@@ -60,6 +60,7 @@ function summarizeToolUse(name: string, input: Record<string, unknown>): string 
 
 export async function invokeClaudeCode(input: ClaudeCodeInput, ctx: ToolContext): Promise<ClaudeCodeResult> {
   await requestApproval(ctx.executionId, ctx.userId, 'invoke_claude_code', { prompt: input.prompt }, 'agent');
+  if (!ctx.repoPath) throw new Error('invoke_claude_code requires an explicit repoPath or scratch workspace');
 
   const profile = normalizePermissionProfile(ctx.permissionProfile);
   const args = ['--print', ...claudePermissionArgs(profile), '--output-format', 'stream-json', '--verbose'];
@@ -88,7 +89,7 @@ export async function invokeClaudeCode(input: ClaudeCodeInput, ctx: ToolContext)
     const spawnEnv = getDelegateEnv('claude_code', profile);
     if (ctx.effort) spawnEnv.CLAUDE_EFFORT = ctx.effort;
     const proc = spawn('claude', args, {
-      cwd: ctx.repoPath ?? process.cwd(),
+      cwd: ctx.repoPath,
       env: spawnEnv,
     });
 

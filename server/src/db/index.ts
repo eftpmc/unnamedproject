@@ -92,7 +92,7 @@ function applySchema(): void {
       project_id TEXT NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
       kind TEXT NOT NULL CHECK(kind IN ('schedule','webhook','manual')),
       schedule_cron TEXT,
-      playbook_id TEXT REFERENCES documents(id) ON DELETE SET NULL,
+      playbook_id TEXT REFERENCES files(id) ON DELETE SET NULL,
       enabled INTEGER NOT NULL DEFAULT 1,
       next_run_at INTEGER,
       last_run_at INTEGER,
@@ -154,7 +154,7 @@ function applySchema(): void {
 
     CREATE TABLE IF NOT EXISTS message_files (
       message_id TEXT NOT NULL REFERENCES messages(id) ON DELETE CASCADE,
-      document_id TEXT NOT NULL REFERENCES documents(id) ON DELETE CASCADE,
+      document_id TEXT NOT NULL REFERENCES files(id) ON DELETE CASCADE,
       PRIMARY KEY (message_id, document_id)
     );
     CREATE INDEX IF NOT EXISTS idx_message_files_message ON message_files(message_id);
@@ -368,6 +368,7 @@ const migrations: Migration[] = [
     version: 8,
     name: 'document_mime_type',
     up: (database) => {
+      if (!tableSql(database, 'documents')) return;
       const cols = (database.prepare("PRAGMA table_info(documents)").all() as { name: string }[]).map(c => c.name);
       if (!cols.includes('mime_type')) {
         database.exec("ALTER TABLE documents ADD COLUMN mime_type TEXT NOT NULL DEFAULT 'text/markdown'");
@@ -595,7 +596,12 @@ export function reconcileOrphanedExecutions(): void {
   const db = getDb();
   const stale = db.prepare("SELECT id, message_id FROM executions WHERE status = 'running'").all() as
     { id: string; message_id: string | null }[];
-  const staleTurns = db.prepare("SELECT id FROM session_turns WHERE status = 'running'").all() as { id: string }[];
+  const staleTurns = db.prepare(`
+    SELECT t.id, t.session_id, t.user_message_id, m.created_at AS user_created_at
+    FROM session_turns t
+    LEFT JOIN messages m ON m.id = t.user_message_id
+    WHERE t.status = 'running'
+  `).all() as { id: string; session_id: string; user_message_id: string; user_created_at: number | null }[];
 
   const markError = db.prepare(
     "UPDATE executions SET status = 'error', result = 'Interrupted by server restart', completed_at = unixepoch() WHERE id = ?"
@@ -606,6 +612,12 @@ export function reconcileOrphanedExecutions(): void {
   for (const { id, message_id } of stale) {
     markError.run(id);
     if (message_id) deleteEmptyMessage.run(message_id);
+  }
+  const deleteEmptyTurnAssistant = db.prepare(
+    "DELETE FROM messages WHERE session_id = ? AND role = 'assistant' AND content = '' AND created_at >= ?"
+  );
+  for (const turn of staleTurns) {
+    deleteEmptyTurnAssistant.run(turn.session_id, turn.user_created_at ?? 0);
   }
 
   db.prepare("UPDATE session_turns SET status = 'error', error = 'Interrupted by server restart', completed_at = unixepoch() WHERE status = 'running'").run();

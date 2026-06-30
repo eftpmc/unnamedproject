@@ -1,4 +1,6 @@
-import { createSessionEvent, getDb, recordAgentUsage, setSessionProviderInfo, type AgentUsageTool } from '../db/index.js';
+import fs from 'fs/promises';
+import path from 'path';
+import { createSessionEvent, getDataDir, getDb, recordAgentUsage, setSessionProviderInfo, type AgentUsageTool } from '../db/index.js';
 import { broadcast } from './socket.js';
 import { newId } from '../lib/ids.js';
 import { classifyIntent } from './intent.js';
@@ -8,6 +10,7 @@ import { getSessionState, recordSessionStateEvent, updateSessionState } from './
 import { generateMcpToken } from '../mcp/auth.js';
 import { getConversationProvider, isProviderLimitError } from './conversation-provider.js';
 import { getDecryptedConfig } from '../routes/connections.js';
+import { ensureWorktree } from '../lib/worktree.js';
 
 const activeTurnControllers = new Map<string, AbortController>();
 
@@ -98,12 +101,12 @@ function getUserMcpServers(userId: string): Record<string, McpServerEntry> {
   return servers;
 }
 
-function getInvocationRepoPath(sessionId: string): string | undefined {
+async function getInvocationRepoPath(sessionId: string): Promise<string> {
   const session = getDb()
     .prepare('SELECT pinned_project_id FROM sessions WHERE id = ?')
     .get(sessionId) as { pinned_project_id: string | null } | undefined;
   const pinnedProjectId = session?.pinned_project_id;
-  if (!pinnedProjectId) return undefined;
+  if (!pinnedProjectId) return ensureSessionScratchDir(sessionId);
 
   const worktree = getDb()
     .prepare('SELECT worktree_path FROM agent_worktrees WHERE session_id = ? AND project_id = ? ORDER BY created_at DESC LIMIT 1')
@@ -111,9 +114,18 @@ function getInvocationRepoPath(sessionId: string): string | undefined {
   if (worktree?.worktree_path) return worktree.worktree_path;
 
   const project = getDb()
-    .prepare('SELECT repo_path FROM projects WHERE id = ?')
-    .get(pinnedProjectId) as { repo_path: string } | undefined;
-  return project?.repo_path || undefined;
+    .prepare('SELECT id, repo_path FROM projects WHERE id = ?')
+    .get(pinnedProjectId) as { id: string; repo_path: string } | undefined;
+  if (!project?.repo_path) return ensureSessionScratchDir(sessionId);
+
+  const ensured = await ensureWorktree({ id: project.id, fields: { repo_path: project.repo_path } }, sessionId);
+  return ensured.worktree_path;
+}
+
+async function ensureSessionScratchDir(sessionId: string): Promise<string> {
+  const scratchPath = path.resolve(getDataDir(), 'agent-scratch', sessionId);
+  await fs.mkdir(scratchPath, { recursive: true });
+  return scratchPath;
 }
 
 function emitRuntimeCheckpoint(
@@ -208,7 +220,7 @@ export async function runAgentTurn(userId: string, sessionId: string, userMessag
     app: { url: `http://localhost:${port}/mcp`, headers: { Authorization: `Bearer ${mcpToken}` } },
     ...getUserMcpServers(userId),
   };
-  const repoPath = getInvocationRepoPath(sessionId);
+  const repoPath = await getInvocationRepoPath(sessionId);
 
   const replyId = newId();
   const replyCreatedAt = Math.floor(Date.now() / 1000);
@@ -229,6 +241,7 @@ export async function runAgentTurn(userId: string, sessionId: string, userMessag
       broadcast(userId, { type: 'message_started', sessionId, message: { id: replyId, role: 'assistant', content: '', created_at: replyCreatedAt } });
     }
     fullText += delta;
+    getDb().prepare('UPDATE messages SET content = ? WHERE id = ?').run(fullText, replyId);
     broadcast(userId, { type: 'message_delta', sessionId, messageId: replyId, delta });
   };
   const onSessionId = (id: string) => { setSessionProviderInfo(sessionId, provider.type, id); };

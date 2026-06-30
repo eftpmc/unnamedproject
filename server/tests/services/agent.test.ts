@@ -1,6 +1,7 @@
 import { describe, it, expect, vi, beforeAll, afterAll, beforeEach } from 'vitest';
 import fs from 'fs';
 import path from 'path';
+import { execFileSync } from 'child_process';
 import { initDb, getDb, closeDb } from '../../src/db/index.js';
 import { newId } from '../../src/lib/ids.js';
 
@@ -145,11 +146,15 @@ describe('runAgentTurn', () => {
     expect(mockInvoke.mock.calls[0][0].systemPromptSuffix).toContain('Earlier in this session');
   });
 
-  it('runs providers from the pinned project repo path', async () => {
+  it('runs providers from an isolated worktree for the pinned project repo', async () => {
     const { runAgentTurn } = await import('../../src/services/agent.js');
     const db = getDb();
+    const repoPath = fs.mkdtempSync(path.join(DATA_DIR, 'agent-main-repo-'));
+    execFileSync('git', ['init'], { cwd: repoPath });
+    execFileSync('git', ['config', 'user.email', 'agent@test.local'], { cwd: repoPath });
+    execFileSync('git', ['config', 'user.name', 'Agent Test'], { cwd: repoPath });
     db.prepare("INSERT INTO spaces (id, user_id, name) VALUES ('sp-agent','u1','Agent Space')").run();
-    db.prepare("INSERT INTO projects (id, space_id, user_id, name, repo_path, origin) VALUES ('p-agent','sp-agent','u1','Agent Repo','/tmp/agent-repo','linked')").run();
+    db.prepare("INSERT INTO projects (id, space_id, user_id, name, repo_path, origin) VALUES ('p-agent','sp-agent','u1','Agent Repo',?,'linked')").run(repoPath);
     db.prepare("INSERT INTO sessions (id, user_id, pinned_project_id) VALUES ('s4','u1','p-agent')").run();
     db.prepare("INSERT INTO messages (id, session_id, role, content) VALUES ('m4','s4','user','work in repo')").run();
     db.prepare("INSERT INTO session_turns (id, session_id, user_message_id, status) VALUES ('t4','s4','m4','running')").run();
@@ -162,7 +167,41 @@ describe('runAgentTurn', () => {
 
     await runAgentTurn('u1', 's4', 'm4');
 
-    expect(mockInvoke.mock.calls[0][0].repoPath).toBe('/tmp/agent-repo');
+    expect(mockInvoke.mock.calls[0][0].repoPath).toBe(path.join(DATA_DIR, 'worktrees', 'p-agent', 's4'));
+    expect(mockInvoke.mock.calls[0][0].repoPath).not.toBe(repoPath);
+  });
+
+  it('runs providers from a session scratch directory when no project is pinned', async () => {
+    const { runAgentTurn } = await import('../../src/services/agent.js');
+    const db = getDb();
+    db.prepare("INSERT INTO sessions (id, user_id) VALUES ('s-scratch','u1')").run();
+    db.prepare("INSERT INTO messages (id, session_id, role, content) VALUES ('m-scratch','s-scratch','user','make a note')").run();
+    db.prepare("INSERT INTO session_turns (id, session_id, user_message_id, status) VALUES ('t-scratch','s-scratch','m-scratch','running')").run();
+
+    await runAgentTurn('u1', 's-scratch', 'm-scratch');
+
+    expect(mockInvoke.mock.calls[0][0].repoPath).toBe(path.join(DATA_DIR, 'agent-scratch', 's-scratch'));
+    expect(fs.existsSync(path.join(DATA_DIR, 'agent-scratch', 's-scratch'))).toBe(true);
+  });
+
+  it('persists streamed assistant text before provider completion', async () => {
+    const { runAgentTurn } = await import('../../src/services/agent.js');
+    const db = getDb();
+    db.prepare("INSERT INTO sessions (id, user_id) VALUES ('s-stream','u1')").run();
+    db.prepare("INSERT INTO messages (id, session_id, role, content) VALUES ('m-stream','s-stream','user','stream then fail')").run();
+    db.prepare("INSERT INTO session_turns (id, session_id, user_message_id, status) VALUES ('t-stream','s-stream','m-stream','running')").run();
+    mockInvoke.mockImplementationOnce(async (params) => {
+      params.onText('partial ');
+      params.onText('response');
+      throw new Error('provider crashed');
+    });
+
+    await expect(runAgentTurn('u1', 's-stream', 'm-stream')).rejects.toThrow('provider crashed');
+
+    const row = db
+      .prepare("SELECT content FROM messages WHERE session_id = ? AND role = 'assistant' ORDER BY created_at DESC LIMIT 1")
+      .get('s-stream') as { content: string } | undefined;
+    expect(row?.content).toBe('partial response');
   });
 
   it('clears provider session and checkpoints state on provider usage limits', async () => {

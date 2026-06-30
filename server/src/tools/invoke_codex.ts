@@ -52,7 +52,7 @@ const CODEX_DEFAULT_PRICING = { inputPer1M: 1.10, outputPer1M: 4.40 };
 
 function estimateCodexCost(model: string | undefined, inputTokens: number, outputTokens: number): number {
   if (!inputTokens && !outputTokens) return 0;
-  const pricing = (model && CODEX_MODEL_PRICING[model]) ?? CODEX_DEFAULT_PRICING;
+  const pricing = model ? (CODEX_MODEL_PRICING[model] ?? CODEX_DEFAULT_PRICING) : CODEX_DEFAULT_PRICING;
   return (inputTokens / 1_000_000) * pricing.inputPer1M + (outputTokens / 1_000_000) * pricing.outputPer1M;
 }
 
@@ -92,6 +92,7 @@ function mcpServerConfigOverrides(servers: Record<string, McpServerConfig>): str
 
 export async function invokeCodex(input: CodexInput, ctx: ToolContext): Promise<CodexResult> {
   await requestApproval(ctx.executionId, ctx.userId, 'invoke_codex', { prompt: input.prompt }, 'agent');
+  if (!ctx.repoPath) throw new Error('invoke_codex requires an explicit repoPath or scratch workspace');
 
   const profile = normalizePermissionProfile(ctx.permissionProfile);
   // codex exec [resume <sessionId>] --dangerously-bypass-approvals-and-sandbox --json [--skip-git-repo-check] "<prompt>"
@@ -112,7 +113,7 @@ export async function invokeCodex(input: CodexInput, ctx: ToolContext): Promise<
 
   return new Promise((resolve, reject) => {
     const proc = spawn('codex', args, {
-      cwd: ctx.repoPath ?? process.cwd(),
+      cwd: ctx.repoPath,
       stdio: ['ignore', 'pipe', 'pipe'],
       env: getDelegateEnv('codex', profile),
     });

@@ -1,7 +1,7 @@
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
 import fs from 'fs';
 import path from 'path';
-import { initDb, getDb, closeDb } from '../../src/db/index.js';
+import { initDb, getDb, closeDb, reconcileOrphanedExecutions } from '../../src/db/index.js';
 
 const DATA_DIR = process.env.DATA_DIR!;
 
@@ -75,5 +75,22 @@ describe('migration v6', () => {
     expect(() => {
       db.prepare("INSERT INTO connections (id, user_id, name, type, encrypted_config) VALUES ('c3','u1','Bad','unknown','{}')").run();
     }).toThrow();
+  });
+
+  it('reconciles interrupted turns without leaving blank assistant messages', () => {
+    const db = getDb();
+    db.prepare("INSERT OR IGNORE INTO users (id, email, hashed_password) VALUES ('u-reconcile','reconcile@test.com','x')").run();
+    db.prepare("INSERT OR IGNORE INTO sessions (id, user_id) VALUES ('s-reconcile','u-reconcile')").run();
+    db.prepare("INSERT INTO messages (id, session_id, role, content, created_at) VALUES ('m-reconcile-user','s-reconcile','user','continue',100)").run();
+    db.prepare("INSERT INTO messages (id, session_id, role, content, created_at) VALUES ('m-reconcile-empty','s-reconcile','assistant','',100)").run();
+    db.prepare("INSERT INTO session_turns (id, session_id, user_message_id, status, started_at) VALUES ('t-reconcile','s-reconcile','m-reconcile-user','running',100)").run();
+
+    reconcileOrphanedExecutions();
+
+    const blank = db.prepare("SELECT id FROM messages WHERE id = 'm-reconcile-empty'").get();
+    expect(blank).toBeUndefined();
+    const turn = db.prepare("SELECT status, error FROM session_turns WHERE id = 't-reconcile'").get() as { status: string; error: string };
+    expect(turn.status).toBe('error');
+    expect(turn.error).toBe('Interrupted by server restart');
   });
 });

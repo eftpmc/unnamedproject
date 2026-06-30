@@ -122,6 +122,9 @@ export default function ChatView({ chatId }: ChatViewProps) {
   const execToMsgRef = useRef<Record<string, string>>({});
   // streaming text for in-progress assistant messages
   const [streamingIds, setStreamingIds] = useState<Set<string>>(new Set());
+  // last message ID that began streaming — used to mark the failed message on error
+  // even after streamingIds has been cleared by message_created
+  const lastStreamingMsgRef = useRef<string | null>(null);
 
   // Hydrate executions from persisted message data so reloading mid-execution
   // or after completion still shows past tool runs and their output.
@@ -129,6 +132,7 @@ export default function ChatView({ chatId }: ChatViewProps) {
   useEffect(() => {
     hydratedRef.current = false;
     execToMsgRef.current = {};
+    lastStreamingMsgRef.current = null;
     setExecutions({});
     setStreamingIds(new Set());
     setSending(false);
@@ -370,17 +374,18 @@ export default function ChatView({ chatId }: ChatViewProps) {
       setSending(false);
       setAgentError(ev.error ?? 'The agent encountered an error. Please try again.');
       queryClient.setQueryData(['chat-status', chatId], { active: false, turn: null, execution: null });
-      // A turn that errors mid-stream never fires message_created, so streamingIds
-      // would otherwise leave a permanently stuck streaming cursor on that message.
+      // message_created may have already cleared streamingIds before agent_error arrives,
+      // so fall back to lastStreamingMsgRef to still mark the right message as failed.
       setStreamingIds(prev => {
-        if (prev.size === 0) return prev;
-        setFailedMessageId([...prev][0]);
+        const msgId = [...prev][0] ?? lastStreamingMsgRef.current;
+        if (msgId) setFailedMessageId(msgId);
         return new Set();
       });
     }
 
     if (event.type === 'message_started') {
       const { message } = event as WSMessageStarted;
+      lastStreamingMsgRef.current = message.id;
       queryClient.setQueryData<Message[]>(['messages', chatId], prev => {
         if (!prev) return [message];
         if (prev.some(m => m.id === message.id)) return prev;
@@ -422,8 +427,17 @@ export default function ChatView({ chatId }: ChatViewProps) {
       if (ev.status === 'error') {
         queryClient.invalidateQueries({ queryKey: ['messages', chatId] });
         setStreamingIds(prev => {
+          const msgId = [...prev][0] ?? lastStreamingMsgRef.current;
+          if (msgId) setFailedMessageId(msgId);
+          return new Set();
+        });
+      }
+      // Safety net: if message_created was dropped (WS blip), streamingIds may still
+      // have the in-progress message ID. Clear it and re-fetch to pick up final content.
+      if (ev.status === 'done' || ev.status === 'stopped') {
+        setStreamingIds(prev => {
           if (prev.size === 0) return prev;
-          setFailedMessageId([...prev][0]);
+          queryClient.invalidateQueries({ queryKey: ['messages', chatId] });
           return new Set();
         });
       }
@@ -524,6 +538,12 @@ export default function ChatView({ chatId }: ChatViewProps) {
       });
     }
 
+    if (event.type === 'ws_connected') {
+      // WS reconnected — events may have been missed. Re-fetch chat status so polling
+      // can correct any stale active/streaming state without waiting for the next interval.
+      queryClient.invalidateQueries({ queryKey: ['chat-status', chatId] });
+    }
+
     if (event.type === 'session_title_updated') {
       const ev = event as WSSessionTitleUpdated;
       if (ev.sessionId === chatId) {
@@ -555,6 +575,17 @@ export default function ChatView({ chatId }: ChatViewProps) {
     const unsub = subscribe(handleWsEvent);
     return unsub;
   }, [handleWsEvent]);
+
+  // When the server reports the turn is no longer active (via polling or WS event),
+  // clear any stale streamingIds left over from a dropped message_created event.
+  useEffect(() => {
+    if (!chatStatus || chatStatus.active) return;
+    setStreamingIds(prev => {
+      if (prev.size === 0) return prev;
+      queryClient.invalidateQueries({ queryKey: ['messages', chatId] });
+      return new Set();
+    });
+  }, [chatStatus?.active, chatId, queryClient]);
 
   useEffect(() => {
     if (!agentActive) return;

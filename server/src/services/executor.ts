@@ -26,13 +26,13 @@ function getSessionIdForExecution(executionId: string): string | null {
 export function createExecution(
   userId: string,
   messageId: string | null,
-  spaceId: string | null,
+  projectId: string | null,
   tool: string
 ): string {
   const id = newId();
   getDb()
-    .prepare('INSERT INTO executions (id, message_id, space_id, tool, status) VALUES (?,?,?,?,?)')
-    .run(id, messageId, spaceId, tool, 'running');
+    .prepare('INSERT INTO executions (id, message_id, project_id, tool, status) VALUES (?,?,?,?,?)')
+    .run(id, messageId, projectId, tool, 'running');
   broadcast(userId, { type: 'execution_update', sessionId: messageId ? getSessionIdForMessage(messageId) : null, executionId: id, status: 'running', tool, messageId });
   return id;
 }
@@ -78,12 +78,12 @@ export async function requestApproval(
 
   const executionContext = getDb()
     .prepare(`
-      SELECT m.session_id AS sessionId, e.space_id AS spaceId
+      SELECT m.session_id AS sessionId, e.project_id AS projectId
       FROM executions e
       JOIN messages m ON m.id = e.message_id
       WHERE e.id = ?
     `)
-    .get(executionId) as { sessionId: string; spaceId: string | null } | undefined;
+    .get(executionId) as { sessionId: string; projectId: string | null } | undefined;
 
   // Fall back to session_id from payload for tools that run without a message context
   const sessionId = executionContext?.sessionId ?? (typeof payload.session_id === 'string' ? payload.session_id : null);
@@ -97,7 +97,7 @@ export async function requestApproval(
       type: 'approval_requested',
       title: `Approval needed: ${action}`,
       body: 'The agent is waiting for your decision.',
-      spaceId: executionContext?.spaceId ?? null,
+      projectId: executionContext?.projectId ?? null,
       executionId,
       metadata: { action, payload },
     });
@@ -175,7 +175,7 @@ export async function requestApproval(
       type: 'approval_resolved',
       title: decision === 'approved' ? `Approved: ${action}` : `Denied: ${action}`,
       body: decision === 'approved' ? 'The agent can continue.' : 'The agent action was denied.',
-      spaceId: executionContext.spaceId,
+      projectId: executionContext.projectId,
       executionId,
       metadata: { action, decision },
     });

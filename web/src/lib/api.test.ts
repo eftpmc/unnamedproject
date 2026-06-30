@@ -94,7 +94,7 @@ describe('Top-level API functions', () => {
 
   describe('createTopLevelProject', () => {
     it('calls POST /projects with name', async () => {
-      mockFetch.mockResolvedValueOnce(mockResponse({ id: '1', name: 'test', space_id: 'sp1', repo_path: '', default_branch: null, origin: 'created', created_at: 0 }));
+      mockFetch.mockResolvedValueOnce(mockResponse({ id: '1', name: 'test', files_path: '', repo_path: '', default_branch: null, origin: 'created', created_at: 0 }));
       await createTopLevelProject({ name: 'test' });
       expect(mockFetch).toHaveBeenCalledWith('/projects', expect.objectContaining({ method: 'POST' }));
     });

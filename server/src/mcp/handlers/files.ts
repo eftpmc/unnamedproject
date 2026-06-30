@@ -18,10 +18,10 @@ export function registerFileHandlers(): void {
       required: ['project_id', 'path', 'title', 'body'],
     },
     handler: async (args, _userId, sessionId) => {
-      const project = getDb().prepare('SELECT space_id FROM projects WHERE id = ?').get(args.project_id as string) as { space_id: string } | undefined;
+      const project = getDb().prepare('SELECT id FROM projects WHERE id = ?').get(args.project_id as string) as { id: string } | undefined;
       if (!project) return `Error: project ${args.project_id} not found`;
       return JSON.stringify(await writeFile({
-        space_id: project.space_id,
+        project_id: args.project_id as string,
         path: args.path as string,
         title: args.title as string,
         tags: args.tags as Record<string, unknown> | undefined,
@@ -54,10 +54,10 @@ export function registerFileHandlers(): void {
       required: ['project_id'],
     },
     handler: async (args) => {
-      const project = getDb().prepare('SELECT space_id FROM projects WHERE id = ?').get(args.project_id as string) as { space_id: string } | undefined;
+      const project = getDb().prepare('SELECT id FROM projects WHERE id = ?').get(args.project_id as string) as { id: string } | undefined;
       if (!project) return `Error: project ${args.project_id} not found`;
       return JSON.stringify(listFiles(
-        project.space_id,
+        args.project_id as string,
         (args.type || args.tags) ? { type: args.type as string | undefined, tags: args.tags as Record<string, unknown> | undefined } : undefined,
       ));
     },

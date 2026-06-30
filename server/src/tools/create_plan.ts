@@ -9,7 +9,7 @@ interface CreatePlanStepInput {
 }
 
 interface CreatePlanInput {
-  space_id: string;
+  project_id: string;
   title: string;
   steps: CreatePlanStepInput[];
   session_id?: string;
@@ -20,14 +20,14 @@ export function runCreatePlan(
   userId: string
 ): string {
   const { plan, steps } = createPlan(
-    input.space_id,
+    input.project_id,
     input.session_id ?? null,
     input.title,
     input.steps,
   );
   return JSON.stringify({
     plan_id: plan.id,
-    space_id: plan.space_id,
+    project_id: plan.project_id,
     steps: steps.map((s: DbPlanStep) => ({
       id: s.id,
       title: s.title,

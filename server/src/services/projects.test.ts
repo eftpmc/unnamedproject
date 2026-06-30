@@ -4,7 +4,6 @@ import { getDb, initDb } from '../db/index.js';
 import fs from 'fs';
 
 let userId: string;
-let spaceId: string;
 
 beforeEach(async () => {
   process.env.DATA_DIR = `/tmp/projects-service-test-${Date.now()}-${Math.random()}`;
@@ -12,25 +11,16 @@ beforeEach(async () => {
   initDb();
 
   userId = 'test-user-id';
-  const now = Math.floor(Date.now() / 1000);
 
   getDb()
     .prepare("INSERT INTO users (id, email, hashed_password) VALUES (?, ?, ?)")
     .run(userId, 'test@test.com', 'hashed');
-
-  // Create a space for the user
-  getDb().prepare(
-    "INSERT INTO spaces (id, user_id, name, created_at) VALUES (?, ?, ?, ?)"
-  ).run('space-1', userId, 'Test Space', now);
-
-  spaceId = 'space-1';
 });
 
 describe('listProjectsForUser', () => {
-  it('returns only projects owned by the user via their spaces', () => {
-    // Create a project linked to the space
+  it('returns only projects owned by the user', () => {
     linkProject({
-      space_id: spaceId,
+      user_id: userId,
       name: 'User Project',
       repo_path: '/tmp/test-repo'
     });
@@ -55,7 +45,7 @@ describe('getProjectForUser', () => {
 
   it('returns a project when it belongs to the user', () => {
     const project = linkProject({
-      space_id: spaceId,
+      user_id: userId,
       name: 'User Project',
       repo_path: '/tmp/test-repo'
     });

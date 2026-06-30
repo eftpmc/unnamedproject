@@ -15,20 +15,20 @@ const upload = multer({
   limits: { files: 1, fileSize: 50 * 1024 * 1024 },
 });
 
-function projectOwnsFile(spaceId: string, userId: string): boolean {
-  return !!getDb().prepare('SELECT 1 FROM projects WHERE space_id = ? AND user_id = ?').get(spaceId, userId);
+function projectOwnsFile(projectId: string, userId: string): boolean {
+  return !!getDb().prepare('SELECT 1 FROM projects WHERE id = ? AND user_id = ?').get(projectId, userId);
 }
 
 function slugify(name: string): string {
   return name.toLowerCase().replace(/\s+/g, '-').replace(/[^\w.-]/g, '') || 'file';
 }
 
-function uniquePath(spaceId: string, base: string): string {
+function uniquePath(projectId: string, base: string): string {
   let p = base;
   let counter = 2;
   const ext = path.extname(base);
   const stem = base.slice(0, base.length - ext.length);
-  while (getDb().prepare('SELECT id FROM files WHERE space_id = ? AND path = ?').get(spaceId, p)) {
+  while (getDb().prepare('SELECT id FROM files WHERE project_id = ? AND path = ?').get(projectId, p)) {
     p = `${stem}-${counter}${ext}`;
     counter++;
   }
@@ -44,15 +44,14 @@ router.post('/', upload.single('file'), async (req, res) => {
     const { project_id, title } = req.body as { project_id?: string; title?: string };
     if (!project_id) { res.status(400).json({ error: 'project_id is required' }); return; }
 
-    const project = getDb().prepare('SELECT space_id FROM projects WHERE id = ? AND user_id = ?').get(project_id, userId) as { space_id: string } | undefined;
-    if (!project) { res.status(404).json({ error: 'Project not found' }); return; }
+    if (!projectOwnsFile(project_id, userId)) { res.status(404).json({ error: 'Project not found' }); return; }
 
     const filename = req.file.originalname || 'upload';
     const fileTitle = title?.trim() || path.basename(filename, path.extname(filename));
-    const filePath = uniquePath(project.space_id, slugify(filename));
+    const filePath = uniquePath(project_id, slugify(filename));
 
     const file = await writeBinaryFile({
-      space_id: project.space_id,
+      project_id,
       path: filePath,
       title: fileTitle,
       mime_type: req.file.mimetype,
@@ -63,31 +62,22 @@ router.post('/', upload.single('file'), async (req, res) => {
   }
 
   // JSON text file creation
-  const { title, body = '', tags, project_id, space_id } = req.body as {
+  const { title, body = '', tags, project_id } = req.body as {
     title?: string;
     body?: string;
     tags?: Record<string, unknown>;
     project_id?: string;
-    space_id?: string;
   };
 
-  if (!title || (!project_id && !space_id)) {
+  if (!title || !project_id) {
     res.status(400).json({ error: 'title and project_id are required' });
     return;
   }
 
-  let resolvedSpaceId: string;
-  if (project_id) {
-    const project = getDb().prepare('SELECT space_id FROM projects WHERE id = ? AND user_id = ?').get(project_id, userId) as { space_id: string } | undefined;
-    if (!project) { res.status(404).json({ error: 'Project not found' }); return; }
-    resolvedSpaceId = project.space_id;
-  } else {
-    if (!projectOwnsFile(space_id!, userId)) { res.status(404).json({ error: 'Project not found' }); return; }
-    resolvedSpaceId = space_id!;
-  }
+  if (!projectOwnsFile(project_id, userId)) { res.status(404).json({ error: 'Project not found' }); return; }
 
-  const filePath = uniquePath(resolvedSpaceId, `${slugify(title)}.md`);
-  const file = await writeFile({ space_id: resolvedSpaceId, path: filePath, title, tags, body });
+  const filePath = uniquePath(project_id, `${slugify(title)}.md`);
+  const file = await writeFile({ project_id, path: filePath, title, tags, body });
   res.status(201).json(file);
 });
 
@@ -95,7 +85,7 @@ router.post('/', upload.single('file'), async (req, res) => {
 router.get('/', (req, res) => {
   const { userId } = req as unknown as AuthedRequest;
   const { type, mime } = req.query as Record<string, string>;
-  let sql = `SELECT f.* FROM files f JOIN projects p ON p.space_id = f.space_id WHERE p.user_id = ?`;
+  let sql = `SELECT f.* FROM files f JOIN projects p ON p.id = f.project_id WHERE p.user_id = ?`;
   const params: unknown[] = [userId];
   if (type) { sql += ' AND f.type = ?'; params.push(type); }
   if (mime) { sql += ' AND f.mime_type LIKE ?'; params.push(`${mime}%`); }
@@ -111,7 +101,7 @@ router.get('/:id', async (req, res) => {
   const { userId } = req as unknown as AuthedRequest;
   const file = await readFile(req.params.id);
   if (!file) { res.status(404).json({ error: 'File not found' }); return; }
-  if (!projectOwnsFile(file.space_id, userId)) { res.status(404).json({ error: 'File not found' }); return; }
+  if (!projectOwnsFile(file.project_id, userId)) { res.status(404).json({ error: 'File not found' }); return; }
   res.json(file);
 });
 
@@ -119,11 +109,14 @@ router.get('/:id', async (req, res) => {
 router.get('/:id/content', async (req, res) => {
   const { userId } = req as unknown as AuthedRequest;
   const row = getDb().prepare('SELECT * FROM files WHERE id = ?').get(req.params.id) as
-    { id: string; space_id: string; path: string; title: string; mime_type: string } | undefined;
+    { id: string; project_id: string; path: string; title: string; mime_type: string } | undefined;
   if (!row) { res.status(404).json({ error: 'File not found' }); return; }
-  if (!projectOwnsFile(row.space_id, userId)) { res.status(404).json({ error: 'File not found' }); return; }
+  if (!projectOwnsFile(row.project_id, userId)) { res.status(404).json({ error: 'File not found' }); return; }
 
-  const filePath = resolveInFiles(row.space_id, row.path);
+  const project = getDb().prepare('SELECT files_path FROM projects WHERE id = ?').get(row.project_id) as { files_path: string } | undefined;
+  if (!project) { res.status(404).json({ error: 'Project not found' }); return; }
+
+  const filePath = resolveInFiles(project.files_path, row.path);
   if (!fs.existsSync(filePath)) { res.status(404).json({ error: 'File not found on disk' }); return; }
 
   res.setHeader('Content-Type', row.mime_type);
@@ -135,7 +128,7 @@ router.patch('/:id', async (req, res) => {
   const { userId } = req as unknown as AuthedRequest;
   const file = await readFile(req.params.id);
   if (!file) { res.status(404).json({ error: 'File not found' }); return; }
-  if (!projectOwnsFile(file.space_id, userId)) { res.status(404).json({ error: 'File not found' }); return; }
+  if (!projectOwnsFile(file.project_id, userId)) { res.status(404).json({ error: 'File not found' }); return; }
   const { tags, title, body } = req.body as {
     tags?: Record<string, unknown>; title?: string; body?: string;
   };
@@ -153,7 +146,7 @@ router.patch('/:id', async (req, res) => {
     return;
   }
   res.json(await writeFile({
-    space_id: file.space_id,
+    project_id: file.project_id,
     path: file.path,
     title: title ?? file.title,
     tags: { ...file.tags, ...(tags ?? {}) },
@@ -165,7 +158,7 @@ router.delete('/:id', async (req, res) => {
   const { userId } = req as unknown as AuthedRequest;
   const file = await readFile(req.params.id);
   if (!file) { res.status(404).json({ error: 'File not found' }); return; }
-  if (!projectOwnsFile(file.space_id, userId)) { res.status(404).json({ error: 'File not found' }); return; }
+  if (!projectOwnsFile(file.project_id, userId)) { res.status(404).json({ error: 'File not found' }); return; }
   await deleteFile(file.id);
   res.status(204).end();
 });

@@ -1,5 +1,4 @@
 import { getDb, getPermissionProfile } from '../db/index.js';
-import { listProjects } from './projects.js';
 import { listFiles } from './files.js';
 import { recallRelevant } from './memory.js';
 import { formatEntry } from '../tools/memory_tools.js';
@@ -149,7 +148,6 @@ interface ProjectCtx {
   name: string;
   description: string | null;
   enabled_connection_ids: string;
-  space_id: string;
 }
 
 const INSTRUCTION_FILES = ['CLAUDE.md', 'AGENTS.md'] as const;
@@ -210,13 +208,10 @@ ${bounded}`;
 }
 
 function projectContextBlock(project: ProjectCtx, _userId: string): string {
-  const repos = listProjects(project.space_id);
-  const files = listFiles(project.space_id);
+  const files = listFiles(project.id);
   const header = `## Active project: **${project.name}** (project_id: ${project.id})${project.description ? ' — ' + project.description : ''}`;
 
-  const repoLine = repos.length > 0
-    ? `\nGit repos: ${repos.map(p => `${p.name} (project_id: ${p.id}, path: ${p.repo_path})`).join('; ')}. Pass project_id to code tools.`
-    : `\nNo git repos in this project yet. Create one with create_project, or work in files.`;
+  const repoLine = `\nRepo (project_id: ${project.id}). Pass project_id to code tools.`;
 
   const fileTypes = [...new Set(files.map(f => f.type).filter(Boolean))];
   const docLine = files.length > 0
@@ -299,7 +294,7 @@ function getPinnedProject(sessionId: string): ProjectCtx | undefined {
   const pinnedProjectId = session?.pinned_project_id ?? undefined;
   if (!pinnedProjectId) return undefined;
   return getDb()
-    .prepare('SELECT id, name, description, enabled_connection_ids, space_id FROM projects WHERE id = ?')
+    .prepare('SELECT id, name, description, enabled_connection_ids FROM projects WHERE id = ?')
     .get(pinnedProjectId) as ProjectCtx | undefined;
 }
 

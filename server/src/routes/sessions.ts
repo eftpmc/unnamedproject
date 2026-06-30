@@ -156,9 +156,8 @@ router.get('/:id/usage-risk', (req, res) => {
 
 router.patch('/:id', (req, res) => {
   const { userId } = req as unknown as AuthedRequest;
-  const { effort, title, pinned_project_id, pinned_space_id } = req.body as { effort?: string; title?: string; pinned_project_id?: string | null; pinned_space_id?: string | null };
-  // Accept pinned_project_id (preferred) or pinned_space_id (legacy alias — treated as project_id)
-  const pinnedProjectUpdate = pinned_project_id !== undefined ? pinned_project_id : pinned_space_id;
+  const { effort, title, pinned_project_id } = req.body as { effort?: string; title?: string; pinned_project_id?: string | null };
+  const pinnedProjectUpdate = pinned_project_id;
 
   if (effort === undefined && title === undefined && pinnedProjectUpdate === undefined) {
     res.status(400).json({ error: 'effort, title, or pinned_project_id required' });

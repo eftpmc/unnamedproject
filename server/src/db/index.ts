@@ -46,34 +46,23 @@ function applySchema(): void {
       UNIQUE(user_id, name)
     );
 
-    CREATE TABLE IF NOT EXISTS spaces (
-      id TEXT PRIMARY KEY,
-      user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
-      name TEXT NOT NULL,
-      description TEXT,
-      enabled_connection_ids TEXT NOT NULL DEFAULT '[]',
-      created_at INTEGER NOT NULL DEFAULT (unixepoch()),
-      UNIQUE(user_id, name)
-    );
-
     CREATE TABLE IF NOT EXISTS projects (
       id TEXT PRIMARY KEY,
-      space_id TEXT NOT NULL REFERENCES spaces(id) ON DELETE CASCADE,
       user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
       name TEXT NOT NULL,
-      repo_path TEXT NOT NULL,
+      repo_path TEXT NOT NULL CHECK(length(repo_path) > 0),
+      files_path TEXT NOT NULL DEFAULT '',
       default_branch TEXT,
       origin TEXT NOT NULL CHECK(origin IN ('created','linked')),
       description TEXT,
       enabled_connection_ids TEXT NOT NULL DEFAULT '[]',
       created_at INTEGER NOT NULL DEFAULT (unixepoch())
     );
-    CREATE INDEX IF NOT EXISTS idx_projects_space ON projects(space_id);
     CREATE INDEX IF NOT EXISTS idx_projects_user ON projects(user_id);
 
     CREATE TABLE IF NOT EXISTS files (
       id TEXT PRIMARY KEY,
-      space_id TEXT NOT NULL REFERENCES spaces(id) ON DELETE CASCADE,
+      project_id TEXT NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
       path TEXT NOT NULL,
       title TEXT NOT NULL,
       type TEXT,
@@ -83,9 +72,9 @@ function applySchema(): void {
       source_session_id TEXT REFERENCES sessions(id) ON DELETE SET NULL,
       created_at INTEGER NOT NULL DEFAULT (unixepoch()),
       updated_at INTEGER NOT NULL DEFAULT (unixepoch()),
-      UNIQUE(space_id, path)
+      UNIQUE(project_id, path)
     );
-    CREATE INDEX IF NOT EXISTS idx_files_space_type ON files(space_id, type);
+    CREATE INDEX IF NOT EXISTS idx_files_project_type ON files(project_id, type);
 
     CREATE TABLE IF NOT EXISTS triggers (
       id TEXT PRIMARY KEY,
@@ -184,7 +173,7 @@ function applySchema(): void {
     CREATE TABLE IF NOT EXISTS executions (
       id TEXT PRIMARY KEY,
       message_id TEXT REFERENCES messages(id) ON DELETE SET NULL,
-      space_id TEXT REFERENCES spaces(id) ON DELETE SET NULL,
+      project_id TEXT REFERENCES projects(id) ON DELETE SET NULL,
       tool TEXT NOT NULL,
       status TEXT NOT NULL DEFAULT 'pending'
         CHECK(status IN ('pending','running','done','error','awaiting_approval')),
@@ -204,7 +193,7 @@ function applySchema(): void {
       )),
       title TEXT NOT NULL,
       body TEXT,
-      space_id TEXT REFERENCES spaces(id) ON DELETE SET NULL,
+      project_id TEXT REFERENCES projects(id) ON DELETE SET NULL,
       item_id TEXT,
       execution_id TEXT REFERENCES executions(id) ON DELETE SET NULL,
       metadata TEXT NOT NULL DEFAULT '{}',
@@ -468,6 +457,316 @@ const migrations: Migration[] = [
       }
     },
   },
+  {
+    version: 12,
+    name: 'projects_nonempty_repo_path',
+    noTransaction: true,
+    up: (database) => {
+      const currentSql = tableSql(database, 'projects') ?? '';
+      if (currentSql.includes('length(repo_path)')) return;
+      database.pragma('foreign_keys = OFF');
+      database.exec('ALTER TABLE projects RENAME TO _projects_v12_tmp;');
+      database.exec(`CREATE TABLE projects (
+        id TEXT PRIMARY KEY,
+        space_id TEXT NOT NULL REFERENCES spaces(id) ON DELETE CASCADE,
+        user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+        name TEXT NOT NULL,
+        repo_path TEXT NOT NULL CHECK(length(repo_path) > 0),
+        default_branch TEXT,
+        origin TEXT NOT NULL CHECK(origin IN ('created','linked')),
+        description TEXT,
+        enabled_connection_ids TEXT NOT NULL DEFAULT '[]',
+        created_at INTEGER NOT NULL DEFAULT (unixepoch())
+      );`);
+      database.exec(`INSERT INTO projects SELECT * FROM _projects_v12_tmp WHERE length(repo_path) > 0;`);
+      database.exec('DROP TABLE _projects_v12_tmp;');
+      database.exec('CREATE INDEX IF NOT EXISTS idx_projects_space ON projects(space_id);');
+      database.exec('CREATE INDEX IF NOT EXISTS idx_projects_user ON projects(user_id);');
+      database.pragma('foreign_keys = ON');
+    },
+  },
+  {
+    version: 34,
+    name: 'fix_fk_refs_post_v12',
+    noTransaction: true,
+    up: (database) => {
+      // v12 used ALTER TABLE projects RENAME TO _projects_v12_tmp with foreign_keys = OFF.
+      // SQLite 3.26+ rewrites child-table FK references during rename even when FKs are off,
+      // so 5 tables ended up with REFERENCES "_projects_v12_tmp"(id) after that table was dropped.
+      // Rebuild each affected table with the correct REFERENCES projects(id).
+      const needsFix = (name: string) => (tableSql(database, name) ?? '').includes('_projects_v12_tmp');
+      const anyBroken = ['triggers','sessions','session_space_links','memories','agent_worktrees'].some(needsFix);
+      if (!anyBroken) return;
+
+      database.pragma('foreign_keys = OFF');
+      database.pragma('legacy_alter_table = ON');
+
+      if (needsFix('triggers')) {
+        database.exec(`CREATE TABLE triggers_v34 (
+          id TEXT PRIMARY KEY,
+          project_id TEXT NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
+          kind TEXT NOT NULL CHECK(kind IN ('schedule','webhook','manual')),
+          schedule_cron TEXT,
+          playbook_id TEXT REFERENCES files(id) ON DELETE SET NULL,
+          enabled INTEGER NOT NULL DEFAULT 1,
+          next_run_at INTEGER,
+          last_run_at INTEGER,
+          created_at INTEGER NOT NULL DEFAULT (unixepoch())
+        );`);
+        database.exec(`INSERT INTO triggers_v34 (id,project_id,kind,schedule_cron,playbook_id,enabled,next_run_at,last_run_at,created_at)
+          SELECT id,project_id,kind,schedule_cron,playbook_id,enabled,next_run_at,last_run_at,created_at FROM triggers;`);
+        database.exec('DROP TABLE triggers;');
+        database.exec('ALTER TABLE triggers_v34 RENAME TO triggers;');
+        database.exec('CREATE INDEX IF NOT EXISTS idx_triggers_project ON triggers(project_id);');
+      }
+
+      if (needsFix('sessions')) {
+        database.exec(`CREATE TABLE sessions_v34 (
+          id TEXT PRIMARY KEY,
+          user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+          title TEXT,
+          effort TEXT NOT NULL DEFAULT 'medium' CHECK(effort IN ('low','medium','high')),
+          model TEXT,
+          pinned_project_id TEXT REFERENCES projects(id) ON DELETE SET NULL,
+          summary TEXT,
+          session_state TEXT,
+          provider_type TEXT,
+          provider_session_id TEXT,
+          discovered_tools TEXT NOT NULL DEFAULT '[]',
+          created_at INTEGER NOT NULL DEFAULT (unixepoch()),
+          updated_at INTEGER NOT NULL DEFAULT (unixepoch())
+        );`);
+        database.exec(`INSERT INTO sessions_v34 (id,user_id,title,effort,model,pinned_project_id,summary,session_state,provider_type,provider_session_id,discovered_tools,created_at,updated_at)
+          SELECT id,user_id,title,effort,model,pinned_project_id,summary,session_state,provider_type,provider_session_id,discovered_tools,created_at,updated_at FROM sessions;`);
+        database.exec('DROP TABLE sessions;');
+        database.exec('ALTER TABLE sessions_v34 RENAME TO sessions;');
+      }
+
+      if (needsFix('session_space_links')) {
+        database.exec(`CREATE TABLE session_space_links_v34 (
+          session_id TEXT NOT NULL REFERENCES sessions(id) ON DELETE CASCADE,
+          project_id TEXT NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
+          source TEXT NOT NULL DEFAULT 'agent' CHECK(source IN ('agent','user','system')),
+          created_at INTEGER NOT NULL DEFAULT (unixepoch()),
+          PRIMARY KEY (session_id, project_id)
+        );`);
+        database.exec(`INSERT INTO session_space_links_v34 (session_id,project_id,source,created_at)
+          SELECT session_id,project_id,source,created_at FROM session_space_links;`);
+        database.exec('DROP TABLE session_space_links;');
+        database.exec('ALTER TABLE session_space_links_v34 RENAME TO session_space_links;');
+      }
+
+      if (needsFix('memories')) {
+        database.exec(`CREATE TABLE memories_v34 (
+          id TEXT PRIMARY KEY,
+          user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+          type TEXT NOT NULL CHECK(type IN ('user','feedback','project','reference')),
+          key TEXT NOT NULL,
+          value TEXT NOT NULL,
+          project_id TEXT REFERENCES projects(id) ON DELETE SET NULL,
+          embedding BLOB,
+          created_at INTEGER NOT NULL DEFAULT (unixepoch()),
+          updated_at INTEGER NOT NULL DEFAULT (unixepoch()),
+          UNIQUE(user_id, type, key)
+        );`);
+        database.exec(`INSERT INTO memories_v34 (id,user_id,type,key,value,project_id,embedding,created_at,updated_at)
+          SELECT id,user_id,type,key,value,project_id,embedding,created_at,updated_at FROM memories;`);
+        database.exec('DROP TABLE memories;');
+        database.exec('ALTER TABLE memories_v34 RENAME TO memories;');
+      }
+
+      if (needsFix('agent_worktrees')) {
+        database.exec(`CREATE TABLE agent_worktrees_v34 (
+          id TEXT PRIMARY KEY,
+          project_id TEXT NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
+          session_id TEXT NOT NULL REFERENCES sessions(id) ON DELETE CASCADE,
+          branch TEXT NOT NULL,
+          worktree_path TEXT NOT NULL,
+          claude_session_id TEXT,
+          codex_session_id TEXT,
+          created_at INTEGER NOT NULL DEFAULT (unixepoch()),
+          UNIQUE(project_id, session_id)
+        );`);
+        database.exec(`INSERT INTO agent_worktrees_v34 (id,project_id,session_id,branch,worktree_path,claude_session_id,codex_session_id,created_at)
+          SELECT id,project_id,session_id,branch,worktree_path,claude_session_id,codex_session_id,created_at FROM agent_worktrees;`);
+        database.exec('DROP TABLE agent_worktrees;');
+        database.exec('ALTER TABLE agent_worktrees_v34 RENAME TO agent_worktrees;');
+      }
+
+      database.pragma('legacy_alter_table = OFF');
+      database.pragma('foreign_keys = ON');
+    },
+  },
+  {
+    version: 33,
+    name: 'drop_spaces',
+    noTransaction: true,
+    up: (database) => {
+      // If the projects table was already created without space_id (fresh install), nothing to do
+      const projectColsCheck = (database.prepare('PRAGMA table_info(projects)').all() as { name: string }[]).map(c => c.name);
+      const tableHasSpaces = projectColsCheck.includes('space_id');
+      const spacesTableExists = !!(database.prepare("SELECT 1 FROM sqlite_master WHERE type='table' AND name='spaces'").get());
+      if (!tableHasSpaces && !spacesTableExists) return;
+
+      database.pragma('foreign_keys = OFF');
+
+      // Step 1: Add files_path to projects if not already present
+      const projectCols = (database.prepare('PRAGMA table_info(projects)').all() as { name: string }[]).map(c => c.name);
+      if (!projectCols.includes('files_path')) {
+        database.exec("ALTER TABLE projects ADD COLUMN files_path TEXT NOT NULL DEFAULT ''");
+      }
+      // Populate files_path from existing space data
+      const projects = (database.prepare("SELECT id, space_id FROM projects WHERE space_id IS NOT NULL AND space_id != ''").all() as { id: string; space_id: string }[]);
+      const dataDir = getDataDir();
+      for (const p of projects) {
+        const fp = path.join(dataDir, 'spaces', p.space_id, 'files');
+        database.prepare('UPDATE projects SET files_path = ? WHERE id = ?').run(fp, p.id);
+      }
+
+      // Step 2: Create/recreate files table with project_id instead of space_id
+      // Handle both old 'documents' table name and already-renamed 'files' table
+      const filesCols = (database.prepare('PRAGMA table_info(files)').all() as { name: string }[]).map(c => c.name);
+      const docsCols = (database.prepare('PRAGMA table_info(documents)').all() as { name: string }[]).map(c => c.name);
+      const sourceTable = filesCols.includes('space_id') ? 'files' : (docsCols.includes('space_id') ? 'documents' : null);
+      if (sourceTable) {
+        // Ensure mime_type and tags columns exist (may be missing on old documents table)
+        const srcCols = sourceTable === 'files' ? filesCols : docsCols;
+        if (!srcCols.includes('mime_type')) database.exec(`ALTER TABLE ${sourceTable} ADD COLUMN mime_type TEXT NOT NULL DEFAULT 'text/markdown'`);
+        if (!srcCols.includes('tags')) {
+          if (srcCols.includes('frontmatter')) {
+            database.exec(`ALTER TABLE ${sourceTable} ADD COLUMN tags TEXT NOT NULL DEFAULT '{}'`);
+            database.exec(`UPDATE ${sourceTable} SET tags = frontmatter WHERE frontmatter IS NOT NULL`);
+          } else {
+            database.exec(`ALTER TABLE ${sourceTable} ADD COLUMN tags TEXT NOT NULL DEFAULT '{}'`);
+          }
+        }
+        const statusCol = srcCols.includes('status') ? 'status' : 'NULL';
+        database.exec(`CREATE TABLE _files_v33_tmp (
+          id TEXT PRIMARY KEY,
+          project_id TEXT NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
+          path TEXT NOT NULL,
+          title TEXT NOT NULL,
+          type TEXT,
+          status TEXT,
+          mime_type TEXT NOT NULL DEFAULT 'text/markdown',
+          tags TEXT NOT NULL DEFAULT '{}',
+          source_session_id TEXT REFERENCES sessions(id) ON DELETE SET NULL,
+          created_at INTEGER NOT NULL DEFAULT (unixepoch()),
+          updated_at INTEGER NOT NULL DEFAULT (unixepoch())
+        );`);
+        database.exec(`INSERT INTO _files_v33_tmp
+          SELECT id, (SELECT p.id FROM projects p WHERE p.space_id = f.space_id) as project_id,
+                 path, title, type, ${statusCol}, mime_type, tags, source_session_id, created_at, updated_at
+          FROM ${sourceTable} f
+          WHERE (SELECT p.id FROM projects p WHERE p.space_id = f.space_id) IS NOT NULL;`);
+        if (database.prepare("SELECT 1 FROM sqlite_master WHERE type='table' AND name='files'").get()) {
+          database.exec('DROP TABLE files;');
+        }
+        database.exec('DROP TABLE IF EXISTS documents;');
+        database.exec('ALTER TABLE _files_v33_tmp RENAME TO files;');
+        database.exec('CREATE INDEX IF NOT EXISTS idx_files_project_type ON files(project_id, type);');
+        database.exec('CREATE UNIQUE INDEX IF NOT EXISTS idx_files_project_path ON files(project_id, path);');
+      } else if (!filesCols.length) {
+        // No files table at all — create empty one
+        database.exec(`CREATE TABLE IF NOT EXISTS files (
+          id TEXT PRIMARY KEY,
+          project_id TEXT NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
+          path TEXT NOT NULL,
+          title TEXT NOT NULL,
+          type TEXT,
+          status TEXT,
+          mime_type TEXT NOT NULL DEFAULT 'text/markdown',
+          tags TEXT NOT NULL DEFAULT '{}',
+          source_session_id TEXT REFERENCES sessions(id) ON DELETE SET NULL,
+          created_at INTEGER NOT NULL DEFAULT (unixepoch()),
+          updated_at INTEGER NOT NULL DEFAULT (unixepoch()),
+          UNIQUE(project_id, path)
+        );`);
+        database.exec('CREATE INDEX IF NOT EXISTS idx_files_project_type ON files(project_id, type);');
+      }
+
+      // Step 3: Recreate executions table with project_id instead of space_id
+      const execCols = (database.prepare('PRAGMA table_info(executions)').all() as { name: string }[]).map(c => c.name);
+      if (execCols.includes('space_id')) {
+        database.exec(`CREATE TABLE _executions_v13_tmp (
+          id TEXT PRIMARY KEY,
+          message_id TEXT REFERENCES messages(id) ON DELETE SET NULL,
+          project_id TEXT REFERENCES projects(id) ON DELETE SET NULL,
+          tool TEXT NOT NULL,
+          status TEXT NOT NULL DEFAULT 'pending'
+            CHECK(status IN ('pending','running','done','error','awaiting_approval')),
+          output_log TEXT NOT NULL DEFAULT '',
+          result TEXT,
+          created_at INTEGER NOT NULL DEFAULT (unixepoch()),
+          completed_at INTEGER
+        );`);
+        database.exec(`INSERT INTO _executions_v13_tmp
+          SELECT id, message_id,
+                 (SELECT p.id FROM projects p WHERE p.space_id = e.space_id) as project_id,
+                 tool, status, output_log, result, created_at, completed_at
+          FROM executions e;`);
+        database.exec('DROP TABLE executions;');
+        database.exec('ALTER TABLE _executions_v13_tmp RENAME TO executions;');
+      }
+
+      // Step 4: Recreate session_events table with project_id instead of space_id
+      const evtCols = (database.prepare('PRAGMA table_info(session_events)').all() as { name: string }[]).map(c => c.name);
+      if (evtCols.includes('space_id')) {
+        database.exec(`CREATE TABLE _session_events_v13_tmp (
+          id TEXT PRIMARY KEY,
+          session_id TEXT NOT NULL REFERENCES sessions(id) ON DELETE CASCADE,
+          type TEXT NOT NULL CHECK(type IN (
+            'scope_changed','project_linked','space_linked','project_created',
+            'artifact_created','item_created','item_updated','approval_requested','approval_resolved',
+            'mcp_required','subagent_started','subagent_completed','connection_created','runtime_checkpoint'
+          )),
+          title TEXT NOT NULL,
+          body TEXT,
+          project_id TEXT REFERENCES projects(id) ON DELETE SET NULL,
+          item_id TEXT,
+          execution_id TEXT REFERENCES executions(id) ON DELETE SET NULL,
+          metadata TEXT NOT NULL DEFAULT '{}',
+          created_at INTEGER NOT NULL DEFAULT (unixepoch())
+        );`);
+        database.exec(`INSERT INTO _session_events_v13_tmp
+          SELECT id, session_id, type, title, body,
+                 (SELECT p.id FROM projects p WHERE p.space_id = se.space_id) as project_id,
+                 item_id, execution_id, metadata, created_at
+          FROM session_events se;`);
+        database.exec('DROP TABLE session_events;');
+        database.exec('ALTER TABLE _session_events_v13_tmp RENAME TO session_events;');
+        database.exec('CREATE INDEX IF NOT EXISTS idx_session_events_session_id ON session_events(session_id);');
+      }
+
+      // Step 5: Recreate projects table without space_id, with files_path
+      const projSql = tableSql(database, 'projects') ?? '';
+      if (projSql.includes('space_id')) {
+        database.exec(`CREATE TABLE _projects_v13_tmp (
+          id TEXT PRIMARY KEY,
+          user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+          name TEXT NOT NULL,
+          repo_path TEXT NOT NULL CHECK(length(repo_path) > 0),
+          files_path TEXT NOT NULL DEFAULT '',
+          default_branch TEXT,
+          origin TEXT NOT NULL CHECK(origin IN ('created','linked')),
+          description TEXT,
+          enabled_connection_ids TEXT NOT NULL DEFAULT '[]',
+          created_at INTEGER NOT NULL DEFAULT (unixepoch())
+        );`);
+        database.exec(`INSERT INTO _projects_v13_tmp (id, user_id, name, repo_path, files_path, default_branch, origin, description, enabled_connection_ids, created_at)
+          SELECT id, user_id, name, repo_path, files_path, default_branch, origin, description, enabled_connection_ids, created_at
+          FROM projects;`);
+        database.exec('DROP TABLE projects;');
+        database.exec('ALTER TABLE _projects_v13_tmp RENAME TO projects;');
+        database.exec('CREATE INDEX IF NOT EXISTS idx_projects_user ON projects(user_id);');
+      }
+
+      // Step 6: Drop spaces table
+      database.exec('DROP TABLE IF EXISTS spaces;');
+
+      database.pragma('foreign_keys = ON');
+    },
+  },
 ];
 
 function tableSql(database: Database.Database, name: string): string | undefined {
@@ -503,7 +802,7 @@ function dropPlanSystem(database: Database.Database): void {
       )),
       title TEXT NOT NULL,
       body TEXT,
-      space_id TEXT REFERENCES spaces(id) ON DELETE SET NULL,
+      project_id TEXT REFERENCES projects(id) ON DELETE SET NULL,
       item_id TEXT,
       execution_id TEXT REFERENCES executions(id) ON DELETE SET NULL,
       metadata TEXT NOT NULL DEFAULT '{}',
@@ -626,24 +925,6 @@ export function reconcileOrphanedExecutions(): void {
   }
 }
 
-export interface DbSpace {
-  id: string;
-  name: string;
-  description: string | null;
-  enabled_connection_ids: string;
-}
-
-/** @deprecated Use DbSpace */
-export type DbProject = DbSpace;
-
-export function getSpaceForUser(spaceId: string, userId: string): DbSpace | undefined {
-  return getDb()
-    .prepare('SELECT id, name, description, enabled_connection_ids FROM spaces WHERE id = ? AND user_id = ?')
-    .get(spaceId, userId) as DbSpace | undefined;
-}
-
-/** @deprecated Use getSpaceForUser */
-export const getProjectForUser = getSpaceForUser;
 
 export interface DbAgentWorktree {
   id: string;
@@ -678,14 +959,6 @@ export function updateAgentWorktreePath(id: string, worktreePath: string): void 
   getDb().prepare('UPDATE agent_worktrees SET worktree_path = ? WHERE id = ?').run(worktreePath, id);
 }
 
-export function getSpacesForUser(userId: string): DbSpace[] {
-  return getDb()
-    .prepare('SELECT id, name, description, enabled_connection_ids FROM spaces WHERE user_id = ?')
-    .all(userId) as DbSpace[];
-}
-
-/** @deprecated Use getSpacesForUser */
-export const getProjectsForUser = getSpacesForUser;
 
 export type SessionEventType =
   | 'scope_changed'
@@ -709,7 +982,7 @@ export interface DbSessionEvent {
   type: SessionEventType;
   title: string;
   body: string | null;
-  space_id: string | null;
+  project_id: string | null;
   item_id: string | null;
   execution_id: string | null;
   metadata: string;
@@ -721,7 +994,7 @@ export function createSessionEvent(input: {
   type: SessionEventType;
   title: string;
   body?: string | null;
-  spaceId?: string | null;
+  projectId?: string | null;
   itemId?: string | null;
   executionId?: string | null;
   metadata?: Record<string, unknown>;
@@ -729,7 +1002,7 @@ export function createSessionEvent(input: {
   const id = newId();
   getDb()
     .prepare(`
-      INSERT INTO session_events (id, session_id, type, title, body, space_id, item_id, execution_id, metadata)
+      INSERT INTO session_events (id, session_id, type, title, body, project_id, item_id, execution_id, metadata)
       VALUES (?,?,?,?,?,?,?,?,?)
     `)
     .run(
@@ -738,7 +1011,7 @@ export function createSessionEvent(input: {
       input.type,
       input.title,
       input.body ?? null,
-      input.spaceId ?? null,
+      input.projectId ?? null,
       input.itemId ?? null,
       input.executionId ?? null,
       JSON.stringify(input.metadata ?? {}),
@@ -768,7 +1041,16 @@ export function linkSessionProject(
   return result.changes > 0;
 }
 
-export function getSessionProjectLinks(sessionId: string): Array<DbSpace & { source: 'agent' | 'user' | 'system'; linked_at: number }> {
+export interface DbSessionProjectLink {
+  id: string;
+  name: string;
+  description: string | null;
+  enabled_connection_ids: string;
+  source: 'agent' | 'user' | 'system';
+  linked_at: number;
+}
+
+export function getSessionProjectLinks(sessionId: string): DbSessionProjectLink[] {
   return getDb()
     .prepare(`
       SELECT p.id, p.name, p.description, p.enabled_connection_ids,
@@ -778,7 +1060,7 @@ export function getSessionProjectLinks(sessionId: string): Array<DbSpace & { sou
       WHERE l.session_id = ?
       ORDER BY l.created_at ASC
     `)
-    .all(sessionId) as Array<DbSpace & { source: 'agent' | 'user' | 'system'; linked_at: number }>;
+    .all(sessionId) as DbSessionProjectLink[];
 }
 
 export interface DbProjectRecord {
@@ -787,13 +1069,13 @@ export interface DbProjectRecord {
   description: string | null;
   enabled_connection_ids: string;
   user_id: string;
-  space_id: string;
   repo_path: string;
+  files_path: string;
 }
 
 export function getProjectByIdForUser(projectId: string, userId: string): DbProjectRecord | undefined {
   return getDb()
-    .prepare('SELECT id, name, description, enabled_connection_ids, user_id, space_id, repo_path FROM projects WHERE id = ? AND user_id = ?')
+    .prepare('SELECT id, name, description, enabled_connection_ids, user_id, repo_path, files_path FROM projects WHERE id = ? AND user_id = ?')
     .get(projectId, userId) as DbProjectRecord | undefined;
 }
 
@@ -864,7 +1146,7 @@ export function getDailyUsage(userId: string, tool: AgentUsageTool): number {
 
 export interface DbPlan {
   id: string;
-  space_id: string;
+  project_id: string;
   session_id: string | null;
   title: string;
   status: 'running' | 'done' | 'error' | 'cancelled';
@@ -889,7 +1171,7 @@ export interface DbPlanStep {
 
 export interface DbPipeline {
   id: string;
-  space_id: string;
+  project_id: string;
   title: string;
   description: string | null;
   created_at: number;
@@ -908,7 +1190,7 @@ export interface DbPipelineTask {
 }
 
 export function createPlan(
-  spaceId: string,
+  projectId: string,
   sessionId: string | null,
   title: string,
   steps: Array<{
@@ -923,7 +1205,7 @@ export function createPlan(
     const id = newId();
     getDb()
       .prepare('INSERT INTO plans (id, space_id, session_id, title) VALUES (?,?,?,?)')
-      .run(id, spaceId, sessionId, title);
+      .run(id, projectId, sessionId, title);
     const stepIds = steps.map(() => newId());
     const insertStep = getDb().prepare(
       'INSERT INTO plan_steps (id, plan_id, title, agent, position, prompt, depends_on, tool_args) VALUES (?,?,?,?,?,?,?,?)'

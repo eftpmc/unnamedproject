@@ -78,7 +78,7 @@ export interface Execution {
 
 export interface LibraryFile {
   id: string;
-  space_id: string;
+  project_id: string;
   path: string;
   title: string;
   type: string | null;
@@ -96,10 +96,10 @@ export interface LibraryFileWithBody extends LibraryFile {
 
 export interface Project {
   id: string;
-  space_id: string; // internal — used for FS paths; not surfaced in UI
   user_id: string;
   name: string;
   repo_path: string;
+  files_path: string;
   default_branch: string | null;
   origin: 'created' | 'linked';
   created_at: number;

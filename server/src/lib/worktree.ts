@@ -33,7 +33,7 @@ export async function ensureWorktree(repoItem: WorktreeRepoItem, sessionId: stri
   }
 
   const git = simpleGit(repoPath);
-  await ensureInitialCommit(git);
+  await ensureInitialCommit(git, repoPath);
 
   const branch = existing?.branch ?? `agent/${sessionId}`;
   // Must be absolute: simple-git runs with cwd=repoItem.repo_path, so a relative
@@ -61,7 +61,24 @@ export async function ensureWorktree(repoItem: WorktreeRepoItem, sessionId: stri
   return createAgentWorktree(repoItem.id, sessionId, branch, worktreePath);
 }
 
-async function ensureInitialCommit(git: ReturnType<typeof simpleGit>): Promise<void> {
+async function ensureInitialCommit(git: ReturnType<typeof simpleGit>, repoPath: string): Promise<void> {
+  // Check whether this directory owns its own .git, not just inherits one from
+  // a parent. If the project dir sits inside another git repo (e.g. the app's
+  // own working tree), git rev-parse HEAD would succeed against the outer repo
+  // and git_op would silently operate on the wrong codebase.
+  const gitEntry = path.join(repoPath, '.git');
+  let hasOwnGit = false;
+  try {
+    await fs.access(gitEntry);
+    hasOwnGit = true;
+  } catch { /* no .git here */ }
+
+  if (!hasOwnGit) {
+    await git.init();
+    await git.raw(['commit', '--allow-empty', '-m', 'Initial commit']);
+    return;
+  }
+
   try {
     await git.raw(['rev-parse', 'HEAD']);
   } catch {

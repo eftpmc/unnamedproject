@@ -2,7 +2,6 @@ import path from 'path';
 import fs from 'fs/promises';
 import { Router } from 'express';
 import { getDb } from '../db/index.js';
-import { newId } from '../lib/ids.js';
 import { requireAuthHeaderOrQuery, type AuthedRequest } from '../middleware/auth.js';
 import { listProjectsForUser, getProjectForUser, createProject, linkProject, deleteProject } from '../services/projects.js';
 import { listFiles } from '../services/files.js';
@@ -37,23 +36,9 @@ router.post('/', async (req, res) => {
     return;
   }
 
-  // Create a backing space (internal — not exposed in the API)
-  const spaceId = newId();
-  getDb().prepare(
-    'INSERT INTO spaces (id, user_id, name, description, enabled_connection_ids) VALUES (?, ?, ?, NULL, ?)',
-  ).run(spaceId, userId, name.trim(), '[]');
-
-  let project;
-  try {
-    project = repo_path
-      ? linkProject({ space_id: spaceId, name: name.trim(), repo_path, default_branch })
-      : await createProject({ space_id: spaceId, name: name.trim() });
-    // Stamp user_id/description/enabled_connection_ids directly on the project row
-    getDb().prepare("UPDATE projects SET user_id = ?, enabled_connection_ids = '[]' WHERE id = ?").run(userId, project.id);
-  } catch (err) {
-    getDb().prepare('DELETE FROM spaces WHERE id = ?').run(spaceId);
-    throw err;
-  }
+  const project = repo_path
+    ? linkProject({ name: name.trim(), user_id: userId, repo_path, default_branch })
+    : await createProject({ name: name.trim(), user_id: userId });
 
   const created = getProjectForUser(project.id, userId)!;
   // Fire-and-forget — don't block the response
@@ -93,16 +78,6 @@ router.patch('/:id', (req, res) => {
   if (fields.length > 0) {
     values.push(project.id);
     getDb().prepare(`UPDATE projects SET ${fields.join(', ')} WHERE id = ?`).run(...values);
-    // Keep spaces table in sync (used internally for FS paths and legacy FKs)
-    const spaceFields: string[] = [];
-    const spaceValues: unknown[] = [];
-    if (name?.trim()) { spaceFields.push('name = ?'); spaceValues.push(name.trim()); }
-    if (description !== undefined) { spaceFields.push('description = ?'); spaceValues.push(description); }
-    if (enabled_connection_ids !== undefined) { spaceFields.push('enabled_connection_ids = ?'); spaceValues.push(JSON.stringify(enabled_connection_ids)); }
-    if (spaceFields.length > 0) {
-      spaceValues.push(project.space_id);
-      getDb().prepare(`UPDATE spaces SET ${spaceFields.join(', ')} WHERE id = ?`).run(...spaceValues);
-    }
   }
 
   res.json(getProjectForUser(req.params.id, userId));
@@ -113,7 +88,6 @@ router.delete('/:id', (req, res) => {
   const project = getProjectForUser(req.params.id, userId);
   if (!project) { res.status(404).json({ error: 'Project not found' }); return; }
   deleteProject(project.id);
-  getDb().prepare('DELETE FROM spaces WHERE id = ?').run(project.space_id);
   res.status(204).end();
 });
 
@@ -123,7 +97,7 @@ router.get('/:id/files', (req, res) => {
   const project = getProjectForUser(req.params.id, userId);
   if (!project) { res.status(404).json({ error: 'Project not found' }); return; }
   const { type } = req.query as Record<string, string>;
-  const files = listFiles(project.space_id, type ? { type } : undefined);
+  const files = listFiles(project.id, type ? { type } : undefined);
   res.json(files);
 });
 

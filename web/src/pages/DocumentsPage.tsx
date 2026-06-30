@@ -471,7 +471,7 @@ export default function DocumentsPage() {
   const isLoading = docsLoading || projectsLoading;
 
   const projectDocs = selectedProject
-    ? documents.filter(d => d.space_id === selectedProject.space_id)
+    ? documents.filter(d => d.project_id === selectedProject.id)
     : [];
 
   function openPreview(id: string) { setPreviewDocId(id); }
@@ -502,7 +502,7 @@ export default function DocumentsPage() {
                   <ProjectCard
                     key={project.id}
                     project={project}
-                    docCount={documents.filter(d => d.space_id === project.space_id).length}
+                    docCount={documents.filter(d => d.project_id === project.id).length}
                     onClick={() => setSelectedProject(project)}
                   />
                 ))}

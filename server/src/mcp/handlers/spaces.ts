@@ -1,8 +1,7 @@
 import { registerTool } from '../registry.js';
 import { getDb, createSessionEvent } from '../../db/index.js';
 import { broadcast } from '../../services/socket.js';
-import { newId } from '../../lib/ids.js';
-import { listProjectsForUser, getProjectForUser } from '../../services/projects.js';
+import { listProjectsForUser, getProjectForUser, createProject } from '../../services/projects.js';
 
 export function registerSpaceHandlers(): void {
   registerTool({
@@ -27,18 +26,14 @@ export function registerSpaceHandlers(): void {
       required: ['name'],
     },
     handler: async (args, userId) => {
-      const spaceId = newId();
-      const projectId = newId();
-      getDb()
-        .prepare('INSERT INTO spaces (id, user_id, name, description, enabled_connection_ids) VALUES (?,?,?,?,?)')
-        .run(spaceId, userId, args.name as string, (args.description as string | undefined) ?? null, '[]');
-      getDb()
-        .prepare('INSERT INTO projects (id, space_id, user_id, name, repo_path, default_branch, origin, description, enabled_connection_ids, created_at) VALUES (?,?,?,?,?,NULL,?,?,?,?)')
-        .run(projectId, spaceId, userId, args.name as string, '', 'created', (args.description as string | undefined) ?? null, '[]', Math.floor(Date.now() / 1000));
-      const project = getDb()
+      const project = await createProject({ name: args.name as string, user_id: userId });
+      if (args.description) {
+        getDb().prepare('UPDATE projects SET description = ? WHERE id = ?').run(args.description as string, project.id);
+      }
+      const result = getDb()
         .prepare('SELECT id, name, description FROM projects WHERE id = ?')
-        .get(projectId) as { id: string; name: string; description: string | null } | undefined;
-      return project ? JSON.stringify(project) : 'Error: failed to create project';
+        .get(project.id) as { id: string; name: string; description: string | null } | undefined;
+      return result ? JSON.stringify(result) : 'Error: failed to create project';
     },
   });
 
@@ -63,7 +58,6 @@ export function registerSpaceHandlers(): void {
       if (args.description !== undefined) { fields.push('description = ?'); values.push(args.description); }
       if (fields.length > 0) {
         getDb().prepare(`UPDATE projects SET ${fields.join(', ')} WHERE id = ?`).run(...values, project.id);
-        getDb().prepare(`UPDATE spaces SET ${fields.join(', ')} WHERE id = ?`).run(...values, project.space_id);
       }
       return `Project '${(args.name as string | undefined) ?? project.name}' updated`;
     },
@@ -91,7 +85,7 @@ export function registerSpaceHandlers(): void {
         sessionId,
         type: 'scope_changed',
         title,
-        spaceId: project?.id ?? null,
+        projectId: project?.id ?? null,
         metadata: { source: 'agent' },
       });
       broadcast(userId, {
@@ -153,15 +147,8 @@ export function registerSpaceHandlers(): void {
     description: 'Deprecated alias for create_project',
     inputSchema: { type: 'object', properties: { name: { type: 'string' } }, required: ['name'] },
     handler: async (args, userId) => {
-      const spaceId = newId();
-      const projectId = newId();
-      getDb()
-        .prepare('INSERT INTO spaces (id, user_id, name, description, enabled_connection_ids) VALUES (?,?,?,?,?)')
-        .run(spaceId, userId, args.name as string, null, '[]');
-      getDb()
-        .prepare('INSERT INTO projects (id, space_id, user_id, name, repo_path, default_branch, origin, enabled_connection_ids, created_at) VALUES (?,?,?,?,?,NULL,?,?,?)')
-        .run(projectId, spaceId, userId, args.name as string, '', 'created', '[]', Math.floor(Date.now() / 1000));
-      return JSON.stringify({ id: projectId, name: args.name as string });
+      const project = await createProject({ name: args.name as string, user_id: userId });
+      return JSON.stringify({ id: project.id, name: project.name });
     },
   });
 }

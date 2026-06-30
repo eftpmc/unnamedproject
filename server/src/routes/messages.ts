@@ -104,7 +104,7 @@ router.get('/:sessionId/messages', (req, res) => {
       SELECT e.id as executionId, e.message_id as messageId, e.tool, e.status, e.output_log as outputLog,
              e.result, e.created_at as createdAt, p.name as projectName, a.id as approvalId, a.action
       FROM executions e
-      LEFT JOIN projects p ON p.space_id = e.space_id
+      LEFT JOIN projects p ON p.id = e.project_id
       LEFT JOIN approvals a ON a.execution_id = e.id AND a.status = 'pending'
       WHERE e.message_id IN (${messages.map(() => '?').join(',') || "''"})
       ORDER BY e.created_at
@@ -156,16 +156,16 @@ router.post('/:sessionId/messages', upload.array('attachments', MAX_UPLOADS), as
     .get(req.params.sessionId, userId);
   if (!session) { res.status(404).json({ error: 'Session not found' }); return; }
 
-  let spaceId: string | null = null;
+  let projectId: string | null = null;
   if (files.length > 0) {
     const row = getDb()
-      .prepare('SELECT p.space_id FROM sessions s JOIN projects p ON p.id = s.pinned_project_id WHERE s.id = ? AND s.user_id = ?')
-      .get(req.params.sessionId, userId) as { space_id: string } | undefined;
+      .prepare('SELECT p.id as project_id FROM sessions s JOIN projects p ON p.id = s.pinned_project_id WHERE s.id = ? AND s.user_id = ?')
+      .get(req.params.sessionId, userId) as { project_id: string } | undefined;
     if (!row) {
       res.status(400).json({ error: 'Pin a project to this chat before uploading files.' });
       return;
     }
-    spaceId = row.space_id;
+    projectId = row.project_id;
   }
 
   const messageId = newId();
@@ -174,7 +174,7 @@ router.post('/:sessionId/messages', upload.array('attachments', MAX_UPLOADS), as
     .run(messageId, req.params.sessionId, 'user', content?.trim() ?? '');
 
   const savedUploads: UploadedDoc[] = [];
-  if (files.length && spaceId) {
+  if (files.length && projectId) {
     for (const file of files) {
       const filename = sanitizeFilename(file.originalname);
       const title = path.basename(filename, path.extname(filename));
@@ -183,7 +183,7 @@ router.post('/:sessionId/messages', upload.array('attachments', MAX_UPLOADS), as
       let docPath = filename;
       let counter = 2;
       const stem = filename.slice(0, filename.length - ext.length);
-      while (getDb().prepare('SELECT id FROM files WHERE space_id = ? AND path = ?').get(spaceId, docPath)) {
+      while (getDb().prepare('SELECT id FROM files WHERE project_id = ? AND path = ?').get(projectId, docPath)) {
         docPath = `${stem}-${counter}${ext}`;
         counter++;
       }
@@ -191,7 +191,7 @@ router.post('/:sessionId/messages', upload.array('attachments', MAX_UPLOADS), as
       let doc;
       if (isText(mimeType)) {
         doc = await writeFile({
-          space_id: spaceId,
+          project_id: projectId,
           path: docPath,
           title,
           body: file.buffer.toString('utf-8'),
@@ -199,7 +199,7 @@ router.post('/:sessionId/messages', upload.array('attachments', MAX_UPLOADS), as
         });
       } else {
         doc = await writeBinaryFile({
-          space_id: spaceId,
+          project_id: projectId,
           path: docPath,
           title,
           mime_type: mimeType,

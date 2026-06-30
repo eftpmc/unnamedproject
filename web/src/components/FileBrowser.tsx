@@ -1,4 +1,5 @@
 import { useMemo, useState } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
@@ -11,6 +12,7 @@ import {
   deleteFileById, getFileById, getFileContentUrl, getProjectFiles, updateFileById,
 } from '../lib/api.js';
 import { timeAgo } from '../lib/utils.js';
+import { MARKDOWN_PROSE_CLASS } from '../lib/prose.js';
 import { EmptyPanel } from '@/components/ui/app-layout';
 import { Button } from '@/components/ui/button';
 import { ConfirmDialog } from '@/components/ui/confirm-dialog';
@@ -98,10 +100,6 @@ function uniqueMimeTypes(files: LibraryFile[]): { mime: string; label: string }[
   }
   return [...seen.entries()].map(([mime, label]) => ({ mime, label })).sort((a, b) => a.label.localeCompare(b.label));
 }
-
-// ─── markdown prose styles ───────────────────────────────────────────────────
-
-const PROSE = 'text-[14px] leading-relaxed text-fg-soft [&_a]:text-primary [&_a]:underline-offset-2 [&_a:hover]:underline [&_blockquote]:border-l-2 [&_blockquote]:border-border [&_blockquote]:pl-3 [&_blockquote]:text-muted-foreground [&_code]:rounded [&_code]:bg-muted [&_code]:px-1.5 [&_code]:py-0.5 [&_code]:font-mono [&_code]:text-[13px] [&_h1:first-child]:mt-0 [&_h1]:mb-3 [&_h1]:mt-5 [&_h1]:text-lg [&_h1]:font-semibold [&_h1]:text-foreground [&_h2]:mb-2 [&_h2]:mt-4 [&_h2]:text-base [&_h2]:font-semibold [&_h2]:text-foreground [&_h3]:mb-2 [&_h3]:mt-3 [&_h3]:text-sm [&_h3]:font-semibold [&_h3]:text-foreground [&_hr]:my-5 [&_hr]:border-border-soft [&_li]:mb-1 [&_ol]:mb-3 [&_ol]:ml-5 [&_ol]:list-decimal [&_p:last-child]:mb-0 [&_p]:mb-3 [&_pre_code]:bg-transparent [&_pre_code]:p-0 [&_pre]:my-3 [&_pre]:overflow-x-auto [&_pre]:rounded-lg [&_pre]:border [&_pre]:border-border-soft [&_pre]:bg-muted/30 [&_pre]:p-3 [&_pre]:font-mono [&_pre]:text-[12px] [&_table]:my-3 [&_table]:w-full [&_table]:border-collapse [&_td]:border [&_td]:border-border-soft [&_td]:px-2 [&_td]:py-1 [&_th]:border [&_th]:border-border-soft [&_th]:bg-muted/30 [&_th]:px-2 [&_th]:py-1 [&_th]:text-left [&_ul]:mb-3 [&_ul]:ml-5 [&_ul]:list-disc';
 
 // ─── preview modal ───────────────────────────────────────────────────────────
 
@@ -217,7 +215,7 @@ function FilePreviewModal({
                 </div>
               </div>
             ) : isMd && data.body !== null ? (
-              <div className={`h-full overflow-auto px-8 py-6 ${PROSE}`}>
+              <div className={`h-full overflow-auto px-8 py-6 ${MARKDOWN_PROSE_CLASS}`}>
                 <ReactMarkdown remarkPlugins={[remarkGfm]} rehypePlugins={[rehypeHighlight]}>{data.body}</ReactMarkdown>
               </div>
             ) : isText && data.body !== null ? (
@@ -321,6 +319,7 @@ function FileCard({ file, onClick }: { file: LibraryFile; onClick: () => void })
 export interface FileBrowserProps {
   projectId: string;
   projectName?: string;
+  files?: LibraryFile[];
   canEdit?: boolean;
   canDelete?: boolean;
 }
@@ -341,19 +340,27 @@ function sortFiles(files: LibraryFile[], key: SortKey): LibraryFile[] {
   });
 }
 
-export default function FileBrowser({ projectId, projectName = 'Files', canEdit, canDelete }: FileBrowserProps) {
-  const [dirPath, setDirPath] = useState('');
+function normalizeFolderPath(path: string): string {
+  const normalized = path.split('/').filter(Boolean).join('/');
+  return normalized ? `${normalized}/` : '';
+}
+
+export default function FileBrowser({ projectId, projectName = 'Files', files: providedFiles, canEdit, canDelete }: FileBrowserProps) {
+  const [searchParams, setSearchParams] = useSearchParams();
   const [previewFile, setPreviewFile] = useState<LibraryFile | null>(null);
   const [search, setSearch] = useState('');
   const [filterMime, setFilterMime] = useState(ALL_TYPES);
   const [sortKey, setSortKey] = useState<SortKey>('name-asc');
   const [displayMode, setDisplayMode] = useState<DisplayMode>('list');
+  const dirPath = normalizeFolderPath(searchParams.get('folder') ?? '');
 
-  const { data: projectFiles = [], isLoading } = useQuery({
+  const { data: fetchedFiles = [], isLoading } = useQuery({
     queryKey: ['files', projectId],
     queryFn: () => getProjectFiles(projectId),
     staleTime: 30_000,
+    enabled: !providedFiles,
   });
+  const projectFiles = providedFiles ?? fetchedFiles;
 
   const mimeOptions = useMemo(() => uniqueMimeTypes(projectFiles), [projectFiles]);
   const isSearching = search.trim() !== '' || filterMime !== ALL_TYPES;
@@ -374,6 +381,14 @@ export default function FileBrowser({ projectId, projectName = 'Files', canEdit,
 
   const isEmpty = !isLoading && folders.length === 0 && files.length === 0;
   const breadcrumbs = dirPath ? dirPath.split('/').filter(Boolean) : [];
+
+  function setDirPath(path: string) {
+    const next = new URLSearchParams(searchParams);
+    const normalized = normalizeFolderPath(path);
+    if (normalized) next.set('folder', normalized);
+    else next.delete('folder');
+    setSearchParams(next, { replace: false });
+  }
 
   function crumbTo(index: number) {
     if (index < 0) { setDirPath(''); return; }

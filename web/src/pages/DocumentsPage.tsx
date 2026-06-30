@@ -97,6 +97,7 @@ export default function DocumentsPage() {
             <FileBrowser
               projectId={selectedProject.id}
               projectName={selectedProject.name}
+              files={documents.filter(d => d.project_id === selectedProject.id)}
               canEdit
               canDelete
             />

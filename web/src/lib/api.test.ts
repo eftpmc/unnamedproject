@@ -101,10 +101,10 @@ describe('Top-level API functions', () => {
   });
 
   describe('getAllFiles', () => {
-    it('calls GET /documents', async () => {
+    it('calls GET /files', async () => {
       mockFetch.mockResolvedValueOnce(mockResponse([]));
       await getAllFiles();
-      expect(mockFetch).toHaveBeenCalledWith('/documents', expect.anything());
+      expect(mockFetch).toHaveBeenCalledWith('/files', expect.anything());
     });
   });
 

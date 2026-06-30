@@ -12,7 +12,7 @@ import {
   Layers,
   MessageSquare,
   KeyRound,
-  Palette,
+
   Plug,
   Search,
   Settings,
@@ -124,7 +124,7 @@ function GlobalNav({ expanded, pathname, onNavigate }: { expanded: boolean; path
         <NavSubItem label="Workspace" href="/settings/workspace" active={pathname === '/settings/workspace'} icon={<FolderOpen size={13} strokeWidth={1.75} />} onNavigate={onNavigate} />
         <NavSubItem label="Memory" href="/settings/memory" active={pathname === '/settings/memory'} icon={<Database size={13} strokeWidth={1.75} />} onNavigate={onNavigate} />
         <NavSubItem label="Vault" href="/settings/vault" active={pathname === '/settings/vault'} icon={<KeyRound size={13} strokeWidth={1.75} />} onNavigate={onNavigate} />
-        <NavSubItem label="Appearance" href="/settings/appearance" active={pathname === '/settings/appearance'} icon={<Palette size={13} strokeWidth={1.75} />} onNavigate={onNavigate} />
+
       </NavGroup>
     </>
   );

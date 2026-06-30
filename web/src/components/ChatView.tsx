@@ -357,10 +357,12 @@ export default function ChatView({ chatId }: ChatViewProps) {
     ]);
     if (scopedTypes.has(event.type)) {
       const eventSessionId = typeof event.sessionId === 'string' ? event.sessionId : null;
-      // approval_requested with null sessionId may still belong to this chat (tool ran without
-      // a message context); don't drop it — the handler below will decide what to do with it.
+      // approval_requested and execution_update with null sessionId may belong to this chat
+      // (tool ran without a message context, e.g. git_op with no messageId). Let them through —
+      // the handlers below guard with msgId checks and orphan lookups so unrecognized executions
+      // are no-ops. Dropping execution_update here leaves orphan approvals permanently stuck.
       if (eventSessionId !== null && eventSessionId !== chatId) return;
-      if (eventSessionId === null && event.type !== 'approval_requested') return;
+      if (eventSessionId === null && event.type !== 'approval_requested' && event.type !== 'execution_update') return;
     }
 
     if (event.type === 'agent_error') {

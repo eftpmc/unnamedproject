@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { Check, Copy, Eye, EyeOff, KeyRound, Moon, Play, Plus, Sun, Trash2, Upload } from 'lucide-react';
+import { Check, Copy, Eye, EyeOff, KeyRound, Play, Plus, Trash2, Upload } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
@@ -43,13 +43,10 @@ import {
 } from '../lib/api.js';
 import type { VaultEntry } from '../lib/api.js';
 import { usePageTitle } from '../lib/usePageTitle.js';
-import { useTheme } from '../lib/useTheme.js';
-import { useAccent } from '../lib/useAccent.js';
-import { ACCENT_PRESETS, DEFAULT_ACCENT } from '../lib/accent.js';
 import type { AgentProvider, Connection, GoogleAccount, Memory, PermissionProfile, Project, ScheduledTask, UserSettings } from '../types.js';
 
-type Section = 'tools' | 'mcp' | 'connections' | 'workspace' | 'memory' | 'vault' | 'appearance';
-const SETTINGS_SECTIONS: Section[] = ['tools', 'mcp', 'connections', 'workspace', 'memory', 'vault', 'appearance'];
+type Section = 'tools' | 'mcp' | 'connections' | 'workspace' | 'memory' | 'vault';
+const SETTINGS_SECTIONS: Section[] = ['tools', 'mcp', 'connections', 'workspace', 'memory', 'vault'];
 const SECTION_TITLES: Record<Section, string> = {
   tools: 'Tools',
   mcp: 'MCP',
@@ -57,7 +54,6 @@ const SECTION_TITLES: Record<Section, string> = {
   workspace: 'Workspace',
   memory: 'Memory',
   vault: 'Vault',
-  appearance: 'Appearance',
 };
 
 type SetupKind = 'claude_code' | 'codex' | 'mcp';
@@ -628,73 +624,6 @@ function VaultSection() {
   );
 }
 
-function AppearanceSection() {
-  const { theme, toggleTheme } = useTheme();
-  const { accent, setAccent } = useAccent();
-  const isDark = theme === 'unnamed-dark';
-  const isCustom = !ACCENT_PRESETS.some(p => p.h === accent.h && p.c === accent.c);
-
-  return (
-    <>
-      <SettingRow>
-        <div>
-          <div className="text-sm font-medium text-foreground">Theme</div>
-          <div className="mt-0.5 text-xs text-muted-foreground">Switch between light and dark mode.</div>
-        </div>
-        <Button variant="outline" size="sm" onClick={toggleTheme}>
-          {isDark ? <Sun size={14} className="mr-1.5" /> : <Moon size={14} className="mr-1.5" />}
-          {isDark ? 'Light mode' : 'Dark mode'}
-        </Button>
-      </SettingRow>
-      <div className="rounded-lg border border-border-soft bg-card p-4">
-        <div className="text-sm font-medium text-foreground">Accent</div>
-        <div className="mt-0.5 text-xs text-muted-foreground">Pick a preset or a custom hue. Applies instantly.</div>
-        <div className="mt-3 flex flex-wrap items-center gap-2">
-          {ACCENT_PRESETS.map(preset => {
-            const active = !isCustom && accent.h === preset.h && accent.c === preset.c;
-            return (
-              <button
-                key={preset.name}
-                type="button"
-                title={preset.name}
-                onClick={() => setAccent({ h: preset.h, c: preset.c })}
-                className={cn(
-                  'size-7 shrink-0 rounded-full ring-offset-2 ring-offset-card transition-all',
-                  active ? 'ring-2 ring-foreground' : 'hover:ring-2 hover:ring-border',
-                )}
-                style={{ backgroundColor: `oklch(0.6 ${preset.c} ${preset.h})` }}
-              >
-                {active && <Check size={14} className="mx-auto text-white drop-shadow" strokeWidth={3} />}
-              </button>
-            );
-          })}
-          <button
-            type="button"
-            title="Custom hue"
-            onClick={() => { if (!isCustom) setAccent({ h: accent.h, c: DEFAULT_ACCENT.c }); }}
-            className={cn(
-              'flex size-7 shrink-0 items-center justify-center rounded-full border-2 transition-all',
-              isCustom ? 'border-foreground' : 'border-dashed border-border hover:border-muted-foreground',
-            )}
-            style={isCustom ? { backgroundColor: `oklch(0.6 ${accent.c} ${accent.h})` } : undefined}
-          >
-            {!isCustom && <Plus size={14} className="text-muted-foreground" />}
-          </button>
-        </div>
-        {isCustom && (
-          <input
-            type="range"
-            min={0}
-            max={360}
-            value={accent.h}
-            onChange={e => setAccent({ h: Number(e.target.value), c: accent.c })}
-            className="mt-3 w-full"
-          />
-        )}
-      </div>
-    </>
-  );
-}
 
 function SettingRowInfo({ title, description, mono }: { title: string; description?: string; mono?: boolean }) {
   return (
@@ -1332,13 +1261,6 @@ export default function Settings() {
 
           {/* ── Vault ──────────────────────────────────── */}
           {section === 'vault' && <VaultSection />}
-
-          {/* ── Appearance ─────────────────────────────── */}
-          {section === 'appearance' && (
-            <div className="flex flex-col gap-3">
-              <AppearanceSection />
-            </div>
-          )}
 
           </div>
         </ContentColumn>

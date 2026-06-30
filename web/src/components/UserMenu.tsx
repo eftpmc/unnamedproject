@@ -1,12 +1,15 @@
 import { useNavigate } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
-import { ChevronDown, LogOut, Moon, QrCode, Sun } from 'lucide-react';
+import { Check, ChevronDown, LogOut, Moon, Plus, QrCode, Sun } from 'lucide-react';
 import { QRCodeSVG } from 'qrcode.react';
 import { useState } from 'react';
 import { getMe } from '../lib/api.js';
 import { clearToken, getToken } from '../lib/auth.js';
 import { useTheme } from '../lib/useTheme.js';
+import { useAccent } from '../lib/useAccent.js';
+import { ACCENT_PRESETS, DEFAULT_ACCENT } from '../lib/accent.js';
 import { useLanguage, useTimezone, LANGUAGES, TIMEZONES } from '../lib/useLocale.js';
+import { cn } from '../lib/utils.js';
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import {
   DropdownMenu,
@@ -29,9 +32,11 @@ export default function UserMenu() {
   const { timezone, setTimezone } = useTimezone();
   const { data: me } = useQuery({ queryKey: ['me'], queryFn: getMe, staleTime: Infinity });
 
+  const { accent, setAccent } = useAccent();
   const initial = me?.email?.[0]?.toUpperCase() ?? 'U';
   const label = me?.email?.split('@')[0] ?? '…';
   const isDark = theme === 'unnamed-dark';
+  const isCustomAccent = !ACCENT_PRESETS.some(p => p.h === accent.h && p.c === accent.c);
   const currentLanguage = LANGUAGES.find(l => l.value === language)?.label ?? language;
   const currentTimezone = TIMEZONES.find(tz => tz.value === timezone)?.label ?? timezone;
   const qrValue = JSON.stringify({
@@ -68,7 +73,7 @@ export default function UserMenu() {
                 {isDark ? 'Dark' : 'Light'}
               </span>
             </DropdownMenuSubTrigger>
-            <DropdownMenuSubContent className="w-40">
+            <DropdownMenuSubContent className="w-56">
               <DropdownMenuRadioGroup
                 value={theme}
                 onValueChange={value => {
@@ -84,6 +89,52 @@ export default function UserMenu() {
                   Dark
                 </DropdownMenuRadioItem>
               </DropdownMenuRadioGroup>
+              <DropdownMenuSeparator />
+              <div className="px-2 py-1.5">
+                <div className="mb-2 text-[11px] font-medium text-muted-foreground">Accent</div>
+                <div className="flex flex-wrap gap-1.5">
+                  {ACCENT_PRESETS.map(preset => {
+                    const active = !isCustomAccent && accent.h === preset.h && accent.c === preset.c;
+                    return (
+                      <button
+                        key={preset.name}
+                        type="button"
+                        title={preset.name}
+                        onClick={() => setAccent({ h: preset.h, c: preset.c })}
+                        className={cn(
+                          'size-6 shrink-0 rounded-full ring-offset-1 ring-offset-popover transition-all',
+                          active ? 'ring-2 ring-foreground' : 'hover:ring-2 hover:ring-border',
+                        )}
+                        style={{ backgroundColor: `oklch(0.6 ${preset.c} ${preset.h})` }}
+                      >
+                        {active && <Check size={10} className="mx-auto text-white drop-shadow" strokeWidth={3} />}
+                      </button>
+                    );
+                  })}
+                  <button
+                    type="button"
+                    title="Custom hue"
+                    onClick={() => { if (!isCustomAccent) setAccent({ h: accent.h, c: DEFAULT_ACCENT.c }); }}
+                    className={cn(
+                      'flex size-6 shrink-0 items-center justify-center rounded-full border-2 transition-all',
+                      isCustomAccent ? 'border-foreground' : 'border-dashed border-border hover:border-muted-foreground',
+                    )}
+                    style={isCustomAccent ? { backgroundColor: `oklch(0.6 ${accent.c} ${accent.h})` } : undefined}
+                  >
+                    {!isCustomAccent && <Plus size={10} className="text-muted-foreground" />}
+                  </button>
+                </div>
+                {isCustomAccent && (
+                  <input
+                    type="range"
+                    min={0}
+                    max={360}
+                    value={accent.h}
+                    onChange={e => setAccent({ h: Number(e.target.value), c: accent.c })}
+                    className="mt-2 w-full"
+                  />
+                )}
+              </div>
             </DropdownMenuSubContent>
           </DropdownMenuSub>
 

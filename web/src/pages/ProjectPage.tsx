@@ -58,7 +58,7 @@ export default function ProjectPage() {
         />
         <PageBody className="px-4 pt-5 sm:px-8 sm:pt-9">
           <ContentColumn className="max-w-7xl">
-            <FileBrowser projectId={project.id} projectName={project.name} />
+            <FileBrowser projectId={project.id} projectName={project.name} canEdit canDelete />
           </ContentColumn>
         </PageBody>
       </PageShell>

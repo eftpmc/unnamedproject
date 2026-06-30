@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { BookOpen, Clipboard, MoreHorizontal, Play, Plus, Trash2, X } from 'lucide-react';
+import { BookOpen, Clipboard, Loader2, MoreHorizontal, Play, Plus, Trash2, X } from 'lucide-react';
 import { getAllTriggers, updateGlobalTrigger, deleteGlobalTrigger, runTriggerNow, createGlobalTrigger, getAllFiles, getProjects } from '../lib/api.js';
 import { usePageTitle } from '../lib/usePageTitle.js';
 import { timeAgo } from '../lib/utils.js';
@@ -140,11 +140,12 @@ export default function TriggersPage() {
         <PageBody className="px-4 pt-5 sm:px-8 sm:pt-9">
           <ContentColumn className="max-w-7xl">
             <DataTable>
-              <DataTableHeader className="grid-cols-[minmax(0,1fr)_7rem_4rem_1.75rem] sm:grid-cols-[minmax(0,1fr)_14rem_4rem_5rem_1.75rem]">
+              <DataTableHeader className="grid-cols-[minmax(0,1fr)_7rem_4rem_1.75rem_1.75rem] sm:grid-cols-[minmax(0,1fr)_14rem_4rem_5rem_1.75rem_1.75rem]">
                 <span>Trigger</span>
                 <span className="hidden sm:block">Schedule / Playbook</span>
                 <span className="justify-self-end">Enabled</span>
                 <span className="hidden justify-self-end sm:block">Last run</span>
+                <span />
                 <span />
               </DataTableHeader>
               <DataTableBody>
@@ -152,7 +153,7 @@ export default function TriggersPage() {
                   const enabled = !!t.enabled;
                   const playbook = t.playbook_id ? docMap.get(t.playbook_id) : undefined;
                   return (
-                    <DataTableRow key={t.id} className="grid-cols-[minmax(0,1fr)_7rem_4rem_1.75rem] sm:grid-cols-[minmax(0,1fr)_14rem_4rem_5rem_1.75rem]">
+                    <DataTableRow key={t.id} className="grid-cols-[minmax(0,1fr)_7rem_4rem_1.75rem_1.75rem] sm:grid-cols-[minmax(0,1fr)_14rem_4rem_5rem_1.75rem_1.75rem]">
                       <div className="min-w-0">
                         <div className="truncate text-sm font-medium capitalize text-foreground">{t.kind}</div>
                         <div className="mt-0.5 truncate font-mono text-[11px] text-faint-fg sm:hidden">
@@ -195,6 +196,18 @@ export default function TriggersPage() {
                       <span className="hidden justify-self-end whitespace-nowrap text-[11px] text-faint-fg sm:block">
                         {t.last_run_at ? timeAgo(t.last_run_at) : 'Never'}
                       </span>
+                      <button
+                        type="button"
+                        title="Run now"
+                        aria-label="Run now"
+                        disabled={runningId === t.id}
+                        onClick={() => runMutation.mutate(t.id)}
+                        className="grid size-7 place-items-center rounded-md text-muted-foreground transition-colors hover:bg-background hover:text-foreground disabled:opacity-40"
+                      >
+                        {runningId === t.id
+                          ? <Loader2 size={13} className="animate-spin" />
+                          : <Play size={13} />}
+                      </button>
                       <DropdownMenu>
                         <DropdownMenuTrigger asChild>
                           <button

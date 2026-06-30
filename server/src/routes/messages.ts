@@ -70,7 +70,7 @@ function getUploadsForMessages(messageIds: string[]): Map<string, UploadedDoc[]>
   if (messageIds.length === 0) return new Map();
   const rows = getDb()
     .prepare(`
-      SELECT md.message_id as messageId, d.id, d.title, d.mime_type as mimeType
+      SELECT mf.message_id as messageId, d.id, d.title, d.mime_type as mimeType
       FROM message_files mf
       JOIN files d ON d.id = mf.document_id
       WHERE mf.message_id IN (${messageIds.map(() => '?').join(',')})

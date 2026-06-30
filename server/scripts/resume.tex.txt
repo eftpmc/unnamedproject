@@ -1,0 +1,149 @@
+% !TeX program = xelatex
+\documentclass{my_cv}
+\title{Resume}
+\author{Zachary Starnes}
+\date{Sep 2024}
+\usepackage[a4paper, left=2em, right=2em, top=2.5em, bottom=0em]{geometry}
+\usepackage{multicol}
+\setlength{\columnsep}{0cm}
+\usepackage{xcolor}
+\usepackage{fontspec}
+\usepackage{setspace}
+\usepackage{lipsum}
+\usepackage[none]{hyphenat}
+\usepackage{changepage}
+\usepackage{hyperref}
+\usepackage{vcell}
+
+\defaultfontfeatures{LetterSpace=2.5}
+
+\hypersetup{
+    unicode=true,
+    colorlinks=true,
+    urlcolor=black,
+}
+
+\setmainfont{ArialMT}[
+    Path=./fonts/,
+    Extension = .ttf,
+    UprightFont=*-Light,
+    BoldFont=*-Medium,
+    ItalicFont=*-Italic,
+    ItalicFeatures={
+        SmallCapsFont=*-Italic,
+    },
+    BoldFeatures={
+        SmallCapsFont=*-Medium,
+    },
+    SmallCapsFont=*-Medium,
+    ]
+
+\begin{document}
+
+\begin{multicols}{2}
+    \headerSection{
+    \vcell{centered}
+    \Huge \textbf{Zachary Starnes}
+    \newline
+    \badge{flashyGreen}{\Large {\textbf{Software Engineer}}}}
+
+    \columnbreak
+    \raggedleft
+    \begin{spacing}{1.2}
+        \large\cvParagraph{
+            \vcell{centered}
+            \href{tel:8438164991}{+1 843 816 4991} \\
+            \href{mailto:zack-ari@aritools.xyz}{zackhhi@gmail.com} \\
+            \href{https://aritools.xyz/}{www.aritools.xyz}
+        }
+    \end{spacing}
+\end{multicols}
+
+\cvSection{Education}
+\begin{adjustwidth}{2em}{0em}
+
+\positionAndCompanyLine{B.S. Computer Science}{Clemson University}{08/24 --  05/28}
+\end{adjustwidth}
+
+\setlength{\columnsep}{1cm}
+
+\cvSection{Research}
+\begin{adjustwidth}{2em}{0em}
+
+\positionAndCompanyLine{Machine Learning Researcher}{Clemson University Creative Inquiry}{ 08/25 -- 08/26}
+
+\begin{itemize}
+    \item Developed and evaluated machine learning models for automated detection of predatory journals.
+    \item Built and evaluated an automated classification pipeline using neural networks and open-source LLMs.
+    \item Presented findings at the 21st Annual Focus on Creative Inquiry Forum and Clemson AI Research Symposium.
+\end{itemize}
+
+\techStackList{Python, PyTorch, Machine Learning, LLMs, Qwen, Llama, Classification}
+
+\end{adjustwidth}
+
+\cvSection{Projects}
+\begin{adjustwidth}{2em}{0em}
+
+\positionAndCompanyLine{Yuzic}{Open Source Mobile App}{12/24 -- Present}
+\begin{flushleft}
+    \badge{lavenderBlue}{
+        \href{https://github.com/eftpmc/yuzic}{github.com/eftpmc/yuzic}
+    }
+\end{flushleft}
+
+\begin{itemize}
+    \item Built a cross-platform open-source music player for self-hosted media servers.
+    \item Implemented offline playback, multi-server support, and music discovery.
+    \item Designed a modular architecture supporting multiple self-hosted music server backends.
+\end{itemize}
+
+\techStackList{React Native, TypeScript, Expo, Redux, Express, Jellyfin API, Subsonic API}
+
+\positionAndCompanyLine{Melodari}{Web App}{08/24}
+    \begin{flushleft}{\badge{lavenderBlue}{    \href{https://melodari-v2.vercel.app}{www.melodari-v2.vercel.app}}}\end{flushleft}
+\begin{itemize}
+    \item Integrated Spotify and other music platform APIs into a unified music library.
+    \item Built profile and social features for playlist sharing across multiple music platforms.
+\end{itemize}
+\techStackList{Next.js, Tailwind, Supabase, Google API, Spotify API}
+
+\end{adjustwidth}
+
+\cvSection{Experience}
+\begin{adjustwidth}{2em}{0em}
+
+\positionAndCompanyLine{Freelance Software Developer}{Various Clients}{04/22 -- Present}
+
+\begin{itemize}
+    \item Developed full-stack web applications for local businesses using React, Next.js, Node.js, and WordPress.
+    \item Built responsive websites, custom integrations, and content management solutions for multiple clients.
+\end{itemize}
+
+\techStackList{React, Next.js, Node.js, TypeScript, TailwindCSS, WordPress}
+
+\positionAndCompanyLine{Junior Developer}{Atlas Studios}{10/22 -- 06/23}
+
+\begin{itemize}
+    \item Developed object-oriented gameplay systems in Lua.
+    \item Built gameplay mechanics and UI features alongside a multidisciplinary development team.
+    \item Contributed to a game serving more than 10,000 players.
+\end{itemize}
+
+\techStackList{Lua, Object-Oriented Programming, Roblox Studio}
+
+\end{adjustwidth}
+
+\cvSection{Technical Skills}
+\raggedright
+\begin{adjustwidth}{2em}{0em}
+
+\begin{itemize}
+    \item \textbf{Languages:} Python, C++, C, Go, Java, JavaScript, TypeScript, Lua, Dart
+    \item \textbf{Frameworks:} React, React Native, Next.js, Node.js, Express, PyTorch, Expo, TailwindCSS
+    \item \textbf{Tools:} Docker, Git, Linux, MongoDB, MySQL, Redis, Firebase, Supabase, Vercel
+\end{itemize}
+
+\end{adjustwidth}
+
+\end{document}

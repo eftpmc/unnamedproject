@@ -12,7 +12,7 @@ const execFileAsync = promisify(execFile);
 export function registerLatexHandlers(): void {
   registerTool({
     name: 'compile_latex',
-    description: 'Compile LaTeX source into a PDF using Tectonic. Saves the .tex source and the rendered .pdf as files in the given project. The PDF is saved at the same path with a .pdf extension.',
+    description: 'Compile LaTeX source into a PDF using Tectonic. Saves the .tex source, any auxiliary files (classes, fonts), and the rendered .pdf as files in the given project. The PDF is saved at the same path with a .pdf extension.',
     inputSchema: {
       type: 'object',
       properties: {
@@ -21,6 +21,19 @@ export function registerLatexHandlers(): void {
         title: { type: 'string' },
         body: { type: 'string', description: 'LaTeX source code' },
         tags: { type: 'object', description: 'YAML key/values; include type and status when relevant' },
+        files: {
+          type: 'array',
+          description: 'Auxiliary files needed to compile (e.g. a .cls class file, .sty, fonts). Each is written alongside main.tex before compiling and saved into the project.',
+          items: {
+            type: 'object',
+            properties: {
+              path: { type: 'string', description: 'Relative path, e.g. my_cv.cls or fonts/ArialMT-Light.ttf' },
+              content: { type: 'string', description: 'File content, text or base64 per encoding' },
+              encoding: { type: 'string', enum: ['utf8', 'base64'], description: 'Defaults to utf8' },
+            },
+            required: ['path', 'content'],
+          },
+        },
       },
       required: ['project_id', 'path', 'title', 'body'],
     },
@@ -33,6 +46,7 @@ export function registerLatexHandlers(): void {
       const pdfPath = texPath.slice(0, -4) + '.pdf';
       const tags = (args.tags as Record<string, unknown> | undefined) ?? {};
       const body = args.body as string;
+      const auxFiles = (args.files as { path: string; content: string; encoding?: 'utf8' | 'base64' }[] | undefined) ?? [];
 
       const workDir = await fs.mkdtemp(path.join(os.tmpdir(), 'latex-'));
       const texFile = path.join(workDir, 'main.tex');
@@ -47,12 +61,46 @@ export function registerLatexHandlers(): void {
         source_session_id: sessionId,
       });
 
+      const auxRecords: unknown[] = [];
+      for (const f of auxFiles) {
+        const encoding = f.encoding ?? 'utf8';
+        const abs = path.resolve(workDir, f.path);
+        if (!abs.startsWith(workDir + path.sep)) {
+          await fs.rm(workDir, { recursive: true, force: true });
+          return `Error: auxiliary file path escapes working directory: ${f.path}`;
+        }
+        await fs.mkdir(path.dirname(abs), { recursive: true });
+        if (encoding === 'base64') {
+          const data = Buffer.from(f.content, 'base64');
+          await fs.writeFile(abs, data);
+          auxRecords.push(await writeBinaryFile({
+            space_id: project.space_id,
+            path: f.path,
+            title: f.path,
+            mime_type: 'application/octet-stream',
+            data,
+            tags,
+            source_session_id: sessionId,
+          }));
+        } else {
+          await fs.writeFile(abs, f.content, 'utf-8');
+          auxRecords.push(await writeFile({
+            space_id: project.space_id,
+            path: f.path,
+            title: f.path,
+            tags,
+            body: f.content,
+            source_session_id: sessionId,
+          }));
+        }
+      }
+
       try {
         await execFileAsync('tectonic', ['main.tex', '--outdir', workDir], { cwd: workDir, timeout: 60_000 });
       } catch (err) {
         const stderr = (err as { stderr?: string }).stderr ?? String(err);
         await fs.rm(workDir, { recursive: true, force: true });
-        return JSON.stringify({ source: sourceFile, error: 'LaTeX compilation failed', log: stderr.slice(-4000) });
+        return JSON.stringify({ source: sourceFile, files: auxRecords, error: 'LaTeX compilation failed', log: stderr.slice(-4000) });
       }
 
       const pdfData = await fs.readFile(path.join(workDir, 'main.pdf'));
@@ -68,7 +116,7 @@ export function registerLatexHandlers(): void {
         source_session_id: sessionId,
       });
 
-      return JSON.stringify({ source: sourceFile, pdf: pdfFile });
+      return JSON.stringify({ source: sourceFile, files: auxRecords, pdf: pdfFile });
     },
   });
 }

@@ -1,4 +1,4 @@
-import { getDb } from '../db/index.js';
+import { getDb, getPermissionProfile } from '../db/index.js';
 import { getDecryptedProviderConfig } from '../routes/agent-providers.js';
 import { ClaudeCodeProvider } from './conversation/claude-code-provider.js';
 
@@ -31,12 +31,15 @@ export async function getConversationProvider(userId: string): Promise<Conversat
 
   if (conn) {
     const cfg = getDecryptedProviderConfig(conn.id, userId);
+    const permissionProfile = cfg.permissionProfile === 'default' || cfg.permissionProfile === undefined
+      ? getPermissionProfile(userId)
+      : cfg.permissionProfile as string;
     return new ClaudeCodeProvider({
       model: (cfg.model as string | undefined) ?? 'claude-sonnet-4-6',
-      permissionProfile: (cfg.permissionProfile as string) ?? 'default',
+      permissionProfile,
       apiKey: cfg.apiKey as string | undefined,
     });
   }
 
-  return new ClaudeCodeProvider({ model: 'claude-sonnet-4-6', permissionProfile: 'default' });
+  return new ClaudeCodeProvider({ model: 'claude-sonnet-4-6', permissionProfile: getPermissionProfile(userId) });
 }

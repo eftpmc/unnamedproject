@@ -1,7 +1,8 @@
 import { describe, it, expect, vi, beforeAll, afterAll } from 'vitest';
 import fs from 'fs';
 import path from 'path';
-import { initDb, getDb, closeDb } from '../../src/db/index.js';
+import { initDb, getDb, closeDb, setPermissionProfile } from '../../src/db/index.js';
+import { encrypt, deriveKey } from '../../src/lib/crypto.js';
 
 const DATA_DIR = process.env.DATA_DIR!;
 
@@ -85,5 +86,44 @@ describe('getConversationProvider', () => {
     const { getConversationProvider } = await import('../../src/services/conversation-provider.js');
     const provider = await getConversationProvider('u1');
     expect(provider.type).toBe('claude_code');
+  });
+
+  it('uses the user settings permission profile when provider permission is default', async () => {
+    const { getConversationProvider } = await import('../../src/services/conversation-provider.js');
+    setPermissionProfile('u1', 'strict');
+    getDb()
+      .prepare("INSERT INTO agent_providers (id, user_id, name, type, encrypted_config) VALUES ('provider-default','u1','Default Provider','claude_code',?)")
+      .run(encrypt(JSON.stringify({ permissionProfile: 'default' }), deriveKey()));
+
+    const provider = await getConversationProvider('u1');
+    await provider.invoke({
+      prompt: 'use settings profile',
+      onText: vi.fn(),
+      onSessionId: vi.fn(),
+      mcpServers: {},
+    });
+
+    const ctx = invokeClaudeCodeMock.mock.calls.at(-1)?.[1];
+    expect(ctx.permissionProfile).toBe('strict');
+  });
+
+  it('lets provider permission profile override user settings', async () => {
+    const { getConversationProvider } = await import('../../src/services/conversation-provider.js');
+    setPermissionProfile('u1', 'strict');
+    getDb().prepare("DELETE FROM agent_providers WHERE user_id = 'u1'").run();
+    getDb()
+      .prepare("INSERT INTO agent_providers (id, user_id, name, type, encrypted_config) VALUES ('provider-override','u1','Override Provider','claude_code',?)")
+      .run(encrypt(JSON.stringify({ permissionProfile: 'trusted' }), deriveKey()));
+
+    const provider = await getConversationProvider('u1');
+    await provider.invoke({
+      prompt: 'use provider profile',
+      onText: vi.fn(),
+      onSessionId: vi.fn(),
+      mcpServers: {},
+    });
+
+    const ctx = invokeClaudeCodeMock.mock.calls.at(-1)?.[1];
+    expect(ctx.permissionProfile).toBe('trusted');
   });
 });

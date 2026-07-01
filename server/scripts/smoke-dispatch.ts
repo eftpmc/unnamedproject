@@ -7,6 +7,7 @@ import { newId } from '../src/lib/ids.js';
 import { ensureWorktree } from '../src/lib/worktree.js';
 import { invokeClaudeCode } from '../src/tools/invoke_claude_code.js';
 import { runProjectQuery } from '../src/tools/project_query.js';
+import { projectFilesDir } from '../src/lib/spaceFs.js';
 import { encrypt, deriveKey } from '../src/lib/crypto.js';
 
 process.env.DATA_DIR = fs.mkdtempSync(path.join(os.tmpdir(), 'smoke-data-'));
@@ -21,12 +22,6 @@ getDb()
   .prepare('INSERT INTO agent_providers (id, user_id, name, type, encrypted_config) VALUES (?,?,?,?,?)')
   .run(providerId, userId, 'smoke-claude-code', 'claude_code', encrypt(JSON.stringify({}), deriveKey()));
 
-// Create a space and project
-const spaceId = newId();
-getDb()
-  .prepare('INSERT INTO spaces (id, user_id, name) VALUES (?,?,?)')
-  .run(spaceId, userId, 'smoke-space');
-
 const repoPath = fs.mkdtempSync(path.join(os.tmpdir(), 'smoke-repo-'));
 await simpleGit(repoPath).init();
 // Code-only repo so graphify doesn't need an LLM key for doc extraction
@@ -36,8 +31,8 @@ await simpleGit(repoPath).add('.').commit('initial commit');
 
 const projectId = newId();
 getDb()
-  .prepare('INSERT INTO projects (id, space_id, name, repo_path, origin) VALUES (?,?,?,?,?)')
-  .run(projectId, spaceId, 'smoke-project', repoPath, 'linked');
+  .prepare('INSERT INTO projects (id, user_id, name, repo_path, files_path, origin) VALUES (?,?,?,?,?,?)')
+  .run(projectId, userId, 'smoke-project', repoPath, projectFilesDir(projectId), 'linked');
 
 const sessionId = newId();
 getDb().prepare('INSERT INTO sessions (id, user_id) VALUES (?,?)').run(sessionId, userId);
@@ -47,12 +42,12 @@ getDb().prepare("INSERT INTO messages (id, session_id, role, content) VALUES (?,
 
 function makeExecution(tool: string): string {
   const execId = newId();
-  getDb().prepare('INSERT INTO executions (id, message_id, space_id, tool, status) VALUES (?,?,?,?,?)').run(execId, messageId, spaceId, tool, 'running');
+  getDb().prepare('INSERT INTO executions (id, message_id, project_id, tool, status) VALUES (?,?,?,?,?)').run(execId, messageId, projectId, tool, 'running');
   return execId;
 }
 
 console.log('--- Step 1: project_query (plan mode) ---');
-const queryResult = await runProjectQuery({ space_id: spaceId, project_id: projectId, question: 'What files are in this repo?' }, userId);
+const queryResult = await runProjectQuery({ project_id: projectId, question: 'What files are in this repo?' }, userId);
 console.log(queryResult);
 
 console.log('\n--- Step 2: ensureWorktree ---');

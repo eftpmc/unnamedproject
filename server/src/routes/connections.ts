@@ -22,7 +22,7 @@ const PURPOSE_ALLOWED_TYPES: Record<string, string[]> = {
 router.get('/', (req, res) => {
   const { userId } = req as AuthedRequest;
   const rows = getDb()
-    .prepare('SELECT id, name, type, purpose, service, url, notes, created_at FROM connections WHERE user_id = ? ORDER BY created_at')
+    .prepare('SELECT id, name, type, purpose, service, url, notes, created_at, last_used_at FROM connections WHERE user_id = ? ORDER BY created_at')
     .all(userId);
   res.json(rows);
 });
@@ -143,6 +143,10 @@ router.delete('/:id', (req, res) => {
   if (result.changes === 0) { res.status(404).json({ error: 'Not found' }); return; }
   res.status(204).send();
 });
+
+export function touchConnection(connectionId: string): void {
+  getDb().prepare('UPDATE connections SET last_used_at = unixepoch() WHERE id = ?').run(connectionId);
+}
 
 export function getDecryptedConfig(connectionId: string, userId: string): Record<string, string> {
   const row = getDb()

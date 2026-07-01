@@ -4,20 +4,25 @@ const emitter = new EventEmitter();
 
 const APPROVAL_TIMEOUT_MS = 10 * 60 * 1000; // 10 minutes
 
-export function waitForApproval(approvalId: string): Promise<'approved' | 'rejected'> {
-  return new Promise((resolve, reject) => {
-    const listener = (decision: 'approved' | 'rejected') => {
+export interface ApprovalResolution {
+  decision: 'approved' | 'rejected';
+  value?: string;
+}
+
+export function waitForApproval(approvalId: string): Promise<ApprovalResolution> {
+  return new Promise((resolve) => {
+    const listener = (resolution: ApprovalResolution) => {
       clearTimeout(timer);
-      resolve(decision);
+      resolve(resolution);
     };
     const timer = setTimeout(() => {
       emitter.off(`approval:${approvalId}`, listener);
-      resolve('rejected');
+      resolve({ decision: 'rejected' });
     }, APPROVAL_TIMEOUT_MS);
     emitter.once(`approval:${approvalId}`, listener);
   });
 }
 
-export function resolveApproval(approvalId: string, decision: 'approved' | 'rejected'): void {
-  emitter.emit(`approval:${approvalId}`, decision);
+export function resolveApproval(approvalId: string, decision: 'approved' | 'rejected', value?: string): void {
+  emitter.emit(`approval:${approvalId}`, { decision, value });
 }

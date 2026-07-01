@@ -199,8 +199,10 @@ export default function ChatView({ chatId }: ChatViewProps) {
   const hasActiveExecution = Object.values(executions).some(list =>
     list.some(exec => exec.status === 'running' || exec.status === 'awaiting_approval')
   );
+  const [recentlyCompletedTool, setRecentlyCompletedTool] = useState(false);
+  const recentlyCompletedRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const agentActive = sending || !!chatStatus?.active || streamingIds.size > 0 || hasActiveExecution;
-  const agentStarting = !!chatStatus?.active && streamingIds.size === 0 && !hasActiveExecution;
+  const agentStarting = (!!chatStatus?.active || recentlyCompletedTool) && streamingIds.size === 0 && !hasActiveExecution;
   const [statusNow, setStatusNow] = useState(() => Math.floor(Date.now() / 1000));
   const agentStatusText = getAgentStatusText({
     sending,
@@ -393,6 +395,8 @@ export default function ChatView({ chatId }: ChatViewProps) {
       });
       setStreamingIds(prev => new Set(prev).add(message.id));
       setSending(false);
+      setRecentlyCompletedTool(false);
+      if (recentlyCompletedRef.current) { clearTimeout(recentlyCompletedRef.current); recentlyCompletedRef.current = null; }
       queryClient.setQueryData(['chat-status', chatId], (prev: unknown) => ({ ...(prev as object ?? {}), active: true }));
     }
 
@@ -489,7 +493,12 @@ export default function ChatView({ chatId }: ChatViewProps) {
             ...(ev.result ? { result: ev.result } : {}),
           };
           if (ev.status === 'done' || ev.status === 'error') refetchWorktree();
-          if (ev.status === 'done' || ev.status === 'error') queryClient.invalidateQueries({ queryKey: ['chat-status', chatId] });
+          if (ev.status === 'done' || ev.status === 'error') {
+            queryClient.invalidateQueries({ queryKey: ['chat-status', chatId] });
+            setRecentlyCompletedTool(true);
+            if (recentlyCompletedRef.current) clearTimeout(recentlyCompletedRef.current);
+            recentlyCompletedRef.current = setTimeout(() => setRecentlyCompletedTool(false), 2000);
+          }
           return { ...prev, [msgId]: list.map(e => e.executionId === ev.executionId ? updated : e) };
         });
       }
@@ -593,6 +602,10 @@ export default function ChatView({ chatId }: ChatViewProps) {
     const interval = window.setInterval(() => setStatusNow(Math.floor(Date.now() / 1000)), 15000);
     return () => window.clearInterval(interval);
   }, [agentActive]);
+
+  useEffect(() => {
+    return () => { if (recentlyCompletedRef.current) clearTimeout(recentlyCompletedRef.current); };
+  }, []);
 
   if (isLoading) {
     return (

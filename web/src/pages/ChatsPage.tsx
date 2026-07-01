@@ -28,6 +28,10 @@ function dateGroup(unixSeconds: number): string {
   return d.toLocaleString('default', { month: 'long', year: now.getFullYear() !== d.getFullYear() ? 'numeric' : undefined });
 }
 
+function fmtCost(usd: number): string {
+  return usd < 0.01 ? `$${usd.toFixed(3)}` : `$${usd.toFixed(2)}`;
+}
+
 function groupChats(chats: Session[]): { label: string; chats: Session[] }[] {
   const groups: Map<string, Session[]> = new Map();
   for (const chat of chats) {
@@ -280,13 +284,20 @@ export default function ChatsPage() {
                                         }
                                       }}
                                     >
-                                      <div className="truncate text-sm font-medium text-foreground underline-offset-2 hover:underline">
-                                        {chat.title ?? 'Untitled chat'}
+                                      <div className="flex min-w-0 items-center gap-1.5">
+                                        <span className="truncate text-sm font-medium text-foreground underline-offset-2 hover:underline">
+                                          {chat.title ?? 'Untitled chat'}
+                                        </span>
+                                        {chat.trigger_id && (
+                                          <span className="shrink-0 rounded-full bg-muted/70 px-1.5 py-0.5 text-[10px] font-medium text-faint-fg">Auto</span>
+                                        )}
                                       </div>
                                       <div className="mt-0.5 flex gap-2 text-[11px] text-faint-fg sm:hidden">
                                         <span className="truncate">{project?.name ?? 'No project'}</span>
+                                        {chat.trigger_id && <><span className="shrink-0">·</span><span className="shrink-0">Auto</span></>}
                                         <span className="shrink-0">·</span>
                                         <span className="shrink-0">{timeAgo(chat.updated_at)}</span>
+                                        {chat.cost_usd > 0 && <><span className="shrink-0">·</span><span className="shrink-0">{fmtCost(chat.cost_usd)}</span></>}
                                       </div>
                                     </div>
                                   )}

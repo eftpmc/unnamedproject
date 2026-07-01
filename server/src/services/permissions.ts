@@ -1,7 +1,7 @@
 export const PERMISSION_PROFILES = ['fast', 'trusted', 'strict'] as const;
 
 export type PermissionProfile = typeof PERMISSION_PROFILES[number];
-export type DelegateTool = 'claude_code' | 'codex';
+export type DelegateTool = 'claude_code';
 
 export function isPermissionProfile(value: unknown): value is PermissionProfile {
   return typeof value === 'string' && PERMISSION_PROFILES.includes(value as PermissionProfile);
@@ -29,6 +29,3 @@ export function claudePermissionArgs(profile: PermissionProfile): string[] {
   return profile === 'strict' ? [] : ['--permission-mode', 'bypassPermissions'];
 }
 
-export function codexPermissionArgs(profile: PermissionProfile): string[] {
-  return profile === 'strict' ? [] : ['--dangerously-bypass-approvals-and-sandbox'];
-}

@@ -3,6 +3,8 @@ export interface Session {
   title: string | null;
   effort: EffortLevel;
   pinned_project_id: string | null;
+  trigger_id: string | null;
+  cost_usd: number;
   created_at: number;
   updated_at: number;
 }
@@ -117,6 +119,18 @@ export interface Trigger {
   next_run_at: number | null;
   last_run_at: number | null;
   created_at: number;
+  last_provider_session_id: string | null;
+  total_cost_usd: number;
+  last_run_status: 'running' | 'done' | 'error' | null;
+}
+
+export interface TriggerRun {
+  id: string;
+  title: string | null;
+  created_at: number;
+  updated_at: number;
+  cost_usd: number;
+  status: 'running' | 'done' | 'error' | null;
 }
 
 export interface FileEntry {
@@ -141,12 +155,13 @@ export interface Connection {
   url?: string;
   notes?: string;
   created_at: number;
+  last_used_at: number | null;
 }
 
 export interface AgentProvider {
   id: string;
   name: string;
-  type: 'claude_code' | 'codex';
+  type: 'claude_code';
   created_at: number;
 }
 
@@ -233,6 +248,14 @@ export interface WSSessionEventCreated extends WSEvent {
   sessionId: string;
   event: SessionEvent;
 }
+
+export type ApprovalUI =
+  | { kind: 'confirm'; title: string; description: string; danger?: boolean; details?: string }
+  | { kind: 'question'; question: string; options?: string[]; type?: 'single' | 'multi' | 'text'; step?: number; total?: number; skippable?: boolean }
+  | { kind: 'connection'; name: string; connectionType: string; description: string; command?: string; url?: string }
+  | { kind: 'trigger_preview'; playbookTitle: string; schedule: string; cron: string; preview?: string }
+  | { kind: 'secret_entry'; key: string; label: string; description: string; placeholder?: string }
+  | { kind: 'dependency'; command: string; packageName: string; reason: string }
 
 export interface Memory {
   type: 'user' | 'feedback' | 'project' | 'reference';

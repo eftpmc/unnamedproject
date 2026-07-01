@@ -44,7 +44,7 @@ function applySchema(): void {
       id TEXT PRIMARY KEY,
       user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
       name TEXT NOT NULL,
-      type TEXT NOT NULL CHECK(type IN ('claude_code','codex')),
+      type TEXT NOT NULL CHECK(type IN ('claude_code')),
       encrypted_config TEXT NOT NULL DEFAULT '',
       created_at INTEGER NOT NULL DEFAULT (unixepoch()),
       UNIQUE(user_id, name)
@@ -769,6 +769,35 @@ const migrations: Migration[] = [
       database.exec('DROP TABLE IF EXISTS spaces;');
 
       database.pragma('foreign_keys = ON');
+    },
+  },
+  {
+    version: 35,
+    name: 'remove_codex_provider',
+    up: (database) => {
+      database.exec("DELETE FROM agent_providers WHERE type = 'codex'");
+    },
+  },
+  {
+    version: 36,
+    name: 'trigger_resume_and_cost',
+    up: (database) => {
+      database.exec("ALTER TABLE triggers ADD COLUMN last_provider_session_id TEXT");
+      database.exec("ALTER TABLE sessions ADD COLUMN trigger_id TEXT");
+    },
+  },
+  {
+    version: 37,
+    name: 'approval_value',
+    up: (database) => {
+      database.exec("ALTER TABLE approvals ADD COLUMN value TEXT");
+    },
+  },
+  {
+    version: 38,
+    name: 'connection_last_used',
+    up: (database) => {
+      database.exec("ALTER TABLE connections ADD COLUMN last_used_at INTEGER");
     },
   },
 ];

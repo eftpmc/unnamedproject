@@ -28,7 +28,7 @@ async function withApproval(
   const executionId = createExecution(userId, null, null, tool);
   try {
     const decision = await requestApproval(executionId, userId, action, payload);
-    if (decision === 'rejected') {
+    if (decision.decision === 'rejected') {
       completeExecution(executionId, userId, 'error', 'Not approved.');
       return 'Not approved.';
     }

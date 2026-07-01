@@ -33,7 +33,7 @@ export async function createConnectionTool(
     ? { name: input.name, type: input.type, service: input.service, url: input.url }
     : { name: input.name, type: input.type, purpose: input.purpose ?? 'tool', config: maskConfig(input.config) };
   const decision = await requestApproval(ctx.executionId, ctx.userId, 'create_connection', approval, 'user');
-  if (decision === 'rejected') return 'create_connection cancelled';
+  if (decision.decision === 'rejected') return 'create_connection cancelled';
 
   try {
     const { id, type, purpose } = createConnectionRecord(ctx.userId, input);

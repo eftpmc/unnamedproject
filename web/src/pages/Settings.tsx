@@ -11,7 +11,7 @@ import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Textarea } from '@/components/ui/textarea';
 import { ContentColumn, PageBody, PageHeader, PageShell } from '@/components/ui/app-layout';
-import { cn } from '@/lib/utils';
+import { cn, timeAgo } from '@/lib/utils';
 import { getToken } from '../lib/auth.js';
 import {
   createConnection,
@@ -56,18 +56,13 @@ const SECTION_TITLES: Record<Section, string> = {
   vault: 'Vault',
 };
 
-type SetupKind = 'claude_code' | 'codex' | 'mcp';
+type SetupKind = 'claude_code' | 'mcp';
 
 const SETUP_META: Record<SetupKind, { title: string; description: string; type: string }> = {
   claude_code: {
     title: 'Claude Code',
     description: 'Powers your conversations. Handles all tasks — coding, research, orchestration.',
     type: 'claude_code',
-  },
-  codex: {
-    title: 'Codex',
-    description: 'Powers your conversations using the OpenAI Codex CLI.',
-    type: 'codex',
   },
   mcp: {
     title: 'MCP Server',
@@ -646,7 +641,7 @@ function ProviderRow({
   onOpenSetup,
   onRequestDelete,
 }: {
-  kind: 'claude_code' | 'codex';
+  kind: 'claude_code';
   providers: AgentProvider[];
   onOpenSetup: (kind: SetupKind) => void;
   onRequestDelete: (id: string) => void;
@@ -786,7 +781,7 @@ function SetupModal({
                 <div>
                   <Label>Model</Label>
                   <Input
-                    placeholder={activeSetup === 'claude_code' ? 'claude-sonnet-4-6' : 'Use Codex account default'}
+                    placeholder="claude-sonnet-4-6"
                     value={providerModel}
                     onChange={e => updateForm({ providerModel: e.target.value })}
                     className="text-sm"
@@ -892,9 +887,8 @@ export default function Settings() {
       const meta = SETUP_META[activeSetup];
       const { setupName, mcpCommand, mcpArgs, mcpEnv, mcpPreset, mcpExtraArg, mcpEnvValues, providerModel, providerPermissionProfile } = form;
 
-      if (activeSetup === 'claude_code' || activeSetup === 'codex') {
-        const defaultModel = activeSetup === 'claude_code' ? 'claude-sonnet-4-6' : '';
-        const resolvedModel = providerModel.trim() || defaultModel;
+      if (activeSetup === 'claude_code') {
+        const resolvedModel = providerModel.trim() || 'claude-sonnet-4-6';
         return createAgentProvider({
           name: setupName.trim() || meta.title,
           type: activeSetup,
@@ -1004,7 +998,6 @@ export default function Settings() {
                 <SectionLabel>Coding tools</SectionLabel>
                 <div className="flex flex-col gap-3">
                   <ProviderRow kind="claude_code" providers={agentProviders} onOpenSetup={openSetupModal} onRequestDelete={id => setPendingDelete({ id })} />
-                  <ProviderRow kind="codex" providers={agentProviders} onOpenSetup={openSetupModal} onRequestDelete={id => setPendingDelete({ id })} />
                 </div>
               </div>
               <div>
@@ -1101,7 +1094,12 @@ export default function Settings() {
                   <SectionLabel>Connected MCP servers</SectionLabel>
                   {mcpConnections.map(c => (
                     <SettingRow key={c.id}>
-                      <SettingRowInfo title={c.name} description="MCP server" />
+                      <div className="min-w-0">
+                        <SettingRowInfo title={c.name} description="MCP server" />
+                        <div className="mt-0.5 text-[11px] text-faint-fg">
+                          {c.last_used_at ? `Active ${timeAgo(c.last_used_at)}` : 'Never used'}
+                        </div>
+                      </div>
                       <div className="flex shrink-0 items-center gap-2 self-start sm:self-center">
                         <ConnectedBadge />
                         <DeleteBtn onClick={() => setPendingDelete({ id: c.id })} />

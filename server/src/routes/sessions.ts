@@ -16,12 +16,14 @@ router.get('/', (req, res) => {
   const PAGE = 100;
 
   const params: unknown[] = [userId];
-  let sql = 'SELECT id, title, effort, pinned_project_id, created_at, updated_at FROM sessions WHERE user_id = ?';
+  let sql = `SELECT s.id, s.title, s.effort, s.pinned_project_id, s.trigger_id, s.created_at, s.updated_at,
+    COALESCE((SELECT SUM(cost_usd) FROM agent_usage WHERE session_id = s.id), 0) as cost_usd
+    FROM sessions s WHERE s.user_id = ?`;
   if (before) {
-    sql += ' AND updated_at < ?';
+    sql += ' AND s.updated_at < ?';
     params.push(before);
   }
-  sql += ` ORDER BY updated_at DESC LIMIT ${PAGE}`;
+  sql += ` ORDER BY s.updated_at DESC LIMIT ${PAGE}`;
   res.json(getDb().prepare(sql).all(...params));
 });
 

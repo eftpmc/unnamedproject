@@ -8,7 +8,7 @@ import { requireAuth, type AuthedRequest } from '../middleware/auth.js';
 const router = Router();
 router.use(requireAuth);
 
-const VALID_TYPES = ['claude_code', 'codex'] as const;
+const VALID_TYPES = ['claude_code'] as const;
 type ProviderType = (typeof VALID_TYPES)[number];
 
 router.get('/', (req, res) => {
@@ -58,15 +58,8 @@ router.get('/:id/test', async (req, res) => {
 
   const start = Date.now();
   try {
-    if (row.type === 'claude_code') {
-      const client = new Anthropic({ apiKey: config.apiKey });
-      await client.models.list();
-    } else {
-      const r = await fetch('https://api.openai.com/v1/models', {
-        headers: { Authorization: `Bearer ${config.apiKey}` },
-      });
-      if (!r.ok) throw new Error(`HTTP ${r.status}`);
-    }
+    const client = new Anthropic({ apiKey: config.apiKey });
+    await client.models.list();
     res.json({ ok: true, latencyMs: Date.now() - start });
   } catch (err) {
     res.json({ ok: false, error: (err as Error).message, latencyMs: Date.now() - start });

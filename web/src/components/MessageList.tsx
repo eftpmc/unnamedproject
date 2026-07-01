@@ -43,31 +43,35 @@ function summarizeGroup(executions: InlineExecution[]): string {
 }
 
 function ExecutionGroup({ executions }: { executions: InlineExecution[] }) {
-  const [expanded, setExpanded] = useState(false);
   const anyRunning = executions.some(e => e.status === 'running' || e.status === 'pending');
+  const [expanded, setExpanded] = useState(anyRunning);
+
+  useEffect(() => {
+    if (anyRunning) setExpanded(true);
+  }, [anyRunning]);
 
   return (
-    <div className="overflow-hidden rounded-lg border border-border-soft bg-card shadow-sm">
+    <div className="overflow-hidden rounded-xl border border-border-soft bg-card">
       <button
         type="button"
         onClick={() => setExpanded(v => !v)}
         aria-expanded={expanded}
-        className="flex w-full items-center gap-2.5 px-3.5 py-3 text-left transition-colors hover:bg-muted/20"
+        className="flex w-full items-center gap-2.5 px-3 py-2.5 text-left transition-colors hover:bg-muted/15"
       >
-        <div className="grid h-7 w-7 shrink-0 place-items-center rounded-md bg-muted text-muted-foreground">
-          <ListChecks size={14} />
+        <div className="grid h-6 w-6 shrink-0 place-items-center rounded-md bg-muted/60 text-muted-foreground/70">
+          <ListChecks size={12} />
         </div>
-        <div className="flex min-w-0 flex-1 flex-col">
-          <span className="text-xs font-medium text-foreground">Ran {executions.length} tools</span>
+        <div className="flex min-w-0 flex-1 items-center gap-2">
+          <span className="text-[11.5px] font-medium text-muted-foreground">{executions.length} tools</span>
           <span className="truncate text-[11px] text-faint-fg">{summarizeGroup(executions)}</span>
         </div>
         <StatusPill status={anyRunning ? 'running' : 'done'} />
-        <span className="text-muted-foreground/70">
-          {expanded ? <ChevronUp size={16} /> : <ChevronDown size={16} />}
+        <span className="text-muted-foreground/40">
+          {expanded ? <ChevronUp size={13} /> : <ChevronDown size={13} />}
         </span>
       </button>
       {expanded && (
-        <div className="flex flex-col gap-2 border-t border-border-soft bg-muted/10 p-2.5">
+        <div className="flex flex-col gap-1.5 border-t border-border-soft bg-muted/5 p-2">
           {executions.map(exec => (
             <div key={exec.executionId} data-execution-id={exec.executionId}>
               {renderExecutionCard(exec)}
@@ -157,7 +161,7 @@ function CodeBlock({ children }: { children: React.ReactNode }) {
 }
 
 const markdownComponents: React.ComponentProps<typeof ReactMarkdown>['components'] = {
-  p:          ({ children }) => <p className="mb-3 last:mb-0">{children}</p>,
+  p:          ({ children }) => <p className="mb-4 last:mb-0">{children}</p>,
   strong:     ({ children }) => <strong className="font-semibold text-foreground">{children}</strong>,
   em:         ({ children }) => <em className="italic">{children}</em>,
   h1:         ({ children }) => <h1 className="mb-3 mt-5 text-xl font-bold text-foreground first:mt-0">{children}</h1>,
@@ -292,8 +296,7 @@ export default function MessageList({ messages, executions, streamingIds, sessio
   const knownMessageIds = new Set(sortedMessages.map(m => m.id));
   const timeline: TimelineItem[] = [];
   const isConversationExec = (exec: InlineExecution) =>
-    exec.tool === 'claude_code' || exec.tool === 'invoke_claude_code' ||
-    exec.tool === 'codex' || exec.tool === 'invoke_codex';
+    exec.tool === 'claude_code' || exec.tool === 'invoke_claude_code';
 
   sortedMessages.forEach((message, messageIndex) => {
     const messageOrder = message.created_at * 1000 + messageIndex * 10;
@@ -529,7 +532,7 @@ export default function MessageList({ messages, executions, streamingIds, sessio
                   )}
                   <div
                     title={timestamp}
-                    className="max-w-[88%] rounded-[18px] rounded-tr-md border border-primary/[0.11] bg-primary/[0.08] px-4 py-2.5 text-[15px] leading-relaxed text-foreground sm:max-w-[80%]"
+                    className="max-w-[88%] rounded-2xl rounded-tr-sm border border-border-soft bg-muted/40 px-4 py-2.5 text-[15px] leading-relaxed text-foreground sm:max-w-[80%]"
                   >
                     {msg.content && (
                       <div className="[&_p:last-child]:mb-0">
@@ -585,10 +588,10 @@ export default function MessageList({ messages, executions, streamingIds, sessio
           );
         })}
         {agentThinking && (
-          <div style={{ marginTop: 32 }} className="flex max-w-[86%] items-center gap-1.5 pb-1">
-            <span className="size-1.5 animate-bounce rounded-full bg-foreground/25 [animation-delay:-0.3s]" />
-            <span className="size-1.5 animate-bounce rounded-full bg-foreground/25 [animation-delay:-0.15s]" />
-            <span className="size-1.5 animate-bounce rounded-full bg-foreground/25" />
+          <div style={{ marginTop: 32 }} className="flex max-w-[86%] items-center gap-2 pb-1">
+            <span className="size-2 animate-bounce rounded-full bg-foreground/30 [animation-delay:-0.32s]" />
+            <span className="size-2 animate-bounce rounded-full bg-foreground/30 [animation-delay:-0.16s]" />
+            <span className="size-2 animate-bounce rounded-full bg-foreground/30" />
           </div>
         )}
         <div ref={bottomRef} />

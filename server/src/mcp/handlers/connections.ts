@@ -3,7 +3,7 @@ import { getDb } from '../../db/index.js';
 import { getDecryptedConfig } from '../../routes/connections.js';
 import { createConnectionTool } from '../../tools/connection_ops.js';
 import { listMcpTools } from '../../lib/mcp-pool.js';
-import { createExecution, completeExecution } from '../../services/executor.js';
+import { createExecution, completeExecution, requestApproval } from '../../services/executor.js';
 
 export function registerConnectionHandlers(): void {
   registerTool({
@@ -36,6 +36,22 @@ export function registerConnectionHandlers(): void {
     },
     handler: async (args, userId) => {
       const executionId = createExecution(userId, null, null, 'create_connection');
+      const connType = args.type as string;
+      const decision = await requestApproval(executionId, userId, 'create_connection', {
+        session_id: undefined,
+        ui: {
+          kind: 'connection',
+          name: args.name as string,
+          connectionType: connType,
+          description: (args.notes as string | undefined) ?? (connType === 'mcp' ? 'Add a new MCP integration' : connType === 'github' ? 'Connect to a GitHub repository' : 'Add a web connection'),
+          command: (args.config as Record<string, unknown> | undefined)?.command as string | undefined,
+          url: args.url as string | undefined,
+        },
+      }, 'user');
+      if (decision.decision === 'rejected') {
+        completeExecution(executionId, userId, 'error', 'User rejected connection creation.');
+        return 'Cancelled: user did not approve this connection.';
+      }
       const result = await createConnectionTool(
         {
           name: args.name as string,

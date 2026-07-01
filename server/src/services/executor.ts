@@ -2,7 +2,7 @@ import { createSessionEvent, getDb, getExpoPushToken, setExpoPushToken, getApnsD
 import { sendApprovalPush } from './push.js';
 import { newId } from '../lib/ids.js';
 import { broadcast } from './socket.js';
-import { waitForApproval } from '../lib/approval.js';
+import { waitForApproval, type ApprovalResolution } from '../lib/approval.js';
 
 function getSessionIdForMessage(messageId: string): string | null {
   const row = getDb()
@@ -62,7 +62,7 @@ export async function requestApproval(
   action: string,
   payload: Record<string, unknown>,
   tier: 'agent' | 'user' = 'user'
-): Promise<'approved' | 'rejected'> {
+): Promise<ApprovalResolution> {
   const approvalId = newId();
   getDb()
     .prepare('INSERT INTO approvals (id, execution_id, action, payload) VALUES (?,?,?,?)')
@@ -73,7 +73,7 @@ export async function requestApproval(
       .prepare("UPDATE approvals SET status = 'approved', resolved_at = unixepoch() WHERE id = ?")
       .run(approvalId);
     broadcast(userId, { type: 'action_auto_approved', sessionId: getSessionIdForExecution(executionId), executionId, approvalId, action, payload });
-    return 'approved';
+    return { decision: 'approved' };
   }
 
   const executionContext = getDb()
@@ -144,11 +144,11 @@ export async function requestApproval(
       }
     });
   }
-  const decision = await waitForApproval(approvalId);
+  const resolution = await waitForApproval(approvalId);
   getDb()
     .prepare('UPDATE approvals SET status = ?, resolved_at = unixepoch() WHERE id = ?')
-    .run(decision, approvalId);
-  if (decision === 'approved') {
+    .run(resolution.decision, approvalId);
+  if (resolution.decision === 'approved') {
     getDb()
       .prepare("UPDATE executions SET status = 'running' WHERE id = ?")
       .run(executionId);
@@ -173,11 +173,11 @@ export async function requestApproval(
     const event = createSessionEvent({
       sessionId: executionContext.sessionId,
       type: 'approval_resolved',
-      title: decision === 'approved' ? `Approved: ${action}` : `Denied: ${action}`,
-      body: decision === 'approved' ? 'The agent can continue.' : 'The agent action was denied.',
+      title: resolution.decision === 'approved' ? `Approved: ${action}` : `Denied: ${action}`,
+      body: resolution.decision === 'approved' ? 'The agent can continue.' : 'The agent action was denied.',
       projectId: executionContext.projectId,
       executionId,
-      metadata: { action, decision },
+      metadata: { action, decision: resolution.decision },
     });
     broadcast(userId, {
       type: 'session_event_created',
@@ -185,5 +185,16 @@ export async function requestApproval(
       event: { ...event, metadata: JSON.parse(event.metadata || '{}') },
     });
   }
-  return decision;
+  return resolution;
+}
+
+export async function requestInput(
+  executionId: string,
+  userId: string,
+  action: string,
+  payload: Record<string, unknown>,
+): Promise<string | null> {
+  const resolution = await requestApproval(executionId, userId, action, payload, 'user');
+  if (resolution.decision !== 'approved') return null;
+  return resolution.value ?? null;
 }

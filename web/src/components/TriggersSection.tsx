@@ -31,6 +31,10 @@ function WebhookUrl({ triggerId }: { triggerId: string }) {
   );
 }
 
+function fmtCost(usd: number): string {
+  return usd < 0.01 ? `$${usd.toFixed(3)}` : `$${usd.toFixed(2)}`;
+}
+
 function TriggerCard({ t, onDelete }: { t: Trigger; onDelete: () => void }) {
   return (
     <div className="flex flex-col gap-2 rounded-lg border border-border-soft bg-card px-4 py-3">
@@ -46,6 +50,7 @@ function TriggerCard({ t, onDelete }: { t: Trigger; onDelete: () => void }) {
       <div className="flex flex-wrap items-center gap-3 text-[11px] text-faint-fg">
         {t.last_run_at && <span>Last run {timeAgo(t.last_run_at)}</span>}
         {t.next_run_at && <span>Next run {timeAgo(t.next_run_at)}</span>}
+        {t.total_cost_usd > 0 && <span>{fmtCost(t.total_cost_usd)} spent</span>}
         <WebhookUrl triggerId={t.id} />
       </div>
     </div>

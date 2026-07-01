@@ -22,11 +22,11 @@ export async function runGitOp(input: GitOpInput, ctx: ToolContext): Promise<str
 
   if (AGENT_OPS.has(input.op)) {
     const decision = await requestApproval(ctx.executionId, ctx.userId, `git ${input.op}`, input as unknown as Record<string, unknown>, 'agent');
-    if (decision === 'rejected') return `git ${input.op} cancelled`;
+    if (decision.decision === 'rejected') return `git ${input.op} cancelled`;
   }
   if (USER_OPS.has(input.op)) {
     const decision = await requestApproval(ctx.executionId, ctx.userId, `git ${input.op}`, input as unknown as Record<string, unknown>, 'user');
-    if (decision === 'rejected') return `User rejected git ${input.op}`;
+    if (decision.decision === 'rejected') return `User rejected git ${input.op}`;
   }
 
   switch (input.op) {

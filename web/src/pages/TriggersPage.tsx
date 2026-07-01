@@ -1,18 +1,84 @@
 import { useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { BookOpen, Clipboard, Loader2, MoreHorizontal, Play, Plus, Trash2, X } from 'lucide-react';
-import { getAllTriggers, updateGlobalTrigger, deleteGlobalTrigger, runTriggerNow, createGlobalTrigger, getAllFiles, getProjects } from '../lib/api.js';
+import { AlertCircle, BookOpen, CheckCircle2, Clipboard, Clock, ExternalLink, Loader2, MoreHorizontal, Play, Plus, Trash2, X } from 'lucide-react';
+import { getAllTriggers, updateGlobalTrigger, deleteGlobalTrigger, runTriggerNow, createGlobalTrigger, getAllFiles, getProjects, getTriggerRuns } from '../lib/api.js';
 import { usePageTitle } from '../lib/usePageTitle.js';
-import { timeAgo } from '../lib/utils.js';
+import { cn, timeAgo } from '../lib/utils.js';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { ConfirmDialog } from '@/components/ui/confirm-dialog';
 import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
+import { Sheet, SheetContent, SheetHeader, SheetTitle } from '@/components/ui/sheet';
 import { CenteredEmptyState, ContentColumn, PageBody, PageHeader, PageLoading, PageShell } from '@/components/ui/app-layout';
 import { DataTable, DataTableBody, DataTableHeader, DataTableRow } from '@/components/ui/data-table';
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
-import type { LibraryFile, Project, Trigger } from '../types.js';
+import type { LibraryFile, Project, Trigger, TriggerRun } from '../types.js';
+
+function fmtCost(usd: number): string {
+  return usd < 0.01 ? `$${usd.toFixed(3)}` : `$${usd.toFixed(2)}`;
+}
+
+function RunStatusIcon({ status }: { status: Trigger['last_run_status'] }) {
+  if (status === 'running') return <Loader2 size={12} className="animate-spin text-primary" />;
+  if (status === 'error') return <AlertCircle size={12} className="text-destructive" />;
+  if (status === 'done') return <CheckCircle2 size={12} className="text-emerald-500" />;
+  return null;
+}
+
+function RunsSheet({ trigger, onClose }: { trigger: Trigger; onClose: () => void }) {
+  const navigate = useNavigate();
+  const { data: runs = [], isLoading } = useQuery<TriggerRun[]>({
+    queryKey: ['trigger-runs', trigger.id],
+    queryFn: () => getTriggerRuns(trigger.id),
+    staleTime: 10_000,
+  });
+
+  return (
+    <Sheet open onOpenChange={open => { if (!open) onClose(); }}>
+      <SheetContent className="w-full sm:max-w-md">
+        <SheetHeader>
+          <SheetTitle>Run history</SheetTitle>
+        </SheetHeader>
+        <div className="mt-4 flex flex-col gap-2 overflow-y-auto">
+          {isLoading ? (
+            <div className="flex items-center justify-center py-8">
+              <Loader2 size={18} className="animate-spin text-muted-foreground" />
+            </div>
+          ) : runs.length === 0 ? (
+            <p className="py-8 text-center text-sm text-muted-foreground">No runs yet.</p>
+          ) : runs.map(run => (
+            <div key={run.id} className="flex items-start justify-between gap-3 rounded-lg border border-border-soft bg-card px-3.5 py-3">
+              <div className="min-w-0 flex-1">
+                <div className="flex items-center gap-2">
+                  {run.status === 'running' && <Loader2 size={12} className="shrink-0 animate-spin text-primary" />}
+                  {run.status === 'error' && <AlertCircle size={12} className="shrink-0 text-destructive" />}
+                  {run.status === 'done' && <CheckCircle2 size={12} className="shrink-0 text-emerald-500" />}
+                  {!run.status && <Clock size={12} className="shrink-0 text-faint-fg" />}
+                  <span className={cn('truncate text-sm font-medium', run.status === 'error' ? 'text-destructive' : 'text-foreground')}>
+                    {run.title ?? 'Untitled run'}
+                  </span>
+                </div>
+                <div className="mt-1 flex items-center gap-2 text-[11px] text-faint-fg">
+                  <span>{timeAgo(run.created_at)}</span>
+                  {run.cost_usd > 0 && <><span>·</span><span>{fmtCost(run.cost_usd)}</span></>}
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => { navigate(`/c/${run.id}`); onClose(); }}
+                className="shrink-0 text-muted-foreground/50 transition-colors hover:text-foreground"
+                title="Open session"
+              >
+                <ExternalLink size={13} />
+              </button>
+            </div>
+          ))}
+        </div>
+      </SheetContent>
+    </Sheet>
+  );
+}
 
 export default function TriggersPage() {
   usePageTitle('Triggers');
@@ -20,6 +86,7 @@ export default function TriggersPage() {
   const qc = useQueryClient();
   const [pendingDelete, setPendingDelete] = useState<Trigger | null>(null);
   const [runningId, setRunningId] = useState<string | null>(null);
+  const [runsTarget, setRunsTarget] = useState<Trigger | null>(null);
 
   // New trigger dialog
   const [createOpen, setCreateOpen] = useState(false);
@@ -140,11 +207,12 @@ export default function TriggersPage() {
         <PageBody className="px-4 pt-5 sm:px-8 sm:pt-9">
           <ContentColumn className="max-w-7xl">
             <DataTable>
-              <DataTableHeader className="grid-cols-[minmax(0,1fr)_7rem_4rem_1.75rem_1.75rem] sm:grid-cols-[minmax(0,1fr)_14rem_4rem_5rem_1.75rem_1.75rem]">
+              <DataTableHeader className="grid-cols-[minmax(0,1fr)_7rem_4rem_1.75rem_1.75rem_1.75rem] sm:grid-cols-[minmax(0,1fr)_14rem_4rem_5rem_1.75rem_1.75rem_1.75rem]">
                 <span>Trigger</span>
                 <span className="hidden sm:block">Schedule / Playbook</span>
                 <span className="justify-self-end">Enabled</span>
                 <span className="hidden justify-self-end sm:block">Last run</span>
+                <span />
                 <span />
                 <span />
               </DataTableHeader>
@@ -153,9 +221,12 @@ export default function TriggersPage() {
                   const enabled = !!t.enabled;
                   const playbook = t.playbook_id ? docMap.get(t.playbook_id) : undefined;
                   return (
-                    <DataTableRow key={t.id} className="grid-cols-[minmax(0,1fr)_7rem_4rem_1.75rem_1.75rem] sm:grid-cols-[minmax(0,1fr)_14rem_4rem_5rem_1.75rem_1.75rem]">
+                    <DataTableRow key={t.id} className="grid-cols-[minmax(0,1fr)_7rem_4rem_1.75rem_1.75rem_1.75rem] sm:grid-cols-[minmax(0,1fr)_14rem_4rem_5rem_1.75rem_1.75rem_1.75rem]">
                       <div className="min-w-0">
-                        <div className="truncate text-sm font-medium capitalize text-foreground">{t.kind}</div>
+                        <div className="flex items-center gap-1.5">
+                          <span className="truncate text-sm font-medium capitalize text-foreground">{t.kind}</span>
+                          <span className="sm:hidden"><RunStatusIcon status={t.last_run_status} /></span>
+                        </div>
                         <div className="mt-0.5 truncate font-mono text-[11px] text-faint-fg sm:hidden">
                           {t.kind === 'webhook'
                             ? `/webhooks/trigger/${t.id}`
@@ -193,9 +264,26 @@ export default function TriggersPage() {
                           <span className={`inline-block size-4 rounded-full bg-white shadow-sm transition-transform ${enabled ? 'translate-x-4' : 'translate-x-0'}`} />
                         </button>
                       </div>
-                      <span className="hidden justify-self-end whitespace-nowrap text-[11px] text-faint-fg sm:block">
-                        {t.last_run_at ? timeAgo(t.last_run_at) : 'Never'}
-                      </span>
+                      <div className="hidden flex-col items-end justify-center gap-0.5 sm:flex">
+                        <div className="flex items-center gap-1.5">
+                          <RunStatusIcon status={t.last_run_status} />
+                          <span className="whitespace-nowrap text-[11px] text-faint-fg">
+                            {t.last_run_at ? timeAgo(t.last_run_at) : 'Never'}
+                          </span>
+                        </div>
+                        {t.total_cost_usd > 0 && (
+                          <span className="text-[10px] text-faint-fg/60">{fmtCost(t.total_cost_usd)}</span>
+                        )}
+                      </div>
+                      <button
+                        type="button"
+                        title="Run history"
+                        aria-label="Run history"
+                        onClick={() => setRunsTarget(t)}
+                        className="grid size-7 place-items-center rounded-md text-muted-foreground transition-colors hover:bg-background hover:text-foreground"
+                      >
+                        <Clock size={13} />
+                      </button>
                       <button
                         type="button"
                         title="Run now"
@@ -253,6 +341,8 @@ export default function TriggersPage() {
           </ContentColumn>
         </PageBody>
       )}
+
+      {runsTarget && <RunsSheet trigger={runsTarget} onClose={() => setRunsTarget(null)} />}
 
       {pendingDelete && (
         <ConfirmDialog

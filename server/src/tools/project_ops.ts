@@ -19,7 +19,7 @@ export async function deleteProject(
     { project_id: input.project_id, name: project.name, repo_paths: repoPaths, delete_files: input.delete_files },
     'user'
   );
-  if (decision === 'rejected') return 'delete_project cancelled';
+  if (decision.decision === 'rejected') return 'delete_project cancelled';
 
   getDb().prepare('DELETE FROM projects WHERE id = ? AND user_id = ?').run(input.project_id, userId);
 

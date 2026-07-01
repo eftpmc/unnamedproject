@@ -11,6 +11,18 @@ export interface TriggerRecord {
   next_run_at: number | null;
   last_run_at: number | null;
   created_at: number;
+  last_provider_session_id: string | null;
+  total_cost_usd: number;
+  last_run_status: 'running' | 'done' | 'error' | null;
+}
+
+export interface TriggerRun {
+  id: string;
+  title: string | null;
+  created_at: number;
+  updated_at: number;
+  cost_usd: number;
+  status: 'running' | 'done' | 'error' | null;
 }
 
 export function createTrigger(input: {
@@ -25,6 +37,7 @@ export function createTrigger(input: {
     schedule_cron: input.schedule_cron ?? null, playbook_id: input.playbook_id ?? null,
     enabled: 1, next_run_at: input.next_run_at ?? null, last_run_at: null,
     created_at: Math.floor(Date.now() / 1000),
+    last_provider_session_id: null, total_cost_usd: 0, last_run_status: null,
   };
   getDb().prepare(
     'INSERT INTO triggers (id,project_id,kind,schedule_cron,playbook_id,enabled,next_run_at,last_run_at,created_at) VALUES (?,?,?,?,?,?,?,?,?)',
@@ -34,11 +47,35 @@ export function createTrigger(input: {
 
 export function listTriggersByUser(userId: string): TriggerRecord[] {
   return getDb().prepare(`
-    SELECT t.* FROM triggers t
+    SELECT t.*,
+      COALESCE((
+        SELECT SUM(au.cost_usd) FROM agent_usage au
+        JOIN sessions s ON s.id = au.session_id
+        WHERE s.trigger_id = t.id
+      ), 0) as total_cost_usd,
+      (
+        SELECT st.status FROM session_turns st
+        JOIN sessions s ON s.id = st.session_id
+        WHERE s.trigger_id = t.id
+        ORDER BY st.created_at DESC LIMIT 1
+      ) as last_run_status
+    FROM triggers t
     JOIN projects p ON p.id = t.project_id
     WHERE p.user_id = ?
     ORDER BY t.created_at DESC
   `).all(userId) as TriggerRecord[];
+}
+
+export function listTriggerRuns(triggerId: string, limit = 20): TriggerRun[] {
+  return getDb().prepare(`
+    SELECT s.id, s.title, s.created_at, s.updated_at,
+      COALESCE((SELECT SUM(cost_usd) FROM agent_usage WHERE session_id = s.id), 0) as cost_usd,
+      (SELECT st.status FROM session_turns st WHERE st.session_id = s.id ORDER BY st.created_at DESC LIMIT 1) as status
+    FROM sessions s
+    WHERE s.trigger_id = ?
+    ORDER BY s.created_at DESC
+    LIMIT ?
+  `).all(triggerId, limit) as TriggerRun[];
 }
 
 export function listTriggersByProject(projectId: string, userId: string): TriggerRecord[] {

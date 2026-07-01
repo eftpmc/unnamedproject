@@ -1,7 +1,7 @@
 import { Router } from 'express';
 import { getDb } from '../db/index.js';
 import { requireAuthHeaderOrQuery, type AuthedRequest } from '../middleware/auth.js';
-import { createTrigger, deleteTrigger, getTrigger, listTriggersByUser, type TriggerRecord } from '../services/triggers.js';
+import { createTrigger, deleteTrigger, getTrigger, listTriggersByUser, listTriggerRuns, type TriggerRecord } from '../services/triggers.js';
 import { nextCronRun } from '../lib/cron.js';
 import { fireTrigger } from '../services/triggerRunner.js';
 
@@ -60,6 +60,12 @@ function authTrigger(triggerId: string, userId: string): TriggerRecord | undefin
   const owned = getDb().prepare('SELECT 1 FROM projects WHERE id = ? AND user_id = ?').get(t.project_id, userId);
   return owned ? t : undefined;
 }
+
+router.get('/:id/runs', (req, res) => {
+  const { userId } = req as unknown as AuthedRequest;
+  if (!authTrigger(req.params.id, userId)) { res.status(404).json({ error: 'Trigger not found' }); return; }
+  res.json(listTriggerRuns(req.params.id));
+});
 
 router.post('/:id/fire', async (req, res) => {
   const { userId } = req as unknown as AuthedRequest;

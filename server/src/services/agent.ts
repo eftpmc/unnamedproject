@@ -8,8 +8,13 @@ import { buildContext, buildContextUpdate } from './context.js';
 import { modeUsesProviderResume, selectInvocationMode } from './invocation-policy.js';
 import { getSessionState, recordSessionStateEvent, updateSessionState } from './session-state.js';
 import { generateMcpToken } from '../mcp/auth.js';
-import { getConversationProvider, isProviderLimitError } from './conversation-provider.js';
-import { getDecryptedConfig } from '../routes/connections.js';
+import { getConversationProvider } from './conversation-provider.js';
+
+function isProviderLimitError(err: unknown): boolean {
+  const msg = (err instanceof Error ? err.message : String(err)).toLowerCase();
+  return msg.includes('rate limit') || msg.includes('usage limit') || msg.includes('quota') || msg.includes('limit exceeded') || msg.includes('too many requests') || msg.includes('429');
+}
+import { getDecryptedConfig, touchConnection } from '../routes/connections.js';
 import { ensureWorktree } from '../lib/worktree.js';
 
 const activeTurnControllers = new Map<string, AbortController>();
@@ -99,12 +104,14 @@ function getUserMcpServers(userId: string): Record<string, McpServerEntry> {
       const key = conn.name.toLowerCase().replace(/[^a-z0-9]+/g, '_').replace(/^_+|_+$/g, '') || conn.id;
       if (cfg.url) {
         servers[key] = { url: cfg.url, headers: cfg.headers ? JSON.parse(cfg.headers) : undefined };
+        touchConnection(conn.id);
       } else if (cfg.command) {
         servers[key] = {
           command: cfg.command,
           args: cfg.args ? JSON.parse(cfg.args) : undefined,
           env: cfg.env ? JSON.parse(cfg.env) : undefined,
         };
+        touchConnection(conn.id);
       }
     } catch { /* skip malformed connections */ }
   }

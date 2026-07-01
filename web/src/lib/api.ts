@@ -151,8 +151,8 @@ export function getPendingApprovals(): Promise<Array<{ approval_id: string; exec
   return request('/executions/pending-approvals');
 }
 
-export function approveExecution(executionId: string): Promise<void> {
-  return request(`/executions/${executionId}/approve`, { method: 'POST' });
+export function approveExecution(executionId: string, value?: string): Promise<void> {
+  return request(`/executions/${executionId}/approve`, { method: 'POST', body: JSON.stringify({ value }), headers: { 'Content-Type': 'application/json' } });
 }
 
 export function rejectExecution(executionId: string): Promise<void> {
@@ -251,6 +251,10 @@ export function updateGlobalTrigger(id: string, body: { enabled?: boolean; playb
 
 export function runTriggerNow(id: string): Promise<{ status: string; sessionId: string }> {
   return request(`/triggers/${id}/fire`, { method: 'POST' });
+}
+
+export function getTriggerRuns(id: string): Promise<import('../types.js').TriggerRun[]> {
+  return request(`/triggers/${id}/runs`);
 }
 
 export function getSettings(): Promise<UserSettings> {

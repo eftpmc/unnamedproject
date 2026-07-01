@@ -1,7 +1,6 @@
 import { registerSystemHandlers } from './system.js';
 import { registerSpaceHandlers } from './spaces.js';
 import { registerMemoryHandlers } from './memory.js';
-import { registerKnowledgeHandlers } from './knowledge.js';
 import { registerChatHandlers } from './chats.js';
 import { registerGitHandlers } from './git.js';
 import { registerConnectionHandlers } from './connections.js';
@@ -17,7 +16,6 @@ import { registerToolPackageHandlers } from './tool-packages.js';
 registerSystemHandlers();
 registerSpaceHandlers();
 registerMemoryHandlers();
-registerKnowledgeHandlers();
 registerChatHandlers();
 registerGitHandlers();
 registerConnectionHandlers();

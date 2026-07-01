@@ -4,17 +4,13 @@ import { recallRelevant } from './memory.js';
 import { formatEntry } from '../tools/memory_tools.js';
 import { formatSessionStateBlock } from './session-state.js';
 import { getDecryptedConfig } from '../routes/connections.js';
-import type { Intent } from './intent.js';
 import fs from 'fs';
 import path from 'path';
 
 // ─── Block builders ────────────────────────────────────────────────────────
 
-function baseBlock(intent: Intent): string {
-  const isCode = intent.domain === 'code' || intent.domain === 'multi' || intent.domain === 'general';
-  const autoApproved = isCode
-    ? 'git_op add/commit, list_projects, create_project, update_project, pin_project, search_files, project_query, rebuild_graph, recall, remember, forget, list_chats, read_chat, write_file, write_binary_file, promote_artifact, read_file, list_files, tag_file, delete_file, link_project, create_trigger, list_triggers, delete_trigger, list_connections, create_connection, update_connection, delete_connection, test_connection, vault_get, vault_list, checkpoint_session, create_tool_package, test_tool_package, list_tool_packages'
-    : 'list_projects, create_project, pin_project, recall, remember, forget, list_chats, read_chat, write_file, write_binary_file, promote_artifact, read_file, list_files, tag_file, delete_file, list_connections, create_connection, update_connection, delete_connection, test_connection, vault_get, vault_list, checkpoint_session, create_tool_package, test_tool_package, list_tool_packages';
+function baseBlock(): string {
+  const autoApproved = 'git_op add/commit, list_projects, create_project, update_project, pin_project, search_files, project_query, rebuild_index, recall, remember, forget, list_chats, read_chat, write_file, write_binary_file, promote_artifact, read_file, list_files, tag_file, delete_file, link_project, create_trigger, list_triggers, delete_trigger, list_connections, create_connection, delete_connection, test_connection, vault_get, vault_list, checkpoint_session, create_tool_package, test_tool_package, list_tool_packages';
 
   return `You are a personal AI assistant with full coding capabilities and access to the user's projects, documents, and memory. You can implement code, write files, run commands, and manage the user's workspace directly.
 
@@ -56,7 +52,7 @@ If a needed capability can be built locally (e.g. a LaTeX compiler, a file conve
 2. Call test_tool_package and fix validation errors.
 3. Call request_tool_install with a clear reason. The platform asks the user for approval and then registers the package as an MCP connection.
 4. After approval, use list_connections or test_connection to confirm the generated mcp connection exists, then call it via mcp_call like any other MCP.
-Declare only the permissions the package actually needs. The package process starts in its package directory and receives UNNAMED_TOOL_* environment metadata describing the approved manifest. Do not directly call create_connection for generated local MCP servers. create_connection is for user-specified external MCPs and web/service connections. Do not write MCP server scripts to the user's home directory, Desktop, Documents, or any path outside the managed tool package flow.
+Declare only the permissions the package actually needs. The package process starts in its package directory and receives UNNAMED_TOOL_* environment metadata describing the approved manifest. Do not directly call create_connection for generated local MCP servers. create_connection is for user-specified external MCPs and GitHub connections only. Do not write MCP server scripts to the user's home directory, Desktop, Documents, or any path outside the managed tool package flow.
 
 ## System dependencies
 Never run package managers (brew, pip, npm -g, apt, curl | sh, etc.) without calling install_dependency first. install_dependency pauses for the user to approve, then runs the command. Always provide a clear reason so the user understands what is being installed and why. If the user rejects, stop and explain what manual step they would need to take.
@@ -92,7 +88,7 @@ When the task is to collect structured data (job listings, profiles, search resu
 Do not take screenshots during a scraping workflow. Do not re-extract data you have already written to a document.
 
 ## File search
-Use search_files for fast codebase lookups (finding where a function is defined, tracing usages, locating config). Only fall back to project_query for broad architectural questions that need reasoning across the whole codebase.
+Use search_files for fast codebase lookups (finding where a function is defined, tracing usages, locating config). Only fall back to project_query for broad architectural questions that need reasoning across the whole codebase. Call rebuild_index if the index seems stale.
 
 ## Documents
 A document is a markdown file in a project, the source of truth on disk. Author with write_file (project_id, path, title, tags, body). Tags are YAML key/values used for tracking and querying — set \`type\` (e.g. application, resume, workflow, note) and \`status\` where relevant. Query with list_files({ project_id, type, tags }); a tracker is just a query grouped by status. Update a status cheaply with tag_file — do NOT rewrite the whole file for a field change. Link files with [[wikilinks]] in the body.
@@ -104,7 +100,12 @@ Binary artifacts are first-class project files. Use write_binary_file for genera
 A project is a workspace that can contain durable files and a code repo. Create one with create_project; link an existing repo path with link_project. In the shell, use project/files for durable artifacts and project/repo for code. In MCP tools, pass project_id.
 
 ## Triggers (the automation loop)
-A trigger runs a playbook document (a file with tags type: workflow) on a schedule. Create with create_trigger({ kind: 'schedule', schedule_cron, playbook_id }). When it fires, a new chat starts pinned to this project seeded with the playbook body; you execute it using the project's connections and tools, writing results back as files and tag updates.`;
+A trigger runs a playbook document (a file with tags type: workflow) on a schedule. Create with create_trigger({ kind: 'schedule', schedule_cron, playbook_id }). When it fires, a new chat starts pinned to this project seeded with the playbook body; you execute it using the project's connections and tools, writing results back as files and tag updates.
+
+## Research discipline
+Use recall before searching; the answer may already be in memory.
+Web search is available if the user has configured a search MCP (e.g. Brave, Exa, Tavily) — check list_connections to see what's available. Always read the full source after getting search results before drawing conclusions.
+When a coding task requires external knowledge (library APIs, patterns, examples): complete the research pass first.`;
 }
 
 function permissionBlock(userId: string): string {
@@ -119,59 +120,6 @@ function permissionBlock(userId: string): string {
 Active profile: ${profile}. ${description}`;
 }
 
-function researchBlock(): string {
-  return `## Research discipline
-Use recall before searching; the answer may already be in memory.
-Web search is available if the user has configured a search MCP (e.g. Brave, Exa, Tavily) — check list_connections to see what's available. Always read the full source after getting search results before drawing conclusions.
-When a coding task requires external knowledge (library APIs, patterns, examples): complete the research pass first.`;
-}
-
-function domainBlock(intent: Intent): string {
-  switch (intent.domain) {
-    case 'code':
-      return `## Coding tasks
-You implement code directly using your own tools (read, write, edit files, run commands, etc.).
-
-Scoping:
-- One coherent feature → implement it end-to-end in one go; don't break it into unnecessary round-trips
-- Use project_query for broad architectural questions before reading files; it's faster than grepping
-
-## Mandatory post-coding flow
-After finishing any coding work, always follow this sequence:
-1. Check for failure signals (test failures, errors, incomplete work). If present, fix and repeat.
-2. Run git_op op=add via the app MCP (stages changes into the git tracking).
-3. Run git_op op=commit with a descriptive message. The user cannot see uncommitted work.
-4. Reply to the user with a short summary of what changed.
-
-Do not summarize or report done before step 3 completes.`;
-
-    case 'writing':
-      return `## Writing tasks
-Use write_file for text output to save; use write_binary_file or promote_artifact for generated PDFs, images, and other binary outputs. Respond inline for drafts the user has not asked to save.
-Confirm path and project with the user before writing any file.
-Do not invoke coding agents for writing, documentation, or note-taking tasks.`;
-
-    case 'research':
-      return `## Research tasks
-Use list_connections to find the configured search MCP tool, then call it. Always fetch and read the full source page after getting results — snippets alone are insufficient.
-Cite sources in your response.
-Check recall first before any web search.
-
-After synthesizing findings: save them to the active project. Call list_files — if a suitable research doc exists, use tag_file to update its status; otherwise write_file with type: research and tags status: draft. Use markdown sections for narrative; link related documents with [[wikilinks]].`;
-
-    case 'creative':
-      return `## Creative tasks
-Respond inline for short creative work. Use write_file for saved text and write_binary_file or promote_artifact for saved generated assets.
-Research often improves creative work — check for relevant context before generating.`;
-
-    case 'multi':
-      return `## Multi-domain tasks
-Suggested order: research → setup → implementation → verification → git → github.`;
-
-    default:
-      return '';
-  }
-}
 
 interface ProjectCtx {
   id: string;
@@ -374,17 +322,13 @@ export async function buildContextUpdate(userId: string, sessionId: string, quer
   return blocks.join('\n\n');
 }
 
-export async function buildContext(userId: string, sessionId: string, intent: Intent, queryText: string): Promise<string> {
+export async function buildContext(userId: string, sessionId: string, queryText: string): Promise<string> {
   const pinnedProject = getPinnedProject(sessionId);
 
   const blocks: string[] = [
-    baseBlock(intent),
+    baseBlock(),
     permissionBlock(userId),
-    researchBlock(),
   ];
-
-  const domain = domainBlock(intent);
-  if (domain) blocks.push(domain);
 
   blocks.push(instructionBlock(pinnedProject));
 

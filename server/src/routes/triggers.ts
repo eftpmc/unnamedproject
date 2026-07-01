@@ -4,6 +4,7 @@ import { requireAuthHeaderOrQuery, type AuthedRequest } from '../middleware/auth
 import { createTrigger, deleteTrigger, getTrigger, listTriggersByUser, listTriggerRuns, type TriggerRecord } from '../services/triggers.js';
 import { nextCronRun } from '../lib/cron.js';
 import { fireTrigger } from '../services/triggerRunner.js';
+import { logger } from '../lib/logger.js';
 
 const router = Router();
 router.use(requireAuthHeaderOrQuery);
@@ -74,7 +75,7 @@ router.post('/:id/fire', async (req, res) => {
     const sessionId = await fireTrigger(req.params.id);
     res.json({ status: 'firing', sessionId });
   } catch (err) {
-    console.error('[trigger/fire]', err);
+    logger.error('[trigger/fire]', { triggerId: req.params.id, err: err instanceof Error ? err.message : String(err) });
     res.status(500).json({ error: 'Failed to fire trigger' });
   }
 });

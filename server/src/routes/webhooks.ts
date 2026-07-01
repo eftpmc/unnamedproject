@@ -1,6 +1,7 @@
 import { Router } from 'express';
 import { getDb } from '../db/index.js';
 import { fireTrigger } from '../services/triggerRunner.js';
+import { logger } from '../lib/logger.js';
 
 const router = Router();
 
@@ -20,7 +21,7 @@ router.post('/trigger/:triggerId', (req, res) => {
 
   res.json({ ok: true, triggerId });
   fireTrigger(triggerId).catch(err =>
-    console.error(`[webhook] fireTrigger ${triggerId} failed:`, err),
+    logger.error('[webhook] fireTrigger failed', { triggerId, err: err instanceof Error ? err.message : String(err) }),
   );
 });
 

@@ -12,6 +12,7 @@ export interface InvokeParams {
   mcpServers: Record<string, { url?: string; headers?: Record<string, string>; command?: string; args?: string[]; env?: Record<string, string> }>;
   model?: string;
   effort?: string;
+  timeoutMs?: number;
   signal?: AbortSignal;
   onText: (delta: string) => void;
   onSessionId: (id: string) => void;

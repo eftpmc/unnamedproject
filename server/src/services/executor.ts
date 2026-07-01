@@ -1,4 +1,5 @@
 import { createSessionEvent, getDb, getExpoPushToken, setExpoPushToken, getApnsDeviceToken, setApnsDeviceToken } from '../db/index.js';
+import { logger } from '../lib/logger.js';
 import { sendApprovalPush } from './push.js';
 import { newId } from '../lib/ids.js';
 import { broadcast } from './socket.js';
@@ -127,7 +128,7 @@ export async function requestApproval(
       if (ticket?.status === 'error' && ticket.message === 'DeviceNotRegistered') {
         setExpoPushToken(userId, null);
       }
-    }).catch(err => console.error('[push] Failed to send Expo notification:', err));
+    }).catch(err => logger.error('[push] Expo notification failed', { err: err instanceof Error ? err.message : String(err) }));
   }
   const apnsToken = getApnsDeviceToken(userId);
   if (apnsToken) {
@@ -140,7 +141,7 @@ export async function requestApproval(
       if (err instanceof Error && err.message === 'DeviceNotRegistered') {
         setApnsDeviceToken(userId, null);
       } else {
-        console.error('[apns] Failed to send notification:', err);
+        logger.error('[apns] Push failed', { err: err instanceof Error ? err.message : String(err) });
       }
     });
   }

@@ -34,6 +34,8 @@ interface ToolContext {
   effort?: string;
   /** System prompt to inject on first turn. Defaults to DELEGATE_FRAMING when absent. */
   systemPromptSuffix?: string;
+  /** Override the default 30-minute kill timeout. */
+  timeoutMs?: number;
   signal?: AbortSignal;
   onText?: (delta: string) => void;      // for streaming chat
   onSessionId?: (id: string) => void;
@@ -127,7 +129,7 @@ export async function invokeClaudeCode(input: ClaudeCodeInput, ctx: ToolContext)
       setTimeout(() => {
         if (proc.exitCode === null) proc.kill('SIGKILL');
       }, 5000);
-    }, DELEGATE_TIMEOUT_MS);
+    }, ctx.timeoutMs ?? DELEGATE_TIMEOUT_MS);
 
     proc.stdout.on('data', (chunk: Buffer) => {
       buffer += chunk.toString();
@@ -189,7 +191,7 @@ export async function invokeClaudeCode(input: ClaudeCodeInput, ctx: ToolContext)
       unregisterProcess(ctx.executionId);
       if (mcpConfigDir) void fs.rm(mcpConfigDir, { recursive: true, force: true });
       if (timedOut) {
-        reject(new Error(`claude timed out after ${DELEGATE_TIMEOUT_MS / 1000}s and was killed`));
+        reject(new Error(`claude timed out after ${(ctx.timeoutMs ?? DELEGATE_TIMEOUT_MS) / 1000}s and was killed`));
         return;
       }
       if (code !== 0 && !resultText) {

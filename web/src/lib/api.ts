@@ -273,9 +273,7 @@ export function createConnection(body: { name: string; type: string; purpose?: s
   return request('/connections', { method: 'POST', body: JSON.stringify(body) });
 }
 
-export function updateConnection(id: string, body: { name?: string; service?: string; url?: string; notes?: string }): Promise<{ ok: boolean }> {
-  return request(`/connections/${id}`, { method: 'PATCH', body: JSON.stringify(body) });
-}
+
 
 export function deleteConnection(id: string): Promise<void> {
   return request(`/connections/${id}`, { method: 'DELETE' });

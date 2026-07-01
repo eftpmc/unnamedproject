@@ -20,17 +20,14 @@ export function registerConnectionHandlers(): void {
 
   registerTool({
     name: 'create_connection',
-    description: 'Create a new connection. For web connections (type=web): provide name, service (e.g. "linkedin"), url, and optional notes. For MCP/github: provide config.',
+    description: 'Create a new MCP or GitHub connection. Provide name, type (github | mcp), and config.',
     inputSchema: {
       type: 'object',
       properties: {
         name: { type: 'string' },
-        type: { type: 'string', description: 'github | mcp | web' },
+        type: { type: 'string', description: 'github | mcp' },
         purpose: { type: 'string' },
-        config: { type: 'object', description: 'Required for github/mcp types' },
-        service: { type: 'string', description: 'Service slug for web type (e.g. linkedin, gmail, handshake)' },
-        url: { type: 'string', description: 'URL for web connections' },
-        notes: { type: 'string', description: 'Context notes for the agent (navigation hints, account details, etc.)' },
+        config: { type: 'object', description: 'Required: command/args/env for mcp, apiKey for github' },
       },
       required: ['name', 'type'],
     },
@@ -43,9 +40,8 @@ export function registerConnectionHandlers(): void {
           kind: 'connection',
           name: args.name as string,
           connectionType: connType,
-          description: (args.notes as string | undefined) ?? (connType === 'mcp' ? 'Add a new MCP integration' : connType === 'github' ? 'Connect to a GitHub repository' : 'Add a web connection'),
+          description: connType === 'mcp' ? 'Add a new MCP integration' : 'Connect to a GitHub repository',
           command: (args.config as Record<string, unknown> | undefined)?.command as string | undefined,
-          url: args.url as string | undefined,
         },
       }, 'user');
       if (decision.decision === 'rejected') {
@@ -58,9 +54,6 @@ export function registerConnectionHandlers(): void {
           type: args.type as string,
           purpose: args.purpose as string | undefined,
           config: (args.config as Record<string, unknown>) ?? {},
-          service: args.service as string | undefined,
-          url: args.url as string | undefined,
-          notes: args.notes as string | undefined,
         },
         { userId, executionId },
       );
@@ -70,43 +63,8 @@ export function registerConnectionHandlers(): void {
   });
 
   registerTool({
-    name: 'update_connection',
-    description: 'Update a web connection\'s name, service, url, or notes. Only works on type=web connections.',
-    inputSchema: {
-      type: 'object',
-      properties: {
-        connection_id: { type: 'string' },
-        name: { type: 'string' },
-        service: { type: 'string' },
-        url: { type: 'string' },
-        notes: { type: 'string' },
-      },
-      required: ['connection_id'],
-    },
-    handler: async (args, userId) => {
-      const row = getDb()
-        .prepare("SELECT id FROM connections WHERE id = ? AND user_id = ? AND type = 'web'")
-        .get(args.connection_id as string, userId);
-      if (!row) return `Error: web connection ${args.connection_id} not found`;
-      const sets: string[] = [];
-      const vals: unknown[] = [];
-      if (args.name !== undefined) { sets.push('name = ?'); vals.push(args.name); }
-      if (args.service !== undefined) { sets.push('service = ?'); vals.push(args.service || null); }
-      if (args.url !== undefined) { sets.push('url = ?'); vals.push(args.url || null); }
-      if (args.notes !== undefined) { sets.push('notes = ?'); vals.push(args.notes || null); }
-      if (!sets.length) return 'Error: nothing to update';
-      try {
-        getDb().prepare(`UPDATE connections SET ${sets.join(', ')} WHERE id = ? AND user_id = ?`).run(...vals, args.connection_id as string, userId);
-      } catch {
-        return 'Error: connection name already exists';
-      }
-      return 'updated';
-    },
-  });
-
-  registerTool({
     name: 'delete_connection',
-    description: 'Delete a connection by id. Works for web connections; also removes MCP connections.',
+    description: 'Delete a connection by id.',
     inputSchema: {
       type: 'object',
       properties: { connection_id: { type: 'string' } },

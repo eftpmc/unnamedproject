@@ -1,6 +1,6 @@
 import { getProjectByIdForUser } from '../db/index.js';
 import { getProject } from '../services/projects.js';
-import { hasGraph, buildGraph, queryGraph } from '../services/graphify.js';
+import { hasIndex, buildIndex, queryIndex } from '../services/repoIndex.js';
 
 interface ProjectQueryInput {
   project_id: string;
@@ -14,9 +14,9 @@ export async function runProjectQuery(input: ProjectQueryInput, userId: string):
   if (!project) return 'Project not found.';
 
   const repoPath = project.repo_path;
-  if (!await hasGraph(repoPath)) {
-    await buildGraph(repoPath, project.id);
+  if (!await hasIndex(repoPath)) {
+    await buildIndex(repoPath, project.id);
   }
 
-  return await queryGraph(input.question, repoPath);
+  return await queryIndex(input.question, repoPath);
 }

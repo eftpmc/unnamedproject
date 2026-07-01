@@ -1,6 +1,6 @@
 import { registerTool } from '../registry.js';
 import { runProjectQuery } from '../../tools/project_query.js';
-import { buildGraph, searchGraph } from '../../services/graphify.js';
+import { buildIndex, searchIndex } from '../../services/repoIndex.js';
 
 export function registerKnowledgeHandlers(): void {
   registerTool({
@@ -39,13 +39,13 @@ export function registerKnowledgeHandlers(): void {
       const project = getProject(args.project_id as string);
       if (!project) return `Error: project ${args.project_id} not found`;
       const limit = Math.min(Number(args.limit ?? 10), 20);
-      return searchGraph(args.query as string, project.repo_path, limit);
+      return searchIndex(args.query as string, project.repo_path, limit);
     },
   });
 
   registerTool({
-    name: 'rebuild_graph',
-    description: 'Rebuild the knowledge graph for a repo project',
+    name: 'rebuild_index',
+    description: 'Rebuild the repo file index for a project',
     inputSchema: {
       type: 'object',
       properties: {
@@ -57,7 +57,7 @@ export function registerKnowledgeHandlers(): void {
       const { getProject } = await import('../../services/projects.js');
       const project = getProject(args.project_id as string);
       if (!project) return `Error: project ${args.project_id} not found`;
-      await buildGraph(project.repo_path, project.id);
+      await buildIndex(project.repo_path, project.id);
       return 'Knowledge graph rebuilt successfully.';
     },
   });

@@ -15,7 +15,6 @@ import { cn, timeAgo } from '@/lib/utils';
 import { getToken } from '../lib/auth.js';
 import {
   createConnection,
-  updateConnection,
   createAgentProvider,
   deleteConnection,
   deleteAgentProvider,
@@ -49,12 +48,11 @@ import type { VaultEntry } from '../lib/api.js';
 import { usePageTitle } from '../lib/usePageTitle.js';
 import type { AgentProvider, Connection, GoogleAccount, Memory, PermissionProfile, Project, ScheduledTask, ToolPackage, UserSettings } from '../types.js';
 
-type Section = 'tools' | 'mcp' | 'connections' | 'workspace' | 'memory' | 'vault';
-const SETTINGS_SECTIONS: Section[] = ['tools', 'mcp', 'connections', 'workspace', 'memory', 'vault'];
+type Section = 'tools' | 'connectors' | 'workspace' | 'memory' | 'vault';
+const SETTINGS_SECTIONS: Section[] = ['tools', 'connectors', 'workspace', 'memory', 'vault'];
 const SECTION_TITLES: Record<Section, string> = {
   tools: 'Tools',
-  mcp: 'MCP',
-  connections: 'Connections',
+  connectors: 'Connectors',
   workspace: 'Workspace',
   memory: 'Memory',
   vault: 'Vault',
@@ -377,146 +375,6 @@ function ToolPackagesSection({ packages }: { packages: ToolPackage[] }) {
   );
 }
 
-const SERVICE_LABELS: Record<string, string> = {
-  linkedin: 'LinkedIn', gmail: 'Gmail', handshake: 'Handshake', twitter: 'Twitter/X',
-  github: 'GitHub', notion: 'Notion', slack: 'Slack', instagram: 'Instagram',
-  facebook: 'Facebook', reddit: 'Reddit', youtube: 'YouTube',
-};
-
-interface WebConnectionForm { name: string; service: string; url: string; notes: string }
-const EMPTY_WEB_FORM: WebConnectionForm = { name: '', service: '', url: '', notes: '' };
-
-function ConnectionsSection({ connections, onChanged }: { connections: Connection[]; onChanged: () => void }) {
-  const qc = useQueryClient();
-  const webConnections = connections.filter(c => c.type === 'web');
-  const [dialog, setDialog] = useState<{ editing: Connection | null } | null>(null);
-  const [form, setForm] = useState<WebConnectionForm>(EMPTY_WEB_FORM);
-  const [error, setError] = useState('');
-
-  function openAdd() {
-    setForm(EMPTY_WEB_FORM);
-    setError('');
-    setDialog({ editing: null });
-  }
-
-  function openEdit(conn: Connection) {
-    setForm({ name: conn.name, service: conn.service ?? '', url: conn.url ?? '', notes: conn.notes ?? '' });
-    setError('');
-    setDialog({ editing: conn });
-  }
-
-  const saveMutation = useMutation({
-    mutationFn: async () => {
-      if (!form.name.trim()) throw new Error('Name required');
-      if (dialog?.editing) {
-        return updateConnection(dialog.editing.id, { name: form.name.trim(), service: form.service.trim(), url: form.url.trim(), notes: form.notes.trim() });
-      }
-      return createConnection({ name: form.name.trim(), type: 'web', service: form.service.trim() || undefined, url: form.url.trim() || undefined, notes: form.notes.trim() || undefined });
-    },
-    onSuccess: () => { qc.invalidateQueries({ queryKey: ['connections'] }); onChanged(); setDialog(null); },
-    onError: (e: Error) => setError(e.message),
-  });
-
-  const deleteMutation = useMutation({
-    mutationFn: (id: string) => deleteConnection(id),
-    onSuccess: () => { qc.invalidateQueries({ queryKey: ['connections'] }); onChanged(); },
-  });
-
-  const grouped = webConnections.reduce<Record<string, Connection[]>>((acc, c) => {
-    const key = c.service || '_other';
-    (acc[key] ??= []).push(c);
-    return acc;
-  }, {});
-
-  return (
-    <div className="flex flex-col gap-5">
-      {webConnections.length === 0 ? (
-        <div className="rounded-lg border border-dashed border-border bg-muted/30 px-4 py-6 text-center text-sm text-muted-foreground">
-          No connections yet. Add one to give the agent named URLs and context for your accounts.
-        </div>
-      ) : (
-        <div className="flex flex-col gap-5">
-          {Object.entries(grouped).map(([service, conns]) => (
-            <div key={service}>
-              {service !== '_other' && (
-                <div className="mb-2 text-[11px] font-medium uppercase tracking-wide text-muted-foreground">
-                  {SERVICE_LABELS[service] ?? service}
-                </div>
-              )}
-              <div className="flex flex-col gap-2">
-                {conns.map(conn => (
-                  <div key={conn.id} className="flex flex-col gap-1.5 rounded-lg border border-border-soft bg-card p-3.5">
-                    <div className="flex items-start justify-between gap-3">
-                      <div className="min-w-0 flex-1">
-                        <div className="text-sm font-medium text-foreground">{conn.name}</div>
-                        {conn.url && (
-                          <div className="mt-0.5 truncate font-mono text-[11px] text-faint-fg">{conn.url}</div>
-                        )}
-                      </div>
-                      <div className="flex shrink-0 items-center gap-1">
-                        <Button variant="ghost" size="icon-sm" onClick={() => openEdit(conn)} className="text-muted-foreground hover:text-foreground" title="Edit">
-                          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.75"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
-                        </Button>
-                        <DeleteBtn onClick={() => deleteMutation.mutate(conn.id)} />
-                      </div>
-                    </div>
-                    {conn.notes && (
-                      <div className="text-[11px] leading-relaxed text-muted-foreground/80">{conn.notes}</div>
-                    )}
-                  </div>
-                ))}
-              </div>
-            </div>
-          ))}
-        </div>
-      )}
-
-      <div>
-        <Button size="sm" onClick={openAdd} className="gap-1.5">
-          <Plus size={13} />
-          Add connection
-        </Button>
-      </div>
-
-      {dialog && (
-        <Dialog open onOpenChange={open => { if (!open) setDialog(null); }}>
-          <DialogContent className="sm:max-w-md">
-            <DialogHeader>
-              <DialogTitle>{dialog.editing ? 'Edit connection' : 'Add connection'}</DialogTitle>
-              <DialogDescription>Named web service the agent can navigate to using Chrome Browser.</DialogDescription>
-            </DialogHeader>
-            <div className="flex flex-col gap-3 py-1">
-              <div>
-                <Label className="text-xs">Display name</Label>
-                <Input className="mt-1" placeholder="LinkedIn Personal" value={form.name} onChange={e => setForm(f => ({ ...f, name: e.target.value }))} />
-              </div>
-              <div>
-                <Label className="text-xs">Service</Label>
-                <Input className="mt-1" placeholder="linkedin" value={form.service} onChange={e => setForm(f => ({ ...f, service: e.target.value.toLowerCase().replace(/\s+/g, '') }))} />
-                <p className="mt-1 text-[11px] text-muted-foreground">Slug used for grouping (e.g. linkedin, gmail, handshake)</p>
-              </div>
-              <div>
-                <Label className="text-xs">URL</Label>
-                <Input className="mt-1 font-mono text-xs" placeholder="https://linkedin.com/feed" value={form.url} onChange={e => setForm(f => ({ ...f, url: e.target.value }))} />
-              </div>
-              <div>
-                <Label className="text-xs">Notes for the agent</Label>
-                <Textarea className="mt-1 text-xs" placeholder="Messages are under /messaging. Job applications under /my-items/applied-jobs." rows={3} value={form.notes} onChange={e => setForm(f => ({ ...f, notes: e.target.value }))} />
-              </div>
-              {error && <p className="text-xs text-destructive">{error}</p>}
-            </div>
-            <DialogFooter>
-              <Button variant="ghost" onClick={() => setDialog(null)}>Cancel</Button>
-              <Button onClick={() => saveMutation.mutate()} disabled={saveMutation.isPending}>
-                {dialog.editing ? 'Save' : 'Add'}
-              </Button>
-            </DialogFooter>
-          </DialogContent>
-        </Dialog>
-      )}
-    </div>
-  );
-}
 
 function parseGoogleCsv(text: string): { key: string; value: string }[] {
   const lines = text.trim().split('\n');
@@ -970,10 +828,10 @@ export default function Settings() {
     if (connected || error) {
       if (connected) {
         qc.invalidateQueries({ queryKey: ['google-status'] });
-        navigate('/settings/mcp', { replace: true });
+        navigate('/settings/connectors', { replace: true });
       } else if (error) {
         setGoogleError(error);
-        navigate('/settings/mcp', { replace: true });
+        navigate('/settings/connectors', { replace: true });
       }
     }
   }, [qc]);
@@ -1141,8 +999,8 @@ export default function Settings() {
             </div>
           )}
 
-          {/* ── MCP ────────────────────────────────────── */}
-          {section === 'mcp' && (
+          {/* ── Connectors ─────────────────────────────── */}
+          {section === 'connectors' && (
             <div className="flex flex-col gap-6">
 
               {/* Chrome Browser */}
@@ -1199,7 +1057,7 @@ export default function Settings() {
 
               {mcpConnections.length > 0 && (
                 <div className="flex flex-col gap-3">
-                  <SectionLabel>Connected MCP servers</SectionLabel>
+                  <SectionLabel>MCP servers</SectionLabel>
                   {mcpConnections.map(c => (
                     <SettingRow key={c.id}>
                       <div className="min-w-0">
@@ -1242,15 +1100,8 @@ export default function Settings() {
                 </div>
                 <HintText>MCP servers run as child processes and expose extra tools to the agent.</HintText>
               </div>
-            </div>
-          )}
 
-          {/* ── Connections ────────────────────────────── */}
-          {section === 'connections' && (
-            <ConnectionsSection
-              connections={connections}
-              onChanged={() => qc.invalidateQueries({ queryKey: ['connections'] })}
-            />
+            </div>
           )}
 
           {/* ── Workspace ──────────────────────────────── */}

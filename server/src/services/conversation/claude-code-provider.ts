@@ -23,7 +23,7 @@ export class ClaudeCodeProvider implements ConversationProvider {
     const executionId = createExecution(userId, params.messageId ?? null, null, 'claude_code');
     try {
       const result = await invokeClaudeCode(
-        { prompt: params.prompt, model: this.config.model },
+        { prompt: params.prompt, model: params.model ?? this.config.model },
         {
           userId,
           executionId,
@@ -33,6 +33,7 @@ export class ClaudeCodeProvider implements ConversationProvider {
           permissionProfile: normalizePermissionProfile(this.config.permissionProfile),
           apiKey: this.config.apiKey,
           effort: params.effort,
+          timeoutMs: params.timeoutMs,
           systemPromptSuffix: params.systemPromptSuffix,
           signal: params.signal,
           onText: params.onText,

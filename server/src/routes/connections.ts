@@ -10,14 +10,13 @@ import { isChromeBridgeConnected } from '../services/chromeBridge.js';
 const router = Router();
 router.use(requireAuth);
 
-const VALID_TYPES = ['github', 'mcp', 'google', 'chrome', 'web'] as const;
-const VALID_PURPOSES = ['github', 'mcp', 'tool', 'google', 'chrome', 'web'] as const;
+const VALID_TYPES = ['github', 'mcp', 'google', 'chrome'] as const;
+const VALID_PURPOSES = ['github', 'mcp', 'tool', 'google', 'chrome'] as const;
 
 const PURPOSE_ALLOWED_TYPES: Record<string, string[]> = {
   github: ['github'],
   mcp: ['mcp'],
   chrome: ['chrome'],
-  web: ['web'],
 };
 
 router.get('/', (req, res) => {
@@ -45,11 +44,11 @@ export function createConnectionRecord(
   if (name.startsWith('tool:') && !managedToolPackage) {
     throw new ConnectionValidationError('Generated tool connections are managed by tool packages. Use request_tool_install or /tool-packages/:id/install.');
   }
-  if (type !== 'web' && !config) throw new ConnectionValidationError('config required');
+  if (!config) throw new ConnectionValidationError('config required');
   if (!VALID_TYPES.includes(type as (typeof VALID_TYPES)[number])) {
     throw new ConnectionValidationError(`type must be one of ${VALID_TYPES.join(', ')}`);
   }
-  const connectionPurpose = purpose ?? (type === 'web' ? 'web' : 'tool');
+  const connectionPurpose = purpose ?? 'tool';
   if (!VALID_PURPOSES.includes(connectionPurpose as (typeof VALID_PURPOSES)[number])) {
     throw new ConnectionValidationError(`purpose must be one of ${VALID_PURPOSES.join(', ')}`);
   }
@@ -117,27 +116,6 @@ router.get('/chrome/status', async (req, res) => {
   res.json({ enabled, extensionConnected: isChromeBridgeConnected(userId) });
 });
 
-router.patch('/:id', (req, res) => {
-  const { userId } = req as unknown as AuthedRequest;
-  const { name, service, url, notes } = req.body as { name?: string; service?: string; url?: string; notes?: string };
-  const row = getDb()
-    .prepare("SELECT id, type FROM connections WHERE id = ? AND user_id = ? AND type = 'web'")
-    .get(req.params.id, userId) as { id: string; type: string } | undefined;
-  if (!row) { res.status(404).json({ error: 'Not found' }); return; }
-  const sets: string[] = [];
-  const vals: unknown[] = [];
-  if (name !== undefined) { sets.push('name = ?'); vals.push(name); }
-  if (service !== undefined) { sets.push('service = ?'); vals.push(service || null); }
-  if (url !== undefined) { sets.push('url = ?'); vals.push(url || null); }
-  if (notes !== undefined) { sets.push('notes = ?'); vals.push(notes || null); }
-  if (!sets.length) { res.status(400).json({ error: 'Nothing to update' }); return; }
-  try {
-    getDb().prepare(`UPDATE connections SET ${sets.join(', ')} WHERE id = ? AND user_id = ?`).run(...vals, req.params.id, userId);
-  } catch {
-    res.status(409).json({ error: 'Connection name already exists' }); return;
-  }
-  res.json({ ok: true });
-});
 
 router.delete('/:id', (req, res) => {
   const { userId } = req as unknown as AuthedRequest;

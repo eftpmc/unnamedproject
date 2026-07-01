@@ -7,6 +7,7 @@ import { requireAuth, type AuthedRequest } from '../middleware/auth.js';
 import { runAgentTurn } from '../services/agent.js';
 import { broadcast } from '../services/socket.js';
 import { writeBinaryFile, writeFile } from '../services/files.js';
+import { logger } from '../lib/logger.js';
 
 const router = Router();
 router.use(requireAuth);
@@ -235,7 +236,7 @@ router.post('/:sessionId/messages', upload.array('attachments', MAX_UPLOADS), as
     try {
       await runAgentTurn(userId, req.params.sessionId, messageId);
     } catch (err) {
-      console.error('[agent turn error]', err);
+      logger.error('[agent turn error]', { err: err instanceof Error ? err.message : String(err) });
       const error = err instanceof Error ? err.message : String(err);
       getDb()
         .prepare("UPDATE session_turns SET status = 'error', error = ?, completed_at = unixepoch() WHERE session_id = ? AND user_message_id = ? AND status = 'running'")

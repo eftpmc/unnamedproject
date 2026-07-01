@@ -1,4 +1,5 @@
 import apn from 'apn';
+import { logger } from '../lib/logger.js';
 
 // APNs credentials come from environment variables.
 // APNS_KEY      — contents of the .p8 key file (or path via APNS_KEY_PATH)
@@ -61,7 +62,7 @@ export async function sendApprovalPush(deviceToken: string, payload: ApprovalPus
   const result = await p.send(note, deviceToken);
   if (result.failed.length > 0) {
     const err = result.failed[0];
-    console.error('[apns] Push failed:', err.error ?? err.response);
+    logger.error('[apns] Push failed', { err: err.error ?? err.response });
     if (err.response?.reason === 'BadDeviceToken' || err.response?.reason === 'Unregistered') {
       throw new Error('DeviceNotRegistered');
     }
@@ -83,7 +84,7 @@ export async function sendChatMessagePush(deviceToken: string, sessionId: string
   const result = await p.send(note, deviceToken);
   if (result.failed.length > 0) {
     const err = result.failed[0];
-    console.error('[apns] Push failed:', err.error ?? err.response);
+    logger.error('[apns] Push failed', { err: err.error ?? err.response });
     if (err.response?.reason === 'BadDeviceToken' || err.response?.reason === 'Unregistered') {
       throw new Error('DeviceNotRegistered');
     }

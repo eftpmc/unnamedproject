@@ -29,6 +29,8 @@ export function registerTriggerHandlers(): void {
         kind: { type: 'string', enum: ['schedule', 'webhook', 'manual'] },
         schedule_cron: { type: 'string', description: '5-field cron, UTC, e.g. "0 8 * * *"' },
         playbook_id: { type: 'string', description: 'Document id of the type:workflow playbook' },
+        timeout_ms: { type: 'number', description: 'Max wall-clock ms before the agent is killed (default 1800000 = 30 min). Increase for long-running playbooks.' },
+        cost_fresh_threshold_usd: { type: 'number', description: 'Session cost at which the agent starts fresh from checkpoint instead of resuming (default $2.50). Raise for multi-turn trigger workflows.' },
       },
       required: ['project_id', 'kind'],
     },
@@ -66,6 +68,8 @@ export function registerTriggerHandlers(): void {
         schedule_cron: cron ?? null,
         playbook_id: args.playbook_id as string | undefined,
         next_run_at: next,
+        timeout_ms: typeof args.timeout_ms === 'number' ? args.timeout_ms : null,
+        cost_fresh_threshold_usd: typeof args.cost_fresh_threshold_usd === 'number' ? args.cost_fresh_threshold_usd : null,
       }));
       completeExecution(executionId, userId ?? 'system', 'done', result);
       return result;

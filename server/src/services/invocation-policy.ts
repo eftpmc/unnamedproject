@@ -6,12 +6,13 @@ interface SelectInvocationModeParams {
   messageCount: number;
   sessionCostUsd?: number;
   blockers?: string[];
+  costFreshThresholdUsd?: number;
 }
 
 // Cost and message count at which hidden provider context becomes expensive
 // enough that we prefer starting fresh with the structured summary.
-const COST_FRESH_THRESHOLD_USD = 2.50;
-const MESSAGE_FRESH_THRESHOLD = 20;
+const COST_FRESH_THRESHOLD_USD = 5.00;
+const MESSAGE_FRESH_THRESHOLD = 30;
 
 // These patterns mean the user explicitly wants a fresh orientation turn —
 // asking what happened, summarizing, or explicitly stopping.
@@ -22,8 +23,6 @@ const FRESH_PATTERNS = [
   /\bstatus update\b/i,
   /\bsummari[sz]e\b/i,
   /\brecap\b/i,
-  /\bupdate\b.*\b(index|document|docs|frontmatter)\b/i,
-  /\bwrite\b.*\b(index|document|docs|frontmatter)\b/i,
   /\bstart (over|fresh|new)\b/i,
   /\bforget (the context|what you know|everything)\b/i,
   /\bbe done\b/i,
@@ -66,7 +65,8 @@ export function selectInvocationMode(params: SelectInvocationModeParams): Invoca
   if (params.blockers && hasLoopBlocker(params.blockers)) return 'fresh_with_summary';
 
   // Cost threshold always wins — session is too expensive to keep resuming.
-  if ((params.sessionCostUsd ?? 0) >= COST_FRESH_THRESHOLD_USD) return 'fresh_with_summary';
+  const costThreshold = params.costFreshThresholdUsd ?? COST_FRESH_THRESHOLD_USD;
+  if ((params.sessionCostUsd ?? 0) >= costThreshold) return 'fresh_with_summary';
 
   // Explicit resume patterns override the message-count threshold. If the user
   // says "try again" or "try clicking that again" they need live session state

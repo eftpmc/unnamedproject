@@ -2,6 +2,7 @@ import { Router } from 'express';
 import multer from 'multer';
 import path from 'path';
 import fs from 'fs';
+import fsPromises from 'fs/promises';
 import { getDb } from '../db/index.js';
 import { requireAuthHeaderOrQuery, type AuthedRequest } from '../middleware/auth.js';
 import { writeFile, writeBinaryFile, readFile, tagFile, deleteFile } from '../services/files.js';
@@ -117,11 +118,11 @@ router.get('/:id/content', async (req, res) => {
   if (!project) { res.status(404).json({ error: 'Project not found' }); return; }
 
   const filePath = resolveInFiles(project.files_path, row.path);
-  if (!fs.existsSync(filePath)) { res.status(404).json({ error: 'File not found on disk' }); return; }
+  try { await fsPromises.access(filePath); } catch { res.status(404).json({ error: 'File not found on disk' }); return; }
 
   res.setHeader('Content-Type', row.mime_type);
   res.setHeader('Content-Disposition', `inline; filename="${encodeURIComponent(row.title)}${path.extname(row.path)}"`);
-  fs.createReadStream(filePath).pipe(res);
+  fs.createReadStream(filePath).on('error', () => res.destroy()).pipe(res);
 });
 
 router.patch('/:id', async (req, res) => {

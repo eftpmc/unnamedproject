@@ -1,4 +1,3 @@
-import Anthropic from '@anthropic-ai/sdk';
 import fs from 'fs';
 import fsPromises from 'fs/promises';
 import path from 'path';
@@ -15,7 +14,7 @@ function indexPath(repoPath: string): string {
 const SKIP_DIRS = new Set([
   'node_modules', '.git', '.next', '.turbo', 'dist', 'build', 'out',
   '.cache', 'coverage', '__pycache__', '.venv', 'venv', '.tox',
-  'graphify-out', '.project-index.json',
+  '.project-index.json',
 ]);
 
 const SOURCE_EXTS = new Set([
@@ -120,12 +119,12 @@ function walkRepo(repoPath: string, maxFiles = 600): WalkEntry[] {
 
 // ─── Public API ────────────────────────────────────────────────────────────
 
-export async function hasGraph(repoPath: string): Promise<boolean> {
+export async function hasIndex(repoPath: string): Promise<boolean> {
   try { await fsPromises.access(indexPath(repoPath)); return true; }
   catch { return false; }
 }
 
-export async function buildGraph(repoPath: string, _projectId: string): Promise<void> {
+export async function buildIndex(repoPath: string, _projectId: string): Promise<void> {
   // Load existing index for incremental re-use
   let existingByPath = new Map<string, FileEntry>();
   try {
@@ -172,20 +171,13 @@ async function ensureGitignored(repoPath: string, entry: string): Promise<void> 
   } catch { /* not writable — skip */ }
 }
 
-export async function queryGraph(question: string, repoPath: string, apiKey?: string | null): Promise<string> {
-  if (!apiKey) {
-    return 'No Anthropic API key configured — add one in Settings → Connections to enable project queries.';
-  }
-
+export async function queryIndex(question: string, repoPath: string): Promise<string> {
   let index: Index | null = null;
   try {
     const raw = await fsPromises.readFile(indexPath(repoPath), 'utf8');
     index = JSON.parse(raw) as Index;
   } catch { /* no index */ }
 
-  const client = new Anthropic({ apiKey });
-
-  let context: string;
   if (index?.files.length) {
     const questionVec = await embed(question);
     const ranked = index.files
@@ -194,33 +186,23 @@ export async function queryGraph(question: string, repoPath: string, apiKey?: st
       .sort((a, b) => b.score - a.score)
       .slice(0, 20);
 
-    context = 'Most relevant files:\n\n' + ranked.map(({ f }) => {
+    return 'Most relevant files (answer the question using this context):\n\n' + ranked.map(({ f }) => {
       const symbolLine = f.symbols?.length ? `Symbols: ${f.symbols.join(', ')}\n` : '';
       return `### ${f.path}\n${symbolLine}${f.preview}`;
     }).join('\n\n');
-  } else {
-    // No index yet — walk and summarize
-    const walked = walkRepo(repoPath, 200);
-    const entries = walked.map(({ rel, abs }) => {
-      let preview = '';
-      try { preview = fs.readFileSync(abs, 'utf8').split('\n').slice(0, 10).join('\n'); } catch {}
-      return `### ${rel}\n${preview}`;
-    });
-    context = 'File tree (no index built yet):\n\n' + entries.join('\n\n');
   }
 
-  const msg = await client.messages.create({
-    model: 'claude-haiku-4-5',
-    max_tokens: 1024,
-    system: 'You are a code navigator. Answer questions about a codebase using the provided file index. Be specific: cite file paths and line numbers where relevant. If the answer is not in the index, say so.',
-    messages: [{ role: 'user', content: `${context}\n\n---\n\nQuestion: ${question}` }],
+  // No index yet — return raw file tree for the agent to reason over
+  const walked = walkRepo(repoPath, 200);
+  const entries = walked.map(({ rel, abs }) => {
+    let preview = '';
+    try { preview = fs.readFileSync(abs, 'utf8').split('\n').slice(0, 10).join('\n'); } catch {}
+    return `### ${rel}\n${preview}`;
   });
-
-  const block = msg.content[0];
-  return block.type === 'text' ? block.text : 'No answer produced.';
+  return 'No index built yet. File tree (answer the question using this context):\n\n' + entries.join('\n\n');
 }
 
-export async function searchGraph(query: string, repoPath: string, limit = 10): Promise<string> {
+export async function searchIndex(query: string, repoPath: string, limit = 10): Promise<string> {
   let index: Index | null = null;
   try {
     const raw = await fsPromises.readFile(indexPath(repoPath), 'utf8');
@@ -228,7 +210,7 @@ export async function searchGraph(query: string, repoPath: string, limit = 10): 
   } catch { /* no index */ }
 
   if (!index?.files.length) {
-    return 'No index found for this project. Run rebuild_graph first, or use project_query which builds it automatically.';
+    return 'No index found for this project. Run rebuild_index first, or use project_query which builds it automatically.';
   }
 
   const queryVec = await embed(query);

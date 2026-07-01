@@ -3,12 +3,12 @@ import path from 'path';
 import { createSessionEvent, getDataDir, getDb, recordAgentUsage, setSessionProviderInfo, type AgentUsageTool } from '../db/index.js';
 import { broadcast } from './socket.js';
 import { newId } from '../lib/ids.js';
-import { classifyIntent } from './intent.js';
 import { buildContext, buildContextUpdate } from './context.js';
 import { modeUsesProviderResume, selectInvocationMode } from './invocation-policy.js';
 import { getSessionState, recordSessionStateEvent, updateSessionState } from './session-state.js';
 import { generateMcpToken } from '../mcp/auth.js';
 import { getConversationProvider } from './conversation-provider.js';
+import { logger } from '../lib/logger.js';
 
 function isProviderLimitError(err: unknown): boolean {
   const msg = (err instanceof Error ? err.message : String(err)).toLowerCase();
@@ -219,12 +219,24 @@ function emitRuntimeCheckpoint(
   });
 }
 
-export async function runAgentTurn(userId: string, sessionId: string, userMessageId: string): Promise<void> {
+export async function runAgentTurn(
+  userId: string,
+  sessionId: string,
+  userMessageId: string,
+  opts?: { costFreshThresholdUsd?: number; timeoutMs?: number },
+): Promise<void> {
   const provider = await getConversationProvider(userId);
 
   const session = getDb()
     .prepare('SELECT model, effort, provider_session_id FROM sessions WHERE id = ?')
     .get(sessionId) as { model: string | null; effort: string | null; provider_session_id: string | null } | undefined;
+
+  // When no explicit model is set, route by effort level.
+  const effectiveModel = session?.model ?? (
+    session?.effort === 'low' ? 'claude-haiku-4-5-20251001' :
+    session?.effort === 'high' ? 'claude-opus-4-8' :
+    undefined
+  );
 
   const lastUserMsg = getDb()
     .prepare("SELECT id, content FROM messages WHERE session_id = ? AND role = 'user' ORDER BY created_at DESC LIMIT 1")
@@ -253,13 +265,13 @@ export async function runAgentTurn(userId: string, sessionId: string, userMessag
     .get(sessionId) as { total: number };
 
   const currentState = getSessionState(sessionId);
-  const intent = classifyIntent(prompt);
   const invocationMode = selectInvocationMode({
     providerSessionId: session?.provider_session_id,
     prompt,
     messageCount,
     sessionCostUsd: sessionCostRow.total,
     blockers: currentState.blockers,
+    costFreshThresholdUsd: opts?.costFreshThresholdUsd,
   });
   const isResume = modeUsesProviderResume(invocationMode);
   if (turn) {
@@ -278,7 +290,7 @@ export async function runAgentTurn(userId: string, sessionId: string, userMessag
       { invocationMode, providerType: provider.type },
     );
   }
-  const systemPromptSuffix = isResume ? undefined : await buildContext(userId, sessionId, intent, prompt);
+  const systemPromptSuffix = isResume ? undefined : await buildContext(userId, sessionId, prompt);
   const contextUpdate = isResume ? await buildContextUpdate(userId, sessionId, prompt) : undefined;
   const effectivePrompt = contextUpdate
     ? `<context>\n${contextUpdate}\n</context>\n\n${prompt}${attachmentBlock}`
@@ -319,7 +331,8 @@ export async function runAgentTurn(userId: string, sessionId: string, userMessag
 
   const doInvoke = (resumeSessionId: string | null) => provider.invoke({
     userId, messageId: userMessageId, repoPath: workspace.cwd, prompt: effectivePrompt, resumeSessionId, systemPromptSuffix, mcpServers,
-    model: session?.model ?? undefined, effort: session?.effort ?? undefined,
+    model: effectiveModel, effort: session?.effort ?? undefined,
+    timeoutMs: opts?.timeoutMs,
     signal: abortController.signal, onText, onSessionId,
   });
 
@@ -354,13 +367,13 @@ export async function runAgentTurn(userId: string, sessionId: string, userMessag
           open_tasks: ['User stopped the active agent turn before completion.'],
           next_action: 'Wait for the user to clarify whether to continue from the checkpoint.',
         });
-      } catch (e) { console.error('[stopTurn:sessionState]', e); }
+      } catch (e) { logger.error('[stopTurn:sessionState]', { err: e instanceof Error ? e.message : String(e) }); }
       try {
         emitRuntimeCheckpoint(userId, sessionId, 'Turn stopped', 'The user stopped the active agent turn before completion.', {
           invocationMode,
           providerType: provider.type,
         });
-      } catch (e) { console.error('[stopTurn:event]', e); }
+      } catch (e) { logger.error('[stopTurn:event]', { err: e instanceof Error ? e.message : String(e) }); }
       broadcast(userId, { type: 'turn_complete', sessionId, status: 'stopped' });
       return;
     }
@@ -374,14 +387,14 @@ export async function runAgentTurn(userId: string, sessionId: string, userMessag
           open_tasks: ['Continue from structured session state instead of resuming the exhausted provider session.'],
           next_action: 'Start a fresh provider session with the saved session state.',
         });
-      } catch (e) { console.error('[limitError:sessionState]', e); }
+      } catch (e) { logger.error('[limitError:sessionState]', { err: e instanceof Error ? e.message : String(e) }); }
       try {
         emitRuntimeCheckpoint(userId, sessionId, 'Provider session reset', 'The provider reported a usage/session limit. Hidden provider context was cleared; future turns can continue from saved state.', {
           invocationMode,
           providerType: provider.type,
           reason: 'provider_limit',
         });
-      } catch (e) { console.error('[limitError:event]', e); }
+      } catch (e) { logger.error('[limitError:event]', { err: e instanceof Error ? e.message : String(e) }); }
     }
     throw err;
   } finally {
@@ -406,8 +419,8 @@ export async function runAgentTurn(userId: string, sessionId: string, userMessag
       messageId: userMessageId,
       executionId: invokeResult.executionId ?? null,
     });
-  } catch (e) { console.error('[postTurn:recordUsage]', e); }
-  try { updateSessionState(sessionId); } catch (e) { console.error('[postTurn:sessionState]', e); }
-  try { maybeGenerateSessionTitle(userId, sessionId); } catch (e) { console.error('[postTurn:title]', e); }
-  try { updateSessionSummary(sessionId); } catch (e) { console.error('[postTurn:summary]', e); }
+  } catch (e) { logger.error('[postTurn:recordUsage]', { err: e instanceof Error ? e.message : String(e) }); }
+  try { updateSessionState(sessionId); } catch (e) { logger.error('[postTurn:sessionState]', { err: e instanceof Error ? e.message : String(e) }); }
+  try { maybeGenerateSessionTitle(userId, sessionId); } catch (e) { logger.error('[postTurn:title]', { err: e instanceof Error ? e.message : String(e) }); }
+  try { updateSessionSummary(sessionId); } catch (e) { logger.error('[postTurn:summary]', { err: e instanceof Error ? e.message : String(e) }); }
 }

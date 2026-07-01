@@ -1,11 +1,10 @@
-import fs from 'fs';
-import path from 'path';
 import { getDb, getDueTriggers } from '../db/index.js';
 import { newId } from '../lib/ids.js';
 import { readFile } from './files.js';
 import { markTriggerRun } from './triggers.js';
 import { nextCronRun } from '../lib/cron.js';
 import { runAgentTurn } from './agent.js';
+import { logger } from '../lib/logger.js';
 
 function triggerById(id: string) {
   return getDb().prepare(`
@@ -21,10 +20,12 @@ function triggerById(id: string) {
     user_id: string;
     files_path: string;
     last_provider_session_id: string | null;
+    timeout_ms: number | null;
+    cost_fresh_threshold_usd: number | null;
   } | undefined;
 }
 
-function parsePlaybookMeta(body: string): { model?: string; effort?: string } {
+function parsePlaybookMeta(body: string): { model?: string; effort?: string; timeout_ms?: number; cost_fresh_threshold_usd?: number } {
   const match = body.match(/^---\n([\s\S]*?)\n---/);
   if (!match) return {};
   const meta: Record<string, string> = {};
@@ -35,41 +36,14 @@ function parsePlaybookMeta(body: string): { model?: string; effort?: string } {
     const v = line.slice(colon + 1).trim();
     if (k && v) meta[k] = v;
   }
-  return { model: meta.model, effort: meta.effort };
+  return {
+    model: meta.model,
+    effort: meta.effort,
+    timeout_ms: meta.timeout_ms ? Number(meta.timeout_ms) : undefined,
+    cost_fresh_threshold_usd: meta.cost_fresh_threshold_usd ? Number(meta.cost_fresh_threshold_usd) : undefined,
+  };
 }
 
-// Read the last N "Queries run this session" blocks from the opportunity log
-// so the agent knows what to skip without re-reading the whole file.
-function extractRecentQueryBlocks(filesPath: string, n = 3): string | null {
-  const logPath = path.join(filesPath, 'opportunity-log.md');
-  let raw: string;
-  try { raw = fs.readFileSync(logPath, 'utf-8'); } catch { return null; }
-
-  const blocks: string[] = [];
-  const lines = raw.split('\n');
-  let capturing = false;
-  let current: string[] = [];
-
-  for (const line of lines) {
-    if (line.startsWith('## ')) {
-      if (capturing && current.length) { blocks.push(current.join('\n').trim()); current = []; }
-      capturing = true;
-    }
-    if (capturing) {
-      if (line.startsWith('**Queries run this session:**') || line.startsWith('**Search coverage')) {
-        current.push(line);
-      } else if (current.length) {
-        if (line.startsWith('**') && !line.startsWith('**Queries')) { capturing = false; continue; }
-        current.push(line);
-      }
-    }
-  }
-  if (capturing && current.length) blocks.push(current.join('\n').trim());
-
-  const recent = blocks.filter(Boolean).slice(-n);
-  if (!recent.length) return null;
-  return `<recent_queries>\nThe following queries and company checks were run in recent sessions. Skip duplicates — rotate to different terms and companies.\n\n${recent.join('\n\n')}\n</recent_queries>`;
-}
 
 export async function fireTrigger(triggerId: string): Promise<string> {
   const trigger = triggerById(triggerId);
@@ -80,10 +54,8 @@ export async function fireTrigger(triggerId: string): Promise<string> {
   const effort = meta.effort ?? 'high';
   const model = meta.model ?? null;
 
-  const recentQueries = trigger.files_path ? extractRecentQueryBlocks(trigger.files_path) : null;
-
   const prompt = playbook
-    ? `${recentQueries ? recentQueries + '\n\n' : ''}Run this playbook:\n\n${playbook.body}`
+    ? `Run this playbook:\n\n${playbook.body}`
     : `Trigger fired. No playbook is set — check the workspace and summarise what has changed since the last run.`;
 
   const title = `${playbook?.title ?? 'Trigger run'} — ${new Date().toISOString().slice(0, 10)}`;
@@ -99,7 +71,13 @@ export async function fireTrigger(triggerId: string): Promise<string> {
   const next = trigger.schedule_cron ? nextCronRun(trigger.schedule_cron, Math.floor(Date.now() / 1000)) : null;
   markTriggerRun(trigger.id, next);
 
-  runAgentTurn(trigger.user_id, sessionId, messageId)
+  // Playbook frontmatter takes precedence over the trigger's stored limits.
+  const turnOpts = {
+    timeoutMs: meta.timeout_ms ?? trigger.timeout_ms ?? undefined,
+    costFreshThresholdUsd: meta.cost_fresh_threshold_usd ?? trigger.cost_fresh_threshold_usd ?? undefined,
+  };
+
+  runAgentTurn(trigger.user_id, sessionId, messageId, turnOpts)
     .then(() => {
       // Persist the Claude Code session ID so the next trigger run can resume it.
       const sess = db.prepare('SELECT provider_session_id FROM sessions WHERE id = ?')
@@ -110,8 +88,7 @@ export async function fireTrigger(triggerId: string): Promise<string> {
       }
     })
     .catch(err => {
-      console.error(`[fireTrigger] runAgentTurn failed for trigger ${triggerId}:`, err);
-      markTriggerRun(trigger.id, Math.floor(Date.now() / 1000));
+      logger.error('[fireTrigger] runAgentTurn failed', { triggerId, err: err instanceof Error ? err.message : String(err) });
     });
 
   return sessionId;
@@ -121,6 +98,6 @@ export async function runDueTriggers(): Promise<void> {
   const due = getDueTriggers(Math.floor(Date.now() / 1000));
   await Promise.all(due.map(async t => {
     try { await fireTrigger(t.id); }
-    catch (err) { console.error(`[triggers] ${t.id} failed:`, err); }
+    catch (err) { logger.error('[triggers] fireTrigger failed', { triggerId: t.id, err: err instanceof Error ? err.message : String(err) }); }
   }));
 }

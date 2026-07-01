@@ -2,7 +2,7 @@ import { EventEmitter } from 'events';
 
 const emitter = new EventEmitter();
 
-const APPROVAL_TIMEOUT_MS = 10 * 60 * 1000; // 10 minutes
+const APPROVAL_TIMEOUT_MS = 30 * 60 * 1000; // 30 minutes
 
 export interface ApprovalResolution {
   decision: 'approved' | 'rejected';

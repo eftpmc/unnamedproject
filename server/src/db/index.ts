@@ -826,6 +826,50 @@ const migrations: Migration[] = [
       `);
     },
   },
+  {
+    version: 42,
+    name: 'missing_indexes',
+    up: (database) => {
+      database.exec(`
+        CREATE INDEX IF NOT EXISTS idx_sessions_user_updated ON sessions(user_id, updated_at DESC);
+        CREATE INDEX IF NOT EXISTS idx_sessions_trigger ON sessions(trigger_id);
+        CREATE INDEX IF NOT EXISTS idx_triggers_due ON triggers(enabled, kind, next_run_at);
+      `);
+    },
+  },
+  {
+    version: 41,
+    name: 'messages_fts',
+    up: (database) => {
+      database.exec(`
+        CREATE VIRTUAL TABLE IF NOT EXISTS messages_fts USING fts5(
+          content,
+          content=messages,
+          content_rowid=rowid
+        );
+        INSERT OR IGNORE INTO messages_fts(rowid, content) SELECT rowid, content FROM messages;
+        CREATE TRIGGER IF NOT EXISTS messages_ai AFTER INSERT ON messages BEGIN
+          INSERT INTO messages_fts(rowid, content) VALUES (new.rowid, new.content);
+        END;
+        CREATE TRIGGER IF NOT EXISTS messages_au AFTER UPDATE ON messages BEGIN
+          INSERT INTO messages_fts(messages_fts, rowid, content) VALUES('delete', old.rowid, old.content);
+          INSERT INTO messages_fts(rowid, content) VALUES (new.rowid, new.content);
+        END;
+        CREATE TRIGGER IF NOT EXISTS messages_ad AFTER DELETE ON messages BEGIN
+          INSERT INTO messages_fts(messages_fts, rowid, content) VALUES('delete', old.rowid, old.content);
+        END;
+      `);
+    },
+  },
+  {
+    version: 40,
+    name: 'trigger_limits',
+    up: (database) => {
+      const cols = (database.prepare('PRAGMA table_info(triggers)').all() as { name: string }[]).map(c => c.name);
+      if (!cols.includes('timeout_ms')) database.exec('ALTER TABLE triggers ADD COLUMN timeout_ms INTEGER');
+      if (!cols.includes('cost_fresh_threshold_usd')) database.exec('ALTER TABLE triggers ADD COLUMN cost_fresh_threshold_usd REAL');
+    },
+  },
 ];
 
 function tableSql(database: Database.Database, name: string): string | undefined {

@@ -43,17 +43,24 @@ router.get('/search', (req, res) => {
   const { userId } = req as unknown as AuthedRequest;
   const q = (req.query.q as string | undefined)?.trim();
   if (!q) { res.json([]); return; }
-  const pattern = `%${q}%`;
+
+  // Sanitize for FTS5 query syntax, then search title (LIKE) + content (FTS5).
+  const ftsQuery = q.replace(/["'*^()]/g, ' ').trim();
   const rows = getDb()
     .prepare(`
+      SELECT s.id, s.title, s.effort, s.pinned_project_id, s.created_at, s.updated_at
+      FROM sessions s
+      WHERE s.user_id = ? AND s.title LIKE ?
+      UNION
       SELECT DISTINCT s.id, s.title, s.effort, s.pinned_project_id, s.created_at, s.updated_at
       FROM sessions s
-      LEFT JOIN messages m ON m.session_id = s.id
-      WHERE s.user_id = ? AND (s.title LIKE ? OR m.content LIKE ?)
-      ORDER BY s.updated_at DESC
+      JOIN messages m ON m.session_id = s.id
+      JOIN messages_fts ON messages_fts.rowid = m.rowid
+      WHERE s.user_id = ? AND messages_fts MATCH ?
+      ORDER BY updated_at DESC
       LIMIT 50
     `)
-    .all(userId, pattern, pattern);
+    .all(userId, `%${q}%`, userId, ftsQuery);
   res.json(rows);
 });
 
@@ -217,7 +224,7 @@ router.post('/', (req, res) => {
   const { title } = req.body as { title?: string };
   // Clean up abandoned empty sessions before creating a new one
   getDb()
-    .prepare(`DELETE FROM sessions WHERE user_id = ? AND id NOT IN (SELECT DISTINCT session_id FROM messages WHERE session_id IS NOT NULL)`)
+    .prepare(`DELETE FROM sessions WHERE user_id = ? AND NOT EXISTS (SELECT 1 FROM messages WHERE messages.session_id = sessions.id)`)
     .run(userId);
   const id = newId();
   getDb()

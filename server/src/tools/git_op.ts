@@ -1,5 +1,5 @@
 import simpleGit from 'simple-git';
-import { requestApproval, appendOutput } from '../services/executor.js';
+import { requestApproval } from '../services/executor.js';
 
 interface GitOpInput {
   op: 'log' | 'diff' | 'status' | 'add' | 'commit' | 'push';

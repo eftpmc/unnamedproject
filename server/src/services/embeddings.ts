@@ -14,6 +14,9 @@ async function getEmbedder(): Promise<FeatureExtractionPipeline> {
     loadPromise = pipeline('feature-extraction', 'Xenova/all-MiniLM-L6-v2').then(fn => {
       embedder = fn;
       return fn;
+    }).catch(err => {
+      loadPromise = null; // allow retry on next call
+      throw err;
     });
   }
   return loadPromise;

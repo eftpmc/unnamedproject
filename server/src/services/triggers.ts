@@ -14,6 +14,8 @@ export interface TriggerRecord {
   last_provider_session_id: string | null;
   total_cost_usd: number;
   last_run_status: 'running' | 'done' | 'error' | null;
+  timeout_ms: number | null;
+  cost_fresh_threshold_usd: number | null;
 }
 
 export interface TriggerRun {
@@ -31,18 +33,14 @@ export function createTrigger(input: {
   schedule_cron?: string | null;
   playbook_id?: string | null;
   next_run_at?: number | null;
+  timeout_ms?: number | null;
+  cost_fresh_threshold_usd?: number | null;
 }): TriggerRecord {
-  const rec: TriggerRecord = {
-    id: newId(), project_id: input.project_id, kind: input.kind,
-    schedule_cron: input.schedule_cron ?? null, playbook_id: input.playbook_id ?? null,
-    enabled: 1, next_run_at: input.next_run_at ?? null, last_run_at: null,
-    created_at: Math.floor(Date.now() / 1000),
-    last_provider_session_id: null, total_cost_usd: 0, last_run_status: null,
-  };
+  const id = newId();
   getDb().prepare(
-    'INSERT INTO triggers (id,project_id,kind,schedule_cron,playbook_id,enabled,next_run_at,last_run_at,created_at) VALUES (?,?,?,?,?,?,?,?,?)',
-  ).run(rec.id, rec.project_id, rec.kind, rec.schedule_cron, rec.playbook_id, rec.enabled, rec.next_run_at, rec.last_run_at, rec.created_at);
-  return getDb().prepare('SELECT * FROM triggers WHERE id = ?').get(rec.id) as TriggerRecord;
+    'INSERT INTO triggers (id,project_id,kind,schedule_cron,playbook_id,enabled,next_run_at,last_run_at,created_at,timeout_ms,cost_fresh_threshold_usd) VALUES (?,?,?,?,?,1,?,NULL,unixepoch(),?,?)',
+  ).run(id, input.project_id, input.kind, input.schedule_cron ?? null, input.playbook_id ?? null, input.next_run_at ?? null, input.timeout_ms ?? null, input.cost_fresh_threshold_usd ?? null);
+  return getDb().prepare('SELECT * FROM triggers WHERE id = ?').get(id) as TriggerRecord;
 }
 
 export function listTriggersByUser(userId: string): TriggerRecord[] {

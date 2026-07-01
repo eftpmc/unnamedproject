@@ -11,12 +11,10 @@ const userId = 'u-projtools';
 beforeAll(() => {
   fs.mkdirSync(process.env.DATA_DIR!, { recursive: true });
   initDb();
-  const spaceId = newId();
   projectId = newId();
   getDb().prepare("INSERT INTO users (id,email,hashed_password) VALUES (?,?,?)").run(userId, 'pt@test.com', 'x');
-  getDb().prepare("INSERT INTO spaces (id,user_id,name) VALUES (?,?,?)").run(spaceId, userId, 'ProjToolsSpace');
-  getDb().prepare("INSERT INTO projects (id,space_id,user_id,name,repo_path,default_branch,origin,created_at) VALUES (?,?,?,?,?,?,?,?)")
-    .run(projectId, spaceId, userId, 'ProjToolsProj', '/tmp/projtools', null, 'linked', Math.floor(Date.now() / 1000));
+  getDb().prepare("INSERT INTO projects (id,user_id,name,repo_path,default_branch,origin,created_at) VALUES (?,?,?,?,?,?,?)")
+    .run(projectId, userId, 'ProjToolsProj', '/tmp/projtools', null, 'linked', Math.floor(Date.now() / 1000));
   registerProjectHandlers();
 });
 
@@ -28,14 +26,13 @@ describe('project tools', () => {
     expect(linked.origin).toBe('linked');
     expect(linked.repo_path).toBe(repoPath);
 
-    const list = JSON.parse(await getTool('list_git_repos')!.handler({ project_id: projectId }, userId, null));
+    const list = JSON.parse(await getTool('list_git_repos')!.handler({ project_id: linked.id }, userId, null));
     expect(list.map((p: { id: string }) => p.id)).toContain(linked.id);
     fs.rmSync(repoPath, { recursive: true, force: true });
   });
 
   it('returns error for unknown project', async () => {
-    const result = await getTool('link_project')!.handler(
-      { project_id: 'nonexistent', name: 'X', repo_path: '/tmp/x' }, userId, null);
+    const result = await getTool('list_git_repos')!.handler({ project_id: 'nonexistent' }, userId, null);
     expect(result).toContain('Error');
   });
 });

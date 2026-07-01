@@ -17,7 +17,6 @@ describe('database schema', () => {
     const names = tables.map(t => t.name);
     expect(names).toContain('users');
     expect(names).toContain('connections');
-    expect(names).toContain('spaces');
     expect(names).toContain('user_settings');
     expect(names).toContain('sessions');
     expect(names).toContain('messages');
@@ -29,9 +28,7 @@ describe('database schema', () => {
     expect(names).not.toContain('plans');
     expect(names).not.toContain('plan_steps');
     expect(names).not.toContain('campaigns');
-    // new tables from baseline refactor
     expect(names).toContain('projects');
-    expect(names).toContain('documents');
     expect(names).toContain('triggers');
     // legacy item/DAG tables must be absent
     expect(names).not.toContain('space_items');
@@ -57,10 +54,10 @@ describe('database schema', () => {
     }
   });
 
-  it('executions table has space_id column', () => {
+  it('executions table has project_id column', () => {
     const db = getDb();
     const cols = db.prepare("SELECT name FROM pragma_table_info('executions')").all() as { name: string }[];
-    expect(cols.some(c => c.name === 'space_id')).toBe(true);
+    expect(cols.some(c => c.name === 'project_id')).toBe(true);
   });
 
   it('sessions table has a summary column', () => {

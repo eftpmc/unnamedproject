@@ -27,14 +27,14 @@ beforeAll(async () => {
   const db = getDb();
   const sessionId = newId();
   const msgId = newId();
-  const wsId = newId();
+  const projectId = newId();
   executionId = newId();
   const approvalId = newId();
 
   db.prepare('INSERT INTO sessions (id, user_id) VALUES (?,?)').run(sessionId, userId);
   db.prepare('INSERT INTO messages (id, session_id, role, content) VALUES (?,?,?,?)').run(msgId, sessionId, 'user', 'test');
-  db.prepare('INSERT INTO spaces (id, user_id, name, enabled_connection_ids) VALUES (?,?,?,?)').run(wsId, userId, `ws-${newId()}`, '[]');
-  db.prepare("INSERT INTO executions (id, message_id, space_id, tool, status) VALUES (?,?,?,?,?)").run(executionId, msgId, wsId, 'git_op', 'awaiting_approval');
+  db.prepare("INSERT INTO projects (id, user_id, name, repo_path, origin) VALUES (?,?,?,?,?)").run(projectId, userId, `project-${newId()}`, `/tmp/${projectId}`, 'linked');
+  db.prepare("INSERT INTO executions (id, message_id, project_id, tool, status) VALUES (?,?,?,?,?)").run(executionId, msgId, projectId, 'git_op', 'awaiting_approval');
   db.prepare("INSERT INTO approvals (id, execution_id, action, payload) VALUES (?,?,?,?)").run(approvalId, executionId, 'git commit', '{"message":"fix bug"}');
 });
 
@@ -72,8 +72,8 @@ describe('executions', () => {
     const rejectApprovalId = newId();
     db.prepare('INSERT INTO sessions (id, user_id) VALUES (?,?)').run(sessionId, userId);
     db.prepare('INSERT INTO messages (id, session_id, role, content) VALUES (?,?,?,?)').run(msgId, sessionId, 'user', 'reject');
-    db.prepare('INSERT INTO spaces (id, user_id, name, enabled_connection_ids) VALUES (?,?,?,?)').run(projId, userId, `reject-${newId()}`, '[]');
-    db.prepare("INSERT INTO executions (id, message_id, space_id, tool, status) VALUES (?,?,?,?,?)").run(rejectExecId, msgId, projId, 'git_op', 'awaiting_approval');
+    db.prepare("INSERT INTO projects (id, user_id, name, repo_path, origin) VALUES (?,?,?,?,?)").run(projId, userId, `reject-${newId()}`, `/tmp/${projId}`, 'linked');
+    db.prepare("INSERT INTO executions (id, message_id, project_id, tool, status) VALUES (?,?,?,?,?)").run(rejectExecId, msgId, projId, 'git_op', 'awaiting_approval');
     db.prepare("INSERT INTO approvals (id, execution_id, action, payload) VALUES (?,?,?,?)").run(rejectApprovalId, rejectExecId, 'git push', '{}');
 
     const res = await request(app)
@@ -98,8 +98,8 @@ describe('executions', () => {
     const runningExecId = newId();
     db.prepare('INSERT INTO sessions (id, user_id) VALUES (?,?)').run(sessionId, userId);
     db.prepare('INSERT INTO messages (id, session_id, role, content) VALUES (?,?,?,?)').run(msgId, sessionId, 'user', 'run');
-    db.prepare('INSERT INTO spaces (id, user_id, name, enabled_connection_ids) VALUES (?,?,?,?)').run(projId, userId, `proj-${newId()}`, '[]');
-    db.prepare("INSERT INTO executions (id, message_id, space_id, tool, status) VALUES (?,?,?,?,?)").run(runningExecId, msgId, projId, 'invoke_claude_code', 'running');
+    db.prepare("INSERT INTO projects (id, user_id, name, repo_path, origin) VALUES (?,?,?,?,?)").run(projId, userId, `proj-${newId()}`, `/tmp/${projId}`, 'linked');
+    db.prepare("INSERT INTO executions (id, message_id, project_id, tool, status) VALUES (?,?,?,?,?)").run(runningExecId, msgId, projId, 'invoke_claude_code', 'running');
 
     const res = await request(app)
       .post(`/executions/${runningExecId}/cancel`)
@@ -121,8 +121,8 @@ describe('executions', () => {
     const doneExecId = newId();
     db.prepare('INSERT INTO sessions (id, user_id) VALUES (?,?)').run(sessionId, userId);
     db.prepare('INSERT INTO messages (id, session_id, role, content) VALUES (?,?,?,?)').run(msgId, sessionId, 'user', 'run');
-    db.prepare('INSERT INTO spaces (id, user_id, name, enabled_connection_ids) VALUES (?,?,?,?)').run(projId, userId, `proj-${newId()}`, '[]');
-    db.prepare("INSERT INTO executions (id, message_id, space_id, tool, status) VALUES (?,?,?,?,?)").run(doneExecId, msgId, projId, 'invoke_claude_code', 'done');
+    db.prepare("INSERT INTO projects (id, user_id, name, repo_path, origin) VALUES (?,?,?,?,?)").run(projId, userId, `proj-${newId()}`, `/tmp/${projId}`, 'linked');
+    db.prepare("INSERT INTO executions (id, message_id, project_id, tool, status) VALUES (?,?,?,?,?)").run(doneExecId, msgId, projId, 'invoke_claude_code', 'done');
 
     const res = await request(app)
       .post(`/executions/${doneExecId}/cancel`)

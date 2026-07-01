@@ -916,6 +916,40 @@ const migrations: Migration[] = [
       database.pragma('foreign_keys = ON');
     },
   },
+  {
+    version: 44,
+    name: 'fix_tool_registry_connection_fk',
+    noTransaction: true,
+    up: (database) => {
+      const sql = tableSql(database, 'tool_registry') ?? '';
+      if (!sql.includes('_connections_web_tmp')) return;
+
+      database.pragma('foreign_keys = OFF');
+      database.pragma('legacy_alter_table = ON');
+      database.exec(`CREATE TABLE tool_registry_v44 (
+        id TEXT PRIMARY KEY,
+        user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+        connection_id TEXT NOT NULL REFERENCES connections(id) ON DELETE CASCADE,
+        tool_name TEXT NOT NULL,
+        mcp_tool_name TEXT NOT NULL,
+        description TEXT NOT NULL DEFAULT '',
+        input_schema TEXT NOT NULL DEFAULT '{}',
+        created_at INTEGER NOT NULL DEFAULT (unixepoch()),
+        updated_at INTEGER NOT NULL DEFAULT (unixepoch()),
+        UNIQUE(connection_id, mcp_tool_name),
+        UNIQUE(user_id, tool_name)
+      );`);
+      database.exec(`INSERT INTO tool_registry_v44 (
+        id, user_id, connection_id, tool_name, mcp_tool_name, description, input_schema, created_at, updated_at
+      )
+        SELECT id, user_id, connection_id, tool_name, mcp_tool_name, description, input_schema, created_at, updated_at
+        FROM tool_registry;`);
+      database.exec('DROP TABLE tool_registry;');
+      database.exec('ALTER TABLE tool_registry_v44 RENAME TO tool_registry;');
+      database.pragma('legacy_alter_table = OFF');
+      database.pragma('foreign_keys = ON');
+    },
+  },
 ];
 
 function tableSql(database: Database.Database, name: string): string | undefined {

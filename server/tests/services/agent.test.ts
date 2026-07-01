@@ -27,7 +27,7 @@ vi.mock('../../src/services/executor.js', () => ({
   createExecution: vi.fn().mockReturnValue('exec-1'),
   completeExecution: vi.fn(),
   appendOutput: vi.fn(),
-  requestApproval: vi.fn().mockResolvedValue('approved'),
+  requestApproval: vi.fn().mockResolvedValue({ decision: 'approved' }),
 }));
 vi.mock('../../src/mcp/auth.js', () => ({ generateMcpToken: vi.fn().mockReturnValue('mcp-tok') }));
 

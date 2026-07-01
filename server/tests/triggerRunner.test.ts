@@ -6,7 +6,7 @@ const { runAgentTurn } = vi.hoisted(() => ({ runAgentTurn: vi.fn(async () => {})
 vi.mock('../src/services/agent.js', () => ({ runAgentTurn }));
 
 import { initDb, getDb } from '../src/db/index.js';
-import { writeDocument } from '../src/services/documents.js';
+import { writeFile } from '../src/services/files.js';
 import { createTrigger, listTriggersByProject } from '../src/services/triggers.js';
 import { fireTrigger } from '../src/services/triggerRunner.js';
 
@@ -15,18 +15,15 @@ let projectId: string;
 beforeAll(async () => {
   fs.mkdirSync(process.env.DATA_DIR!, { recursive: true });
   initDb();
-  const spaceId = newId();
   projectId = newId();
   getDb().prepare("INSERT INTO users (id,email,hashed_password) VALUES ('u','run@test.com','x')").run();
-  getDb().prepare("INSERT INTO spaces (id,user_id,name) VALUES (?,?,?)").run(spaceId, 'u', 'RunnerSpace');
-  getDb().prepare("INSERT INTO projects (id,space_id,user_id,name,repo_path,default_branch,origin,created_at) VALUES (?,?,?,?,?,?,?,?)")
-    .run(projectId, spaceId, 'u', 'RunnerProj', '/tmp/runner', null, 'linked', Math.floor(Date.now() / 1000));
+  getDb().prepare("INSERT INTO projects (id,user_id,name,repo_path,files_path,default_branch,origin,created_at) VALUES (?,?,?,?,?,?,?,?)")
+    .run(projectId, 'u', 'RunnerProj', '/tmp/runner', '/tmp/runner-files', null, 'linked', Math.floor(Date.now() / 1000));
 });
 
 describe('fireTrigger', () => {
   it('seeds a session from the playbook and advances next_run_at', async () => {
-    const project = getDb().prepare('SELECT space_id FROM projects WHERE id = ?').get(projectId) as { space_id: string };
-    const playbook = await writeDocument({ space_id: project.space_id, path: 'flow.md', title: 'Flow', frontmatter: { type: 'workflow' }, body: 'Search internships and draft applications.' });
+    const playbook = await writeFile({ project_id: projectId, path: 'flow.md', title: 'Flow', tags: { type: 'workflow' }, body: 'Search internships and draft applications.' });
     const t = createTrigger({ project_id: projectId, kind: 'schedule', schedule_cron: '0 8 * * *', playbook_id: playbook.id, next_run_at: 1 });
 
     await fireTrigger(t.id);

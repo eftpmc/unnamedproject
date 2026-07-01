@@ -9,10 +9,10 @@ vi.mock('../../src/services/projects.js', () => ({
   getProject: vi.fn(),
 }));
 
-vi.mock('../../src/services/graphify.js', () => ({
-  hasGraph: vi.fn().mockResolvedValue(true),
-  buildGraph: vi.fn().mockResolvedValue(undefined),
-  queryGraph: vi.fn().mockResolvedValue('auth.ts handles JWT verification'),
+vi.mock('../../src/services/repoIndex.js', () => ({
+  hasIndex: vi.fn().mockResolvedValue(true),
+  buildIndex: vi.fn().mockResolvedValue(undefined),
+  queryIndex: vi.fn().mockResolvedValue('auth.ts handles JWT verification'),
 }));
 
 describe('project_query', () => {
@@ -27,7 +27,7 @@ describe('project_query', () => {
   it('queries the graph when the project has a repo_path', async () => {
     const { getProjectByIdForUser } = await import('../../src/db/index.js');
     vi.mocked(getProjectByIdForUser).mockReturnValue(
-      { id: 'proj-1', space_id: 's1', user_id: 'u1', name: 'api', repo_path: '/tmp/repo', description: null, enabled_connection_ids: '[]' },
+      { id: 'proj-1', user_id: 'u1', name: 'api', repo_path: '/tmp/repo', files_path: '/tmp/files', description: null, enabled_connection_ids: '[]' },
     );
 
     const result = await runProjectQuery({ project_id: 'proj-1', question: 'where is auth handled?' }, 'u1');
@@ -36,13 +36,13 @@ describe('project_query', () => {
 
   it('builds the graph first if it does not exist', async () => {
     const { getProjectByIdForUser } = await import('../../src/db/index.js');
-    const { hasGraph, buildGraph } = await import('../../src/services/graphify.js');
+    const { hasIndex, buildIndex } = await import('../../src/services/repoIndex.js');
     vi.mocked(getProjectByIdForUser).mockReturnValue(
-      { id: 'proj-2', space_id: 's2', user_id: 'u1', name: 'api', repo_path: '/tmp/repo2', description: null, enabled_connection_ids: '[]' },
+      { id: 'proj-2', user_id: 'u1', name: 'api', repo_path: '/tmp/repo2', files_path: '/tmp/files2', description: null, enabled_connection_ids: '[]' },
     );
-    vi.mocked(hasGraph).mockResolvedValueOnce(false);
+    vi.mocked(hasIndex).mockResolvedValueOnce(false);
 
     await runProjectQuery({ project_id: 'proj-2', question: 'what is this?' }, 'u1');
-    expect(buildGraph).toHaveBeenCalledWith('/tmp/repo2', 'proj-2');
+    expect(buildIndex).toHaveBeenCalledWith('/tmp/repo2', 'proj-2');
   });
 });

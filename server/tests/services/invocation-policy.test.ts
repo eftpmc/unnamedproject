@@ -30,7 +30,7 @@ describe('selectInvocationMode', () => {
     expect(selectInvocationMode({
       providerSessionId: 'p1',
       prompt: 'can you clean this up',
-      messageCount: 20,
+      messageCount: 30,
     })).toBe('fresh_with_summary');
   });
 
@@ -39,7 +39,7 @@ describe('selectInvocationMode', () => {
       providerSessionId: 'p1',
       prompt: 'keep going',
       messageCount: 5,
-      sessionCostUsd: 3.00,
+      sessionCostUsd: 5.00,
     })).toBe('fresh_with_summary');
   });
 

@@ -22,7 +22,7 @@ beforeAll(() => {
   messageId = newId();
   db.prepare('INSERT INTO messages (id, session_id, role, content) VALUES (?,?,?,?)').run(messageId, sessionId, 'user', 'hello');
   projectId = newId();
-  db.prepare('INSERT INTO spaces (id, user_id, name, enabled_connection_ids) VALUES (?,?,?,?)').run(projectId, userId, 'test-ws', '[]');
+  db.prepare("INSERT INTO projects (id, user_id, name, repo_path, origin) VALUES (?,?,?,?,?)").run(projectId, userId, 'test-project', `/tmp/${projectId}`, 'linked');
 });
 
 describe('executor', () => {

@@ -14,7 +14,7 @@ function makeProc() {
 }
 
 vi.mock('child_process', () => ({ spawn: vi.fn() }));
-vi.mock('../../src/services/executor.js', () => ({ appendOutput: vi.fn(), requestApproval: vi.fn().mockResolvedValue('approved') }));
+vi.mock('../../src/services/executor.js', () => ({ appendOutput: vi.fn(), requestApproval: vi.fn().mockResolvedValue({ decision: 'approved' }) }));
 vi.mock('../../src/lib/process-registry.js', () => ({ registerProcess: vi.fn(), unregisterProcess: vi.fn() }));
 
 beforeEach(() => {

@@ -10,6 +10,7 @@ vi.mock('../src/lib/mcp-pool.js', () => ({
     { name: 'search_web', description: 'Search the web', inputSchema: { type: 'object', properties: { query: { type: 'string' } }, required: ['query'] } },
   ]),
   callMcpTool: vi.fn().mockResolvedValue('mcp tool result'),
+  closeMcpConnection: vi.fn(),
 }));
 
 let token: string;

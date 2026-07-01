@@ -17,7 +17,6 @@ let token: string;
 let userId: string;
 let sessionId: string;
 let projectId: string;
-let spaceId: string;
 
 beforeAll(async () => {
   fs.mkdirSync(process.env.DATA_DIR!, { recursive: true });
@@ -40,12 +39,9 @@ beforeAll(async () => {
   db.prepare('INSERT INTO messages (id, session_id, role, content) VALUES (?,?,?,?)')
     .run(newId(), sessionId, 'user', 'keep session active for route tests');
 
-  // Create a space then a project in that space
-  spaceId = newId();
   projectId = newId();
-  db.prepare("INSERT INTO spaces (id, user_id, name, enabled_connection_ids) VALUES (?,?,?,?)").run(spaceId, userId, 'myspace', '[]');
-  db.prepare("INSERT INTO projects (id, space_id, user_id, name, repo_path, default_branch, origin, created_at) VALUES (?,?,?,?,?,?,?,?)")
-    .run(projectId, spaceId, userId, 'myproj', '/fake/repo', null, 'linked', Math.floor(Date.now() / 1000));
+  db.prepare("INSERT INTO projects (id, user_id, name, repo_path, files_path, default_branch, origin, created_at) VALUES (?,?,?,?,?,?,?,?)")
+    .run(projectId, userId, 'myproj', '/fake/repo', '/fake/files', null, 'linked', Math.floor(Date.now() / 1000));
 });
 
 describe('PATCH /sessions/:id pinned_project_id', () => {

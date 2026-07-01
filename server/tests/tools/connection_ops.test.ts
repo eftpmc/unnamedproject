@@ -4,7 +4,7 @@ import { initDb, getDb } from '../../src/db/index.js';
 import { newId } from '../../src/lib/ids.js';
 
 vi.mock('../../src/services/executor.js', () => ({
-  requestApproval: vi.fn().mockResolvedValue('approved'),
+  requestApproval: vi.fn().mockResolvedValue({ decision: 'approved' }),
 }));
 
 const { createConnectionTool } = await import('../../src/tools/connection_ops.js');
@@ -40,7 +40,7 @@ describe('createConnectionTool', () => {
   });
 
   it('persists the connection once approved', async () => {
-    vi.mocked(requestApproval).mockResolvedValueOnce('approved');
+    vi.mocked(requestApproval).mockResolvedValueOnce({ decision: 'approved' });
     const result = await createConnectionTool(
       { name: 'My MCP', type: 'mcp', purpose: 'mcp', config: { command: 'npx', args: ['-y', 'foo'] } },
       { userId, executionId: 'e3' },
@@ -52,7 +52,7 @@ describe('createConnectionTool', () => {
   });
 
   it('does not create a connection when the user rejects', async () => {
-    vi.mocked(requestApproval).mockResolvedValueOnce('rejected');
+    vi.mocked(requestApproval).mockResolvedValueOnce({ decision: 'rejected' });
     const before = (getDb().prepare('SELECT COUNT(*) as c FROM connections WHERE user_id = ?').get(userId) as { c: number }).c;
     const result = await createConnectionTool(
       { name: 'Denied Conn', type: 'github', purpose: 'github', config: { apiKey: 'ghp_shouldnotpersist' } },
@@ -64,7 +64,7 @@ describe('createConnectionTool', () => {
   });
 
   it('surfaces validation errors from createConnectionRecord', async () => {
-    vi.mocked(requestApproval).mockResolvedValueOnce('approved');
+    vi.mocked(requestApproval).mockResolvedValueOnce({ decision: 'approved' });
     const result = await createConnectionTool(
       { name: 'Bad', type: 'bogus-type', purpose: 'tool', config: { apiKey: 'x' } },
       { userId, executionId: 'e5' },

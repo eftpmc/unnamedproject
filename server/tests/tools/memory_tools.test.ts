@@ -58,11 +58,9 @@ describe('memory_tools', () => {
   });
 
   it('formats project entries with the linked project name', () => {
-    const spaceId = newId();
     const projectId = newId();
-    getDb().prepare('INSERT INTO spaces (id, user_id, name, enabled_connection_ids) VALUES (?,?,?,?)').run(spaceId, userId, 'myspace', '[]');
-    getDb().prepare("INSERT INTO projects (id, space_id, user_id, name, repo_path, default_branch, origin, created_at) VALUES (?,?,?,?,?,?,?,?)")
-      .run(projectId, spaceId, userId, 'demo-project', `/tmp/${projectId}`, null, 'linked', Math.floor(Date.now() / 1000));
+    getDb().prepare("INSERT INTO projects (id, user_id, name, repo_path, default_branch, origin, created_at) VALUES (?,?,?,?,?,?,?)")
+      .run(projectId, userId, 'demo-project', `/tmp/${projectId}`, null, 'linked', Math.floor(Date.now() / 1000));
     remember(userId, 'project', 'status', 'in progress', projectId);
     expect(recall(userId, 'project', 'status')).toBe('[project: demo-project] status: in progress');
   });

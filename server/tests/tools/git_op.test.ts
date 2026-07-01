@@ -12,7 +12,7 @@ vi.mock('simple-git', () => ({
 }));
 
 vi.mock('../../src/services/executor.js', () => ({
-  requestApproval: vi.fn().mockResolvedValue('approved'),
+  requestApproval: vi.fn().mockResolvedValue({ decision: 'approved' }),
   appendOutput: vi.fn(),
 }));
 
@@ -31,8 +31,8 @@ describe('git_op', () => {
 
   it('returns rejection message when user rejects', async () => {
     const { requestApproval } = await import('../../src/services/executor.js');
-    vi.mocked(requestApproval).mockResolvedValueOnce('rejected');
-    const result = await runGitOp({ op: 'push' }, ctx);
+    vi.mocked(requestApproval).mockResolvedValueOnce({ decision: 'rejected' });
+    const result = await runGitOp({ op: 'push', branch: 'agent/test' }, ctx);
     expect(result).toContain('rejected');
   });
 });

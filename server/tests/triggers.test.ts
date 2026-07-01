@@ -10,12 +10,10 @@ beforeAll(() => {
   fs.mkdirSync(process.env.DATA_DIR!, { recursive: true });
   initDb();
   const userId = 'u3';
-  const spaceId = newId();
   projectId = newId();
   getDb().prepare("INSERT INTO users (id,email,hashed_password) VALUES (?,?,?)").run(userId, 'trig@test.com', 'x');
-  getDb().prepare("INSERT INTO spaces (id,user_id,name) VALUES (?,?,?)").run(spaceId, userId, 'TrigSpace');
-  getDb().prepare("INSERT INTO projects (id,space_id,user_id,name,repo_path,default_branch,origin,created_at) VALUES (?,?,?,?,?,?,?,?)")
-    .run(projectId, spaceId, userId, 'TrigProj', '/tmp/trig', null, 'linked', Math.floor(Date.now() / 1000));
+  getDb().prepare("INSERT INTO projects (id,user_id,name,repo_path,files_path,default_branch,origin,created_at) VALUES (?,?,?,?,?,?,?,?)")
+    .run(projectId, userId, 'TrigProj', '/tmp/trig', '/tmp/trig-files', null, 'linked', Math.floor(Date.now() / 1000));
 });
 
 describe('triggers service', () => {

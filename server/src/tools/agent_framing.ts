@@ -1,4 +1,4 @@
-// Shared framing injected into delegated coding agents (Claude Code, Codex).
+// Shared framing injected into delegated Claude Code agents.
 // These agents run non-interactively with no way to ask the user a follow-up
 // question, so they need to know upfront that they're trusted to act with
 // the user's authority and should make reasonable judgment calls themselves.

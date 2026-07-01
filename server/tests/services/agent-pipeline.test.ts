@@ -49,7 +49,7 @@ describe('agent turn pipeline: cost + state → invocation mode', () => {
 
   it('session exceeding cost threshold triggers fresh start', () => {
     const db = getDb();
-    db.prepare("INSERT INTO agent_usage (id, user_id, tool, cost_usd, session_id) VALUES ('au-1','ap-u','claude_code',3.00,'ap-s2')").run();
+    db.prepare("INSERT INTO agent_usage (id, user_id, tool, cost_usd, session_id) VALUES ('au-1','ap-u','claude_code',6.00,'ap-s2')").run();
 
     const cost = queryCost('ap-s2');
     const state = getSessionState('ap-s2');
@@ -60,7 +60,7 @@ describe('agent turn pipeline: cost + state → invocation mode', () => {
       sessionCostUsd: cost,
       blockers: state.blockers,
     });
-    expect(cost).toBe(3.00);
+    expect(cost).toBe(6.00);
     expect(mode).toBe('fresh_with_summary');
   });
 
@@ -85,12 +85,12 @@ describe('agent turn pipeline: cost + state → invocation mode', () => {
 
   it('accumulated cost across multiple usage rows is summed correctly', () => {
     const db = getDb();
-    db.prepare("INSERT INTO agent_usage (id, user_id, tool, cost_usd, session_id) VALUES ('au-2','ap-u','claude_code',0.80,'ap-s1')").run();
-    db.prepare("INSERT INTO agent_usage (id, user_id, tool, cost_usd, session_id) VALUES ('au-3','ap-u','codex',0.90,'ap-s1')").run();
+    db.prepare("INSERT INTO agent_usage (id, user_id, tool, cost_usd, session_id) VALUES ('au-2','ap-u','claude_code',2.00,'ap-s1')").run();
+    db.prepare("INSERT INTO agent_usage (id, user_id, tool, cost_usd, session_id) VALUES ('au-3','ap-u','claude_code',2.10,'ap-s1')").run();
     db.prepare("INSERT INTO agent_usage (id, user_id, tool, cost_usd, session_id) VALUES ('au-4','ap-u','claude_code',1.00,'ap-s1')").run();
 
     const cost = queryCost('ap-s1');
-    expect(cost).toBeCloseTo(2.70, 5);
+    expect(cost).toBeCloseTo(5.10, 5);
 
     const state = getSessionState('ap-s1');
     const mode = selectInvocationMode({

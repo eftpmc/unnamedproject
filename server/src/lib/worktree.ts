@@ -2,12 +2,12 @@ import fs from 'fs/promises';
 import path from 'path';
 import simpleGit from 'simple-git';
 import {
-  getDataDir,
   getAgentWorktree,
   createAgentWorktree,
   updateAgentWorktreePath,
   type DbAgentWorktree,
 } from '../db/index.js';
+import { assertOutsideAppRoot, defaultAgentRuntimeRoot } from './workspacePaths.js';
 interface WorktreeRepoItem {
   id: string;
   fields: { repo_path: string };
@@ -22,6 +22,7 @@ interface WorktreeRepoItem {
  */
 export async function ensureWorktree(repoItem: WorktreeRepoItem, sessionId: string): Promise<DbAgentWorktree> {
   const repoPath = repoItem.fields.repo_path as string;
+  assertOutsideAppRoot(repoPath, 'repo_path');
   const existing = getAgentWorktree(repoItem.id, sessionId);
   if (existing) {
     try {
@@ -39,7 +40,7 @@ export async function ensureWorktree(repoItem: WorktreeRepoItem, sessionId: stri
   // Must be absolute: simple-git runs with cwd=repoItem.repo_path, so a relative
   // path here would be resolved by git against the repo dir while fs.* below
   // resolve it against the server's cwd, putting the worktree in two places.
-  const worktreePath = existing?.worktree_path ?? path.resolve(getDataDir(), 'worktrees', repoItem.id, sessionId);
+  const worktreePath = existing?.worktree_path ?? path.resolve(defaultAgentRuntimeRoot(), 'worktrees', repoItem.id, sessionId);
   await fs.mkdir(path.dirname(worktreePath), { recursive: true });
   await fs.rm(worktreePath, { recursive: true, force: true });
 

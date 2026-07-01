@@ -4,6 +4,7 @@ import path from 'path';
 import { execFileSync } from 'child_process';
 import { initDb, getDb, closeDb } from '../../src/db/index.js';
 import { newId } from '../../src/lib/ids.js';
+import { defaultAgentRuntimeRoot } from '../../src/lib/workspacePaths.js';
 
 const DATA_DIR = process.env.DATA_DIR!;
 
@@ -16,9 +17,9 @@ const mockInvoke = vi.fn().mockImplementation(async (params) => {
 vi.mock('../../src/services/conversation-provider.js', () => ({
   isProviderLimitError: (err: unknown) => String(err instanceof Error ? err.message : err).toLowerCase().includes('usage limit'),
   getConversationProvider: vi.fn().mockResolvedValue({
-    type: 'codex',
+    type: 'claude_code',
     invoke: mockInvoke,
-    resolveModel: vi.fn().mockResolvedValue('codex-mini-latest'),
+    resolveModel: vi.fn().mockResolvedValue('claude-sonnet-4-6'),
   }),
 }));
 vi.mock('../../src/services/socket.js', () => ({ broadcast: vi.fn() }));
@@ -57,7 +58,7 @@ describe('runAgentTurn', () => {
     const { broadcast } = await import('../../src/services/socket.js');
     const { runAgentTurn } = await import('../../src/services/agent.js');
     getDb()
-      .prepare("INSERT INTO executions (id, message_id, tool, status) VALUES ('exec-1','m1','codex','running')")
+      .prepare("INSERT INTO executions (id, message_id, tool, status) VALUES ('exec-1','m1','claude_code','running')")
       .run();
 
     await runAgentTurn('u1', 's1', 'm1');
@@ -88,20 +89,20 @@ describe('runAgentTurn', () => {
       .prepare('SELECT invocation_mode, provider_type, provider_session_id FROM session_turns WHERE id = ?')
       .get('t1') as { invocation_mode: string | null; provider_type: string | null; provider_session_id: string | null };
     expect(turn.invocation_mode).toBe('new_provider_session');
-    expect(turn.provider_type).toBe('codex');
+    expect(turn.provider_type).toBe('claude_code');
     expect(turn.provider_session_id).toBeNull();
   });
 
-  it('retries codex once without resume when the saved thread rollout is missing', async () => {
+  it('retries Claude Code once without resume when the saved thread rollout is missing', async () => {
     const { runAgentTurn } = await import('../../src/services/agent.js');
     const db = getDb();
-    db.prepare("INSERT INTO sessions (id, user_id, provider_type, provider_session_id) VALUES ('s2','u1','codex','stale-thread')").run();
+    db.prepare("INSERT INTO sessions (id, user_id, provider_type, provider_session_id) VALUES ('s2','u1','claude_code','stale-thread')").run();
     db.prepare("INSERT INTO messages (id, session_id, role, content) VALUES ('m2','s2','user','continue')").run();
     db.prepare("INSERT INTO session_turns (id, session_id, user_message_id, status) VALUES ('t2','s2','m2','running')").run();
-    db.prepare("INSERT INTO executions (id, message_id, tool, status) VALUES ('exec-fresh','m2','codex','running')").run();
+    db.prepare("INSERT INTO executions (id, message_id, tool, status) VALUES ('exec-fresh','m2','claude_code','running')").run();
 
     mockInvoke
-      .mockRejectedValueOnce(new Error('codex exited with code 1: Error: thread/resume: thread/resume failed: no rollout found for thread id 5f3d61d7-bf'))
+      .mockRejectedValueOnce(new Error('claude exited with code 1: Error: thread/resume: thread/resume failed: no rollout found for thread id 5f3d61d7-bf'))
       .mockImplementationOnce(async (params) => {
         params.onText('Fresh thread response');
         params.onSessionId('fresh-thread');
@@ -118,7 +119,7 @@ describe('runAgentTurn', () => {
       invocation_mode: string | null; provider_type: string | null; provider_session_id: string | null;
     };
     expect(turn.invocation_mode).toBe('resume_provider_session');
-    expect(turn.provider_type).toBe('codex');
+    expect(turn.provider_type).toBe('claude_code');
     expect(turn.provider_session_id).toBe('stale-thread');
 
     const session = db.prepare('SELECT provider_session_id FROM sessions WHERE id = ?').get('s2') as { provider_session_id: string | null };
@@ -133,9 +134,9 @@ describe('runAgentTurn', () => {
       params.onSessionId('prov-sess-3');
       return { costUsd: 0.001 };
     });
-    db.prepare("INSERT INTO sessions (id, user_id, provider_type, provider_session_id, summary) VALUES ('s3','u1','codex','expensive-thread','Earlier useful facts')").run();
-    // Seed attributed cost above the $2.50 threshold so the policy goes fresh.
-    db.prepare("INSERT INTO agent_usage (id, user_id, session_id, tool, cost_usd) VALUES ('au-s3','u1','s3','codex',3.00)").run();
+    db.prepare("INSERT INTO sessions (id, user_id, provider_type, provider_session_id, summary) VALUES ('s3','u1','claude_code','expensive-thread','Earlier useful facts')").run();
+    // Seed attributed cost above the $5.00 threshold so the policy goes fresh.
+    db.prepare("INSERT INTO agent_usage (id, user_id, session_id, tool, cost_usd) VALUES ('au-s3','u1','s3','claude_code',6.00)").run();
     db.prepare("INSERT INTO messages (id, session_id, role, content) VALUES ('m3','s3','user','keep working on it')").run();
     db.prepare("INSERT INTO session_turns (id, session_id, user_message_id, status) VALUES ('t3','s3','m3','running')").run();
 
@@ -146,15 +147,14 @@ describe('runAgentTurn', () => {
     expect(mockInvoke.mock.calls[0][0].systemPromptSuffix).toContain('Earlier in this session');
   });
 
-  it('runs providers from an isolated worktree for the pinned project repo', async () => {
+  it('exposes an isolated worktree under the session workspace for the pinned project repo', async () => {
     const { runAgentTurn } = await import('../../src/services/agent.js');
     const db = getDb();
     const repoPath = fs.mkdtempSync(path.join(DATA_DIR, 'agent-main-repo-'));
     execFileSync('git', ['init'], { cwd: repoPath });
     execFileSync('git', ['config', 'user.email', 'agent@test.local'], { cwd: repoPath });
     execFileSync('git', ['config', 'user.name', 'Agent Test'], { cwd: repoPath });
-    db.prepare("INSERT INTO spaces (id, user_id, name) VALUES ('sp-agent','u1','Agent Space')").run();
-    db.prepare("INSERT INTO projects (id, space_id, user_id, name, repo_path, origin) VALUES ('p-agent','sp-agent','u1','Agent Repo',?,'linked')").run(repoPath);
+    db.prepare("INSERT INTO projects (id, user_id, name, repo_path, origin) VALUES ('p-agent','u1','Agent Repo',?,'linked')").run(repoPath);
     db.prepare("INSERT INTO sessions (id, user_id, pinned_project_id) VALUES ('s4','u1','p-agent')").run();
     db.prepare("INSERT INTO messages (id, session_id, role, content) VALUES ('m4','s4','user','work in repo')").run();
     db.prepare("INSERT INTO session_turns (id, session_id, user_message_id, status) VALUES ('t4','s4','m4','running')").run();
@@ -167,8 +167,11 @@ describe('runAgentTurn', () => {
 
     await runAgentTurn('u1', 's4', 'm4');
 
-    expect(mockInvoke.mock.calls[0][0].repoPath).toBe(path.join(DATA_DIR, 'worktrees', 'p-agent', 's4'));
+    expect(mockInvoke.mock.calls[0][0].repoPath).toBe(path.join(defaultAgentRuntimeRoot(), 'agent-workspaces', 's4'));
     expect(mockInvoke.mock.calls[0][0].repoPath).not.toBe(repoPath);
+    expect(fs.realpathSync(path.join(defaultAgentRuntimeRoot(), 'agent-workspaces', 's4', 'project', 'repo'))).toBe(
+      fs.realpathSync(path.join(defaultAgentRuntimeRoot(), 'worktrees', 'p-agent', 's4')),
+    );
   });
 
   it('runs providers from a session scratch directory when no project is pinned', async () => {
@@ -180,8 +183,8 @@ describe('runAgentTurn', () => {
 
     await runAgentTurn('u1', 's-scratch', 'm-scratch');
 
-    expect(mockInvoke.mock.calls[0][0].repoPath).toBe(path.join(DATA_DIR, 'agent-scratch', 's-scratch'));
-    expect(fs.existsSync(path.join(DATA_DIR, 'agent-scratch', 's-scratch'))).toBe(true);
+    expect(mockInvoke.mock.calls[0][0].repoPath).toBe(path.join(defaultAgentRuntimeRoot(), 'agent-workspaces', 's-scratch'));
+    expect(fs.existsSync(path.join(defaultAgentRuntimeRoot(), 'agent-workspaces', 's-scratch'))).toBe(true);
   });
 
   it('persists streamed assistant text before provider completion', async () => {
@@ -207,7 +210,7 @@ describe('runAgentTurn', () => {
   it('clears provider session and checkpoints state on provider usage limits', async () => {
     const { runAgentTurn } = await import('../../src/services/agent.js');
     const db = getDb();
-    db.prepare("INSERT INTO sessions (id, user_id, provider_type, provider_session_id) VALUES ('s5','u1','codex','limited-thread')").run();
+    db.prepare("INSERT INTO sessions (id, user_id, provider_type, provider_session_id) VALUES ('s5','u1','claude_code','limited-thread')").run();
     db.prepare("INSERT INTO messages (id, session_id, role, content) VALUES ('m5','s5','user','continue')").run();
     db.prepare("INSERT INTO session_turns (id, session_id, user_message_id, status) VALUES ('t5','s5','m5','running')").run();
 

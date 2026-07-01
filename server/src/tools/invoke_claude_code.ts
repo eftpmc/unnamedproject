@@ -2,10 +2,18 @@ import { spawn } from 'child_process';
 import fs from 'fs/promises';
 import os from 'os';
 import path from 'path';
+import simpleGit from 'simple-git';
 import { appendOutput, requestApproval } from '../services/executor.js';
 import { registerProcess, unregisterProcess } from '../lib/process-registry.js';
 import { DELEGATE_FRAMING, DELEGATE_TIMEOUT_MS } from './agent_framing.js';
-import { claudePermissionArgs, getDelegateEnv, normalizePermissionProfile, type PermissionProfile } from '../services/permissions.js';
+import {
+  allowsSelfModification,
+  claudePermissionArgs,
+  getDelegateEnv,
+  normalizePermissionProfile,
+  type PermissionProfile,
+} from '../services/permissions.js';
+import { APP_ROOT } from '../lib/workspacePaths.js';
 
 interface ClaudeCodeInput {
   prompt: string;
@@ -47,6 +55,43 @@ export interface ClaudeCodeResult {
   costUsd: number;
 }
 
+interface AppRepoSnapshot {
+  head: string | null;
+  status: string;
+}
+
+async function snapshotAppRepo(): Promise<AppRepoSnapshot | null> {
+  const git = simpleGit(APP_ROOT);
+  try {
+    const head = (await git.raw(['rev-parse', 'HEAD'])).trim() || null;
+    const status = await git.raw([
+      'status',
+      '--porcelain=v1',
+      '--untracked-files=all',
+      '--',
+      '.',
+      ':(exclude).claude',
+      ':(exclude).playwright-cli',
+    ]);
+    return { head, status };
+  } catch {
+    return null;
+  }
+}
+
+async function assertAppRepoUnchanged(before: AppRepoSnapshot | null): Promise<void> {
+  if (!before) return;
+  const after = await snapshotAppRepo();
+  if (!after) return;
+  if (after.head === before.head && after.status === before.status) return;
+
+  const details = [
+    after.head !== before.head ? `HEAD changed from ${before.head ?? 'unknown'} to ${after.head ?? 'unknown'}` : null,
+    after.status !== before.status ? 'working tree status changed' : null,
+  ].filter(Boolean).join('; ');
+  throw new Error(`Blocked delegate boundary violation: the Unnamed app repository was modified without the self-modification profile (${details}).`);
+}
+
 function summarizeToolUse(name: string, input: Record<string, unknown>): string {
   switch (name) {
     case 'Read': return `Read ${input.file_path}`;
@@ -67,6 +112,8 @@ export async function invokeClaudeCode(input: ClaudeCodeInput, ctx: ToolContext)
   if (!ctx.repoPath) throw new Error('invoke_claude_code requires an explicit repoPath or scratch workspace');
 
   const profile = normalizePermissionProfile(ctx.permissionProfile);
+  const canSelfModify = allowsSelfModification(profile);
+  const appRepoBeforePromise = canSelfModify ? Promise.resolve(null) : snapshotAppRepo();
   const args = ['--print', ...claudePermissionArgs(profile), '--output-format', 'stream-json', '--verbose'];
   let mcpConfigDir: string | null = null;
   let runtimeHomeDir: string | undefined;
@@ -103,6 +150,10 @@ export async function invokeClaudeCode(input: ClaudeCodeInput, ctx: ToolContext)
   return new Promise((resolve, reject) => {
     const spawnEnv = getDelegateEnv('claude_code', profile, { homeDir: runtimeHomeDir, tmpDir: runtimeTmpDir, apiKey: ctx.apiKey });
     if (ctx.effort) spawnEnv.CLAUDE_EFFORT = ctx.effort;
+    if (!canSelfModify) {
+      const existingCeilings = spawnEnv.GIT_CEILING_DIRECTORIES ? spawnEnv.GIT_CEILING_DIRECTORIES.split(path.delimiter) : [];
+      spawnEnv.GIT_CEILING_DIRECTORIES = [path.resolve(ctx.repoPath!), ...existingCeilings].join(path.delimiter);
+    }
     const proc = spawn('claude', args, {
       cwd: ctx.repoPath,
       env: spawnEnv,
@@ -186,19 +237,25 @@ export async function invokeClaudeCode(input: ClaudeCodeInput, ctx: ToolContext)
       reject(new Error(`Failed to launch claude: ${err.message}. Is the Claude Code CLI installed and on PATH?`));
     });
 
-    proc.on('close', code => {
+    proc.on('close', async code => {
       clearTimeout(timeoutTimer);
       unregisterProcess(ctx.executionId);
       if (mcpConfigDir) void fs.rm(mcpConfigDir, { recursive: true, force: true });
-      if (timedOut) {
-        reject(new Error(`claude timed out after ${(ctx.timeoutMs ?? DELEGATE_TIMEOUT_MS) / 1000}s and was killed`));
-        return;
+      try {
+        const appRepoBefore = await appRepoBeforePromise;
+        if (!canSelfModify) await assertAppRepoUnchanged(appRepoBefore);
+        if (timedOut) {
+          reject(new Error(`claude timed out after ${(ctx.timeoutMs ?? DELEGATE_TIMEOUT_MS) / 1000}s and was killed`));
+          return;
+        }
+        if (code !== 0 && !resultText) {
+          reject(new Error(`claude exited with code ${code}${stderrText.trim() ? `: ${stderrText.trim()}` : ''}`));
+          return;
+        }
+        resolve({ result: resultText || 'Done.', sessionId, costUsd });
+      } catch (err) {
+        reject(err);
       }
-      if (code !== 0 && !resultText) {
-        reject(new Error(`claude exited with code ${code}${stderrText.trim() ? `: ${stderrText.trim()}` : ''}`));
-        return;
-      }
-      resolve({ result: resultText || 'Done.', sessionId, costUsd });
     });
   });
 }

@@ -1,9 +1,10 @@
 import fs from 'fs/promises';
 import path from 'path';
 import simpleGit from 'simple-git';
-import { getDb, getDataDir } from '../db/index.js';
+import { getDb, getProjectsRoot } from '../db/index.js';
 import { newId } from '../lib/ids.js';
 import { projectFilesDir } from '../lib/spaceFs.js';
+import { assertOutsideAppRoot, resolveWorkspacePath } from '../lib/workspacePaths.js';
 
 export interface ProjectRecord {
   id: string;
@@ -32,8 +33,10 @@ function insert(rec: Omit<ProjectRecord, 'description' | 'enabled_connection_ids
 
 export async function createProject(input: { name: string; user_id: string }): Promise<ProjectRecord> {
   const id = newId();
-  const repoPath = path.join(getDataDir(), 'projects', id);
-  const filesPath = path.join(getDataDir(), 'projects', id, 'files');
+  const projectsRoot = getProjectsRoot(input.user_id);
+  assertOutsideAppRoot(projectsRoot, 'projects_root');
+  const repoPath = path.join(projectsRoot, id);
+  const filesPath = path.join(repoPath, 'files');
   await fs.mkdir(repoPath, { recursive: true });
   const git = simpleGit(repoPath);
   await git.init();
@@ -48,9 +51,11 @@ export async function createProject(input: { name: string; user_id: string }): P
 
 export function linkProject(input: { name: string; user_id: string; repo_path: string; default_branch?: string | null; files_path?: string }): ProjectRecord {
   const id = newId();
+  const repoPath = resolveWorkspacePath(input.repo_path);
+  assertOutsideAppRoot(repoPath, 'repo_path');
   const filesPath = input.files_path ?? projectFilesDir(id);
   const rec = {
-    id, user_id: input.user_id, name: input.name, repo_path: input.repo_path, files_path: filesPath,
+    id, user_id: input.user_id, name: input.name, repo_path: repoPath, files_path: filesPath,
     default_branch: input.default_branch ?? null, origin: 'linked' as const, created_at: Math.floor(Date.now() / 1000),
   };
   insert(rec);

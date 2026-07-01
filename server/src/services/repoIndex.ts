@@ -2,6 +2,7 @@ import fs from 'fs';
 import fsPromises from 'fs/promises';
 import path from 'path';
 import { embed, cosineSimilarity } from './embeddings.js';
+import { assertOutsideAppRoot } from '../lib/workspacePaths.js';
 
 // ─── Index path ────────────────────────────────────────────────────────────
 
@@ -120,11 +121,13 @@ function walkRepo(repoPath: string, maxFiles = 600): WalkEntry[] {
 // ─── Public API ────────────────────────────────────────────────────────────
 
 export async function hasIndex(repoPath: string): Promise<boolean> {
+  assertOutsideAppRoot(repoPath, 'repo_path');
   try { await fsPromises.access(indexPath(repoPath)); return true; }
   catch { return false; }
 }
 
 export async function buildIndex(repoPath: string, _projectId: string): Promise<void> {
+  assertOutsideAppRoot(repoPath, 'repo_path');
   // Load existing index for incremental re-use
   let existingByPath = new Map<string, FileEntry>();
   try {
@@ -172,6 +175,7 @@ async function ensureGitignored(repoPath: string, entry: string): Promise<void> 
 }
 
 export async function queryIndex(question: string, repoPath: string): Promise<string> {
+  assertOutsideAppRoot(repoPath, 'repo_path');
   let index: Index | null = null;
   try {
     const raw = await fsPromises.readFile(indexPath(repoPath), 'utf8');
@@ -203,6 +207,7 @@ export async function queryIndex(question: string, repoPath: string): Promise<st
 }
 
 export async function searchIndex(query: string, repoPath: string, limit = 10): Promise<string> {
+  assertOutsideAppRoot(repoPath, 'repo_path');
   let index: Index | null = null;
   try {
     const raw = await fsPromises.readFile(indexPath(repoPath), 'utf8');

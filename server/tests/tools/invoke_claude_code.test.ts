@@ -94,13 +94,13 @@ describe('invoke_claude_code', () => {
     delete process.env.UNRELATED_SECRET;
   });
 
-  it('omits the bypass permission flag in strict profile', async () => {
+  it('omits the bypass permission flag outside self-modification mode', async () => {
     const proc = makeProc();
     vi.mocked(spawn).mockReturnValue(proc as any);
 
     const promise = invokeClaudeCode(
       { prompt: 'fix the login bug' },
-      { userId: 'u1', executionId: 'e1', repoPath: '/tmp/repo', permissionProfile: 'strict' }
+      { userId: 'u1', executionId: 'e1', repoPath: '/tmp/repo', permissionProfile: 'trusted' }
     );
     await vi.waitFor(() => expect(spawn).toHaveBeenCalled());
     proc.emit('close', 0);
@@ -108,6 +108,39 @@ describe('invoke_claude_code', () => {
 
     const args = vi.mocked(spawn).mock.calls[0][1] as string[];
     expect(args).not.toContain('--permission-mode');
+  });
+
+  it('uses bypass permissions only for self-modification mode', async () => {
+    const proc = makeProc();
+    vi.mocked(spawn).mockReturnValue(proc as any);
+
+    const promise = invokeClaudeCode(
+      { prompt: 'fix the login bug' },
+      { userId: 'u1', executionId: 'e1', repoPath: '/tmp/repo', permissionProfile: 'self_modify' }
+    );
+    await vi.waitFor(() => expect(spawn).toHaveBeenCalled());
+    proc.emit('close', 0);
+    await promise;
+
+    const args = vi.mocked(spawn).mock.calls[0][1] as string[];
+    expect(args).toContain('--permission-mode');
+    expect(args).toContain('bypassPermissions');
+  });
+
+  it('sets a git ceiling outside self-modification mode', async () => {
+    const proc = makeProc();
+    vi.mocked(spawn).mockReturnValue(proc as any);
+
+    const promise = invokeClaudeCode(
+      { prompt: 'fix the login bug' },
+      { userId: 'u1', executionId: 'e1', repoPath: '/tmp/repo', permissionProfile: 'fast' }
+    );
+    await vi.waitFor(() => expect(spawn).toHaveBeenCalled());
+    proc.emit('close', 0);
+    await promise;
+
+    const options = vi.mocked(spawn).mock.calls[0][2] as { env: NodeJS.ProcessEnv };
+    expect(options.env.GIT_CEILING_DIRECTORIES?.split(path.delimiter)).toContain('/tmp/repo');
   });
 
   it('uses an isolated home and temp directory in strict profile', async () => {

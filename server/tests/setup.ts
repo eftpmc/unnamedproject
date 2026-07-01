@@ -5,6 +5,7 @@ import { closeDb } from '../src/db/index.js';
 
 process.env.JWT_SECRET = 'test-secret-32-chars-long-enough!!';
 process.env.DATA_DIR = '/tmp/unnamedproject-test';
+process.env.UNNAMED_WORKSPACE_ROOT = '/tmp/unnamedproject-workspaces';
 process.env.NODE_ENV = 'test';
 process.env.ALLOW_REGISTRATION = 'true';
 

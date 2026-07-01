@@ -2,6 +2,7 @@ import { Router } from 'express';
 import { getProjectsRoot, setProjectsRoot, getPermissionProfile, setPermissionProfile, getExpoPushToken, setExpoPushToken, getApnsDeviceToken, setApnsDeviceToken } from '../db/index.js';
 import { requireAuth, type AuthedRequest } from '../middleware/auth.js';
 import { isPermissionProfile } from '../services/permissions.js';
+import { assertOutsideAppRoot, resolveWorkspacePath } from '../lib/workspacePaths.js';
 
 const router = Router();
 router.use(requireAuth);
@@ -23,7 +24,7 @@ router.put('/', (req, res) => {
     apnsDeviceToken?: string | null;
   };
   if (permission_profile !== undefined && !isPermissionProfile(permission_profile)) {
-    res.status(400).json({ error: 'permission_profile must be one of fast, trusted, strict' });
+    res.status(400).json({ error: 'permission_profile must be one of fast, trusted, strict, self_modify' });
     return;
   }
   if (expoPushToken !== undefined && expoPushToken !== null) {
@@ -38,7 +39,18 @@ router.put('/', (req, res) => {
       return;
     }
   }
-  if (projects_root !== undefined) setProjectsRoot(userId, projects_root.trim());
+  if (projects_root !== undefined) {
+    const normalizedProjectsRoot = projects_root.trim() ? resolveWorkspacePath(projects_root) : '';
+    if (normalizedProjectsRoot) {
+      try {
+        assertOutsideAppRoot(normalizedProjectsRoot, 'projects_root');
+      } catch (err) {
+        res.status(400).json({ error: err instanceof Error ? err.message : 'projects_root must be outside the app repository' });
+        return;
+      }
+    }
+    setProjectsRoot(userId, normalizedProjectsRoot);
+  }
   if (permission_profile !== undefined) setPermissionProfile(userId, permission_profile);
   if (expoPushToken !== undefined) setExpoPushToken(userId, expoPushToken ?? null);
   if (apnsDeviceToken !== undefined) setApnsDeviceToken(userId, apnsDeviceToken ?? null);

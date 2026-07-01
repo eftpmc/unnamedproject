@@ -5,6 +5,7 @@ import { initDb, getDb } from '../src/db/index.js';
 import { createProject } from '../src/services/projects.js';
 import { registerFileHandlers } from '../src/mcp/handlers/files.js';
 import { getTool } from '../src/mcp/registry.js';
+import { defaultAgentRuntimeRoot } from '../src/lib/workspacePaths.js';
 
 let projectId: string;
 let filesPath: string;
@@ -41,7 +42,7 @@ describe('file MCP tools', () => {
   });
 
   it('promotes a local artifact into project files and registers it', async () => {
-    const localPath = path.join(process.env.DATA_DIR!, 'agent-workspaces', sessionId, 'session', 'outputs', 'scratch-artifact.pdf');
+    const localPath = path.join(defaultAgentRuntimeRoot(), 'agent-workspaces', sessionId, 'session', 'outputs', 'scratch-artifact.pdf');
     const data = Buffer.from('%PDF-1.5\n% promoted pdf\n');
     fs.mkdirSync(path.dirname(localPath), { recursive: true });
     fs.writeFileSync(localPath, data);

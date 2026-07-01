@@ -1,5 +1,6 @@
-import { getDataDir, getDb, getPermissionProfile } from '../db/index.js';
+import { getDb, getPermissionProfile } from '../db/index.js';
 import { listFiles } from './files.js';
+import { defaultAgentRuntimeRoot } from '../lib/workspacePaths.js';
 import { recallRelevant } from './memory.js';
 import { formatEntry } from '../tools/memory_tools.js';
 import { formatSessionStateBlock } from './session-state.js';
@@ -47,12 +48,12 @@ If the user asks about project content, documents, or files and no project is pi
 
 ## MCP connections
 GitHub, web search, and other external integrations are configured in Settings → Connections as MCP servers. The app MCP is always available. Other MCP connections are injected into Claude Code only when they are enabled for the pinned project. Use list_connections to see what's configured. If the user asks for something that requires an external service and no suitable project-enabled connection exists, tell them to enable one for the project or add one in Settings.
-If a needed capability can be built locally (e.g. a LaTeX compiler, a file converter, a data processor), build it as an agent tool package, not by directly creating an MCP connection:
+If a needed capability can be built locally (e.g. a LaTeX compiler, a file converter, a data processor), build it as a project/tool-package artifact, not by editing the Unnamed app harness:
 1. Call create_tool_package with a manifest and source files. Supported runtimes: node and python. Use a relative entry path. Valid filesystem permission labels are session, project_files, repo_read, repo_write, and tools_dir. Secret permissions must be uppercase environment variable names, and subprocess permissions must be command names such as python3 or pdflatex, not paths or shell expressions.
 2. Call test_tool_package and fix validation errors.
 3. Call request_tool_install with a clear reason. The platform asks the user for approval and then registers the package as an MCP connection.
 4. After approval, use list_connections or test_connection to confirm the generated mcp connection exists, then call it via mcp_call like any other MCP.
-Declare only the permissions the package actually needs. The package process starts in its package directory and receives UNNAMED_TOOL_* environment metadata describing the approved manifest. Do not directly call create_connection for generated local MCP servers. create_connection is for user-specified external MCPs and GitHub connections only. Do not write MCP server scripts to the user's home directory, Desktop, Documents, or any path outside the managed tool package flow.
+Declare only the permissions the package actually needs. The package process starts in its package directory and receives UNNAMED_TOOL_* environment metadata describing the approved manifest. Do not directly call create_connection for generated local MCP servers. create_connection is for user-specified external MCPs and GitHub connections only. Do not write MCP server scripts to the user's home directory, Desktop, Documents, or any path outside the managed tool package flow. If the user wants a generated tool promoted into the Unnamed app itself, stop and say that requires the App Maintainer/self-modification profile.
 
 ## System dependencies
 Never run package managers (brew, pip, npm -g, apt, curl | sh, etc.) without calling install_dependency first. install_dependency pauses for the user to approve, then runs the command. Always provide a clear reason so the user understands what is being installed and why. If the user rejects, stop and explain what manual step they would need to take.
@@ -111,9 +112,10 @@ When a coding task requires external knowledge (library APIs, patterns, examples
 function permissionBlock(userId: string): string {
   const profile = getPermissionProfile(userId);
   const descriptions: Record<string, string> = {
-    fast: 'delegated agents run non-interactively in isolated worktrees with a minimal environment; this is the default speed/safety balance.',
-    trusted: 'delegated agents run non-interactively and inherit the server environment; use only for fully trusted local work.',
-    strict: 'delegated agents avoid bypass permission flags and run with an isolated home/cache/temp directory; use an API-key provider for the cleanest strict setup.',
+    fast: 'delegated agents run in project-scoped workspaces with a minimal environment; this is the default speed/safety balance.',
+    trusted: 'delegated agents keep the project boundary but may receive selected local credentials such as SSH/GitHub tokens for trusted local work.',
+    strict: 'delegated agents keep the project boundary, avoid bypass permission flags, and use an isolated home/cache/temp directory.',
+    self_modify: 'delegated agents may modify the Unnamed app itself. Use only when intentionally working on the harness/platform.',
   };
   const description = descriptions[profile] ?? 'permission profile active.';
   return `## Permission profile
@@ -172,7 +174,7 @@ function instructionBlock(project?: ProjectCtx): string {
 
   if (entries.length === 0) {
     return `## Agent instruction files
-Project-level CLAUDE.md and AGENTS.md files are loaded natively by Claude Code/Codex from the active repo working directory when a repo is pinned.${project ? ` Active project: ${project.name}.` : ''}
+Project-level CLAUDE.md and AGENTS.md files are loaded natively by Claude Code from the active repo working directory when a repo is pinned.${project ? ` Active project: ${project.name}.` : ''}
 No global CLAUDE.md or AGENTS.md files were found in the app workspace roots.`;
   }
 
@@ -182,13 +184,13 @@ No global CLAUDE.md or AGENTS.md files were found in the app workspace roots.`;
     : `${body.slice(0, MAX_INSTRUCTION_BLOCK_CHARS).trim()}\n\n[Truncated: combined instruction files exceeded ${MAX_INSTRUCTION_BLOCK_CHARS} characters.]`;
 
   return `## Agent instruction files
-Follow these durable global instructions. Project-level CLAUDE.md and AGENTS.md files are loaded natively by Claude Code/Codex from the active repo working directory when a repo is pinned, so do not ask the user to restate them.
+Follow these durable global instructions. Project-level CLAUDE.md and AGENTS.md files are loaded natively by Claude Code from the active repo working directory when a repo is pinned, so do not ask the user to restate them.
 
 ${bounded}`;
 }
 
 function workspaceBlock(sessionId: string, project?: ProjectCtx): string {
-  const root = path.resolve(getDataDir(), 'agent-workspaces', sessionId);
+  const root = path.resolve(defaultAgentRuntimeRoot(), 'agent-workspaces', sessionId);
   const lines = [
     `## Workspace filesystem`,
     `Current workspace root: ${root}`,

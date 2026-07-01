@@ -1,10 +1,10 @@
 import fs from 'fs/promises';
 import path from 'path';
 import simpleGit from 'simple-git';
-import { getDataDir } from '../db/index.js';
+import { defaultProjectFilesRoot } from './workspacePaths.js';
 
 export function projectFilesDir(projectId: string): string {
-  return path.join(getDataDir(), 'projects', projectId, 'files');
+  return path.join(defaultProjectFilesRoot(), projectId);
 }
 
 export async function ensureFilesRepo(filesPath: string): Promise<void> {

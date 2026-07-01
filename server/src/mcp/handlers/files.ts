@@ -2,8 +2,8 @@ import { registerTool } from '../registry.js';
 import fs from 'fs/promises';
 import path from 'path';
 import { writeFile, writeBinaryFile, readFile, listFiles, tagFile, deleteFile, mimeTypeFromPath } from '../../services/files.js';
-import { getDataDir } from '../../db/index.js';
 import { getProjectForUser } from '../../services/projects.js';
+import { defaultAgentRuntimeRoot } from '../../lib/workspacePaths.js';
 
 function decodeBase64(data: unknown): Buffer | string {
   if (typeof data !== 'string' || data.trim() === '') return 'Error: data_base64 is required';
@@ -17,7 +17,7 @@ function decodeBase64(data: unknown): Buffer | string {
 function resolveArtifactSource(sourcePath: string, sessionId: string | null): string | null {
   if (!sessionId) return null;
   if (path.isAbsolute(sourcePath)) return null;
-  const root = path.resolve(getDataDir(), 'agent-workspaces', sessionId);
+  const root = path.resolve(defaultAgentRuntimeRoot(), 'agent-workspaces', sessionId);
   const resolved = path.resolve(root, sourcePath);
   if (!resolved.startsWith(root + path.sep)) return null;
   return resolved;

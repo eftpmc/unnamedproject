@@ -4,6 +4,7 @@ import express from 'express';
 import fs from 'fs';
 import { getDb, initDb } from '../db/index.js';
 import { signToken } from '../lib/jwt.js';
+import { APP_ROOT } from '../lib/workspacePaths.js';
 import projectsRouter from './projects.js';
 
 const app = express();
@@ -14,6 +15,7 @@ let authorization: string;
 
 beforeAll(() => {
   process.env.DATA_DIR = `/tmp/projects-route-test-${Date.now()}`;
+  process.env.UNNAMED_WORKSPACE_ROOT = `/tmp/projects-route-workspaces-${Date.now()}`;
   fs.mkdirSync(process.env.DATA_DIR!, { recursive: true });
   initDb();
   getDb()
@@ -34,6 +36,15 @@ describe('POST /projects', () => {
   it('returns 400 when name is missing', async () => {
     const res = await request(app).post('/projects').set('Authorization', authorization).send({});
     expect(res.status).toBe(400);
+  });
+
+  it('returns 400 when linking the app repository as a project', async () => {
+    const res = await request(app)
+      .post('/projects')
+      .set('Authorization', authorization)
+      .send({ name: 'Harness', repo_path: APP_ROOT });
+    expect(res.status).toBe(400);
+    expect(res.body.error).toMatch(/outside the Unnamed app repository/);
   });
 });
 

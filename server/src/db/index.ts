@@ -4,6 +4,12 @@ import fs from 'fs';
 import { fileURLToPath } from 'url';
 import bcrypt from 'bcrypt';
 import { newId } from '../lib/ids.js';
+import {
+  defaultProjectFilesRoot,
+  defaultProjectsRoot,
+  isPathInsideAppRoot,
+  resolveWorkspacePath,
+} from '../lib/workspacePaths.js';
 import { runMigrations, type Migration } from './migrate.js';
 import { backupDatabase } from './backup.js';
 
@@ -101,7 +107,7 @@ function applySchema(): void {
       claude_code_daily_budget_usd REAL,
       codex_daily_budget_usd REAL,
       permission_profile TEXT NOT NULL DEFAULT 'fast'
-        CHECK(permission_profile IN ('fast','trusted','strict')),
+        CHECK(permission_profile IN ('fast','trusted','strict','self_modify')),
       expo_push_token TEXT,
       apns_device_token TEXT
     );
@@ -870,6 +876,46 @@ const migrations: Migration[] = [
       if (!cols.includes('cost_fresh_threshold_usd')) database.exec('ALTER TABLE triggers ADD COLUMN cost_fresh_threshold_usd REAL');
     },
   },
+  {
+    version: 43,
+    name: 'self_modify_permission_profile',
+    noTransaction: true,
+    up: (database) => {
+      const sql = tableSql(database, 'user_settings') ?? '';
+      if (sql.includes("'self_modify'")) return;
+
+      database.pragma('foreign_keys = OFF');
+      database.exec(`
+        CREATE TABLE _user_settings_v43_tmp (
+          user_id TEXT PRIMARY KEY REFERENCES users(id) ON DELETE CASCADE,
+          projects_root TEXT,
+          claude_code_budget_usd REAL,
+          codex_budget_usd REAL,
+          claude_code_daily_budget_usd REAL,
+          codex_daily_budget_usd REAL,
+          permission_profile TEXT NOT NULL DEFAULT 'fast'
+            CHECK(permission_profile IN ('fast','trusted','strict','self_modify')),
+          expo_push_token TEXT,
+          apns_device_token TEXT
+        );
+      `);
+      database.exec(`
+        INSERT INTO _user_settings_v43_tmp (
+          user_id, projects_root, claude_code_budget_usd, codex_budget_usd,
+          claude_code_daily_budget_usd, codex_daily_budget_usd, permission_profile,
+          expo_push_token, apns_device_token
+        )
+        SELECT
+          user_id, projects_root, claude_code_budget_usd, codex_budget_usd,
+          claude_code_daily_budget_usd, codex_daily_budget_usd, permission_profile,
+          expo_push_token, apns_device_token
+        FROM user_settings;
+      `);
+      database.exec('DROP TABLE user_settings;');
+      database.exec('ALTER TABLE _user_settings_v43_tmp RENAME TO user_settings;');
+      database.pragma('foreign_keys = ON');
+    },
+  },
 ];
 
 function tableSql(database: Database.Database, name: string): string | undefined {
@@ -955,6 +1001,65 @@ function seedDefaultAccounts(): void {
   }
 }
 
+function moveDirectoryIfPresent(fromPath: string, toPath: string): void {
+  if (path.resolve(fromPath) === path.resolve(toPath)) return;
+  if (!fs.existsSync(fromPath)) {
+    fs.mkdirSync(toPath, { recursive: true });
+    return;
+  }
+  fs.mkdirSync(path.dirname(toPath), { recursive: true });
+  if (!fs.existsSync(toPath)) {
+    try {
+      fs.renameSync(fromPath, toPath);
+    } catch (err) {
+      if ((err as NodeJS.ErrnoException).code !== 'EXDEV') throw err;
+      fs.cpSync(fromPath, toPath, { recursive: true, force: true });
+    }
+    return;
+  }
+  fs.cpSync(fromPath, toPath, { recursive: true, force: true });
+}
+
+function repairProjectWorkspacePaths(dataDir: string): void {
+  const projectsTable = db.prepare("SELECT name FROM sqlite_master WHERE type='table' AND name='projects'").get();
+  if (!projectsTable) return;
+
+  const rows = db.prepare('SELECT id, user_id, repo_path, files_path, origin FROM projects').all() as Array<{
+    id: string;
+    user_id: string;
+    repo_path: string;
+    files_path: string | null;
+    origin: string | null;
+  }>;
+  const dataRoot = path.resolve(dataDir);
+  const update = db.prepare('UPDATE projects SET repo_path = ?, files_path = ? WHERE id = ?');
+
+  for (const project of rows) {
+    const repoPath = resolveWorkspacePath(project.repo_path);
+    const filesPath = project.files_path ? resolveWorkspacePath(project.files_path) : null;
+    const repoIsAppManaged = project.origin === 'created' || repoPath.startsWith(`${dataRoot}${path.sep}`);
+    const filesAreAppManaged = !filesPath || filesPath.startsWith(`${dataRoot}${path.sep}`);
+    if (!repoIsAppManaged && !filesAreAppManaged) continue;
+    if (!isPathInsideAppRoot(repoPath) && (!filesPath || !isPathInsideAppRoot(filesPath))) continue;
+
+    const nextRepoPath = repoIsAppManaged && isPathInsideAppRoot(repoPath)
+      ? path.join(defaultProjectsRoot(project.user_id), project.id)
+      : repoPath;
+    const filesInsideRepo = !!filesPath && (filesPath === repoPath || filesPath.startsWith(`${repoPath}${path.sep}`));
+    const nextFilesPath = filesAreAppManaged && (!filesPath || isPathInsideAppRoot(filesPath))
+      ? (filesInsideRepo ? path.join(nextRepoPath, path.relative(repoPath, filesPath)) : path.join(defaultProjectFilesRoot(), project.id))
+      : filesPath!;
+
+    if (repoPath !== nextRepoPath) moveDirectoryIfPresent(repoPath, nextRepoPath);
+    if (filesPath && filesPath !== nextFilesPath && !nextFilesPath.startsWith(`${nextRepoPath}${path.sep}`)) {
+      moveDirectoryIfPresent(filesPath, nextFilesPath);
+    } else {
+      fs.mkdirSync(nextFilesPath, { recursive: true });
+    }
+    update.run(nextRepoPath, nextFilesPath, project.id);
+  }
+}
+
 export function initDb(overrideDataDir?: string): void {
   const dataDir = overrideDataDir ?? getDataDir();
   fs.mkdirSync(dataDir, { recursive: true });
@@ -978,6 +1083,7 @@ export function initDb(overrideDataDir?: string): void {
 
   dropPlanSystem(db);
   dropLegacyItemTables(db);
+  repairProjectWorkspacePaths(dataDir);
   seedDefaultAccounts();
 }
 
@@ -1054,9 +1160,8 @@ export function createAgentWorktree(projectId: string, sessionId: string, branch
   return getAgentWorktree(projectId, sessionId)!;
 }
 
-export function setAgentWorktreeSession(id: string, tool: 'claude' | 'codex', sessionId: string): void {
-  const column = tool === 'claude' ? 'claude_session_id' : 'codex_session_id';
-  getDb().prepare(`UPDATE agent_worktrees SET ${column} = ? WHERE id = ?`).run(sessionId, id);
+export function setAgentWorktreeSession(id: string, _tool: 'claude', sessionId: string): void {
+  getDb().prepare('UPDATE agent_worktrees SET claude_session_id = ? WHERE id = ?').run(sessionId, id);
 }
 
 export function updateAgentWorktreePath(id: string, worktreePath: string): void {
@@ -1187,28 +1292,29 @@ export function getProjectsRoot(userId: string): string {
   const row = getDb()
     .prepare('SELECT projects_root FROM user_settings WHERE user_id = ?')
     .get(userId) as { projects_root: string | null } | undefined;
-  return row?.projects_root || path.join(getDataDir(), 'projects');
+  return row?.projects_root ? resolveWorkspacePath(row.projects_root) : defaultProjectsRoot(userId);
 }
 
 export function setProjectsRoot(userId: string, projectsRoot: string): void {
+  const normalized = projectsRoot.trim() ? resolveWorkspacePath(projectsRoot) : defaultProjectsRoot(userId);
   getDb()
     .prepare(`
       INSERT INTO user_settings (user_id, projects_root) VALUES (?, ?)
       ON CONFLICT(user_id) DO UPDATE SET projects_root = excluded.projects_root
     `)
-    .run(userId, projectsRoot);
+    .run(userId, normalized);
 }
 
-export type AgentUsageTool = 'claude_code' | 'codex' | 'lead_agent' | 'subagent';
+export type AgentUsageTool = 'claude_code' | 'lead_agent' | 'subagent';
 
-export type PermissionProfile = 'fast' | 'trusted' | 'strict';
+export type PermissionProfile = 'fast' | 'trusted' | 'strict' | 'self_modify';
 
 export function getPermissionProfile(userId: string): PermissionProfile {
   const row = getDb()
     .prepare('SELECT permission_profile FROM user_settings WHERE user_id = ?')
     .get(userId) as { permission_profile: string } | undefined;
   const profile = row?.permission_profile;
-  return profile === 'trusted' || profile === 'strict' ? profile : 'fast';
+  return profile === 'trusted' || profile === 'strict' || profile === 'self_modify' ? profile : 'fast';
 }
 
 export function setPermissionProfile(userId: string, profile: PermissionProfile): void {
@@ -1262,7 +1368,7 @@ export interface DbPlanStep {
   id: string;
   plan_id: string;
   title: string;
-  agent: 'claude_code' | 'codex' | 'mcp' | 'file_write' | 'git' | 'github' | 'eval' | 'subagent';
+  agent: 'claude_code' | 'mcp' | 'file_write' | 'git' | 'github' | 'eval' | 'subagent';
   status: 'waiting' | 'running' | 'done' | 'error';
   execution_id: string | null;
   position: number;

@@ -1,6 +1,6 @@
 import fs from 'fs/promises';
 import path from 'path';
-import { createSessionEvent, getDataDir, getDb, recordAgentUsage, setSessionProviderInfo, type AgentUsageTool } from '../db/index.js';
+import { createSessionEvent, getDb, recordAgentUsage, setSessionProviderInfo, type AgentUsageTool } from '../db/index.js';
 import { broadcast } from './socket.js';
 import { newId } from '../lib/ids.js';
 import { buildContext, buildContextUpdate } from './context.js';
@@ -16,6 +16,7 @@ function isProviderLimitError(err: unknown): boolean {
 }
 import { getDecryptedConfig, touchConnection } from '../routes/connections.js';
 import { ensureWorktree } from '../lib/worktree.js';
+import { defaultAgentRuntimeRoot } from '../lib/workspacePaths.js';
 
 const activeTurnControllers = new Map<string, AbortController>();
 
@@ -155,7 +156,7 @@ async function ensureSessionWorkspace(root: string): Promise<{ sessionRoot: stri
 }
 
 async function prepareInvocationWorkspace(sessionId: string): Promise<InvocationWorkspace> {
-  const root = path.resolve(getDataDir(), 'agent-workspaces', sessionId);
+  const root = path.resolve(defaultAgentRuntimeRoot(), 'agent-workspaces', sessionId);
   await fs.mkdir(root, { recursive: true });
   const { sessionRoot, sessionOutputsPath } = await ensureSessionWorkspace(root);
 

@@ -1,4 +1,4 @@
-export const PERMISSION_PROFILES = ['fast', 'trusted', 'strict'] as const;
+export const PERMISSION_PROFILES = ['fast', 'trusted', 'strict', 'self_modify'] as const;
 
 export type PermissionProfile = typeof PERMISSION_PROFILES[number];
 export type DelegateTool = 'claude_code';
@@ -16,7 +16,7 @@ export function getDelegateEnv(
   profile: PermissionProfile,
   runtime?: { homeDir?: string; tmpDir?: string; apiKey?: string },
 ): NodeJS.ProcessEnv {
-  if (profile === 'trusted') return runtime?.apiKey ? { ...process.env, ANTHROPIC_API_KEY: runtime.apiKey } : process.env;
+  if (profile === 'self_modify') return runtime?.apiKey ? { ...process.env, ANTHROPIC_API_KEY: runtime.apiKey } : process.env;
 
   const env: NodeJS.ProcessEnv = {};
   for (const key of ['PATH', 'USER', 'LOGNAME', 'SHELL']) {
@@ -42,10 +42,19 @@ export function getDelegateEnv(
     }
   }
   if (runtime?.apiKey) env.ANTHROPIC_API_KEY = runtime.apiKey;
+  if (profile === 'trusted') {
+    for (const key of ['SSH_AUTH_SOCK', 'GITHUB_TOKEN', 'GH_TOKEN']) {
+      if (process.env[key]) env[key] = process.env[key];
+    }
+  }
   if (process.env.NODE_ENV) env.NODE_ENV = process.env.NODE_ENV;
   return env;
 }
 
 export function claudePermissionArgs(profile: PermissionProfile): string[] {
-  return profile === 'strict' ? [] : ['--permission-mode', 'bypassPermissions'];
+  return profile === 'self_modify' ? ['--permission-mode', 'bypassPermissions'] : [];
+}
+
+export function allowsSelfModification(profile: PermissionProfile): boolean {
+  return profile === 'self_modify';
 }

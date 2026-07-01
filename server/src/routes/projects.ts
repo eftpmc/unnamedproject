@@ -37,9 +37,15 @@ router.post('/', async (req, res) => {
     return;
   }
 
-  const project = repo_path
-    ? linkProject({ name: name.trim(), user_id: userId, repo_path, default_branch })
-    : await createProject({ name: name.trim(), user_id: userId });
+  let project;
+  try {
+    project = repo_path
+      ? linkProject({ name: name.trim(), user_id: userId, repo_path, default_branch })
+      : await createProject({ name: name.trim(), user_id: userId });
+  } catch (err) {
+    res.status(400).json({ error: err instanceof Error ? err.message : 'Could not create project' });
+    return;
+  }
 
   const created = getProjectForUser(project.id, userId)!;
   // Fire-and-forget — don't block the response

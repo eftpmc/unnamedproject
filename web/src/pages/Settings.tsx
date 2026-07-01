@@ -83,7 +83,7 @@ interface SetupFormState {
   mcpEnvValues: Record<string, string>;
   providerModel: string;
   providerApiKey: string;
-  providerPermissionProfile: 'default' | 'fast' | 'strict';
+  providerPermissionProfile: 'default' | PermissionProfile;
 }
 
 const INITIAL_SETUP_FORM: SetupFormState = {
@@ -748,14 +748,16 @@ function SetupModal({
                 </div>
                 <div>
                   <Label>Permission profile</Label>
-                  <Select value={providerPermissionProfile} onValueChange={value => updateForm({ providerPermissionProfile: value as 'default' | 'fast' | 'strict' })}>
+                  <Select value={providerPermissionProfile} onValueChange={value => updateForm({ providerPermissionProfile: value as 'default' | PermissionProfile })}>
                     <SelectTrigger className="mt-1">
                       <SelectValue />
                     </SelectTrigger>
                     <SelectContent>
                       <SelectItem value="default">Default</SelectItem>
-                      <SelectItem value="fast">Fast</SelectItem>
-                      <SelectItem value="strict">Strict</SelectItem>
+                      <SelectItem value="strict">Safe</SelectItem>
+                      <SelectItem value="fast">Normal</SelectItem>
+                      <SelectItem value="trusted">Power User</SelectItem>
+                      <SelectItem value="self_modify">App Maintainer</SelectItem>
                     </SelectContent>
                   </Select>
                 </div>
@@ -975,9 +977,10 @@ export default function Settings() {
                           <SelectValue />
                         </SelectTrigger>
                         <SelectContent>
-                          <SelectItem value="fast">Fast</SelectItem>
-                          <SelectItem value="trusted">Trusted</SelectItem>
-                          <SelectItem value="strict">Strict</SelectItem>
+                          <SelectItem value="strict">Safe</SelectItem>
+                          <SelectItem value="fast">Normal</SelectItem>
+                          <SelectItem value="trusted">Power User</SelectItem>
+                          <SelectItem value="self_modify">App Maintainer</SelectItem>
                         </SelectContent>
                       </Select>
                     </div>
@@ -991,8 +994,9 @@ export default function Settings() {
                     </Button>
                   </div>
                   <p className="text-xs leading-relaxed text-muted-foreground/70">
-                    Fast keeps delegated agents non-interactive with a minimal environment. Trusted restores full
-                    environment inheritance for local-only work. Strict isolates home/cache/temp and removes bypass flags.
+                    Safe uses the strongest runtime isolation. Normal is project-scoped with a minimal environment.
+                    Power User can use selected local credentials while keeping the project boundary. App Maintainer
+                    is the only mode allowed to modify Unnamed itself.
                   </p>
                 </div>
               </div>
@@ -1129,7 +1133,7 @@ export default function Settings() {
                     </Button>
                   </div>
                   {projectsRootError && <div className="text-sm text-destructive">{projectsRootError}</div>}
-                  <HintText>Repositories created for new projects are stored here. Keep the default, or point to a workspace location such as <code>~/code</code>.</HintText>
+                  <HintText>Repositories created for new projects are stored here. Keep this outside the Unnamed app repository; the default uses an app-managed workspace in your home directory.</HintText>
                 </div>
               </div>
 

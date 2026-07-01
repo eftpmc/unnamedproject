@@ -4,6 +4,7 @@ import { getDb } from '../db/index.js';
 import { newId } from '../lib/ids.js';
 import { encrypt, decrypt, deriveKey } from '../lib/crypto.js';
 import { requireAuth, type AuthedRequest } from '../middleware/auth.js';
+import { isPermissionProfile } from '../services/permissions.js';
 
 const router = Router();
 router.use(requireAuth);
@@ -32,6 +33,13 @@ router.post('/', (req, res) => {
   }
   if (config.mode === 'api' && !config.apiKey) {
     res.status(400).json({ error: "apiKey required when mode is 'api'" }); return;
+  }
+  if (
+    config.permissionProfile !== undefined
+    && config.permissionProfile !== 'default'
+    && !isPermissionProfile(config.permissionProfile)
+  ) {
+    res.status(400).json({ error: 'permissionProfile must be default, fast, trusted, strict, or self_modify' }); return;
   }
 
   const id = newId();

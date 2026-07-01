@@ -139,7 +139,7 @@ export interface FileEntry {
   path: string;
 }
 
-export type PermissionProfile = 'fast' | 'trusted' | 'strict';
+export type PermissionProfile = 'fast' | 'trusted' | 'strict' | 'self_modify';
 
 export interface UserSettings {
   projects_root: string;

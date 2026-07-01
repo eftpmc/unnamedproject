@@ -1,12 +1,15 @@
 import { describe, it, expect, beforeEach } from 'vitest';
-import { listProjectsForUser, getProjectForUser, linkProject } from './projects.js';
+import path from 'path';
+import { createProject, listProjectsForUser, getProjectForUser, linkProject } from './projects.js';
 import { getDb, initDb } from '../db/index.js';
 import fs from 'fs';
+import { APP_ROOT } from '../lib/workspacePaths.js';
 
 let userId: string;
 
 beforeEach(async () => {
   process.env.DATA_DIR = `/tmp/projects-service-test-${Date.now()}-${Math.random()}`;
+  process.env.UNNAMED_WORKSPACE_ROOT = `/tmp/projects-service-workspaces-${Date.now()}-${Math.random()}`;
   fs.mkdirSync(process.env.DATA_DIR!, { recursive: true });
   initDb();
 
@@ -18,6 +21,13 @@ beforeEach(async () => {
 });
 
 describe('listProjectsForUser', () => {
+  it('creates project repos under the external workspace root', async () => {
+    const project = await createProject({ user_id: userId, name: 'Created Project' });
+    expect(project.repo_path).toContain(process.env.UNNAMED_WORKSPACE_ROOT!);
+    expect(project.repo_path).not.toContain(process.env.DATA_DIR!);
+    expect(fs.existsSync(path.join(project.repo_path, '.git'))).toBe(true);
+  });
+
   it('returns only projects owned by the user', () => {
     linkProject({
       user_id: userId,
@@ -34,6 +44,16 @@ describe('listProjectsForUser', () => {
     const results = listProjectsForUser('nonexistent-user-id');
     expect(Array.isArray(results)).toBe(true);
     expect(results.length).toBe(0);
+  });
+});
+
+describe('workspace boundary', () => {
+  it('rejects linked repos inside the app repository', () => {
+    expect(() => linkProject({
+      user_id: userId,
+      name: 'Harness',
+      repo_path: APP_ROOT,
+    })).toThrow(/outside the Unnamed app repository/);
   });
 });
 

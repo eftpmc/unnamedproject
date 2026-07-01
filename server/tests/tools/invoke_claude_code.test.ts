@@ -227,7 +227,7 @@ describe('invoke_claude_code', () => {
     expect(allowedIdx).toBeGreaterThanOrEqual(0);
     const allowedTools = args[allowedIdx + 1].split(',');
     expect(allowedTools).toEqual(expect.arrayContaining(['Read', 'WebFetch', 'WebSearch', 'Bash(ls *)']));
-    expect(allowedTools.some(t => t.startsWith('mcp__app__'))).toBe(false);
+    expect(allowedTools).toContain('mcp__app__*');
 
     proc.emit('close', 0);
     await promise;

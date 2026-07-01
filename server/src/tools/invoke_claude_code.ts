@@ -112,7 +112,7 @@ function summarizeToolUse(name: string, input: Record<string, unknown>): string 
   }
 }
 
-function defaultAllowedTools(profile: PermissionProfile): string[] {
+function defaultAllowedTools(mcpServers: Record<string, McpServerConfig> | undefined, profile: PermissionProfile): string[] {
   const tools = [
     'Read',
     'WebFetch',
@@ -123,6 +123,12 @@ function defaultAllowedTools(profile: PermissionProfile): string[] {
   const canonical = canonicalPermissionProfile(profile);
   if (canonical !== 'chat_only') {
     tools.push('Bash(cat *)');
+  }
+  // Pre-approve all tools from every connected MCP server via wildcard.
+  // The app server enforces profile-based access control server-side,
+  // so the wildcard here doesn't bypass tool_builder gating.
+  for (const name of Object.keys(mcpServers ?? {})) {
+    tools.push(`mcp__${name}__*`);
   }
   return tools;
 }
@@ -148,7 +154,7 @@ export async function invokeClaudeCode(input: ClaudeCodeInput, ctx: ToolContext)
   const canSelfModify = allowsSelfModification(profile);
   const appRepoBeforePromise = canSelfModify ? Promise.resolve(null) : snapshotAppRepo();
   const args = ['--print', ...claudePermissionArgs(profile), '--output-format', 'stream-json', '--verbose'];
-  const allowedTools = defaultAllowedTools(profile);
+  const allowedTools = defaultAllowedTools(ctx.mcpServers, profile);
   if (allowedTools.length > 0) args.push('--allowedTools', allowedTools.join(','));
   const allowedDirs = uniqueResolvedDirs([...(ctx.allowedDirs ?? [])]);
   if (allowedDirs.length > 0) args.push('--add-dir', ...allowedDirs);

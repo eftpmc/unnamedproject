@@ -207,6 +207,63 @@ describe('invoke_claude_code', () => {
     await promise;
   });
 
+  it('auto-allows app MCP tools that the system prompt marks as approved', async () => {
+    const proc = makeProc();
+    vi.mocked(spawn).mockReturnValue(proc as any);
+
+    const promise = invokeClaudeCode(
+      { prompt: 'run the daily scan' },
+      {
+        userId: 'u1',
+        executionId: 'e1',
+        repoPath: '/tmp/repo',
+        mcpServers: { app: { url: 'http://localhost:3000/mcp', headers: { Authorization: 'Bearer token' } } },
+      }
+    );
+    await vi.waitFor(() => expect(spawn).toHaveBeenCalled());
+
+    const args = vi.mocked(spawn).mock.calls[0][1] as string[];
+    const allowedIdx = args.indexOf('--allowedTools');
+    expect(allowedIdx).toBeGreaterThanOrEqual(0);
+    expect(args[allowedIdx + 1].split(',')).toEqual(expect.arrayContaining([
+      'mcp__app__list_files',
+      'mcp__app__read_file',
+      'mcp__app__write_file',
+      'mcp__app__checkpoint_session',
+      'mcp__app__list_tool_packages',
+      'mcp__app__git_op',
+      'Read',
+      'Bash(ls *)',
+    ]));
+
+    proc.emit('close', 0);
+    await promise;
+  });
+
+  it('adds external project backing directories to Claude allowed dirs', async () => {
+    const proc = makeProc();
+    vi.mocked(spawn).mockReturnValue(proc as any);
+
+    const promise = invokeClaudeCode(
+      { prompt: 'inspect project files' },
+      {
+        userId: 'u1',
+        executionId: 'e1',
+        repoPath: '/tmp/session-workspace',
+        allowedDirs: ['/tmp/project-files', '/tmp/project-worktree', '/tmp/project-files'],
+      }
+    );
+    await vi.waitFor(() => expect(spawn).toHaveBeenCalled());
+
+    const args = vi.mocked(spawn).mock.calls[0][1] as string[];
+    const addDirIdx = args.indexOf('--add-dir');
+    expect(addDirIdx).toBeGreaterThanOrEqual(0);
+    expect(args.slice(addDirIdx + 1, addDirIdx + 3)).toEqual(['/tmp/project-files', '/tmp/project-worktree']);
+
+    proc.emit('close', 0);
+    await promise;
+  });
+
   it('does not append framing when resuming a session', async () => {
     const proc = makeProc();
     vi.mocked(spawn).mockReturnValue(proc as any);

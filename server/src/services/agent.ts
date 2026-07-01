@@ -89,7 +89,9 @@ interface InvocationWorkspace {
   sessionOutputsPath: string;
   projectRoot?: string;
   projectFilesPath?: string;
+  projectFilesTargetPath?: string;
   projectRepoPath?: string;
+  projectRepoTargetPath?: string;
 }
 
 
@@ -195,7 +197,9 @@ async function prepareInvocationWorkspace(sessionId: string): Promise<Invocation
     sessionOutputsPath,
     projectRoot,
     projectFilesPath: project.files_path ? path.join(projectRoot, 'files') : undefined,
+    projectFilesTargetPath: project.files_path || undefined,
     projectRepoPath: projectRepoPath ? path.join(projectRoot, 'repo') : undefined,
+    projectRepoTargetPath: projectRepoPath,
   };
 }
 
@@ -331,7 +335,9 @@ export async function runAgentTurn(
   const onSessionId = (id: string) => { setSessionProviderInfo(sessionId, provider.type, id); };
 
   const doInvoke = (resumeSessionId: string | null) => provider.invoke({
-    userId, messageId: userMessageId, repoPath: workspace.cwd, prompt: effectivePrompt, resumeSessionId, systemPromptSuffix, mcpServers,
+    userId, messageId: userMessageId, repoPath: workspace.cwd,
+    allowedDirs: [workspace.projectFilesTargetPath, workspace.projectRepoTargetPath].filter((dir): dir is string => !!dir),
+    prompt: effectivePrompt, resumeSessionId, systemPromptSuffix, mcpServers,
     model: effectiveModel, effort: session?.effort ?? undefined,
     timeoutMs: opts?.timeoutMs,
     signal: abortController.signal, onText, onSessionId,

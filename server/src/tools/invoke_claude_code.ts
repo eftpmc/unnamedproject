@@ -37,6 +37,7 @@ interface ToolContext {
   repoPath?: string;
   resumeSessionId?: string | null;
   mcpServers?: Record<string, McpServerConfig>;
+  allowedDirs?: string[];
   permissionProfile?: PermissionProfile;
   apiKey?: string;
   effort?: string;
@@ -107,6 +108,74 @@ function summarizeToolUse(name: string, input: Record<string, unknown>): string 
   }
 }
 
+const APP_MCP_ALLOWED_TOOLS = [
+  'list_projects',
+  'create_project',
+  'update_project',
+  'pin_project',
+  'list_spaces',
+  'create_space',
+  'pin_space',
+  'search_files',
+  'project_query',
+  'rebuild_index',
+  'recall',
+  'remember',
+  'forget',
+  'list_chats',
+  'read_chat',
+  'write_file',
+  'write_binary_file',
+  'promote_artifact',
+  'read_file',
+  'list_files',
+  'tag_file',
+  'delete_file',
+  'link_project',
+  'git_op',
+  'create_trigger',
+  'list_triggers',
+  'delete_trigger',
+  'list_connections',
+  'create_connection',
+  'delete_connection',
+  'test_connection',
+  'vault_get',
+  'vault_list',
+  'vault_request_secret',
+  'checkpoint_session',
+  'create_tool_package',
+  'test_tool_package',
+  'request_tool_install',
+  'list_tool_packages',
+  'disable_tool_package',
+];
+
+function defaultAllowedTools(mcpServers?: Record<string, McpServerConfig>): string[] {
+  const tools = [
+    'Read',
+    'Bash(ls *)',
+    'Bash(find *)',
+  ];
+  if (mcpServers?.app) {
+    tools.push(...APP_MCP_ALLOWED_TOOLS.map(name => `mcp__app__${name}`));
+  }
+  return tools;
+}
+
+function uniqueResolvedDirs(dirs: Array<string | undefined>): string[] {
+  const seen = new Set<string>();
+  const out: string[] = [];
+  for (const dir of dirs) {
+    if (!dir) continue;
+    const resolved = path.resolve(dir);
+    if (seen.has(resolved)) continue;
+    seen.add(resolved);
+    out.push(resolved);
+  }
+  return out;
+}
+
 export async function invokeClaudeCode(input: ClaudeCodeInput, ctx: ToolContext): Promise<ClaudeCodeResult> {
   await requestApproval(ctx.executionId, ctx.userId, 'invoke_claude_code', { prompt: input.prompt }, 'agent');
   if (!ctx.repoPath) throw new Error('invoke_claude_code requires an explicit repoPath or scratch workspace');
@@ -115,6 +184,10 @@ export async function invokeClaudeCode(input: ClaudeCodeInput, ctx: ToolContext)
   const canSelfModify = allowsSelfModification(profile);
   const appRepoBeforePromise = canSelfModify ? Promise.resolve(null) : snapshotAppRepo();
   const args = ['--print', ...claudePermissionArgs(profile), '--output-format', 'stream-json', '--verbose'];
+  const allowedTools = defaultAllowedTools(ctx.mcpServers);
+  if (allowedTools.length > 0) args.push('--allowedTools', allowedTools.join(','));
+  const allowedDirs = uniqueResolvedDirs([...(ctx.allowedDirs ?? [])]);
+  if (allowedDirs.length > 0) args.push('--add-dir', ...allowedDirs);
   let mcpConfigDir: string | null = null;
   let runtimeHomeDir: string | undefined;
   let runtimeTmpDir: string | undefined;

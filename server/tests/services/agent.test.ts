@@ -169,6 +169,9 @@ describe('runAgentTurn', () => {
 
     expect(mockInvoke.mock.calls[0][0].repoPath).toBe(path.join(defaultAgentRuntimeRoot(), 'agent-workspaces', 's4'));
     expect(mockInvoke.mock.calls[0][0].repoPath).not.toBe(repoPath);
+    expect(mockInvoke.mock.calls[0][0].allowedDirs).toEqual(expect.arrayContaining([
+      path.join(defaultAgentRuntimeRoot(), 'worktrees', 'p-agent', 's4'),
+    ]));
     expect(fs.realpathSync(path.join(defaultAgentRuntimeRoot(), 'agent-workspaces', 's4', 'project', 'repo'))).toBe(
       fs.realpathSync(path.join(defaultAgentRuntimeRoot(), 'worktrees', 'p-agent', 's4')),
     );

@@ -6,6 +6,7 @@ export interface InvokeParams {
   userId?: string;
   messageId?: string | null;
   repoPath?: string;
+  allowedDirs?: string[];
   prompt: string;
   resumeSessionId?: string | null;
   systemPromptSuffix?: string;

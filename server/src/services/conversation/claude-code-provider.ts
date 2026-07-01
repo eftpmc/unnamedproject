@@ -28,6 +28,7 @@ export class ClaudeCodeProvider implements ConversationProvider {
           userId,
           executionId,
           repoPath: params.repoPath,
+          allowedDirs: params.allowedDirs,
           resumeSessionId: params.resumeSessionId,
           mcpServers: params.mcpServers as Record<string, McpServerConfig>,
           permissionProfile: normalizePermissionProfile(this.config.permissionProfile),

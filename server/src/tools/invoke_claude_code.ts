@@ -8,12 +8,16 @@ import { registerProcess, unregisterProcess } from '../lib/process-registry.js';
 import { DELEGATE_FRAMING, DELEGATE_TIMEOUT_MS } from './agent_framing.js';
 import {
   allowsSelfModification,
+  allowsToolBuilding,
   claudePermissionArgs,
+  canonicalPermissionProfile,
   getDelegateEnv,
   normalizePermissionProfile,
+  shouldUseIsolatedRuntime,
   type PermissionProfile,
 } from '../services/permissions.js';
 import { APP_ROOT } from '../lib/workspacePaths.js';
+import { generateMcpToken } from '../mcp/auth.js';
 
 interface ClaudeCodeInput {
   prompt: string;
@@ -108,57 +112,17 @@ function summarizeToolUse(name: string, input: Record<string, unknown>): string 
   }
 }
 
-const APP_MCP_ALLOWED_TOOLS = [
-  'list_projects',
-  'create_project',
-  'update_project',
-  'pin_project',
-  'list_spaces',
-  'create_space',
-  'pin_space',
-  'search_files',
-  'project_query',
-  'rebuild_index',
-  'recall',
-  'remember',
-  'forget',
-  'list_chats',
-  'read_chat',
-  'write_file',
-  'write_binary_file',
-  'promote_artifact',
-  'read_file',
-  'list_files',
-  'tag_file',
-  'delete_file',
-  'link_project',
-  'git_op',
-  'create_trigger',
-  'list_triggers',
-  'delete_trigger',
-  'list_connections',
-  'create_connection',
-  'delete_connection',
-  'test_connection',
-  'vault_get',
-  'vault_list',
-  'vault_request_secret',
-  'checkpoint_session',
-  'create_tool_package',
-  'test_tool_package',
-  'request_tool_install',
-  'list_tool_packages',
-  'disable_tool_package',
-];
-
-function defaultAllowedTools(mcpServers?: Record<string, McpServerConfig>): string[] {
+function defaultAllowedTools(profile: PermissionProfile): string[] {
   const tools = [
     'Read',
+    'WebFetch',
+    'WebSearch',
     'Bash(ls *)',
     'Bash(find *)',
   ];
-  if (mcpServers?.app) {
-    tools.push(...APP_MCP_ALLOWED_TOOLS.map(name => `mcp__app__${name}`));
+  const canonical = canonicalPermissionProfile(profile);
+  if (canonical !== 'chat_only') {
+    tools.push('Bash(cat *)');
   }
   return tools;
 }
@@ -184,14 +148,14 @@ export async function invokeClaudeCode(input: ClaudeCodeInput, ctx: ToolContext)
   const canSelfModify = allowsSelfModification(profile);
   const appRepoBeforePromise = canSelfModify ? Promise.resolve(null) : snapshotAppRepo();
   const args = ['--print', ...claudePermissionArgs(profile), '--output-format', 'stream-json', '--verbose'];
-  const allowedTools = defaultAllowedTools(ctx.mcpServers);
+  const allowedTools = defaultAllowedTools(profile);
   if (allowedTools.length > 0) args.push('--allowedTools', allowedTools.join(','));
   const allowedDirs = uniqueResolvedDirs([...(ctx.allowedDirs ?? [])]);
   if (allowedDirs.length > 0) args.push('--add-dir', ...allowedDirs);
   let mcpConfigDir: string | null = null;
   let runtimeHomeDir: string | undefined;
   let runtimeTmpDir: string | undefined;
-  if (profile === 'strict') {
+  if (shouldUseIsolatedRuntime(profile)) {
     const runtimeDir = path.join(ctx.repoPath, '.unnamed', 'delegate-runtime');
     runtimeHomeDir = path.join(runtimeDir, 'home');
     runtimeTmpDir = path.join(runtimeDir, 'tmp');
@@ -209,7 +173,12 @@ export async function invokeClaudeCode(input: ClaudeCodeInput, ctx: ToolContext)
     const servers: Record<string, unknown> = {};
     for (const [name, cfg] of Object.entries(ctx.mcpServers)) {
       if (cfg.url) {
-        servers[name] = { type: 'http', url: cfg.url, ...(cfg.headers ? { headers: cfg.headers } : {}) };
+        let headers = cfg.headers;
+        if (name === 'app') {
+          const delegateToken = generateMcpToken(ctx.userId, null, profile);
+          headers = { ...headers, Authorization: `Bearer ${delegateToken}` };
+        }
+        servers[name] = { type: 'http', url: cfg.url, ...(headers ? { headers } : {}) };
       } else {
         servers[name] = { command: cfg.command, args: cfg.args ?? [], env: cfg.env ?? {}, ...(cfg.cwd ? { cwd: cfg.cwd } : {}) };
       }

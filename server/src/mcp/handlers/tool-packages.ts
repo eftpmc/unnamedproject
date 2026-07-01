@@ -10,6 +10,7 @@ import {
 } from '../../services/tool-packages.js';
 import { createSessionEvent, getDb, getToolPackage } from '../../db/index.js';
 import { broadcast } from '../../services/socket.js';
+import { allowsToolBuilding, normalizePermissionProfile } from '../../services/permissions.js';
 
 function approved(decision: unknown): boolean {
   return decision === 'approved'
@@ -95,7 +96,10 @@ export function registerToolPackageHandlers(): void {
       },
       required: ['manifest', 'files'],
     },
-    handler: async (args, userId, sessionId) => {
+    handler: async (args, userId, sessionId, profile) => {
+      if (profile !== null && !allowsToolBuilding(normalizePermissionProfile(profile))) {
+        return 'Error: tool package creation requires the tool_builder permission profile.';
+      }
       const pkg = await createOrUpdateToolPackage({
         userId,
         manifest: args.manifest,
@@ -130,7 +134,10 @@ export function registerToolPackageHandlers(): void {
       },
       required: ['package_id', 'reason'],
     },
-    handler: async (args, userId, sessionId) => {
+    handler: async (args, userId, sessionId, profile) => {
+      if (profile !== null && !allowsToolBuilding(normalizePermissionProfile(profile))) {
+        return 'Error: tool package installation requires the tool_builder permission profile.';
+      }
       const packageId = args.package_id as string;
       const validation = await testToolPackage(userId, packageId);
       if (!validation.ok || !validation.package) return JSON.stringify(validation, null, 2);
@@ -184,7 +191,10 @@ export function registerToolPackageHandlers(): void {
       properties: { package_id: { type: 'string' } },
       required: ['package_id'],
     },
-    handler: async (args, userId, sessionId) => {
+    handler: async (args, userId, sessionId, profile) => {
+      if (profile !== null && !allowsToolBuilding(normalizePermissionProfile(profile))) {
+        return 'Error: disabling tool packages requires the tool_builder permission profile.';
+      }
       const packageId = args.package_id as string;
       const pkg = getToolPackage(userId, packageId);
       if (!pkg) return `Error: tool package ${packageId} not found`;

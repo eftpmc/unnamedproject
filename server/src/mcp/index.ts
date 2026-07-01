@@ -14,8 +14,9 @@ router.post('/', async (req, res) => {
 
   let userId: string;
   let sessionId: string | null;
+  let profile: string | null;
   try {
-    ({ userId, sessionId } = verifyMcpToken(authHeader.slice(7)));
+    ({ userId, sessionId, profile } = verifyMcpToken(authHeader.slice(7)));
   } catch {
     res.status(401).json({ error: 'Invalid MCP token' });
     return;
@@ -64,7 +65,7 @@ router.post('/', async (req, res) => {
       return;
     }
     try {
-      const text = await tool.handler(args, userId, sessionId);
+      const text = await tool.handler(args, userId, sessionId, profile);
       ok({ content: [{ type: 'text', text }] });
     } catch (e) {
       const msg = e instanceof Error ? e.message : String(e);

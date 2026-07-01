@@ -207,7 +207,7 @@ describe('invoke_claude_code', () => {
     await promise;
   });
 
-  it('auto-allows app MCP tools that the system prompt marks as approved', async () => {
+  it('allows built-in tools and leaves MCP tool access to the server', async () => {
     const proc = makeProc();
     vi.mocked(spawn).mockReturnValue(proc as any);
 
@@ -225,16 +225,9 @@ describe('invoke_claude_code', () => {
     const args = vi.mocked(spawn).mock.calls[0][1] as string[];
     const allowedIdx = args.indexOf('--allowedTools');
     expect(allowedIdx).toBeGreaterThanOrEqual(0);
-    expect(args[allowedIdx + 1].split(',')).toEqual(expect.arrayContaining([
-      'mcp__app__list_files',
-      'mcp__app__read_file',
-      'mcp__app__write_file',
-      'mcp__app__checkpoint_session',
-      'mcp__app__list_tool_packages',
-      'mcp__app__git_op',
-      'Read',
-      'Bash(ls *)',
-    ]));
+    const allowedTools = args[allowedIdx + 1].split(',');
+    expect(allowedTools).toEqual(expect.arrayContaining(['Read', 'WebFetch', 'WebSearch', 'Bash(ls *)']));
+    expect(allowedTools.some(t => t.startsWith('mcp__app__'))).toBe(false);
 
     proc.emit('close', 0);
     await promise;

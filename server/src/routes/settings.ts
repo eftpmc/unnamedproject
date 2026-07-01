@@ -24,7 +24,7 @@ router.put('/', (req, res) => {
     apnsDeviceToken?: string | null;
   };
   if (permission_profile !== undefined && !isPermissionProfile(permission_profile)) {
-    res.status(400).json({ error: 'permission_profile must be one of fast, trusted, strict, self_modify' });
+    res.status(400).json({ error: 'permission_profile must be one of chat_only, project_files, project_tools, external_actions, tool_builder, isolated, self_modify' });
     return;
   }
   if (expoPushToken !== undefined && expoPushToken !== null) {

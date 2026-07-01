@@ -41,6 +41,7 @@ function applySchema(): void {
       type TEXT NOT NULL CHECK(type IN ('github','mcp','google','chrome')),
       purpose TEXT NOT NULL DEFAULT 'tool' CHECK(purpose IN ('github','mcp','tool','google','chrome')),
       service TEXT,
+      provenance TEXT NOT NULL DEFAULT 'user',
       encrypted_config TEXT NOT NULL DEFAULT '',
       created_at INTEGER NOT NULL DEFAULT (unixepoch()),
       UNIQUE(user_id, name)
@@ -107,7 +108,10 @@ function applySchema(): void {
       claude_code_daily_budget_usd REAL,
       codex_daily_budget_usd REAL,
       permission_profile TEXT NOT NULL DEFAULT 'fast'
-        CHECK(permission_profile IN ('fast','trusted','strict','self_modify')),
+        CHECK(permission_profile IN (
+          'chat_only','project_files','project_tools','external_actions','tool_builder','isolated','self_modify',
+          'fast','trusted','strict'
+        )),
       expo_push_token TEXT,
       apns_device_token TEXT
     );
@@ -950,6 +954,54 @@ const migrations: Migration[] = [
       database.pragma('foreign_keys = ON');
     },
   },
+  {
+    version: 45,
+    name: 'connection_provenance_and_permission_profiles',
+    noTransaction: true,
+    up: (database) => {
+      const connectionCols = (database.prepare('PRAGMA table_info(connections)').all() as { name: string }[]).map(c => c.name);
+      if (!connectionCols.includes('provenance')) {
+        database.exec("ALTER TABLE connections ADD COLUMN provenance TEXT NOT NULL DEFAULT 'user'");
+      }
+
+      const sql = tableSql(database, 'user_settings') ?? '';
+      if (sql.includes("'tool_builder'")) return;
+
+      database.pragma('foreign_keys = OFF');
+      database.exec(`
+        CREATE TABLE _user_settings_v45_tmp (
+          user_id TEXT PRIMARY KEY REFERENCES users(id) ON DELETE CASCADE,
+          projects_root TEXT,
+          claude_code_budget_usd REAL,
+          codex_budget_usd REAL,
+          claude_code_daily_budget_usd REAL,
+          codex_daily_budget_usd REAL,
+          permission_profile TEXT NOT NULL DEFAULT 'fast'
+            CHECK(permission_profile IN (
+              'chat_only','project_files','project_tools','external_actions','tool_builder','isolated','self_modify',
+              'fast','trusted','strict'
+            )),
+          expo_push_token TEXT,
+          apns_device_token TEXT
+        );
+      `);
+      database.exec(`
+        INSERT INTO _user_settings_v45_tmp (
+          user_id, projects_root, claude_code_budget_usd, codex_budget_usd,
+          claude_code_daily_budget_usd, codex_daily_budget_usd, permission_profile,
+          expo_push_token, apns_device_token
+        )
+        SELECT
+          user_id, projects_root, claude_code_budget_usd, codex_budget_usd,
+          claude_code_daily_budget_usd, codex_daily_budget_usd, permission_profile,
+          expo_push_token, apns_device_token
+        FROM user_settings;
+      `);
+      database.exec('DROP TABLE user_settings;');
+      database.exec('ALTER TABLE _user_settings_v45_tmp RENAME TO user_settings;');
+      database.pragma('foreign_keys = ON');
+    },
+  },
 ];
 
 function tableSql(database: Database.Database, name: string): string | undefined {
@@ -1341,14 +1393,34 @@ export function setProjectsRoot(userId: string, projectsRoot: string): void {
 
 export type AgentUsageTool = 'claude_code' | 'lead_agent' | 'subagent';
 
-export type PermissionProfile = 'fast' | 'trusted' | 'strict' | 'self_modify';
+export type PermissionProfile =
+  | 'chat_only'
+  | 'project_files'
+  | 'project_tools'
+  | 'external_actions'
+  | 'tool_builder'
+  | 'isolated'
+  | 'self_modify'
+  | 'fast'
+  | 'trusted'
+  | 'strict';
 
 export function getPermissionProfile(userId: string): PermissionProfile {
   const row = getDb()
     .prepare('SELECT permission_profile FROM user_settings WHERE user_id = ?')
     .get(userId) as { permission_profile: string } | undefined;
   const profile = row?.permission_profile;
-  return profile === 'trusted' || profile === 'strict' || profile === 'self_modify' ? profile : 'fast';
+  return profile === 'chat_only'
+    || profile === 'project_files'
+    || profile === 'project_tools'
+    || profile === 'external_actions'
+    || profile === 'tool_builder'
+    || profile === 'isolated'
+    || profile === 'self_modify'
+    || profile === 'trusted'
+    || profile === 'strict'
+    ? profile
+    : 'fast';
 }
 
 export function setPermissionProfile(userId: string, profile: PermissionProfile): void {

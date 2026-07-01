@@ -1,17 +1,21 @@
 import { Router } from 'express';
 import { google } from 'googleapis';
+import os from 'os';
+import path from 'path';
 import { getDb } from '../db/index.js';
 import { newId } from '../lib/ids.js';
 import { encrypt, decrypt, deriveKey } from '../lib/crypto.js';
 import { closeMcpConnection } from '../lib/mcp-pool.js';
 import { requireAuth, type AuthedRequest } from '../middleware/auth.js';
 import { isChromeBridgeConnected } from '../services/chromeBridge.js';
+import { APP_ROOT, expandUserPath, isPathInsideAppRoot } from '../lib/workspacePaths.js';
 
 const router = Router();
 router.use(requireAuth);
 
 const VALID_TYPES = ['github', 'mcp', 'google', 'chrome'] as const;
 const VALID_PURPOSES = ['github', 'mcp', 'tool', 'google', 'chrome'] as const;
+const VALID_PROVENANCE = ['user', 'oauth', 'chrome_bridge', 'managed_tool_package', 'legacy_mcp'] as const;
 
 const PURPOSE_ALLOWED_TYPES: Record<string, string[]> = {
   github: ['github'],
@@ -22,7 +26,7 @@ const PURPOSE_ALLOWED_TYPES: Record<string, string[]> = {
 router.get('/', (req, res) => {
   const { userId } = req as AuthedRequest;
   const rows = getDb()
-    .prepare('SELECT id, name, type, purpose, service, url, notes, created_at, last_used_at FROM connections WHERE user_id = ? ORDER BY created_at')
+    .prepare('SELECT id, name, type, purpose, service, url, notes, provenance, created_at, last_used_at FROM connections WHERE user_id = ? ORDER BY created_at')
     .all(userId);
   res.json(rows);
 });
@@ -35,9 +39,75 @@ export class ConnectionValidationError extends Error {
   }
 }
 
+function asRecord(value: unknown): Record<string, unknown> {
+  return value && typeof value === 'object' && !Array.isArray(value) ? value as Record<string, unknown> : {};
+}
+
+function parseArgs(value: unknown): string[] {
+  if (Array.isArray(value)) return value.filter((item): item is string => typeof item === 'string');
+  if (typeof value === 'string') {
+    try {
+      const parsed = JSON.parse(value) as unknown;
+      return Array.isArray(parsed) ? parsed.filter((item): item is string => typeof item === 'string') : [];
+    } catch {
+      return [];
+    }
+  }
+  return [];
+}
+
+function maybeResolvePath(value: string): string | null {
+  if (!value || value.startsWith('-')) return null;
+  if (value.includes('://')) return null;
+  const expanded = expandUserPath(value);
+  if (!path.isAbsolute(expanded) && !expanded.startsWith('.')) return null;
+  return path.resolve(expanded);
+}
+
+function isInside(parent: string, candidate: string): boolean {
+  const rel = path.relative(parent, candidate);
+  return rel === '' || (!!rel && !rel.startsWith('..') && !path.isAbsolute(rel));
+}
+
+function assertManagedMcpPathBoundary(type: string, config: unknown, managedToolPackage: boolean): void {
+  if (type !== 'mcp' || managedToolPackage) return;
+  const cfg = asRecord(config);
+  const candidates = [
+    typeof cfg.command === 'string' ? cfg.command : null,
+    ...parseArgs(cfg.args),
+  ].filter((value): value is string => !!value);
+
+  const blockedRoots = [
+    path.join(os.homedir(), '.claude'),
+    path.join(os.homedir(), '.codex'),
+  ];
+  for (const value of candidates) {
+    const resolved = maybeResolvePath(value);
+    if (!resolved) continue;
+    if (isPathInsideAppRoot(resolved)) {
+      throw new ConnectionValidationError(`Unmanaged MCP connections cannot execute files inside the Unnamed app repository (${APP_ROOT}). Create a managed tool package instead.`);
+    }
+    for (const root of blockedRoots) {
+      if (isInside(root, resolved)) {
+        throw new ConnectionValidationError(`Unmanaged MCP connections cannot execute files from ${root}. Create a managed tool package instead.`);
+      }
+    }
+  }
+}
+
 export function createConnectionRecord(
   userId: string,
-  input: { name?: string; type?: string; purpose?: string; config?: unknown; service?: string; url?: string; notes?: string; managedToolPackage?: boolean },
+  input: {
+    name?: string;
+    type?: string;
+    purpose?: string;
+    config?: unknown;
+    service?: string;
+    url?: string;
+    notes?: string;
+    managedToolPackage?: boolean;
+    provenance?: string;
+  },
 ): { id: string; type: string; purpose: string } {
   const { name, type, purpose, config, service, url, notes, managedToolPackage } = input;
   if (!name || !type) throw new ConnectionValidationError('name and type required');
@@ -56,12 +126,17 @@ export function createConnectionRecord(
   if (allowedTypes && !allowedTypes.includes(type)) {
     throw new ConnectionValidationError(`Purpose '${connectionPurpose}' does not support type '${type}'. Allowed: ${allowedTypes.join(', ')}`);
   }
+  assertManagedMcpPathBoundary(type, config, !!managedToolPackage);
+  const provenance = managedToolPackage ? 'managed_tool_package' : input.provenance ?? (type === 'google' ? 'oauth' : type === 'chrome' ? 'chrome_bridge' : 'user');
+  if (!VALID_PROVENANCE.includes(provenance as (typeof VALID_PROVENANCE)[number])) {
+    throw new ConnectionValidationError(`provenance must be one of ${VALID_PROVENANCE.join(', ')}`);
+  }
   const id = newId();
   const encrypted = encrypt(JSON.stringify(config ?? {}), deriveKey());
   try {
     getDb()
-      .prepare('INSERT INTO connections (id, user_id, name, type, purpose, service, url, notes, encrypted_config) VALUES (?,?,?,?,?,?,?,?,?)')
-      .run(id, userId, name, type, connectionPurpose, service ?? null, url ?? null, notes ?? null, encrypted);
+      .prepare('INSERT INTO connections (id, user_id, name, type, purpose, service, url, notes, provenance, encrypted_config) VALUES (?,?,?,?,?,?,?,?,?,?)')
+      .run(id, userId, name, type, connectionPurpose, service ?? null, url ?? null, notes ?? null, provenance, encrypted);
   } catch {
     throw new ConnectionValidationError('Connection name already exists', 409);
   }

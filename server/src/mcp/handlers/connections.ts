@@ -12,8 +12,8 @@ export function registerConnectionHandlers(): void {
     inputSchema: { type: 'object', properties: {} },
     handler: async (_args, userId) => {
       const conns = getDb()
-        .prepare('SELECT id, name, type, purpose, service, url, notes FROM connections WHERE user_id = ? ORDER BY created_at')
-        .all(userId) as Array<{ id: string; name: string; type: string; purpose: string; service: string | null; url: string | null; notes: string | null }>;
+        .prepare('SELECT id, name, type, purpose, service, url, notes, provenance FROM connections WHERE user_id = ? ORDER BY created_at')
+        .all(userId) as Array<{ id: string; name: string; type: string; purpose: string; service: string | null; url: string | null; notes: string | null; provenance: string }>;
       return JSON.stringify(conns, null, 2);
     },
   });

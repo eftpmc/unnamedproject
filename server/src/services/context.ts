@@ -112,6 +112,12 @@ When a coding task requires external knowledge (library APIs, patterns, examples
 function permissionBlock(userId: string): string {
   const profile = getPermissionProfile(userId);
   const descriptions: Record<string, string> = {
+    chat_only: 'delegated agents should answer and inspect only; project write and tool-building workflows are not exposed.',
+    project_files: 'delegated agents can work with project documents and session files within the project boundary.',
+    project_tools: 'delegated agents can use app project tools inside the project boundary; this is the default speed/safety balance.',
+    external_actions: 'delegated agents keep the project boundary but may receive selected local credentials such as SSH/GitHub tokens for trusted external work.',
+    tool_builder: 'delegated agents may create managed MCP tool packages and request user approval to install them, but cannot modify the Unnamed app itself.',
+    isolated: 'delegated agents keep the project boundary and use an isolated home/cache/temp directory.',
     fast: 'delegated agents run in project-scoped workspaces with a minimal environment; this is the default speed/safety balance.',
     trusted: 'delegated agents keep the project boundary but may receive selected local credentials such as SSH/GitHub tokens for trusted local work.',
     strict: 'delegated agents keep the project boundary, avoid bypass permission flags, and use an isolated home/cache/temp directory.',

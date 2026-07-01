@@ -54,6 +54,48 @@ export function mimeTypeFromPath(filePath: string): string {
   return map[ext] ?? 'text/plain';
 }
 
+export async function appendFile(input: {
+  project_id: string;
+  path: string;
+  entry: string;
+  source_session_id?: string | null;
+}): Promise<FileRecord> {
+  const filesPath = getFilesPath(input.project_id);
+  await ensureFilesRepo(filesPath);
+  const abs = resolveInFiles(filesPath, input.path);
+  await fs.mkdir(path.dirname(abs), { recursive: true });
+
+  const existing = rowByPath(input.project_id, input.path);
+  if (existing) {
+    const fh = await fs.open(abs, 'a');
+    try {
+      await fh.appendFile('\n' + input.entry, 'utf-8');
+    } finally {
+      await fh.close();
+    }
+  } else {
+    await fs.writeFile(abs, serializeFrontmatter({ type: 'log', status: 'active' }, input.entry), 'utf-8');
+  }
+
+  const now = Math.floor(Date.now() / 1000);
+  const mime_type = mimeTypeFromPath(input.path);
+  const id = existing?.id ?? newId();
+
+  if (existing) {
+    getDb().prepare(
+      'UPDATE files SET source_session_id=COALESCE(?,source_session_id), updated_at=? WHERE id=?',
+    ).run(input.source_session_id ?? null, now, id);
+  } else {
+    const tags = JSON.stringify({ type: 'log', status: 'active' });
+    getDb().prepare(
+      'INSERT INTO files (id,project_id,path,title,type,status,mime_type,tags,source_session_id,created_at,updated_at) VALUES (?,?,?,?,?,?,?,?,?,?,?)',
+    ).run(id, input.project_id, input.path, input.path, 'log', 'active', mime_type, tags, input.source_session_id ?? null, now, now);
+  }
+
+  await commitFiles(filesPath, `append to ${input.path}`);
+  return hydrate(rowByPath(input.project_id, input.path)!);
+}
+
 export async function writeFile(input: {
   project_id: string;
   path: string;

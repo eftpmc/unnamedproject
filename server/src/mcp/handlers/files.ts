@@ -1,7 +1,7 @@
 import { registerTool } from '../registry.js';
 import fs from 'fs/promises';
 import path from 'path';
-import { writeFile, writeBinaryFile, readFile, listFiles, tagFile, deleteFile, mimeTypeFromPath } from '../../services/files.js';
+import { appendFile, writeFile, writeBinaryFile, readFile, listFiles, tagFile, deleteFile, mimeTypeFromPath } from '../../services/files.js';
 import { getProjectForUser } from '../../services/projects.js';
 import { defaultAgentRuntimeRoot } from '../../lib/workspacePaths.js';
 
@@ -24,6 +24,30 @@ function resolveArtifactSource(sourcePath: string, sessionId: string | null): st
 }
 
 export function registerFileHandlers(): void {
+  registerTool({
+    name: 'append_file',
+    description: 'Append text to a project file without reading its current contents. Safe for large log files that would exceed context limits if read in full. Creates the file if it does not exist. Use instead of write_file when the goal is to add a new section at the end of an existing document.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        project_id: { type: 'string' },
+        path: { type: 'string', description: 'Relative path within the project, e.g. opportunity-log.md' },
+        entry: { type: 'string', description: 'Text to append. A newline separator is added automatically before the entry.' },
+      },
+      required: ['project_id', 'path', 'entry'],
+    },
+    handler: async (args, userId, sessionId) => {
+      const project = getProjectForUser(args.project_id as string, userId);
+      if (!project) return `Error: project ${args.project_id} not found`;
+      return JSON.stringify(await appendFile({
+        project_id: args.project_id as string,
+        path: args.path as string,
+        entry: args.entry as string,
+        source_session_id: sessionId,
+      }));
+    },
+  });
+
   registerTool({
     name: 'write_file',
     description: 'Create or overwrite a text file in a project. Tags are YAML key/values (set `type` and `status` for tracking). Body is the file content. Re-writing the same path updates it. For PDFs, images, archives, or other binary artifacts, use write_binary_file or promote_artifact.',

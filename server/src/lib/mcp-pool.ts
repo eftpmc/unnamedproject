@@ -16,10 +16,20 @@ interface McpConn {
 
 const pool = new Map<string, Promise<McpConn>>();
 
-function createConn(command: string, args: string[], env: Record<string, string>): Promise<McpConn> {
+function buildMcpEnv(env: Record<string, string>): NodeJS.ProcessEnv {
+  const base: NodeJS.ProcessEnv = {};
+  for (const key of ['PATH', 'HOME', 'USER', 'LOGNAME', 'SHELL', 'TMPDIR', 'TEMP', 'TMP']) {
+    if (process.env[key]) base[key] = process.env[key];
+  }
+  if (process.env.NODE_ENV) base.NODE_ENV = process.env.NODE_ENV;
+  return { ...base, ...env };
+}
+
+function createConn(command: string, args: string[], env: Record<string, string>, cwd?: string): Promise<McpConn> {
   return new Promise((resolve, reject) => {
     const proc = spawn(command, args, {
-      env: { ...process.env, ...env },
+      cwd,
+      env: buildMcpEnv(env),
       stdio: ['pipe', 'pipe', 'pipe'],
     });
 
@@ -102,10 +112,11 @@ export async function listMcpTools(
   command: string,
   args: string[],
   env: Record<string, string>,
+  cwd?: string,
 ): Promise<McpToolInfo[]> {
   let connPromise = pool.get(connectionId);
   if (!connPromise) {
-    connPromise = createConn(command, args, env).catch(err => {
+    connPromise = createConn(command, args, env, cwd).catch(err => {
       pool.delete(connectionId);
       throw err;
     });
@@ -128,10 +139,11 @@ export async function callMcpTool(
   env: Record<string, string>,
   toolName: string,
   toolInput: Record<string, unknown>,
+  cwd?: string,
 ): Promise<string> {
   let connPromise = pool.get(connectionId);
   if (!connPromise) {
-    connPromise = createConn(command, args, env).catch(err => {
+    connPromise = createConn(command, args, env, cwd).catch(err => {
       pool.delete(connectionId);
       throw err;
     });
@@ -151,4 +163,11 @@ export function closeMcpConnections(): void {
     p.then(c => c.proc.kill()).catch(() => {});
   }
   pool.clear();
+}
+
+export function closeMcpConnection(connectionId: string): void {
+  const conn = pool.get(connectionId);
+  if (!conn) return;
+  pool.delete(connectionId);
+  conn.then(c => c.proc.kill()).catch(() => {});
 }

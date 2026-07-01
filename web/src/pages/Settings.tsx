@@ -21,6 +21,7 @@ import {
   deleteAgentProvider,
   deleteScheduledTask,
   disconnectGoogle,
+  disableToolPackage,
   enableChrome,
   disableChrome,
   getChromeStatus,
@@ -32,18 +33,21 @@ import {
   getProjects,
   getScheduledTasks,
   getSettings,
+  getToolPackages,
   getVaultEntries,
+  installToolPackage,
   setVaultEntry,
   deleteVaultEntry,
   importVaultEntries,
   runScheduledTask,
   testAgentProvider,
   testConnection,
+  testToolPackage,
   updateSettings,
 } from '../lib/api.js';
 import type { VaultEntry } from '../lib/api.js';
 import { usePageTitle } from '../lib/usePageTitle.js';
-import type { AgentProvider, Connection, GoogleAccount, Memory, PermissionProfile, Project, ScheduledTask, UserSettings } from '../types.js';
+import type { AgentProvider, Connection, GoogleAccount, Memory, PermissionProfile, Project, ScheduledTask, ToolPackage, UserSettings } from '../types.js';
 
 type Section = 'tools' | 'mcp' | 'connections' | 'workspace' | 'memory' | 'vault';
 const SETTINGS_SECTIONS: Section[] = ['tools', 'mcp', 'connections', 'workspace', 'memory', 'vault'];
@@ -80,6 +84,7 @@ interface SetupFormState {
   mcpExtraArg: string;
   mcpEnvValues: Record<string, string>;
   providerModel: string;
+  providerApiKey: string;
   providerPermissionProfile: 'default' | 'fast' | 'strict';
 }
 
@@ -92,6 +97,7 @@ const INITIAL_SETUP_FORM: SetupFormState = {
   mcpExtraArg: '',
   mcpEnvValues: {},
   providerModel: '',
+  providerApiKey: '',
   providerPermissionProfile: 'default',
 };
 
@@ -282,6 +288,91 @@ function PlaywrightSection({ connections, onConnectionsChanged }: { connections:
       <HintText>
         Runs as a headless browser process via <code>npx @playwright/mcp</code>. Use Chrome Browser instead when the task needs your signed-in session.
       </HintText>
+    </div>
+  );
+}
+
+function ToolPackagesSection({ packages }: { packages: ToolPackage[] }) {
+  const qc = useQueryClient();
+
+  const installMutation = useMutation({
+    mutationFn: (id: string) => installToolPackage(id),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['tool-packages'] });
+      qc.invalidateQueries({ queryKey: ['connections'] });
+    },
+  });
+  const disableMutation = useMutation({
+    mutationFn: (id: string) => disableToolPackage(id),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['tool-packages'] });
+      qc.invalidateQueries({ queryKey: ['connections'] });
+    },
+  });
+  const testMutation = useMutation({
+    mutationFn: (id: string) => testToolPackage(id),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['tool-packages'] }),
+  });
+
+  if (packages.length === 0) return null;
+
+  function statusBadge(pkg: ToolPackage) {
+    if (pkg.status === 'installed') return <ConnectedBadge />;
+    if (pkg.status === 'error') return <ConnectionErrorBadge />;
+    if (pkg.status === 'disabled') return <Badge variant="outline">Disabled</Badge>;
+    return <Badge variant="secondary">Draft</Badge>;
+  }
+
+  function permissionSummary(pkg: ToolPackage) {
+    const permissions = pkg.manifest.permissions;
+    const filesystem = permissions?.filesystem?.length ? permissions.filesystem.join(', ') : 'none';
+    const secrets = permissions?.secrets?.length ? permissions.secrets.join(', ') : 'none';
+    const subprocess = permissions?.subprocess?.length ? permissions.subprocess.join(', ') : 'none';
+    return [
+      `fs: ${filesystem}`,
+      `network: ${permissions?.network ? 'yes' : 'no'}`,
+      `secrets: ${secrets}`,
+      `subprocess: ${subprocess}`,
+    ].join(' · ');
+  }
+
+  return (
+    <div className="flex flex-col gap-3">
+      <SectionLabel>Agent-built tool packages</SectionLabel>
+      {packages.map(pkg => (
+        <SettingRow key={pkg.id}>
+          <div className="min-w-0">
+            <div className="flex flex-wrap items-center gap-2">
+              <div className="text-sm font-medium text-foreground">{pkg.name}</div>
+              {statusBadge(pkg)}
+            </div>
+            <div className="mt-1 text-xs text-muted-foreground">
+              {pkg.description || pkg.manifest.description || 'Generated MCP package'} · {pkg.manifest.runtime} · {pkg.manifest.entry}
+            </div>
+            <div className="mt-1 max-w-full truncate font-mono text-[11px] text-faint-fg" title={permissionSummary(pkg)}>
+              {permissionSummary(pkg)}
+            </div>
+            {pkg.last_error && (
+              <div className="mt-1 max-w-full truncate text-[11px] text-destructive">{pkg.last_error}</div>
+            )}
+          </div>
+          <div className="flex shrink-0 items-center gap-2 self-start sm:self-center">
+            <Button size="sm" variant="outline" onClick={() => testMutation.mutate(pkg.id)} disabled={testMutation.isPending}>
+              Test
+            </Button>
+            {pkg.status === 'installed' ? (
+              <Button size="sm" variant="outline" onClick={() => disableMutation.mutate(pkg.id)} disabled={disableMutation.isPending}>
+                Disable
+              </Button>
+            ) : (
+              <Button size="sm" onClick={() => installMutation.mutate(pkg.id)} disabled={installMutation.isPending}>
+                Install
+              </Button>
+            )}
+          </div>
+        </SettingRow>
+      ))}
+      <HintText>Claude can draft these packages, but activation is controlled here or through an explicit approval.</HintText>
     </div>
   );
 }
@@ -706,7 +797,7 @@ function SetupModal({
   const existing = activeSetup === 'mcp'
     ? connections.find(c => c.purpose === activeSetup)
     : providers.find(p => p.type === activeSetup);
-  const { setupName, mcpCommand, mcpArgs, mcpEnv, mcpPreset, mcpExtraArg, mcpEnvValues, providerModel, providerPermissionProfile } = form;
+  const { setupName, mcpCommand, mcpArgs, mcpEnv, mcpPreset, mcpExtraArg, mcpEnvValues, providerModel, providerApiKey, providerPermissionProfile } = form;
 
   const selectedPreset = activeSetup === 'mcp' && mcpPreset !== 'custom'
     ? MCP_PRESETS.find(p => p.id === mcpPreset)
@@ -788,6 +879,16 @@ function SetupModal({
                   />
                 </div>
                 <div>
+                  <Label>API key</Label>
+                  <Input
+                    type="password"
+                    placeholder="Optional; enables isolated strict runs"
+                    value={providerApiKey}
+                    onChange={e => updateForm({ providerApiKey: e.target.value })}
+                    className="text-sm"
+                  />
+                </div>
+                <div>
                   <Label>Permission profile</Label>
                   <Select value={providerPermissionProfile} onValueChange={value => updateForm({ providerPermissionProfile: value as 'default' | 'fast' | 'strict' })}>
                     <SelectTrigger className="mt-1">
@@ -823,6 +924,7 @@ export default function Settings() {
 
   const { data: connections = [] } = useQuery<Connection[]>({ queryKey: ['connections'], queryFn: getConnections });
   const { data: agentProviders = [] } = useQuery<AgentProvider[]>({ queryKey: ['agent-providers'], queryFn: getAgentProviders });
+  const { data: toolPackages = [] } = useQuery<ToolPackage[]>({ queryKey: ['tool-packages'], queryFn: getToolPackages });
   const { data: projects = [] } = useQuery<Project[]>({ queryKey: ['projects'], queryFn: () => getProjects() });
   const { data: memory = [] } = useQuery<Memory[]>({ queryKey: ['memory'], queryFn: getMemory });
   const { data: scheduledTasks = [] } = useQuery<ScheduledTask[]>({ queryKey: ['scheduledTasks'], queryFn: getScheduledTasks });
@@ -840,7 +942,7 @@ export default function Settings() {
   // Google connect dialog state
   const [googleConnectDialog, setGoogleConnectDialog] = useState<{ service: string; label: string } | null>(null);
 
-  const mcpConnections = connections.filter(c => c.purpose === 'mcp');
+  const mcpConnections = connections.filter(c => c.purpose === 'mcp' && !c.name.startsWith('tool:'));
 
   const { data: googleStatus = {} } = useQuery<Record<string, GoogleAccount[]>>({
     queryKey: ['google-status'],
@@ -885,14 +987,18 @@ export default function Settings() {
     mutationFn: () => {
       if (!activeSetup) throw new Error('Pick what you want to set up');
       const meta = SETUP_META[activeSetup];
-      const { setupName, mcpCommand, mcpArgs, mcpEnv, mcpPreset, mcpExtraArg, mcpEnvValues, providerModel, providerPermissionProfile } = form;
+      const { setupName, mcpCommand, mcpArgs, mcpEnv, mcpPreset, mcpExtraArg, mcpEnvValues, providerModel, providerApiKey, providerPermissionProfile } = form;
 
       if (activeSetup === 'claude_code') {
         const resolvedModel = providerModel.trim() || 'claude-sonnet-4-6';
         return createAgentProvider({
           name: setupName.trim() || meta.title,
           type: activeSetup,
-          config: { ...(resolvedModel ? { model: resolvedModel } : {}), permissionProfile: providerPermissionProfile },
+          config: {
+            ...(resolvedModel ? { model: resolvedModel } : {}),
+            ...(providerApiKey.trim() ? { mode: 'api', apiKey: providerApiKey.trim() } : { mode: 'local' }),
+            permissionProfile: providerPermissionProfile,
+          },
         });
       }
 
@@ -1028,7 +1134,7 @@ export default function Settings() {
                   </div>
                   <p className="text-xs leading-relaxed text-muted-foreground/70">
                     Fast keeps delegated agents non-interactive with a minimal environment. Trusted restores full
-                    environment inheritance for local-only work. Strict removes bypass flags and may require manual CLI approval.
+                    environment inheritance for local-only work. Strict isolates home/cache/temp and removes bypass flags.
                   </p>
                 </div>
               </div>
@@ -1044,6 +1150,8 @@ export default function Settings() {
 
               {/* Playwright Browser */}
               <PlaywrightSection connections={connections} onConnectionsChanged={() => qc.invalidateQueries({ queryKey: ['connections'] })} />
+
+              <ToolPackagesSection packages={toolPackages} />
 
               {/* Google services */}
               <div>

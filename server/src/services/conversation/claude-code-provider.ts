@@ -7,6 +7,7 @@ import type { ConversationProvider, InvokeParams } from '../conversation-provide
 interface ClaudeCodeConfig {
   model: string;
   permissionProfile: string;
+  apiKey?: string;
 }
 
 export class ClaudeCodeProvider implements ConversationProvider {
@@ -30,6 +31,7 @@ export class ClaudeCodeProvider implements ConversationProvider {
           resumeSessionId: params.resumeSessionId,
           mcpServers: params.mcpServers as Record<string, McpServerConfig>,
           permissionProfile: normalizePermissionProfile(this.config.permissionProfile),
+          apiKey: this.config.apiKey,
           effort: params.effort,
           systemPromptSuffix: params.systemPromptSuffix,
           signal: params.signal,

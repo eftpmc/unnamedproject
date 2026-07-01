@@ -1,5 +1,5 @@
 import { getToken, setToken, clearToken } from './auth.js';
-import type { Session, Message, Connection, AgentProvider, GoogleAccount, EffortLevel, UserSettings, Memory, ScheduledTask, SessionWorktree, PermissionProfile, SessionEvent, LibraryFile, LibraryFileWithBody, Project, Trigger, FileEntry } from '../types.js';
+import type { Session, Message, Connection, AgentProvider, GoogleAccount, EffortLevel, UserSettings, Memory, ScheduledTask, SessionWorktree, PermissionProfile, SessionEvent, LibraryFile, LibraryFileWithBody, Project, Trigger, FileEntry, ToolPackage } from '../types.js';
 
 async function request<T>(path: string, init: RequestInit = {}): Promise<T> {
   const token = getToken();
@@ -283,6 +283,22 @@ export function deleteConnection(id: string): Promise<void> {
 
 export function testConnection(id: string): Promise<{ ok: boolean | null; latencyMs?: number; error?: string }> {
   return request(`/connections/${id}/test`);
+}
+
+export function getToolPackages(): Promise<ToolPackage[]> {
+  return request('/tool-packages');
+}
+
+export function installToolPackage(id: string): Promise<ToolPackage> {
+  return request(`/tool-packages/${id}/install`, { method: 'POST' });
+}
+
+export function disableToolPackage(id: string): Promise<ToolPackage> {
+  return request(`/tool-packages/${id}/disable`, { method: 'POST' });
+}
+
+export function testToolPackage(id: string): Promise<{ ok: boolean; errors: string[]; package: ToolPackage | null }> {
+  return request(`/tool-packages/${id}/test`, { method: 'POST' });
 }
 
 export function getMemory(): Promise<Memory[]> {

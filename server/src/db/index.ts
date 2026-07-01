@@ -800,6 +800,32 @@ const migrations: Migration[] = [
       database.exec("ALTER TABLE connections ADD COLUMN last_used_at INTEGER");
     },
   },
+  {
+    version: 39,
+    name: 'tool_packages',
+    up: (database) => {
+      database.exec(`
+        CREATE TABLE IF NOT EXISTS tool_packages (
+          id TEXT PRIMARY KEY,
+          user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+          name TEXT NOT NULL,
+          description TEXT NOT NULL DEFAULT '',
+          package_path TEXT NOT NULL,
+          manifest TEXT NOT NULL DEFAULT '{}',
+          status TEXT NOT NULL DEFAULT 'draft'
+            CHECK(status IN ('draft','installed','disabled','error')),
+          connection_id TEXT REFERENCES connections(id) ON DELETE SET NULL,
+          source_session_id TEXT REFERENCES sessions(id) ON DELETE SET NULL,
+          last_error TEXT,
+          created_at INTEGER NOT NULL DEFAULT (unixepoch()),
+          updated_at INTEGER NOT NULL DEFAULT (unixepoch()),
+          installed_at INTEGER,
+          UNIQUE(user_id, name)
+        );
+        CREATE INDEX IF NOT EXISTS idx_tool_packages_user_status ON tool_packages(user_id, status);
+      `);
+    },
+  },
 ];
 
 function tableSql(database: Database.Database, name: string): string | undefined {
@@ -1411,6 +1437,42 @@ export function addSessionDiscoveredTools(sessionId: string, toolNames: string[]
   getDb()
     .prepare('UPDATE sessions SET discovered_tools = ? WHERE id = ?')
     .run(JSON.stringify([...existing]), sessionId);
+}
+
+export type ToolPackageStatus = 'draft' | 'installed' | 'disabled' | 'error';
+
+export interface DbToolPackage {
+  id: string;
+  user_id: string;
+  name: string;
+  description: string;
+  package_path: string;
+  manifest: string;
+  status: ToolPackageStatus;
+  connection_id: string | null;
+  source_session_id: string | null;
+  last_error: string | null;
+  created_at: number;
+  updated_at: number;
+  installed_at: number | null;
+}
+
+export function getToolPackage(userId: string, packageId: string): DbToolPackage | undefined {
+  return getDb()
+    .prepare('SELECT * FROM tool_packages WHERE id = ? AND user_id = ?')
+    .get(packageId, userId) as DbToolPackage | undefined;
+}
+
+export function getToolPackageByName(userId: string, name: string): DbToolPackage | undefined {
+  return getDb()
+    .prepare('SELECT * FROM tool_packages WHERE user_id = ? AND name = ?')
+    .get(userId, name) as DbToolPackage | undefined;
+}
+
+export function listToolPackages(userId: string): DbToolPackage[] {
+  return getDb()
+    .prepare('SELECT * FROM tool_packages WHERE user_id = ? ORDER BY updated_at DESC, created_at DESC')
+    .all(userId) as DbToolPackage[];
 }
 
 export function getExpoPushToken(userId: string): string | null {

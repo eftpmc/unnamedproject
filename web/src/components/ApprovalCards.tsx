@@ -298,6 +298,72 @@ function DependencyCard({ ui, executionId, onDone }: { ui: Extract<ApprovalUI, {
   );
 }
 
+// ─── Tool package ──────────────────────────────────────────────────────────
+
+function ToolPackageCard({ ui, executionId, onDone }: { ui: Extract<ApprovalUI, { kind: 'tool_package' }>; executionId: string; onDone: () => void }) {
+  const [acting, setActing] = useState(false);
+  const filesystem = ui.permissions?.filesystem?.join(', ') || 'none';
+  const subprocess = ui.permissions?.subprocess?.join(', ') || 'none';
+  const secrets = ui.permissions?.secrets?.join(', ') || 'none';
+
+  async function install() {
+    setActing(true);
+    try { await approveExecution(executionId); onDone(); } finally { setActing(false); }
+  }
+  async function dismiss() {
+    setActing(true);
+    try { await rejectExecution(executionId); onDone(); } finally { setActing(false); }
+  }
+
+  return (
+    <div className="flex flex-col gap-4 p-5">
+      <div className="flex items-center gap-2.5">
+        <span className="grid size-8 shrink-0 place-items-center rounded-lg bg-muted text-muted-foreground">
+          <Package size={14} />
+        </span>
+        <div>
+          <p className="text-[15px] font-semibold text-foreground">Install {ui.name}</p>
+          <p className="text-xs text-muted-foreground">{ui.reason || ui.description}</p>
+        </div>
+      </div>
+      <div className="rounded-xl bg-muted/40 px-3.5 py-2.5 font-mono text-[11px] leading-relaxed text-muted-foreground">
+        <div>runtime: {ui.runtime}</div>
+        <div>entry: {ui.entry}</div>
+        <div>filesystem: {filesystem}</div>
+        <div>network: {ui.permissions?.network ? 'yes' : 'no'}</div>
+        <div>secrets: {secrets}</div>
+        <div>subprocess: {subprocess}</div>
+      </div>
+      <CardActions cancelLabel="Skip" confirmLabel="Install" disabled={acting} onCancel={dismiss} onConfirm={install} />
+    </div>
+  );
+}
+
+function ToolPackageDisableCard({ ui, executionId, onDone }: { ui: Extract<ApprovalUI, { kind: 'tool_package_disable' }>; executionId: string; onDone: () => void }) {
+  const [acting, setActing] = useState(false);
+
+  async function disable() {
+    setActing(true);
+    try { await approveExecution(executionId); onDone(); } finally { setActing(false); }
+  }
+  async function dismiss() {
+    setActing(true);
+    try { await rejectExecution(executionId); onDone(); } finally { setActing(false); }
+  }
+
+  return (
+    <div className="flex flex-col gap-4 p-5">
+      <div>
+        <p className="text-[15px] font-semibold text-foreground">Disable generated tool</p>
+        <p className="mt-1 text-sm text-muted-foreground">
+          {ui.name || ui.packageId} will be removed from the active MCP connections.
+        </p>
+      </div>
+      <CardActions cancelLabel="Cancel" confirmLabel="Disable" disabled={acting} onCancel={dismiss} onConfirm={disable} />
+    </div>
+  );
+}
+
 // ─── Confirm ────────────────────────────────────────────────────────────────
 
 function ConfirmCard({ ui, executionId, onDone }: { ui: Extract<ApprovalUI, { kind: 'confirm' }>; executionId: string; onDone: () => void }) {
@@ -376,6 +442,8 @@ export function ApprovalCard({
     case 'trigger_preview':return <TriggerPreviewCard ui={ui} executionId={executionId} onDone={onDone} />;
     case 'secret_entry':   return <SecretEntryCard    ui={ui} executionId={executionId} onDone={onDone} />;
     case 'dependency':     return <DependencyCard     ui={ui} executionId={executionId} onDone={onDone} />;
+    case 'tool_package':   return <ToolPackageCard    ui={ui} executionId={executionId} onDone={onDone} />;
+    case 'tool_package_disable': return <ToolPackageDisableCard ui={ui} executionId={executionId} onDone={onDone} />;
     case 'confirm':        return <ConfirmCard        ui={ui} executionId={executionId} onDone={onDone} />;
     default:               return <GenericApprovalCard action={action} executionId={executionId} onDone={onDone} />;
   }

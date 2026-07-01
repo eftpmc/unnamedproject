@@ -2,7 +2,7 @@ import { registerTool } from '../registry.js';
 import { getDb } from '../../db/index.js';
 import { getDecryptedConfig } from '../../routes/connections.js';
 import { createConnectionTool } from '../../tools/connection_ops.js';
-import { listMcpTools } from '../../lib/mcp-pool.js';
+import { closeMcpConnection, listMcpTools } from '../../lib/mcp-pool.js';
 import { createExecution, completeExecution, requestApproval } from '../../services/executor.js';
 
 export function registerConnectionHandlers(): void {
@@ -113,6 +113,14 @@ export function registerConnectionHandlers(): void {
       required: ['connection_id'],
     },
     handler: async (args, userId) => {
+      const row = getDb()
+        .prepare('SELECT name FROM connections WHERE id = ? AND user_id = ?')
+        .get(args.connection_id as string, userId) as { name: string } | undefined;
+      if (!row) return `Error: connection ${args.connection_id} not found`;
+      if (row.name.startsWith('tool:')) {
+        return 'Error: generated tool package connections must be disabled with disable_tool_package.';
+      }
+      closeMcpConnection(args.connection_id as string);
       const result = getDb()
         .prepare('DELETE FROM connections WHERE id = ? AND user_id = ?')
         .run(args.connection_id as string, userId);
@@ -142,7 +150,7 @@ export function registerConnectionHandlers(): void {
         const cfg = getDecryptedConfig(connRow.id, userId);
         const mcpArgs = cfg.args ? (JSON.parse(cfg.args) as string[]) : [];
         const mcpEnv = cfg.env ? (JSON.parse(cfg.env) as Record<string, string>) : {};
-        const tools = await listMcpTools(connRow.id, cfg.command, mcpArgs, mcpEnv);
+        const tools = await listMcpTools(connRow.id, cfg.command, mcpArgs, mcpEnv, cfg.cwd);
         return JSON.stringify({
           id: connRow.id,
           name: connRow.name,

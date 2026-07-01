@@ -3,6 +3,7 @@ import { google } from 'googleapis';
 import { getDb } from '../db/index.js';
 import { newId } from '../lib/ids.js';
 import { encrypt, decrypt, deriveKey } from '../lib/crypto.js';
+import { closeMcpConnection } from '../lib/mcp-pool.js';
 import { requireAuth, type AuthedRequest } from '../middleware/auth.js';
 import { isChromeBridgeConnected } from '../services/chromeBridge.js';
 
@@ -37,10 +38,13 @@ export class ConnectionValidationError extends Error {
 
 export function createConnectionRecord(
   userId: string,
-  input: { name?: string; type?: string; purpose?: string; config?: unknown; service?: string; url?: string; notes?: string },
+  input: { name?: string; type?: string; purpose?: string; config?: unknown; service?: string; url?: string; notes?: string; managedToolPackage?: boolean },
 ): { id: string; type: string; purpose: string } {
-  const { name, type, purpose, config, service, url, notes } = input;
+  const { name, type, purpose, config, service, url, notes, managedToolPackage } = input;
   if (!name || !type) throw new ConnectionValidationError('name and type required');
+  if (name.startsWith('tool:') && !managedToolPackage) {
+    throw new ConnectionValidationError('Generated tool connections are managed by tool packages. Use request_tool_install or /tool-packages/:id/install.');
+  }
   if (type !== 'web' && !config) throw new ConnectionValidationError('config required');
   if (!VALID_TYPES.includes(type as (typeof VALID_TYPES)[number])) {
     throw new ConnectionValidationError(`type must be one of ${VALID_TYPES.join(', ')}`);
@@ -137,6 +141,15 @@ router.patch('/:id', (req, res) => {
 
 router.delete('/:id', (req, res) => {
   const { userId } = req as unknown as AuthedRequest;
+  const row = getDb()
+    .prepare('SELECT name FROM connections WHERE id = ? AND user_id = ?')
+    .get(req.params.id, userId) as { name: string } | undefined;
+  if (!row) { res.status(404).json({ error: 'Not found' }); return; }
+  if (row.name.startsWith('tool:')) {
+    res.status(409).json({ error: 'Generated tool connections must be disabled from Tool Packages.' });
+    return;
+  }
+  closeMcpConnection(req.params.id);
   const result = getDb()
     .prepare('DELETE FROM connections WHERE id = ? AND user_id = ?')
     .run(req.params.id, userId);

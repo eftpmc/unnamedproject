@@ -57,7 +57,7 @@ export function listTriggersByUser(userId: string): TriggerRecord[] {
         SELECT st.status FROM session_turns st
         JOIN sessions s ON s.id = st.session_id
         WHERE s.trigger_id = t.id
-        ORDER BY st.created_at DESC LIMIT 1
+        ORDER BY st.started_at DESC LIMIT 1
       ) as last_run_status
     FROM triggers t
     JOIN projects p ON p.id = t.project_id
@@ -70,7 +70,7 @@ export function listTriggerRuns(triggerId: string, limit = 20): TriggerRun[] {
   return getDb().prepare(`
     SELECT s.id, s.title, s.created_at, s.updated_at,
       COALESCE((SELECT SUM(cost_usd) FROM agent_usage WHERE session_id = s.id), 0) as cost_usd,
-      (SELECT st.status FROM session_turns st WHERE st.session_id = s.id ORDER BY st.created_at DESC LIMIT 1) as status
+      (SELECT st.status FROM session_turns st WHERE st.session_id = s.id ORDER BY st.started_at DESC LIMIT 1) as status
     FROM sessions s
     WHERE s.trigger_id = ?
     ORDER BY s.created_at DESC

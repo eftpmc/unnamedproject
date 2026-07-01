@@ -165,6 +165,33 @@ export interface AgentProvider {
   created_at: number;
 }
 
+export interface ToolPackage {
+  id: string;
+  name: string;
+  description: string;
+  status: 'draft' | 'installed' | 'disabled' | 'error';
+  package_path: string;
+  manifest: {
+    name: string;
+    description?: string;
+    runtime: 'node' | 'python';
+    entry: string;
+    scope?: 'session' | 'project' | 'user';
+    permissions?: {
+      filesystem?: string[];
+      network?: boolean;
+      secrets?: string[];
+      subprocess?: string[];
+    };
+  };
+  connection_id: string | null;
+  source_session_id: string | null;
+  last_error: string | null;
+  created_at: number;
+  updated_at: number;
+  installed_at: number | null;
+}
+
 export interface GoogleAccount {
   id: string;
   name: string;
@@ -256,6 +283,16 @@ export type ApprovalUI =
   | { kind: 'trigger_preview'; playbookTitle: string; schedule: string; cron: string; preview?: string }
   | { kind: 'secret_entry'; key: string; label: string; description: string; placeholder?: string }
   | { kind: 'dependency'; command: string; packageName: string; reason: string }
+  | {
+      kind: 'tool_package';
+      name: string;
+      description: string;
+      runtime: 'node' | 'python';
+      entry: string;
+      permissions?: { filesystem?: string[]; network?: boolean; secrets?: string[]; subprocess?: string[] };
+      reason?: string;
+    }
+  | { kind: 'tool_package_disable'; packageId: string; name?: string }
 
 export interface Memory {
   type: 'user' | 'feedback' | 'project' | 'reference';

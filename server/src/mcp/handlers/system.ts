@@ -9,7 +9,7 @@ const execFileAsync = promisify(execFile);
 export function registerSystemHandlers(): void {
   registerTool({
     name: 'get_tools_dir',
-    description: 'Returns the managed tools directory path. Always write custom MCP server scripts here, never to home, Desktop, or Documents.',
+    description: 'Returns the managed tools directory path. Prefer create_tool_package for generated MCP servers; use this only for inspection/debugging. Never write tools to home, Desktop, or Documents.',
     inputSchema: { type: 'object', properties: {} },
     handler: async () => getToolsDir(),
   });

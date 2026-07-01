@@ -2,6 +2,8 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { EventEmitter } from 'events';
 import { spawn } from 'child_process';
 import fs from 'fs/promises';
+import path from 'path';
+import os from 'os';
 import { invokeClaudeCode } from '../../src/tools/invoke_claude_code.js';
 
 function makeProc() {
@@ -100,12 +102,50 @@ describe('invoke_claude_code', () => {
       { prompt: 'fix the login bug' },
       { userId: 'u1', executionId: 'e1', repoPath: '/tmp/repo', permissionProfile: 'strict' }
     );
-    await new Promise(setImmediate);
+    await vi.waitFor(() => expect(spawn).toHaveBeenCalled());
     proc.emit('close', 0);
     await promise;
 
     const args = vi.mocked(spawn).mock.calls[0][1] as string[];
     expect(args).not.toContain('--permission-mode');
+  });
+
+  it('uses an isolated home and temp directory in strict profile', async () => {
+    const repoPath = await fs.mkdtemp(path.join(os.tmpdir(), 'strict-claude-'));
+    const proc = makeProc();
+    vi.mocked(spawn).mockReturnValue(proc as any);
+
+    const promise = invokeClaudeCode(
+      { prompt: 'fix the login bug' },
+      { userId: 'u1', executionId: 'e1', repoPath, permissionProfile: 'strict' }
+    );
+    await vi.waitFor(() => expect(spawn).toHaveBeenCalled());
+    proc.emit('close', 0);
+    await promise;
+
+    const options = vi.mocked(spawn).mock.calls[0][2] as { env: NodeJS.ProcessEnv };
+    expect(options.env.HOME).toBe(path.join(repoPath, '.unnamed', 'delegate-runtime', 'home'));
+    expect(options.env.TMPDIR).toBe(path.join(repoPath, '.unnamed', 'delegate-runtime', 'tmp'));
+    expect(options.env.XDG_CONFIG_HOME).toBe(path.join(repoPath, '.unnamed', 'delegate-runtime', 'home', '.config'));
+  });
+
+  it('passes only the configured provider API key into the delegate env', async () => {
+    process.env.UNRELATED_SECRET = 'do-not-leak';
+    const proc = makeProc();
+    vi.mocked(spawn).mockReturnValue(proc as any);
+
+    const promise = invokeClaudeCode(
+      { prompt: 'fix the login bug' },
+      { userId: 'u1', executionId: 'e1', repoPath: '/tmp/repo', apiKey: 'sk-ant-test' }
+    );
+    await new Promise(setImmediate);
+    proc.emit('close', 0);
+    await promise;
+
+    const options = vi.mocked(spawn).mock.calls[0][2] as { env: NodeJS.ProcessEnv };
+    expect(options.env.ANTHROPIC_API_KEY).toBe('sk-ant-test');
+    expect(options.env.UNRELATED_SECRET).toBeUndefined();
+    delete process.env.UNRELATED_SECRET;
   });
 
   it('passes MCP servers via a config file and separates the prompt from variadic options', async () => {

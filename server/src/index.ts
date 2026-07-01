@@ -24,6 +24,7 @@ import projectsRoutes from './routes/projects.js';
 import filesRoutes from './routes/files.js';
 import triggersRoutes from './routes/triggers.js';
 import vaultRoutes from './routes/vault.js';
+import toolPackagesRoutes from './routes/tool-packages.js';
 
 const PORT = process.env.PORT ?? '3000';
 const NODE_ENV = process.env.NODE_ENV;
@@ -104,6 +105,7 @@ app.use('/auth/google', wrapAsyncErrors(googleRoutes));
 app.use('/files', wrapAsyncErrors(filesRoutes));
 app.use('/triggers', wrapAsyncErrors(triggersRoutes));
 app.use('/vault', wrapAsyncErrors(vaultRoutes));
+app.use('/tool-packages', wrapAsyncErrors(toolPackagesRoutes));
 
 app.use('/mcp', mcpRouter);
 

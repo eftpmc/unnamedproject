@@ -79,7 +79,7 @@ function maybeGenerateSessionTitle(userId: string, sessionId: string): void {
   broadcast(userId, { type: 'session_title_updated', sessionId, title });
 }
 
-type McpServerEntry = { url?: string; headers?: Record<string, string>; command?: string; args?: string[]; env?: Record<string, string> };
+type McpServerEntry = { url?: string; headers?: Record<string, string>; command?: string; args?: string[]; env?: Record<string, string>; cwd?: string };
 
 interface InvocationWorkspace {
   cwd: string;
@@ -92,10 +92,30 @@ interface InvocationWorkspace {
 }
 
 
-function getUserMcpServers(userId: string): Record<string, McpServerEntry> {
+function getProjectEnabledMcpConnectionIds(userId: string, sessionId: string): Set<string> {
+  const row = getDb()
+    .prepare(`
+      SELECT p.enabled_connection_ids
+      FROM sessions s
+      JOIN projects p ON p.id = s.pinned_project_id AND p.user_id = s.user_id
+      WHERE s.id = ? AND s.user_id = ?
+    `)
+    .get(sessionId, userId) as { enabled_connection_ids: string } | undefined;
+  if (!row) return new Set();
+  try {
+    const parsed = JSON.parse(row.enabled_connection_ids || '[]') as unknown;
+    return new Set(Array.isArray(parsed) ? parsed.map(String) : []);
+  } catch {
+    return new Set();
+  }
+}
+
+function getUserMcpServers(userId: string, enabledConnectionIds: Set<string>): Record<string, McpServerEntry> {
+  if (enabledConnectionIds.size === 0) return {};
+  const placeholders = Array.from(enabledConnectionIds).map(() => '?').join(',');
   const conns = getDb()
-    .prepare("SELECT id, name FROM connections WHERE user_id = ? AND type = 'mcp' ORDER BY created_at")
-    .all(userId) as { id: string; name: string }[];
+    .prepare(`SELECT id, name FROM connections WHERE user_id = ? AND type = 'mcp' AND id IN (${placeholders}) ORDER BY created_at`)
+    .all(userId, ...Array.from(enabledConnectionIds)) as { id: string; name: string }[];
 
   const servers: Record<string, McpServerEntry> = {};
   for (const conn of conns) {
@@ -110,6 +130,7 @@ function getUserMcpServers(userId: string): Record<string, McpServerEntry> {
           command: cfg.command,
           args: cfg.args ? JSON.parse(cfg.args) : undefined,
           env: cfg.env ? JSON.parse(cfg.env) : undefined,
+          cwd: cfg.cwd,
         };
         touchConnection(conn.id);
       }
@@ -265,9 +286,10 @@ export async function runAgentTurn(userId: string, sessionId: string, userMessag
 
   const port = process.env.PORT ?? '3000';
   const mcpToken = generateMcpToken(userId, sessionId);
+  const enabledMcpConnectionIds = getProjectEnabledMcpConnectionIds(userId, sessionId);
   const mcpServers = {
     app: { url: `http://localhost:${port}/mcp`, headers: { Authorization: `Bearer ${mcpToken}` } },
-    ...getUserMcpServers(userId),
+    ...getUserMcpServers(userId, enabledMcpConnectionIds),
   };
   const workspace = await prepareInvocationWorkspace(sessionId);
 

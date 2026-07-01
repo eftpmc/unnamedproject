@@ -17,6 +17,7 @@ export interface McpServerConfig {
   command?: string;
   args?: string[];
   env?: Record<string, string>;
+  cwd?: string;
   // HTTP transport
   url?: string;
   headers?: Record<string, string>;
@@ -29,6 +30,7 @@ interface ToolContext {
   resumeSessionId?: string | null;
   mcpServers?: Record<string, McpServerConfig>;
   permissionProfile?: PermissionProfile;
+  apiKey?: string;
   effort?: string;
   /** System prompt to inject on first turn. Defaults to DELEGATE_FRAMING when absent. */
   systemPromptSuffix?: string;
@@ -65,6 +67,17 @@ export async function invokeClaudeCode(input: ClaudeCodeInput, ctx: ToolContext)
   const profile = normalizePermissionProfile(ctx.permissionProfile);
   const args = ['--print', ...claudePermissionArgs(profile), '--output-format', 'stream-json', '--verbose'];
   let mcpConfigDir: string | null = null;
+  let runtimeHomeDir: string | undefined;
+  let runtimeTmpDir: string | undefined;
+  if (profile === 'strict') {
+    const runtimeDir = path.join(ctx.repoPath, '.unnamed', 'delegate-runtime');
+    runtimeHomeDir = path.join(runtimeDir, 'home');
+    runtimeTmpDir = path.join(runtimeDir, 'tmp');
+    await fs.mkdir(path.join(runtimeHomeDir, '.config'), { recursive: true });
+    await fs.mkdir(path.join(runtimeHomeDir, '.cache'), { recursive: true });
+    await fs.mkdir(path.join(runtimeHomeDir, '.local', 'share'), { recursive: true });
+    await fs.mkdir(runtimeTmpDir, { recursive: true });
+  }
   if (input.model) args.push('--model', input.model);
   if (!ctx.resumeSessionId) args.push('--append-system-prompt', ctx.systemPromptSuffix ?? DELEGATE_FRAMING);
   if (ctx.resumeSessionId) args.push('--resume', ctx.resumeSessionId);
@@ -76,7 +89,7 @@ export async function invokeClaudeCode(input: ClaudeCodeInput, ctx: ToolContext)
       if (cfg.url) {
         servers[name] = { type: 'http', url: cfg.url, ...(cfg.headers ? { headers: cfg.headers } : {}) };
       } else {
-        servers[name] = { command: cfg.command, args: cfg.args ?? [], env: cfg.env ?? {} };
+        servers[name] = { command: cfg.command, args: cfg.args ?? [], env: cfg.env ?? {}, ...(cfg.cwd ? { cwd: cfg.cwd } : {}) };
       }
     }
     await fs.writeFile(mcpConfigPath, JSON.stringify({ mcpServers: servers }));
@@ -86,7 +99,7 @@ export async function invokeClaudeCode(input: ClaudeCodeInput, ctx: ToolContext)
   args.push(input.prompt);
 
   return new Promise((resolve, reject) => {
-    const spawnEnv = getDelegateEnv('claude_code', profile);
+    const spawnEnv = getDelegateEnv('claude_code', profile, { homeDir: runtimeHomeDir, tmpDir: runtimeTmpDir, apiKey: ctx.apiKey });
     if (ctx.effort) spawnEnv.CLAUDE_EFFORT = ctx.effort;
     const proc = spawn('claude', args, {
       cwd: ctx.repoPath,

@@ -62,6 +62,22 @@ describe('ClaudeCodeProvider', () => {
     const ctx = invokeClaudeCodeMock.mock.calls.at(-1)?.[1];
     expect(ctx.resumeSessionId).toBe('prev-sess');
   });
+
+  it('passes configured provider API key to invokeClaudeCode', async () => {
+    const { ClaudeCodeProvider } = await import('../../src/services/conversation/claude-code-provider.js');
+    const provider = new ClaudeCodeProvider({ model: 'claude-sonnet-4-6', permissionProfile: 'strict', apiKey: 'sk-ant-test' });
+
+    await provider.invoke({
+      prompt: 'continue',
+      onText: vi.fn(),
+      onSessionId: vi.fn(),
+      mcpServers: {},
+    });
+
+    const ctx = invokeClaudeCodeMock.mock.calls.at(-1)?.[1];
+    expect(ctx.apiKey).toBe('sk-ant-test');
+    expect(ctx.permissionProfile).toBe('strict');
+  });
 });
 
 describe('getConversationProvider', () => {

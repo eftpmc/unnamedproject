@@ -33,6 +33,7 @@ export async function getConversationProvider(userId: string): Promise<Conversat
     return new ClaudeCodeProvider({
       model: (cfg.model as string | undefined) ?? 'claude-sonnet-4-6',
       permissionProfile: (cfg.permissionProfile as string) ?? 'default',
+      apiKey: cfg.apiKey as string | undefined,
     });
   }
 

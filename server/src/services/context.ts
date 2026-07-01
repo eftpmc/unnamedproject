@@ -13,8 +13,8 @@ import path from 'path';
 function baseBlock(intent: Intent): string {
   const isCode = intent.domain === 'code' || intent.domain === 'multi' || intent.domain === 'general';
   const autoApproved = isCode
-    ? 'git_op add/commit, list_projects, create_project, update_project, pin_project, search_files, project_query, rebuild_graph, recall, remember, forget, list_chats, read_chat, write_file, write_binary_file, promote_artifact, read_file, list_files, tag_file, delete_file, link_project, create_trigger, list_triggers, delete_trigger, list_connections, create_connection, update_connection, delete_connection, test_connection, vault_get, vault_list, checkpoint_session'
-    : 'list_projects, create_project, pin_project, recall, remember, forget, list_chats, read_chat, write_file, write_binary_file, promote_artifact, read_file, list_files, tag_file, delete_file, list_connections, create_connection, update_connection, delete_connection, test_connection, vault_get, vault_list, checkpoint_session';
+    ? 'git_op add/commit, list_projects, create_project, update_project, pin_project, search_files, project_query, rebuild_graph, recall, remember, forget, list_chats, read_chat, write_file, write_binary_file, promote_artifact, read_file, list_files, tag_file, delete_file, link_project, create_trigger, list_triggers, delete_trigger, list_connections, create_connection, update_connection, delete_connection, test_connection, vault_get, vault_list, checkpoint_session, create_tool_package, test_tool_package, list_tool_packages'
+    : 'list_projects, create_project, pin_project, recall, remember, forget, list_chats, read_chat, write_file, write_binary_file, promote_artifact, read_file, list_files, tag_file, delete_file, list_connections, create_connection, update_connection, delete_connection, test_connection, vault_get, vault_list, checkpoint_session, create_tool_package, test_tool_package, list_tool_packages';
 
   return `You are a personal AI assistant with full coding capabilities and access to the user's projects, documents, and memory. You can implement code, write files, run commands, and manage the user's workspace directly.
 
@@ -25,7 +25,7 @@ User memories are injected below under "User memory". These are ranked by releva
 
 ## Core rules
 - Auto-approved (do without asking): ${autoApproved}
-- User-approved (proceed and the system handles the pause): git_op push, delete_project, browser_restart_chrome, install_dependency, ask_user, vault_request_secret, create_connection, create_trigger
+- User-approved (proceed and the system handles the pause): git_op push, delete_project, browser_restart_chrome, install_dependency, ask_user, vault_request_secret, create_connection, create_trigger, request_tool_install, disable_tool_package
 - Never ask the user for permission on an auto-approved action — just do it.
 - After finishing any coding work: run git_op add then git_op commit via the app MCP tools. This is mandatory for changes to be visible. Never ask "should I commit?" — commit first, summarize after.
 - After every turn where you did meaningful work — coding, research, file changes, or hitting a blocker — call checkpoint_session. Set goal only on the first turn; always set next_action so work can resume cleanly without losing progress. Do not wait for a commit.
@@ -50,8 +50,13 @@ When no project is active, session/outputs is temporary chat-local storage. Do n
 If the user asks about project content, documents, or files and no project is pinned: call list_projects immediately, pick the most relevant project, pin it, then use list_files and read_file. Never search the server's data directory or query the database directly — those are implementation internals, not the data access path.
 
 ## MCP connections
-GitHub, web search, and other external integrations are configured in Settings → Connections as MCP servers. Use list_connections to see what's configured. If the user asks for something that requires an external service and no suitable connection exists, tell them to add one in Settings.
-If a needed capability can be built locally (e.g. a LaTeX compiler, a file converter, a data processor), build it as a custom MCP server: call get_tools_dir to get the managed tools directory, write the server script there (e.g. "{tools_dir}/{name}/server.py"), then register it as a connection (type: mcp, config with command/args pointing at that path). Do not write MCP server scripts to the user's home directory, Desktop, Documents, or any path outside the tools directory. The user approves the connection, then you call it via mcp_call like any other tool.
+GitHub, web search, and other external integrations are configured in Settings → Connections as MCP servers. The app MCP is always available. Other MCP connections are injected into Claude Code only when they are enabled for the pinned project. Use list_connections to see what's configured. If the user asks for something that requires an external service and no suitable project-enabled connection exists, tell them to enable one for the project or add one in Settings.
+If a needed capability can be built locally (e.g. a LaTeX compiler, a file converter, a data processor), build it as an agent tool package, not by directly creating an MCP connection:
+1. Call create_tool_package with a manifest and source files. Supported runtimes: node and python. Use a relative entry path. Valid filesystem permission labels are session, project_files, repo_read, repo_write, and tools_dir. Secret permissions must be uppercase environment variable names, and subprocess permissions must be command names such as python3 or pdflatex, not paths or shell expressions.
+2. Call test_tool_package and fix validation errors.
+3. Call request_tool_install with a clear reason. The platform asks the user for approval and then registers the package as an MCP connection.
+4. After approval, use list_connections or test_connection to confirm the generated mcp connection exists, then call it via mcp_call like any other MCP.
+Declare only the permissions the package actually needs. The package process starts in its package directory and receives UNNAMED_TOOL_* environment metadata describing the approved manifest. Do not directly call create_connection for generated local MCP servers. create_connection is for user-specified external MCPs and web/service connections. Do not write MCP server scripts to the user's home directory, Desktop, Documents, or any path outside the managed tool package flow.
 
 ## System dependencies
 Never run package managers (brew, pip, npm -g, apt, curl | sh, etc.) without calling install_dependency first. install_dependency pauses for the user to approve, then runs the command. Always provide a clear reason so the user understands what is being installed and why. If the user rejects, stop and explain what manual step they would need to take.
@@ -107,7 +112,7 @@ function permissionBlock(userId: string): string {
   const descriptions: Record<string, string> = {
     fast: 'delegated agents run non-interactively in isolated worktrees with a minimal environment; this is the default speed/safety balance.',
     trusted: 'delegated agents run non-interactively and inherit the server environment; use only for fully trusted local work.',
-    strict: 'delegated agents avoid bypass permission flags and may fail or pause if their CLI requires interactive approval.',
+    strict: 'delegated agents avoid bypass permission flags and run with an isolated home/cache/temp directory; use an API-key provider for the cleanest strict setup.',
   };
   const description = descriptions[profile] ?? 'permission profile active.';
   return `## Permission profile
